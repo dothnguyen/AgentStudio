@@ -1,6 +1,6 @@
 # P00-S02 — SQLite state, write authority, and event journal
 
-Status: In Review — all checks pass on Linux (ext4); confirm by running the test suite once inside the WSL distro
+Status: Done
 Depends on: P00-S01
 Architecture: [P00 implementation contract](../architecture.md), sections C–D
 
@@ -32,11 +32,13 @@ Create the only source of truth for teams, agents, tasks, assignments, workflow 
 
 - [x] Every accepted state change has exactly one event in the same transaction.
 - [x] Write authority (coordinator / command inbox / report inbox) is enforced and tested.
-- [ ] Status survives process exit and restart on a WSL-native filesystem — passes on Linux ext4; run the suite inside WSL to confirm.
+- [x] Status survives process exit and restart on a WSL-native filesystem (full suite inside Ubuntu-24.04 / WSL2).
 - [x] Duplicate commands cannot create duplicate assignments or events.
 - [x] Snapshot and event cursor are consistent.
 
 ## Evidence (2026-10-21)
+
+- Target machine: `python3 -m unittest discover -s tests -t .` inside Ubuntu-24.04 (WSL2, Python 3.12.3) → 109 tests OK in 70 s (`phases/phase-00/evidence/test-run-wsl-ubuntu-24.04.log`).
 
 - `python3 -m unittest discover -s tests -t .` → 86 tests OK on Ubuntu 22.04 / Python 3.10.12 (non-root), and OK on Python 3.13 / SQLite 3.45.1 (root; one permission test skipped). The S01 boundary spike still passes against this code.
 - Write authority is enforced by an SQLite authorizer per connection role (`tests/unit/test_store.py::WriteAuthority`), plus a source scan that fails if a module opens a connection with an unexpected role.

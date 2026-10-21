@@ -98,7 +98,15 @@ Agent availability is not a task state. A live process or pane does not prove an
 
 ## E. tmux and terminal rules
 
-Each team gets a unique run-scoped tmux session with **one window and exactly N panes for N agents**: create the first pane, split once per additional agent, select `tiled`. No operator pane. Record session ID, window ID, pane ID, pane PID + start time, agent ID, and a run ownership marker (tmux user option). Every later action rechecks marker and pane identity; never use pane index alone. Stop only verified owned sessions; if identity is ambiguous return `CLEANUP_INCOMPLETE` and preserve the session. Never `tmux kill-server`.
+All Agent Studio sessions live on a **dedicated tmux server**, `tmux -L agent-studio` (override with `AGENT_STUDIO_TMUX_SOCKET`), so the user's own tmux server is never touched and `kill-server` is never needed. Each team gets a unique run-scoped tmux session (`as-<first 16 hex of teamId>`) with **one window and exactly N panes for N agents**: create the first pane, split once per additional agent, select `tiled`. No operator pane. Record session ID, window ID, pane ID, pane PID + start time, agent ID, and a run ownership marker (tmux user option). Every later action rechecks marker and pane identity; never use pane index alone. Stop only verified owned sessions; if identity is ambiguous return `CLEANUP_INCOMPLETE` and preserve the session. Never `tmux kill-server`.
+
+Panes keep `remain-on-exit on` so a dead worker stays visible, and show a title bar with name, provider and role.
+
+**Delivery lifecycle.** The coordinator claims a queued assignment for an idle agent with a live pane (one at a time per agent), commits, and only then writes `agents/<agentId>/inbox/<assignmentId>.request` (`0600`). The worker shim moves it to `active/` **before** running it and to `done/` afterwards, so a restarted worker never re-runs a request. A claimed assignment whose request file is in none of the three folders was never seen by a worker and is safely rewritten (redelivery). The runner's `start` report (PID + start time + boot ID) is the only path from `claimed` to `running`.
+
+**Liveness.** Every ~2 s the coordinator compares each live agent's recorded pane ID and pane-process identity with the server's pane list. A missing pane, an exited pane process, or a changed identity marks the agent `offline` (`agent.pane_dead` with a reason) and its in-flight assignment `reconciling`; a lost session marks the team `error`. Pane state never changes a task outcome.
+
+**Stop.** `team.stop` verifies the session's `@agent_studio_team` and `@agent_studio_owner` options and that it contains only panes Agent Studio created, then kills only that session (by `$id`), cancels the team's active assignments and tasks, and marks agents `offline`. Any mismatch records `team.error` and returns `CLEANUP_INCOMPLETE` with the session preserved. The response includes the session inventory before and after.
 
 Never use `tmux send-keys` to deliver a task. Panes show readable worker/runner progress only. Operators watch via `team.attach` or the returned attach command (WSL shell or Windows Terminal). No pane-output stream, xterm.js, or terminal-byte protocol in P00/P01. Terminal data is never parsed for task/question/result records.
 

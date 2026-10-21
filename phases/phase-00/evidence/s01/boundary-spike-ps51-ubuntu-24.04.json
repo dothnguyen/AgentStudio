@@ -1,0 +1,98 @@
+﻿{
+    "recordedAt":  "2026-10-21T12:32:29.0334708Z",
+    "distro":  "Ubuntu-24.04",
+    "entry":  "/home/dothn/.local/bin/agent-studio",
+    "powershell":  "5.1.26100.9711 Desktop",
+    "os":  "Microsoft Windows NT 10.0.26200.0",
+    "healthBefore":  {
+                         "backendVersion":  "0.1.0",
+                         "protocol":  "agent-studio/v1",
+                         "python":  "3.12.3",
+                         "distro":  "Ubuntu-24.04",
+                         "wsl":  {
+                                     "isWsl":  true,
+                                     "version":  "2",
+                                     "kernel":  "5.15.167.4-microsoft-standard-WSL2"
+                                 },
+                         "stateDir":  {
+                                          "path":  "/home/dothn/.local/state/agent-studio",
+                                          "ok":  true
+                                      },
+                         "coordinator":  {
+                                             "running":  false
+                                         },
+                         "keepAlive":  {
+                                           "active":  false
+                                       }
+                     },
+    "coordinator":  {
+                        "running":  true,
+                        "alreadyRunning":  false,
+                        "pid":  478046,
+                        "startTime":  6977055,
+                        "startedAt":  "2026-10-21T12:32:30.791Z",
+                        "uptimeSeconds":  0.028,
+                        "version":  "0.1.0",
+                        "debugCommands":  true,
+                        "logFile":  "/home/dothn/.local/state/agent-studio/coordinator.log"
+                    },
+    "oneShotEcho":  {
+                        "total":  13,
+                        "exact":  13
+                    },
+    "oneShotLatencyMs":  {
+                             "median":  315.7,
+                             "samples":  10,
+                             "p95":  338.5
+                         },
+    "serveEcho":  {
+                      "latencyMs":  {
+                                        "median":  11.13,
+                                        "p95":  12.28
+                                    },
+                      "total":  100,
+                      "exact":  100
+                  },
+    "serveMalformedLine":  {
+                               "code":  "BAD_REQUEST",
+                               "sessionContinued":  true
+                           },
+    "callerKill":  {
+                       "pidAfter":  478046,
+                       "survived":  true,
+                       "pidBefore":  478046
+                   },
+    "environment":  {
+                        "envMode":  "login-interactive",
+                        "envSource":  "login-shell",
+                        "shell":  "/bin/bash",
+                        "warnings":  [
+
+                                     ],
+                        "pathDirs":  {
+                                         "linux":  [
+                                                       "/home/dothn/.local/bin",
+                                                       "/home/dothn/.nvm/versions/node/v24.22.0/bin",
+                                                       "/usr/local/sbin",
+                                                       "/usr/local/bin",
+                                                       "/usr/sbin",
+                                                       "/usr/bin",
+                                                       "/sbin",
+                                                       "/bin",
+                                                       "/usr/games",
+                                                       "/usr/local/games",
+                                                       "/usr/lib/wsl/lib",
+                                                       "/snap/bin"
+                                                   ],
+                                         "windowsInteropCount":  39
+                                     },
+                        "distro":  "Ubuntu-24.04"
+                    },
+    "keepAlive":  {
+                      "active":  false
+                  },
+    "failures":  [
+
+                 ],
+    "passed":  true
+}

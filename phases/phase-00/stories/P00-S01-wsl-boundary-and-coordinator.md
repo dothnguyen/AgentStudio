@@ -1,6 +1,6 @@
 # P00-S01 — WSL boundary, entry shim, and coordinator daemon
 
-Status: In Progress — Linux-side implementation and tests complete; Windows checks (steps 8–9) pending on the target machine
+Status: In Review — everything verified on the target machine except a long-wait (≥5 min) idle-shutdown check
 Depends on: none
 Architecture: [P00 implementation contract](../architecture.md), sections A–C
 
@@ -36,19 +36,21 @@ Prove the Windows↔WSL crossing that broke the previous Electron + NTM attempt 
 ## Done when
 
 - [x] Separate CLI invocations reach the same coordinator (Linux, automated).
-- [ ] A PowerShell `serve` session on Windows reaches the same coordinator — run `boundary-spike.ps1`.
-- [ ] Hostile payloads round-trip byte-exact from PowerShell through the real `wsl.exe --exec` — run `boundary-spike.ps1` (passed in PowerShell 7 against a stand-in `wsl.exe`; real `wsl.exe` and Windows PowerShell 5.1 still required).
-- [ ] Killing the Windows caller leaves the coordinator running — run `boundary-spike.ps1` (passed for a killed client process on Linux).
-- [ ] Closing all terminals past the idle timeout leaves the coordinator running, with a documented keep-alive if needed — run `check-lifetime.ps1`.
+- [x] A PowerShell `serve` session on Windows reaches the same coordinator.
+- [x] Hostile payloads round-trip byte-exact from Windows PowerShell 5.1 through the real `wsl.exe --exec` (13/13 one-shot, 100/100 serve).
+- [x] Killing the Windows caller leaves the coordinator running (same PID before/after).
+- [ ] Closing all terminals past the idle timeout leaves the coordinator running — survived a 67 s wait with no keep-alive; repeat with ≥5 min (`check-lifetime.ps1`) to close this item.
 - [x] Login-PATH executables (nvm-style, interactive-only `.bashrc`) resolve (automated).
 - [x] Preflight fails before creating any tmux session; stdout is pure JSON; logs contain no payloads (automated).
-- [ ] Evidence records distro, WSL version, commands, coordinator PID, protocol version, latencies, and negative-case codes — attach `boundary-spike-evidence.json` and `lifetime-evidence.json`.
+- [x] Evidence records distro, WSL version, coordinator PID, protocol version, latencies, and negative-case codes (`phases/phase-00/evidence/s01/`).
 
 ## Evidence so far (2026-10-21)
 
 - `python3 -m unittest discover -s tests -t .` → 49 tests OK on Ubuntu 22.04 / Python 3.10.12 (non-root) and OK on Python 3.13 (root; the permission test is skipped).
 - `boundary-spike.ps1` under PowerShell 7.4.6 on Linux, with a stand-in `wsl.exe` that forwards `-d <distro> --exec …`: one-shot 13/13 and serve 100/100 hostile payloads byte-exact; malformed line → `BAD_REQUEST` with the session kept open; coordinator PID unchanged after the client was killed. Serve round-trip median ≈10 ms; one-shot median ≈110 ms (no `wsl.exe` start-up cost included).
 - Found and fixed during testing: the shim depended on PATH for `readlink`/`dirname`, so a `wsl.exe --exec` call with a stripped PATH would fail before Python started.
-- Not yet run: the real `wsl.exe`, Windows PowerShell 5.1, Windows Terminal, and WSL idle shutdown. These need the target Windows machine.
+- Target machine (2026-10-21, Windows PowerShell 5.1.26100, Ubuntu-24.04, WSL2 kernel 5.15.167.4, Python 3.12.3): `boundary-spike.ps1` passed — 13/13 one-shot and 100/100 serve payloads byte-exact, malformed line → `BAD_REQUEST` with the session kept, coordinator PID 478046 unchanged after the caller was killed, login-shell environment captured. Latency: one-shot `wsl.exe` call median 316 ms (p95 339 ms) vs serve round trip median 11 ms (p95 12 ms) — confirms P01 should hold one persistent `serve` process.
+- `check-lifetime.ps1`: coordinator survived (same PID, no keep-alive) but Record→Verify was only 67 s; a ≥5 min wait is still needed.
+- Found on the target machine: with a wrong distro name, `wsl.exe` writes a UTF-16 error to stdout that the first script version hid. The module now checks the distro first, shows WSL's message, falls back to `--cd ~` for the home folder, and checks that `agent-studio` is installed.
 
 Do not begin UI wiring here.

@@ -1,7 +1,8 @@
 # Agent Studio WSL backend
 
 Implemented so far: P00-S01 (entry shim, coordinator daemon, command inbox, `serve`, health, preflight, Windows
-boundary scripts) and P00-S02 (schema v2, role-enforced write authority, event journal, snapshot/events). Contract: [architecture](../phases/phase-00/architecture.md).
+boundary scripts), P00-S02 (schema, role-enforced write authority, event journal, snapshot/events), and P00-S03
+(one tmux window with one pane per agent, request-file delivery, pane liveness, attach, scoped stop). Contract: [architecture](../phases/phase-00/architecture.md).
 
 ## Layout
 
@@ -19,6 +20,10 @@ boundary scripts) and P00-S02 (schema v2, role-enforced write authority, event j
 | `agent_studio/store.py` | Coordinator-only `Store`/`Tx`: every row change writes exactly one event in the same transaction. |
 | `agent_studio/reports.py` | Immutable worker-report inbox and exactly-once application. |
 | `agent_studio/queries.py` | `snapshot` and `events.after` (read-only, one consistent read transaction each). |
+| `agent_studio/tmuxctl.py` | tmux on Agent Studio's own server (`tmux -L agent-studio`); IDs only, never indices or keystrokes. |
+| `agent_studio/teams.py` | `team.start` / `team.stop`, claim + request-file delivery, redelivery, pane-liveness monitor. |
+| `bin/agent-studio-worker` | Bash loop in each pane: inbox → active → `agent-studio runner` → done. No state decisions. |
+| `agent_studio/runner.py`, `report_rules.py` | Runs one assignment and reports; how the coordinator applies start/progress/final reports. |
 | `../scripts/windows/` | PowerShell module, boundary spike, lifetime check, keep-alive. |
 
 Requirements inside WSL: bash, Python 3.8+ (standard library only), tmux, util-linux. Nothing to `pip install`.
@@ -57,6 +62,26 @@ State lives in `${XDG_STATE_HOME:-~/.local/state}/agent-studio` (directory `0700
 `coordinator.json` (identity), `runtime.json` (resolved PATH summary), `coordinator.log`.
 
 Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login`, or `inherit`.
+
+## Run a team and watch it (inside WSL)
+
+```bash
+agent-studio coordinator start --enable-debug            # debug: allows the test-only `fake` provider
+agent-studio team start --workspace ~/scratch/demo --agent fake:developer:Dev --agent fake:reviewer:Rev --pretty
+#   -> teamId, one paneId per agent, and attach commands
+agent-studio team attach --team <teamId>                 # this terminal becomes the tmux window
+agent-studio debug assign --agent <agentId> --duration-ms 8000 --lines 8   # stub work you can watch
+agent-studio snapshot --team <teamId> --pretty           # status comes from here, never from pane text
+agent-studio team stop --team <teamId>
+```
+
+From Windows, `team attach --print` (or the `team.start` receipt) gives a ready-made command, e.g.
+`wt.exe -w new wsl.exe -d Ubuntu --exec /usr/bin/tmux -L agent-studio attach-session -t =as-1a2b3c4d5e6f7a8b`.
+
+tmux keys (prefix `Ctrl-b`): `d` detach (the team keeps working) · `z` zoom/unzoom the current pane ·
+arrows or `o` move between panes · `[` scroll back (`q` to leave) · `w` pick a window. Reattach with the same
+`team attach` command. You can also list Agent Studio's sessions with `tmux -L agent-studio ls`; your own
+`tmux ls` server is separate.
 
 ## Windows boundary checks (PowerShell, from `scripts\windows`)
 

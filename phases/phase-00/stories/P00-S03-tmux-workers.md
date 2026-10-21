@@ -1,6 +1,6 @@
 # P00-S03 — N worker panes in one native tmux window
 
-Status: To Do
+Status: Done
 Depends on: P00-S01, P00-S02
 Architecture: [P00 implementation contract](../architecture.md), sections A, D, E
 
@@ -30,10 +30,18 @@ Launch a configured team of N provider-neutral worker shims in exactly N panes o
 
 ## Done when
 
-- [ ] Configured N equals observed pane count for N=2 and N=3.
-- [ ] One terminal window shows all panes in tiled layout, from WSL and Windows Terminal.
-- [ ] Native detach/reattach works without an output bridge or re-dispatch.
-- [ ] Task delivery comes from coordinator claims and request files, never tmux keystrokes.
-- [ ] Stop affects only verified run-owned sessions; evidence includes before/after tmux inventory.
+- [x] Configured N equals observed pane count for N=2 and N=3.
+- [x] One terminal window shows all panes in tiled layout, from WSL and Windows Terminal (manual check on the target machine).
+- [x] Native detach/reattach works without an output bridge or re-dispatch (automated, real tmux client on a pty, Ctrl-b d twice, work continued, one assignment).
+- [x] Task delivery comes from coordinator claims and request files, never tmux keystrokes.
+- [x] Stop affects only verified run-owned sessions; the `team.stop` response carries before/after tmux inventory.
+
+## Evidence (2026-10-21)
+
+- `python3 -m unittest discover -s tests -t .` → 109 tests OK: Ubuntu 22.04 / Python 3.10 / tmux 3.2a (in chunks) and Python 3.13 / tmux 3.4 (one run, 97 s; one root-only skip). 18 of them drive real tmux (`tests/integration/test_s03_tmux.py`).
+- Covered: N=2/3 pane counts and titles; idempotent start (one session); roster validation; `fake` refused by a non-debug coordinator; delivery only to the target pane (checked via that pane's own output and `done/` folders); foreign and malformed request files refused and archived; queueing behind a busy agent; unfinished run stays `running`; pane mapping after resize, focus, layout change and swap-pane; killed pane → agent `offline`, assignment `reconciling`, task still `running`; killed session → team `error`; changed ownership marker and a foreign pane in a reused index → `CLEANUP_INCOMPLETE` with the session preserved; unrelated sessions on both the default and the Agent Studio socket unchanged; stop cancels active work and is repeatable.
+- Design decisions: dedicated tmux socket; request lifecycle inbox → active → done with safe redelivery; claim committed before the file is written; minimal report rules until S04.
+- Bugs found while testing: request writing assumed the agent folder existed; the S02 debug fixture claimed a `running` team with no session (now stays `starting`).
+- Target machine (2026-10-21, Ubuntu-24.04 / WSL2): full suite 109 OK; operator's manual check passed — two titled panes, stub progress only in the assigned pane, zoom, detach mid-run and reattach with work completed, Windows Terminal attach to the same panes, scoped stop.
 
 Do not infer task outcome from pane output.

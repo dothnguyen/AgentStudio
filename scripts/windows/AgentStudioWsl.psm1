@@ -7,7 +7,7 @@
 
 Set-StrictMode -Version 2
 $script:Utf8 = New-Object System.Text.UTF8Encoding($false)
-$script:SafeArg = '^[A-Za-z0-9._/:@+=-]+$'
+$script:SafeArg = '^[A-Za-z0-9._/:@+=~-]+$'
 $script:Protocol = 'agent-studio/v1'
 
 function Assert-SafeArg([string]$Value) {
@@ -49,21 +49,56 @@ function Invoke-WslRaw([string]$Distro, [string[]]$Argv, [byte[]]$StdinBytes = $
                        ElapsedMs = [math]::Round($sw.Elapsed.TotalMilliseconds, 1) }
 }
 
+function Get-WslText([string]$Text) {
+    # wsl.exe's own messages (unknown distro, WSL not installed, ...) are UTF-16; read as UTF-8 they carry NULs.
+    if ($null -eq $Text) { return '' }
+    return ($Text -replace "`0", '').Trim()
+}
+
+function Format-WslFailure($Raw) {
+    $out = Get-WslText $Raw.Stdout
+    $err = Get-WslText $Raw.Stderr
+    return "exit code $($Raw.ExitCode); wsl output: '$out'; stderr: '$err'"
+}
+
 function ConvertFrom-AgentStudioOutput($Raw, [string]$What) {
     $lines = @($Raw.Stdout -split "`n" | Where-Object { $_.Trim() })
-    if ($lines.Count -eq 0) {
-        throw "No JSON response from $What (exit $($Raw.ExitCode)). stderr: $($Raw.Stderr)"
+    if ($lines.Count -eq 0 -or -not $lines[-1].Trim().StartsWith('{')) {
+        throw "No JSON response from $What ($(Format-WslFailure $Raw))."
     }
     return ($lines[-1] | ConvertFrom-Json)
 }
 
+function Assert-DistroExists([string]$Distro) {
+    $r = Invoke-WslRaw -Distro $Distro -Argv @('--exec', '/bin/true')
+    if ($r.ExitCode -ne 0) {
+        throw ("WSL could not run anything in distro '$Distro' ($(Format-WslFailure $r)). " +
+               "Check the exact name with: wsl -l -v")
+    }
+}
+
 function Resolve-AgentStudioEntry([string]$Distro, [string]$EntryPath) {
-    if ($EntryPath) { Assert-SafeArg $EntryPath; return $EntryPath }
-    $r = Invoke-WslRaw -Distro $Distro -Argv @('--exec', '/usr/bin/printenv', 'HOME')
-    $wslHome = $r.Stdout.Trim()
-    if (-not $wslHome.StartsWith('/')) { throw "Could not read HOME in distro '$Distro'. stderr: $($r.Stderr)" }
-    $path = "$wslHome/.local/bin/agent-studio"
-    Assert-SafeArg $path
+    Assert-DistroExists $Distro
+    if ($EntryPath) {
+        Assert-SafeArg $EntryPath
+        $path = $EntryPath
+    } else {
+        # Ask for HOME; if --exec does not provide it, let wsl.exe resolve ~ itself and print the directory.
+        $wslHome = Get-WslText (Invoke-WslRaw -Distro $Distro -Argv @('--exec', '/usr/bin/printenv', 'HOME')).Stdout
+        if (-not $wslHome.StartsWith('/')) {
+            $r = Invoke-WslRaw -Distro $Distro -Argv @('--cd', '~', '--exec', '/bin/pwd')
+            $wslHome = Get-WslText $r.Stdout
+            if (-not $wslHome.StartsWith('/')) {
+                throw "Could not find your home folder in distro '$Distro' ($(Format-WslFailure $r)). Pass -EntryPath /home/<you>/.local/bin/agent-studio"
+            }
+        }
+        $path = "$wslHome/.local/bin/agent-studio"
+        Assert-SafeArg $path
+    }
+    $t = Invoke-WslRaw -Distro $Distro -Argv @('--exec', '/usr/bin/test', '-x', $path)
+    if ($t.ExitCode -ne 0) {
+        throw "agent-studio is not installed at $path in '$Distro'. Inside WSL run: bash /mnt/c/Works/Projects/AgentStudio/backend/install.sh"
+    }
     return $path
 }
 
