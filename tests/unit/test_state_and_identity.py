@@ -14,15 +14,15 @@ class StateTests(unittest.TestCase):
         self.path = os.path.join(self.dir, "state.db")
 
     def test_migrate_empty_and_repeat(self):
-        conn = state.connect(self.path, create=True)
-        self.assertEqual(state.migrate(conn, self.path), 1)
-        self.assertEqual(state.migrate(conn, self.path), 1)
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 1)
+        conn = state.connect(self.path, role="coordinator", create=True)
+        self.assertEqual(state.migrate(conn, self.path), state.SCHEMA_VERSION)
+        self.assertEqual(state.migrate(conn, self.path), state.SCHEMA_VERSION)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], state.SCHEMA_VERSION)
         self.assertEqual(os.stat(self.path).st_mode & 0o777, 0o600)
         state.check_schema(conn)
 
     def test_future_schema_rejected(self):
-        conn = state.connect(self.path, create=True)
+        conn = state.connect(self.path, role="coordinator", create=True)
         state.migrate(conn, self.path)
         conn.execute("INSERT INTO schema_migrations VALUES (99, 'x')")
         with self.assertRaises(AsError) as cm:
@@ -34,11 +34,11 @@ class StateTests(unittest.TestCase):
 
     def test_client_cannot_use_uninitialized_db(self):
         with self.assertRaises(AsError) as cm:
-            state.connect(self.path)
+            state.connect(self.path, role="client")
         self.assertEqual(cm.exception.code, "BACKEND_UNAVAILABLE")
 
     def test_idempotent_insert_and_conflict(self):
-        conn = state.connect(self.path, create=True)
+        conn = state.connect(self.path, role="coordinator", create=True)
         state.migrate(conn, self.path)
         a = inbox.insert_or_get(conn, "key-00000001", "debug.echo", {"text": "x"})
         b = inbox.insert_or_get(conn, "key-00000001", "debug.echo", {"text": "x"})
@@ -49,14 +49,14 @@ class StateTests(unittest.TestCase):
         self.assertEqual(cm.exception.code, "IDEMPOTENCY_CONFLICT")
 
     def test_pending_rows_cannot_have_responses(self):
-        conn = state.connect(self.path, create=True)
+        conn = state.connect(self.path, role="coordinator", create=True)
         state.migrate(conn, self.path)
         with self.assertRaises(sqlite3.IntegrityError):
             conn.execute("INSERT INTO commands (idempotency_key, command, payload_hash, args_json, status, "
                          "response_json, created_at) VALUES ('k1234567', 'c', 'h', '{}', 'pending', '{}', 'now')")
 
     def test_complete_is_single_shot(self):
-        conn = state.connect(self.path, create=True)
+        conn = state.connect(self.path, role="coordinator", create=True)
         state.migrate(conn, self.path)
         seq = inbox.insert_or_get(conn, "key-00000002", "debug.echo", {"text": "x"})
         inbox.complete(conn, seq, {"ok": True, "data": 1})

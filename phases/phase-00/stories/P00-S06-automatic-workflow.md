@@ -10,7 +10,7 @@ Run the built-in workflow automatically: Developer implements, coordinator captu
 
 ## Implement in this order
 
-1. `workflow.start` with runId, task text, Developer agentId, Reviewer agentId, validation command (from a fixed per-workspace config, not free text on the command line), and idempotency key. Require two different agents, a git workspace, a clean tree (or fixture acknowledgment), and no active mutating work.
+1. `workflow.start` with teamId, task text, Developer agentId, Reviewer agentId, validation command (from a fixed per-workspace config, not free text on the command line), and idempotency key. Require two different agents, a git workspace, a clean tree (or fixture acknowledgment), and no active mutating work.
 2. Persist the workflow run with `baseCommit`, retry budget 1, and a start event before dispatch. Stages: `developer`, `reviewer`, `developer_repair`, `reviewer_recheck`. Developer stages use `workspace_write`; Reviewer stages use `read_only`. Provider IDs come from agents, never from stage code.
 3. Prompts = fixed role templates + bounded user task + stage inputs, all passed as data files. Never interpolate text into Bash, SQL, tmux targets, or the validation command.
 4. After a successful Developer stage: capture `git diff <baseCommit>` plus untracked file list (bounded) as an artifact, run the validation command in the workspace with a deadline, and record exit code and bounded output.

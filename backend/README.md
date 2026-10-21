@@ -1,7 +1,7 @@
 # Agent Studio WSL backend
 
-P00-S01 scope: entry shim, Python coordinator daemon, command inbox, `serve`, health, infrastructure
-preflight, and the Windows boundary scripts. Contract: [architecture](../phases/phase-00/architecture.md).
+Implemented so far: P00-S01 (entry shim, coordinator daemon, command inbox, `serve`, health, preflight, Windows
+boundary scripts) and P00-S02 (schema v2, role-enforced write authority, event journal, snapshot/events). Contract: [architecture](../phases/phase-00/architecture.md).
 
 ## Layout
 
@@ -14,6 +14,11 @@ preflight, and the Windows boundary scripts. Contract: [architecture](../phases/
 | `agent_studio/serve.py` | Line-delimited JSON over stdio for Windows callers. |
 | `agent_studio/envresolve.py` | Captures the login + interactive shell environment so nvm/pipx-installed CLIs resolve. |
 | `agent_studio/ops.py` | `health`, `preflight`. |
+| `agent_studio/schema.py` | Entities, enums, allowed transitions, DDL (single source for SQL CHECKs and Python checks). |
+| `agent_studio/state.py` | Connections by role (`coordinator`/`client`/`runner`/`reader`) with an SQLite authorizer; migrations. |
+| `agent_studio/store.py` | Coordinator-only `Store`/`Tx`: every row change writes exactly one event in the same transaction. |
+| `agent_studio/reports.py` | Immutable worker-report inbox and exactly-once application. |
+| `agent_studio/queries.py` | `snapshot` and `events.after` (read-only, one consistent read transaction each). |
 | `../scripts/windows/` | PowerShell module, boundary spike, lifetime check, keep-alive. |
 
 Requirements inside WSL: bash, Python 3.8+ (standard library only), tmux, util-linux. Nothing to `pip install`.
@@ -34,7 +39,10 @@ for fresh checkouts, otherwise run `sed -i 's/\r$//' backend/bin/agent-studio`.
 agent-studio health --pretty
 agent-studio coordinator start             # idempotent; add --enable-debug for debug.echo
 agent-studio preflight --workspace ~/some/project --pretty
+agent-studio snapshot --pretty            # works even when the coordinator is stopped
+agent-studio events --after 0 --limit 50 --pretty
 agent-studio debug echo --text 'hello'     # debug coordinators only
+agent-studio debug fixture --agents 3      # debug only: fake team/task/assignment with real events
 agent-studio coordinator stop
 ```
 

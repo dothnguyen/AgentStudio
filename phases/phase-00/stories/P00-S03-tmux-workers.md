@@ -10,7 +10,7 @@ Launch a configured team of N provider-neutral worker shims in exactly N panes o
 
 ## Implement in this order
 
-1. `backend/bin/agent-studio-worker` (Bash). Accepts only validated runId and agentId, changes to the canonical workspace, prints provider/role and an idle banner, waits for a request file in its agent's private inbox directory, runs `agent-studio runner <assignmentId>` in the foreground, removes/archives the request file, and returns to idle. It makes no state decisions. Until S04 the runner executes a stub that writes a fake report.
+1. `backend/bin/agent-studio-worker` (Bash). Accepts only validated teamId and agentId, changes to the canonical workspace, prints provider/role and an idle banner, waits for a request file in its agent's private inbox directory, runs `agent-studio runner <assignmentId>` in the foreground, removes/archives the request file, and returns to idle. It makes no state decisions. Until S04 the runner executes a stub that writes a fake report.
 2. `team.start` input: ordered roster of `{agentId, providerId, role}`. Reject zero members, duplicate IDs, unsupported provider IDs, and rosters above the explicit P00 limit; never drop a member silently.
 3. Generate an unguessable run ID and one run-scoped session. Create the first pane, split once per additional member, select `tiled`. Verify `list-panes` count equals roster size **before** reporting success. Test N=2 and N=3.
 4. Record session/window/pane IDs, pane PID + start time, agent, provider, canonical workspace, and ownership marker (tmux user option). Later checks use pane IDs and the marker, never pane indices.

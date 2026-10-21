@@ -33,7 +33,12 @@ class Sandbox:
     def __init__(self, env_mode="inherit", extra_env=None):
         self.root = tempfile.mkdtemp(prefix="as-test-")
         self.env = dict(os.environ)
-        self.env.update({"XDG_STATE_HOME": os.path.join(self.root, "state"), "AGENT_STUDIO_ENV_MODE": env_mode})
+        tmux_dir = os.path.join(self.root, "tmux")
+        os.makedirs(tmux_dir, mode=0o700)
+        self.env.update({"XDG_STATE_HOME": os.path.join(self.root, "state"), "AGENT_STUDIO_ENV_MODE": env_mode,
+                         "TMUX_TMPDIR": tmux_dir})
+        for k in ("TMUX", "TMUX_PANE"):
+            self.env.pop(k, None)
         self.env.update(extra_env or {})
 
     @property
@@ -54,12 +59,44 @@ class Sandbox:
         return subprocess.Popen([SHIM, "serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, env=self.env)
 
+    def tmux(self, *args, socket="agent-studio", check=True):
+        """Test-only direct tmux access on this sandbox's private TMUX_TMPDIR."""
+        base = ["tmux"] + (["-L", socket] if socket else [])
+        proc = subprocess.run(base + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env,
+                              timeout=20)
+        if check and proc.returncode != 0:
+            raise AssertionError(f"tmux {args}: {proc.stderr.decode()}")
+        return proc.stdout.decode()
+
+    def snapshot(self, team_id=None):
+        args = ["snapshot", "--include-stopped"] + (["--team", team_id] if team_id else [])
+        rc, resp, proc = self.run(*args)
+        assert resp and resp["ok"], (resp, proc.stderr)
+        return resp["data"]
+
     def cleanup(self):
         try:
             self.run("coordinator", "stop", timeout=30)
         except Exception:
             pass
+        for socket in ("agent-studio", None):  # private sandbox servers only (TMUX_TMPDIR is ours)
+            try:
+                self.tmux("kill-server", socket=socket, check=False)
+            except Exception:
+                pass
         shutil.rmtree(self.root, ignore_errors=True)
+
+
+def wait_until(fn, timeout=15.0, interval=0.2, message="condition"):
+    import time
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = fn()
+        if last:
+            return last
+        time.sleep(interval)
+    raise AssertionError(f"timed out waiting for {message}; last={last!r}")
 
 
 def key(prefix="test"):

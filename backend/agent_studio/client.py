@@ -14,7 +14,7 @@ def submit(command: str, args: dict, key: str, timeout_ms: int) -> dict:
     if not info:
         raise AsError(BACKEND_UNAVAILABLE, "The coordinator is not running.", retryable=True,
                       remediation="Run: agent-studio coordinator start")
-    conn = state.connect(state.db_path(sd))
+    conn = state.connect(state.db_path(sd), role="client")
     try:
         state.check_schema(conn)
         seq = inbox.insert_or_get(conn, key, command, args)

@@ -14,7 +14,9 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, envresolve, inbox, paths, procid, state
+from . import PROTOCOL, VERSION, envresolve, fixtures, inbox, paths, procid, report_rules, reports, state, teams, \
+    tmuxctl
+from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
 LOCK_FILE = "coordinator.lock"
@@ -115,35 +117,68 @@ def _log(msg: str) -> None:
     sys.stderr.flush()
 
 
-def _handle_debug_echo(args: dict, ctx: dict) -> dict:
+def _require_debug(ctx: dict) -> None:
     if not ctx["debug"]:
         raise AsError(DEBUG_DISABLED, "Debug commands are disabled in this coordinator.",
                       remediation="agent-studio coordinator stop && agent-studio coordinator start --enable-debug")
+
+
+def _handle_debug_echo(args: dict, tx, ctx: dict) -> dict:
+    _require_debug(ctx)
     text = args["text"]
     raw = text.encode("utf-8")
     return {"text": text, "sha256": hashlib.sha256(raw).hexdigest(), "utf8Bytes": len(raw),
             "codePoints": len(text), "coordinatorPid": os.getpid()}
 
 
-HANDLERS = {"debug.echo": _handle_debug_echo}
+def _handle_debug_fixture(args: dict, tx, ctx: dict) -> dict:
+    _require_debug(ctx)
+    return fixtures.create_fixture_team(tx, agents=args["agents"], workspace=args["workspace"])
 
 
-def process_pending(conn, ctx: dict) -> int:
+def _handle_debug_assign(args: dict, tx, ctx: dict) -> dict:
+    _require_debug(ctx)
+    return teams.debug_assign(tx, args, ctx)
+
+
+HANDLERS = {
+    "debug.echo": _handle_debug_echo,
+    "debug.fixture": _handle_debug_fixture,
+    "debug.assign": _handle_debug_assign,
+    "team.start": lambda args, tx, ctx: teams.team_start(tx, args, ctx),
+    "team.stop": lambda args, tx, ctx: teams.team_stop(tx, args, ctx),
+}
+MONITOR_INTERVAL_S = 2.0
+
+
+def process_pending(store: Store, ctx: dict) -> int:
+    """Each command's state changes, events, and stored response commit in ONE transaction, so a crash can
+    never leave a change applied without its receipt (which would replay it) or a receipt without the change."""
+    conn = store.conn
     n = 0
     for row in inbox.pending(conn):
         handler = HANDLERS.get(row["command"])
         try:
-            if handler is None:
-                raise AsError(UNKNOWN_COMMAND, f"The coordinator does not handle {row['command']!r}.")
-            resp = {"ok": True, "data": handler(json.loads(row["args_json"]), ctx)}
-        except AsError as e:
+            with store.transaction(actor="operator", command_seq=row["seq"]) as tx:
+                if handler is None:
+                    raise AsError(UNKNOWN_COMMAND, f"The coordinator does not handle {row['command']!r}.")
+                data = handler(json.loads(row["args_json"]), tx, ctx)
+                if isinstance(data, teams.Failure):  # keep the recorded state change, answer with the error
+                    resp = {"ok": False, "error": data.error.to_error()}
+                    if data.error.data is not None:
+                        resp["data"] = data.error.data
+                    inbox.complete(conn, row["seq"], resp)
+                else:
+                    inbox.complete(conn, row["seq"], {"ok": True, "data": data})
+        except AsError as e:  # the transaction rolled back; record the rejection on its own
             resp = {"ok": False, "error": e.to_error()}
             if e.data is not None:
                 resp["data"] = e.data
+            inbox.complete(conn, row["seq"], resp)
         except Exception:  # never let one command kill the loop; never log its payload
             _log(f"handler error for command seq={row['seq']} name={row['command']}:\n{traceback.format_exc()}")
-            resp = {"ok": False, "error": {"code": INTERNAL, "message": "Internal coordinator error.", "retryable": False}}
-        inbox.complete(conn, row["seq"], resp)
+            inbox.complete(conn, row["seq"], {"ok": False, "error": {"code": INTERNAL,
+                                              "message": "Internal coordinator error.", "retryable": False}})
         n += 1
     return n
 
@@ -179,8 +214,9 @@ def run(enable_debug: bool = False) -> int:
     signal.signal(signal.SIGUSR1, lambda s, f: None)  # wake-up only; set_wakeup_fd does the work
 
     dbp = state.db_path(sd)
-    conn = state.connect(dbp, create=True)
+    conn = state.connect(dbp, role="coordinator", create=True)
     state.migrate(conn, dbp)
+    store = Store(conn)
 
     env, envinfo = envresolve.resolve()
     os.environ.clear()
@@ -195,10 +231,18 @@ def run(enable_debug: bool = False) -> int:
     procid.write_json_atomic(_p(sd, PID_FILE), pidfile)
     _log(f"started (debug={enable_debug}, env={envinfo['source']})")
 
-    ctx = {"debug": enable_debug, "stateDir": sd}
+    tmux = tmuxctl.Tmux(env=env)
+    ctx = {"debug": enable_debug, "stateDir": sd, "tmux": tmux}
+    next_monitor = 0.0
     while not stop_flag["stop"]:
         try:
-            process_pending(conn, ctx)
+            process_pending(store, ctx)
+            reports.apply_pending(store, report_rules.apply)
+            teams.redeliver(store, sd)
+            teams.dispatch_claims(store, sd)
+            if time.monotonic() >= next_monitor:
+                teams.monitor(store, tmux)
+                next_monitor = time.monotonic() + MONITOR_INTERVAL_S
         except Exception:
             _log(f"loop error:\n{traceback.format_exc()}")
             time.sleep(0.5)

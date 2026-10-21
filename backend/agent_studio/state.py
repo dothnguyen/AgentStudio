@@ -1,13 +1,26 @@
-"""SQLite connection and migrations. Only the coordinator runs migrate(); clients call check_schema()."""
+"""SQLite connections, roles, and migrations.
+
+Write authority is enforced by SQLite itself: every connection is opened with a role, and non-coordinator
+roles get an authorizer that rejects writes outside their inbox table.
+
+  coordinator  all reads and writes, migrations (only the coordinator daemon and tests use it)
+  client       read + INSERT INTO commands
+  runner       read + INSERT INTO worker_reports
+  reader       read-only (mode=ro + query_only)
+"""
 from __future__ import annotations
 
 import os
 import sqlite3
+import urllib.parse
 from datetime import datetime, timezone
 
+from . import schema
 from .protocol import AsError, BACKEND_UNAVAILABLE, UNSUPPORTED_SCHEMA
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
+ROLES = ("coordinator", "client", "runner", "reader")
+ROLE_INSERTS = {"client": {"commands"}, "runner": {"worker_reports"}, "reader": set()}
 
 MIGRATIONS = {
     1: [
@@ -25,7 +38,37 @@ MIGRATIONS = {
         )""",
         "CREATE INDEX commands_pending ON commands (status, seq)",
     ],
+    2: schema.MIGRATION_2,
+    3: schema.MIGRATION_3,
 }
+
+_DDL_ACTIONS = {getattr(sqlite3, n) for n in dir(sqlite3)
+                if n.startswith(("SQLITE_CREATE_", "SQLITE_DROP_")) or n in ("SQLITE_ALTER_TABLE", "SQLITE_REINDEX",
+                                                                           "SQLITE_ATTACH", "SQLITE_DETACH",
+                                                                           "SQLITE_ANALYZE")}
+
+
+class RoleConnection(sqlite3.Connection):
+    role = "reader"
+
+
+def _authorizer(role: str):
+    allowed_inserts = ROLE_INSERTS[role]
+
+    def check(action, arg1, arg2, dbname, source):
+        if action == sqlite3.SQLITE_INSERT:
+            return sqlite3.SQLITE_OK if (arg1 in allowed_inserts or (allowed_inserts and arg1 == "sqlite_sequence")) \
+                else sqlite3.SQLITE_DENY
+        if action in (sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE):
+            # AUTOINCREMENT bookkeeping happens on sqlite_sequence when an allowed insert runs.
+            return sqlite3.SQLITE_OK if (allowed_inserts and arg1 == "sqlite_sequence") else sqlite3.SQLITE_DENY
+        if action in _DDL_ACTIONS:
+            return sqlite3.SQLITE_DENY
+        if action == sqlite3.SQLITE_PRAGMA and arg2 is not None:
+            return sqlite3.SQLITE_DENY  # setting pragmas is coordinator-only after connect()
+        return sqlite3.SQLITE_OK
+
+    return check
 
 
 def utcnow() -> str:
@@ -36,23 +79,38 @@ def db_path(state_dir: str) -> str:
     return os.path.join(state_dir, "state.db")
 
 
-def connect(path: str, create: bool = False) -> sqlite3.Connection:
+def connect(path: str, role: str, create: bool = False) -> RoleConnection:
+    if role not in ROLES:
+        raise ValueError(f"unknown role {role!r}")
+    if create and role != "coordinator":
+        raise ValueError("only the coordinator creates the database")
     if not create and not os.path.exists(path):
         raise AsError(BACKEND_UNAVAILABLE, "The state database has not been initialized by the coordinator.",
                       retryable=True, remediation="Run: agent-studio coordinator start")
-    conn = sqlite3.connect(path, timeout=5.0, isolation_level=None)
+    if role == "reader":
+        uri = "file:" + urllib.parse.quote(os.path.abspath(path)) + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=5.0, isolation_level=None, factory=RoleConnection)
+    else:
+        conn = sqlite3.connect(path, timeout=5.0, isolation_level=None, factory=RoleConnection)
+    conn.role = role
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 5000")
+    if role == "reader":
+        conn.execute("PRAGMA query_only = 1")
+    if role != "coordinator":
+        conn.set_authorizer(_authorizer(role))
     return conn
 
 
-def current_version(conn: sqlite3.Connection) -> int:
+def current_version(conn) -> int:
     row = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
     return int(row[0] or 0)
 
 
-def migrate(conn: sqlite3.Connection, path: str) -> int:
+def migrate(conn: RoleConnection, path: str) -> int:
+    if conn.role != "coordinator":
+        raise ValueError("only the coordinator migrates")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("BEGIN IMMEDIATE")
     try:
@@ -62,8 +120,11 @@ def migrate(conn: sqlite3.Connection, path: str) -> int:
             raise AsError(UNSUPPORTED_SCHEMA, f"Database schema version {version} is newer than this backend supports "
                                               f"({SCHEMA_VERSION}).", remediation="Upgrade Agent Studio.")
         for v in range(version + 1, SCHEMA_VERSION + 1):
-            for stmt in MIGRATIONS[v]:
-                conn.execute(stmt)
+            for step in MIGRATIONS[v]:
+                if callable(step):
+                    step(conn)
+                else:
+                    conn.execute(step)
             conn.execute("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", (v, utcnow()))
         conn.execute("COMMIT")
     except BaseException:
@@ -76,7 +137,7 @@ def migrate(conn: sqlite3.Connection, path: str) -> int:
     return SCHEMA_VERSION
 
 
-def check_schema(conn: sqlite3.Connection) -> None:
+def check_schema(conn) -> None:
     try:
         version = current_version(conn)
     except sqlite3.OperationalError:
@@ -90,3 +151,8 @@ def check_schema(conn: sqlite3.Connection) -> None:
     if version < SCHEMA_VERSION:
         raise AsError(BACKEND_UNAVAILABLE, "The running coordinator uses an older schema.", retryable=True,
                       remediation="Restart it: agent-studio coordinator stop && agent-studio coordinator start")
+
+
+def db_id(conn) -> str:
+    row = conn.execute("SELECT value FROM meta WHERE key = 'db_id'").fetchone()
+    return row[0]

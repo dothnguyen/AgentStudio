@@ -1,6 +1,6 @@
 # P00-S02 — SQLite state, write authority, and event journal
 
-Status: To Do
+Status: In Review — all checks pass on Linux (ext4); confirm by running the test suite once inside the WSL distro
 Depends on: P00-S01
 Architecture: [P00 implementation contract](../architecture.md), sections C–D
 
@@ -30,10 +30,19 @@ Create the only source of truth for teams, agents, tasks, assignments, workflow 
 
 ## Done when
 
-- [ ] Every accepted state change has exactly one event in the same transaction.
-- [ ] Write authority (coordinator / command inbox / report inbox) is enforced and tested.
-- [ ] Status survives process exit and restart on a WSL-native filesystem.
-- [ ] Duplicate commands cannot create duplicate assignments or events.
-- [ ] Snapshot and event cursor are consistent.
+- [x] Every accepted state change has exactly one event in the same transaction.
+- [x] Write authority (coordinator / command inbox / report inbox) is enforced and tested.
+- [ ] Status survives process exit and restart on a WSL-native filesystem — passes on Linux ext4; run the suite inside WSL to confirm.
+- [x] Duplicate commands cannot create duplicate assignments or events.
+- [x] Snapshot and event cursor are consistent.
+
+## Evidence (2026-10-21)
+
+- `python3 -m unittest discover -s tests -t .` → 86 tests OK on Ubuntu 22.04 / Python 3.10.12 (non-root), and OK on Python 3.13 / SQLite 3.45.1 (root; one permission test skipped). The S01 boundary spike still passes against this code.
+- Write authority is enforced by an SQLite authorizer per connection role (`tests/unit/test_store.py::WriteAuthority`), plus a source scan that fails if a module opens a connection with an unexpected role.
+- Concurrency: one writer process creating 60 teams × 3 agents per transaction while two readers snapshot continuously — every snapshot had complete teams, a monotonic cursor, and `cursor == 4 × teams`.
+- Crash: a process SIGKILLed between an `assignment → succeeded` update and COMMIT leaves the assignment `running` with no `assignment.succeeded` event and a clean `integrity_check`.
+- Design change found while implementing: S01 committed a command's effect and its stored response separately; they are now one transaction (covered by `AtomicCommands`).
+- Implementation: `backend/agent_studio/{schema,state,store,reports,queries,fixtures}.py`; commands `snapshot`, `events.after`, `debug.fixture`.
 
 Do not implement Electron or a renderer-side database client.

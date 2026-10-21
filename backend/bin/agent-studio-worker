@@ -1,0 +1,64 @@
+#!/bin/bash
+# Agent Studio worker shim: one per tmux pane. It makes no state decisions.
+#   * accepts only a validated team ID and agent ID (UUIDs) - never task text
+#   * waits for a request file written by the coordinator into this agent's private inbox
+#   * moves it to active/ BEFORE running it, so a restarted worker can never run it twice
+#   * runs `agent-studio runner` in the foreground (its output is what you watch in the pane)
+#   * archives the request in done/ and returns to idle
+set -uo pipefail
+umask 077
+
+uuid='^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+team="${1:-}"
+agent="${2:-}"
+if [[ ! "$team" =~ $uuid || ! "$agent" =~ $uuid ]]; then
+  printf 'agent-studio-worker: refusing to start without a valid team ID and agent ID\n' >&2
+  exit 2
+fi
+
+rl=/usr/bin/readlink
+[[ -x "$rl" ]] || rl=/bin/readlink
+self="$("$rl" -f -- "${BASH_SOURCE[0]}")"
+entry="${self%/*}/agent-studio"
+
+state="${XDG_STATE_HOME:-}"
+[[ "$state" == /* ]] || state="$HOME/.local/state"
+base="$state/agent-studio/agents/$agent"
+inbox="$base/inbox"
+active="$base/active"
+done_dir="$base/done"
+mkdir -p -- "$inbox" "$active" "$done_dir"
+
+stamp() { printf '%(%H:%M:%S)T' -1; }
+if [[ -r "$base/banner" ]]; then
+  cat -- "$base/banner"   # written by the coordinator with control characters removed
+fi
+printf '\n'
+idle() { printf '[%s] idle - waiting for an assignment\n' "$(stamp)"; }
+trap 'printf "\n[%s] worker stopping\n" "$(stamp)"; exit 0' TERM HUP INT
+
+idle
+shopt -s nullglob
+while true; do
+  files=("$inbox"/*.request)
+  if (( ${#files[@]} == 0 )); then
+    sleep 0.5
+    continue
+  fi
+  file="${files[0]}"
+  name="${file##*/}"
+  id="${name%.request}"
+  if [[ ! "$id" =~ $uuid ]]; then
+    printf '[%s] ignoring malformed request file %q\n' "$(stamp)" "$name"
+    mv -f -- "$file" "$done_dir/$name.rejected" 2>/dev/null || true
+    continue
+  fi
+  if ! mv -- "$file" "$active/$name" 2>/dev/null; then
+    continue
+  fi
+  "$entry" runner --agent "$agent" --assignment "$id"
+  rc=$?
+  mv -f -- "$active/$name" "$done_dir/$name" 2>/dev/null || true
+  printf '[%s] runner finished (exit %d)\n' "$(stamp)" "$rc"
+  idle
+done

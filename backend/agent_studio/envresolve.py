@@ -16,7 +16,8 @@ from typing import Dict, Optional, Tuple
 
 MARKER = b"__AGENT_STUDIO_ENV_BEGIN__"
 SCRIPT = "printf '%s\\0' __AGENT_STUDIO_ENV_BEGIN__; command env -0"
-KEEP_FROM_CALLER = ("XDG_STATE_HOME", "AGENT_STUDIO_ENV_MODE", "AGENT_STUDIO_PYTHON", "PYTHONIOENCODING")
+KEEP_FROM_CALLER = ("XDG_STATE_HOME", "AGENT_STUDIO_ENV_MODE", "AGENT_STUDIO_PYTHON", "AGENT_STUDIO_TMUX_SOCKET",
+                    "TMUX_TMPDIR", "PYTHONIOENCODING")
 TIMEOUT_S = 15
 
 _cache: Optional[Tuple[Dict[str, str], dict]] = None

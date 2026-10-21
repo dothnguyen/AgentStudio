@@ -9,7 +9,7 @@ import subprocess
 import uuid
 
 from . import PROTOCOL, VERSION, coordinator, envresolve, paths, procid
-from .protocol import AsError, TMUX_NOT_FOUND, WORKSPACE_NOT_FOUND, req_text
+from .protocol import AsError, STATE_DIR_UNUSABLE, TMUX_NOT_FOUND, WORKSPACE_NOT_FOUND, req_text
 
 WINDOWS_PATH_RE = re.compile(r"^(?:[A-Za-z]:(?:[\\/]|$)|\\\\)")
 
@@ -97,6 +97,10 @@ def preflight(args: dict) -> dict:
     workspace = None
     try:
         workspace = canonical_workspace(raw)
+        sd_real = os.path.realpath(paths.raw_state_dir())
+        if sd_real == workspace or sd_real.startswith(workspace.rstrip("/") + "/"):
+            raise AsError(STATE_DIR_UNUSABLE, f"The state directory {sd_real} is inside the workspace.",
+                          remediation="Keep Agent Studio state outside the project folder (unset XDG_STATE_HOME).")
         record("workspace", path=workspace)
         if paths.is_windows_or_network_path(workspace):
             warnings.append({"code": "WORKSPACE_ON_WINDOWS_FS",

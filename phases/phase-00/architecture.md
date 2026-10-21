@@ -51,12 +51,12 @@ The previous Electron + NTM attempt failed at this boundary. These rules are non
 **serve.** One JSON object per line in each direction. Requests carry an `id` that the matching response echoes; `events.subscribe` makes `serve` push event lines tagged with `seq`. A malformed line gets a `BAD_REQUEST` response with `id:null` and the connection stays open. Field lengths (task text, findings) are validated per field.
 
 ```json
-{"protocol":"agent-studio/v1","id":"7","command":"task.direct","idempotencyKey":"uuid","args":{"runId":"uuid","agentId":"uuid","taskText":"…","policy":"read_only"}}
+{"protocol":"agent-studio/v1","id":"7","command":"task.direct","idempotencyKey":"uuid","args":{"teamId":"uuid","agentId":"uuid","taskText":"…","policy":"read_only"}}
 {"protocol":"agent-studio/v1","id":"7","ok":true,"data":{"receipt":"accepted","taskId":"uuid","assignmentId":"uuid"}}
-{"protocol":"agent-studio/v1","event":{"seq":43,"name":"assignment.started","runId":"uuid","agentId":"uuid","assignmentId":"uuid","data":{}}}
+{"protocol":"agent-studio/v1","event":{"seq":43,"name":"assignment.started","teamId":"uuid","agentId":"uuid","assignmentId":"uuid","data":{}}}
 ```
 
-**Commands.** `health`, `preflight`, `coordinator.start`, `coordinator.stop`, `team.start`, `team.attach`, `team.stop`, `task.direct`, `workflow.start`, `snapshot`, `events.after`, `events.subscribe` (serve only), `assignment.cancel`, `assignment.resolve`. Mutating commands require an idempotency key: same key + identical payload returns the original receipt; same key + different payload returns `IDEMPOTENCY_CONFLICT`. Responses are `ok` with typed `data`, or `{code,message,retryable}`. Receipts distinguish `accepted`, `assigned`, and `started`; never generic success for queued work. `team.attach` is interactive in a TTY and otherwise returns the exact WSL and Windows Terminal attach commands.
+**Commands.** `health`, `preflight`, `coordinator.start`, `coordinator.stop`, `snapshot` (`teamId?`, `includeStopped?`), `events.after` (`cursor`, `limit` ≤ 1000, `teamId?`, `dbId?`), `team.start`, `team.attach`, `team.stop`, `task.direct`, `workflow.start`, `snapshot`, `events.after`, `events.subscribe` (serve only), `assignment.cancel`, `assignment.resolve`. Debug coordinators (`--enable-debug`) also accept `debug.echo` and `debug.fixture`; these are for tests and the boundary spike only. Mutating commands require an idempotency key: same key + identical payload returns the original receipt; same key + different payload returns `IDEMPOTENCY_CONFLICT`. Responses are `ok` with typed `data`, or `{code,message,retryable}`. Receipts distinguish `accepted`, `assigned`, and `started`; never generic success for queued work. `team.attach` is interactive in a TTY and otherwise returns the exact WSL and Windows Terminal attach commands.
 
 `assignment.resolve` takes `assignmentId` and `action ∈ {retry, fail, cancel}`. It is the only way out of `waiting_input` and `reconciling`. `retry` creates a new attempt (new assignment ID, same stage) and may carry an explicitly different policy that the operator chose; it never reruns an attempt that may still be running.
 
@@ -66,7 +66,20 @@ Rejected everywhere: arbitrary shell commands, paths outside the canonical works
 
 Tables: `schema_migrations`; `teams`; `agents`; `tasks`; `workflow_runs`; `stage_attempts`; `assignments`; `commands` (inbox + idempotency); `worker_reports` (immutable inbox); `events` (INTEGER PRIMARY KEY sequence, UTC timestamp, actor, entity IDs, name, JSON payload). Foreign keys on, explicit transactions, busy timeout, WAL (WSL-local only), versioned migrations.
 
-**Write authority.** Coordinator: all materialized rows and events. Clients: insert `commands` rows only. Runners: insert `worker_reports` rows only (unique on `assignmentId` + report sequence). Every coordinator transition updates its row and appends its event in one transaction.
+**Identifiers.** All entity IDs are lowercase UUID v4. The team ID doubles as the run ID: one team row per launched team. A `meta` row holds a random `db_id`; `snapshot` and `events.after` return it, and a client that passes a `dbId` from another database (or a cursor past the head) gets `CURSOR_INVALID` and must take a new snapshot.
+
+**Write authority** is enforced by SQLite, not convention. Every connection is opened with a role; non-coordinator roles get an authorizer callback that denies other writes, DDL, ATTACH, and pragma changes.
+
+| Role | May write | Used by |
+|---|---|---|
+| `coordinator` | everything, migrations | coordinator daemon only |
+| `client` | `INSERT INTO commands` | CLI / serve mutating commands |
+| `runner` | `INSERT INTO worker_reports` | assignment runner (S04) |
+| `reader` | nothing (`mode=ro`, `query_only`) | `snapshot`, `events.after` |
+
+`events`, `worker_reports`, and `report_applications` are append-only (triggers abort UPDATE/DELETE). Reports are unique on `assignment_id` + `report_seq`; an identical resubmission is a no-op and a different one is `REPORT_CONFLICT`. The coordinator applies each report exactly once, recording the outcome in `report_applications` (a handler rejection such as `INVALID_TRANSITION` is recorded as `rejected:<code>` without changing state).
+
+**Atomicity.** Every row change writes exactly one event in the same transaction (`store.Tx`). A command's state changes, events, and stored response commit in **one** transaction, so a crash can never leave a change without its receipt (which would replay it on restart) or a receipt without its change. Events record the actor (`operator` for commands, `runner` for applied reports, `coordinator` for its own decisions) plus `command_seq` / `report_id` for traceability.
 
 | Object | States and essential transitions |
 |---|---|

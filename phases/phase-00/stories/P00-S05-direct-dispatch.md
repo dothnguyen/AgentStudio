@@ -10,7 +10,7 @@ A user selects any idle team member, regardless of provider, sends one task with
 
 ## Implement in this order
 
-1. `task.direct` (CLI and serve) with runId, agentId, task text, policy, and idempotency key. Validate lengths, UUIDs, team membership, and that the agent's adapter supports the policy before accepting.
+1. `task.direct` (CLI and serve) with teamId, agentId, task text, policy, and idempotency key. Validate lengths, UUIDs, team membership, and that the agent's adapter supports the policy before accepting.
 2. In one coordinator transaction: require agent `idle`; if policy is `workspace_write`, require no active mutating assignment or workflow in the workspace (`WORKSPACE_BUSY`); write task, assignment (`queued`), event, and command response. Return an `accepted` receipt with IDs.
 3. Coordinator claims (`claimed`) and writes the request file; commit `running` only after runner start evidence. If the process fails to start, record a failed assignment with a diagnostic code.
 4. Apply normalized progress and attention reports as events; the runner prints activity in the pane. Apply the final report only if assignmentId, agentId, providerId, and attempt match.
