@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+test-results/
+.ntm/
+.git-history-backup-*/
+playwright-report/
+*.log
+.DS_Store
