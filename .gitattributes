@@ -1,0 +1,7 @@
+# The WSL side must keep LF line endings, or bash fails with "bad interpreter: /bin/bash^M".
+* text=auto
+backend/bin/* text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf

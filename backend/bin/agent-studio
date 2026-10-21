@@ -1,0 +1,33 @@
+#!/bin/bash
+# Agent Studio entry shim.
+# Windows callers invoke this exact file through: wsl.exe -d <distro> --exec <absolute path> <literal subcommand>
+# It passes argv through unchanged and never inspects, rewrites, or evaluates user text.
+# Login-environment capture (so provider CLIs resolve as in the user's terminal) is done by the
+# Python backend for long-lived processes; see agent_studio/envresolve.py.
+set -euo pipefail
+
+# Do not rely on PATH: wsl.exe --exec can start us with an unusual one.
+rl=/usr/bin/readlink
+[[ -x "$rl" ]] || rl=/bin/readlink
+self="$("$rl" -f -- "${BASH_SOURCE[0]}")"
+bindir="${self%/*}"
+backend="${bindir%/*}"
+
+py="${AGENT_STUDIO_PYTHON:-}"
+if [[ -z "$py" ]]; then
+  for candidate in /usr/bin/python3 /usr/local/bin/python3; do
+    if [[ -x "$candidate" ]]; then py="$candidate"; break; fi
+  done
+fi
+if [[ -z "$py" ]]; then
+  py="$(command -v python3 || true)"
+fi
+if [[ -z "$py" ]]; then
+  printf '%s\n' '{"protocol":"agent-studio/v1","id":null,"ok":false,"error":{"code":"BACKEND_UNAVAILABLE","message":"python3 was not found in this WSL distro.","retryable":false,"remediation":"Install Python 3.8+ (e.g. sudo apt install python3)."}}'
+  exit 1
+fi
+
+export PYTHONIOENCODING=utf-8
+unset PYTHONPATH PYTHONHOME PYTHONSTARTUP
+# launch.py puts only the backend directory on sys.path (not the caller's cwd).
+exec "$py" -s "$backend/launch.py" "$@"

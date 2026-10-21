@@ -7,3 +7,7 @@ test-results/
 playwright-report/
 *.log
 .DS_Store
+__pycache__/
+*.pyc
+boundary-spike-evidence.json
+lifetime-evidence.json
