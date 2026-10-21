@@ -12,13 +12,14 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve
+from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, validation, watch
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, dumps, envelope
 
 USAGE = """agent-studio <command>
 
   health                                   backend, coordinator, environment, keep-alive status
-  preflight --workspace PATH               infrastructure checks (state dir, workspace, tmux)
+  preflight --workspace PATH [--provider ID ...] [--policy P ...]
+                                           state dir, workspace, tmux, and selected providers/policies
   coordinator start [--enable-debug]       start the coordinator daemon (idempotent)
   coordinator stop                         stop the recorded coordinator process
   snapshot [--team ID] [--include-stopped]  current teams, agents, tasks, workflow runs, assignments + cursor
@@ -27,10 +28,20 @@ USAGE = """agent-studio <command>
                                            launch one tmux window with one pane per agent
   team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
   team stop --team ID                      stop only that team's verified tmux session
+  task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
+              [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
+  task show --task ID                      a task, its assignments and its event history
+  assignment cancel --assignment ID        cancel queued or running work (exactly one outcome wins)
+  assignment resolve --assignment ID --action retry|fail|cancel [--policy P]
+                                           settle waiting_input / reconciling work or a paused workflow stage
+  workflow start --team ID --developer ID --reviewer ID (--text TEXT | --text-file PATH|-) [--wait]
+                                           Developer -> validation -> Reviewer, one bounded repair
+  workflow show --workflow ID              stages, verdicts, validation, handoffs and history
+  workflow cancel --workflow ID            cancel a running or paused workflow
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
-  debug assign --agent ID [--outcome S] [--duration-ms N] [--lines N] [--exit-without-final]
-                                           give an agent a stub assignment (debug coordinators only)
+  debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
+               [--write-file REL]          give an agent a fake-provider assignment (debug coordinators only)
   request                                  read one JSON request from stdin, print one response
   serve                                    line-delimited JSON requests/responses over stdio
   keepalive                                hold the WSL keep-alive lock until terminated
@@ -54,12 +65,28 @@ def _emit(resp: dict, pretty: bool) -> int:
     return 0 if resp.get("ok") else 1
 
 
+def _task_text(ns) -> str:
+    if (ns.text is None) == (ns.text_file is None):
+        raise AsError(BAD_REQUEST, "give exactly one of --text or --text-file")
+    if ns.text is not None:
+        return ns.text
+    try:
+        if ns.text_file == "-":
+            return sys.stdin.buffer.read(dispatch.MAX_TASK_BYTES + 1).decode("utf-8")
+        with open(ns.text_file, "rb") as f:
+            return f.read(dispatch.MAX_TASK_BYTES + 1).decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise AsError(BAD_REQUEST, f"Cannot read the task text: {e}")
+
+
 def _human_request(argv) -> dict:
     p = _Parser(prog="agent-studio", add_help=False)
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("health", add_help=False)
     pf = sub.add_parser("preflight", add_help=False)
     pf.add_argument("--workspace", required=True)
+    pf.add_argument("--provider", action="append", default=[])
+    pf.add_argument("--policy", action="append", default=[])
     co = sub.add_parser("coordinator", add_help=False)
     co.add_argument("action", choices=["start", "stop"])
     co.add_argument("--enable-debug", action="store_true")
@@ -71,6 +98,39 @@ def _human_request(argv) -> dict:
     ev.add_argument("--limit", type=int, default=200)
     ev.add_argument("--team")
     ev.add_argument("--db-id")
+    tk = sub.add_parser("task", add_help=False)
+    tk.add_argument("action", choices=["direct", "show"])
+    tk.add_argument("--team")
+    tk.add_argument("--agent")
+    tk.add_argument("--task")
+    tk.add_argument("--policy")
+    tk.add_argument("--text")
+    tk.add_argument("--text-file")
+    tk.add_argument("--deadline-ms", type=int)
+    tk.add_argument("--wait", action="store_true")
+    tk.add_argument("--scenario")
+    tk.add_argument("--duration-ms", type=int, default=1000)
+    tk.add_argument("--lines", type=int, default=3)
+    tk.add_argument("--key")
+    tk.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
+    wf_p = sub.add_parser("workflow", add_help=False)
+    wf_p.add_argument("action", choices=["start", "show", "cancel"])
+    wf_p.add_argument("--team")
+    wf_p.add_argument("--developer")
+    wf_p.add_argument("--reviewer")
+    wf_p.add_argument("--workflow")
+    wf_p.add_argument("--text")
+    wf_p.add_argument("--text-file")
+    wf_p.add_argument("--wait", action="store_true")
+    wf_p.add_argument("--key")
+    wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
+    asg_p = sub.add_parser("assignment", add_help=False)
+    asg_p.add_argument("action", choices=["cancel", "resolve"])
+    asg_p.add_argument("--action", dest="resolve_action", choices=["retry", "fail", "cancel"])
+    asg_p.add_argument("--policy")
+    asg_p.add_argument("--assignment", required=True)
+    asg_p.add_argument("--key")
+    asg_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     tm = sub.add_parser("team", add_help=False)
     tm.add_argument("action", choices=["start", "stop", "attach"])
     tm.add_argument("--workspace")
@@ -86,10 +146,12 @@ def _human_request(argv) -> dict:
     dbg.add_argument("--agents", type=int, default=2)
     dbg.add_argument("--agent")
     dbg.add_argument("--goal")
-    dbg.add_argument("--outcome", default="succeeded")
+    dbg.add_argument("--scenario", default="success")
+    dbg.add_argument("--policy", default="read_only")
     dbg.add_argument("--duration-ms", type=int, default=1500)
     dbg.add_argument("--lines", type=int, default=3)
-    dbg.add_argument("--exit-without-final", action="store_true")
+    dbg.add_argument("--deadline-ms", type=int)
+    dbg.add_argument("--write-file")
     dbg.add_argument("--key")
     dbg.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     ns = p.parse_args(argv)
@@ -98,6 +160,10 @@ def _human_request(argv) -> dict:
         req["command"] = "health"
     elif ns.cmd == "preflight":
         req.update(command="preflight", args={"workspace": ns.workspace})
+        if ns.provider:
+            req["args"]["providers"] = ns.provider
+        if ns.policy:
+            req["args"]["policies"] = ns.policy
     elif ns.cmd == "coordinator":
         req["command"] = f"coordinator.{ns.action}"
         if ns.action == "start":
@@ -112,6 +178,49 @@ def _human_request(argv) -> dict:
             req["args"]["teamId"] = ns.team
         if ns.db_id:
             req["args"]["dbId"] = ns.db_id
+    elif ns.cmd == "task":
+        if ns.action == "show":
+            if not ns.task:
+                raise AsError(BAD_REQUEST, "task show needs --task ID")
+            req.update(command="task.show", args={"taskId": ns.task})
+        else:
+            if not (ns.team and ns.agent and ns.policy):
+                raise AsError(BAD_REQUEST, "task direct needs --team, --agent and --policy")
+            text = _task_text(ns)
+            req.update(command="task.direct", args={"teamId": ns.team, "agentId": ns.agent, "policy": ns.policy,
+                                                    "text": text})
+            if ns.deadline_ms:
+                req["args"]["deadlineMs"] = ns.deadline_ms
+            if ns.scenario:
+                req["args"]["debugProviderOptions"] = {"scenario": ns.scenario, "durationMs": ns.duration_ms,
+                                                       "progressLines": ns.lines}
+            req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+            req["_wait"] = ns.wait
+    elif ns.cmd == "workflow":
+        if ns.action == "start":
+            if not (ns.team and ns.developer and ns.reviewer):
+                raise AsError(BAD_REQUEST, "workflow start needs --team, --developer and --reviewer")
+            text = _task_text(ns)
+            req.update(command="workflow.start", args={"teamId": ns.team, "developerAgentId": ns.developer,
+                                                       "reviewerAgentId": ns.reviewer, "text": text},
+                       idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+            req["_wait_workflow"] = ns.wait
+        else:
+            if not ns.workflow:
+                raise AsError(BAD_REQUEST, f"workflow {ns.action} needs --workflow ID")
+            req.update(command=f"workflow.{ns.action}", args={"workflowRunId": ns.workflow})
+            if ns.action == "cancel":
+                req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+    elif ns.cmd == "assignment":
+        if ns.action == "resolve":
+            if not ns.resolve_action:
+                raise AsError(BAD_REQUEST, "assignment resolve needs --action retry|fail|cancel")
+            req.update(command="assignment.resolve", args={"assignmentId": ns.assignment, "action": ns.resolve_action})
+            if ns.policy:
+                req["args"]["policy"] = ns.policy
+        else:
+            req.update(command="assignment.cancel", args={"assignmentId": ns.assignment})
+        req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "team":
         if ns.action == "start":
             if not ns.workspace or not ns.agent:
@@ -139,9 +248,12 @@ def _human_request(argv) -> dict:
         if ns.action == "assign":
             if not ns.agent:
                 raise AsError(BAD_REQUEST, "debug assign needs --agent ID")
-            req.update(command="debug.assign", args={"agentId": ns.agent, "stub": {
-                "outcome": ns.outcome, "durationMs": ns.duration_ms, "progressLines": ns.lines,
-                "exitWithoutFinal": ns.exit_without_final}})
+            fake = {"scenario": ns.scenario, "durationMs": ns.duration_ms, "progressLines": ns.lines}
+            if ns.write_file:
+                fake["writeFile"] = ns.write_file
+            req.update(command="debug.assign", args={"agentId": ns.agent, "policy": ns.policy, "fake": fake})
+            if ns.deadline_ms:
+                req["args"]["deadlineMs"] = ns.deadline_ms
             if ns.goal:
                 req["args"]["goal"] = ns.goal
         elif ns.action == "echo":
@@ -180,6 +292,11 @@ def main(argv=None) -> int:
             sys.stderr.write(e.message + "\n")
             return 2
         return runner.run(ns.agent, ns.assignment)
+    if cmd == "validate":
+        if argv[1:2] != ["--dir"] or len(argv) != 3:
+            sys.stderr.write("usage: agent-studio validate --dir DIR (internal)\n")
+            return 2
+        return validation.run_validator(argv[2])
     if cmd == "request":
         raw = sys.stdin.buffer.read(MAX_LINE_BYTES + 1)
         if len(raw) > MAX_LINE_BYTES:
@@ -190,7 +307,27 @@ def main(argv=None) -> int:
     except AsError as e:
         return _emit(envelope(None, False, error=e.to_error()), pretty)
     print_only = req.pop("_print", False)
+    wait = req.pop("_wait", False)
+    wait_wf = req.pop("_wait_workflow", False)
     resp = dispatch.handle_request(req, require_id=False)
+    if wait_wf and resp.get("ok"):
+        receipt = resp["data"]
+        sys.stderr.write(f"accepted: workflow {receipt['workflowRunId']} (base {receipt['baseCommit'][:12]})\n")
+        try:
+            detail = watch.follow_workflow(receipt["workflowRunId"])
+        except KeyboardInterrupt:
+            sys.stderr.write("stopped watching; the workflow keeps running (see: agent-studio workflow show)\n")
+            return 130
+        return _emit(envelope(None, True, data=dict(detail, receipt=receipt)), pretty)
+    if wait and resp.get("ok"):
+        receipt = resp["data"]
+        sys.stderr.write(f"accepted: task {receipt['taskId']} assignment {receipt['assignmentId']}\n")
+        try:
+            detail = watch.follow(receipt["assignmentId"], receipt["taskId"])
+        except KeyboardInterrupt:
+            sys.stderr.write("stopped watching; the task keeps running (see: agent-studio task show)\n")
+            return 130
+        resp = envelope(None, True, data=dict(detail, receipt=receipt))
     if (req.get("command") == "team.attach" and resp.get("ok") and not print_only
             and sys.stdin.isatty() and sys.stdout.isatty()):
         argv_ = resp["data"]["argv"]

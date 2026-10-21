@@ -39,10 +39,9 @@ class TeamCase(unittest.TestCase):
                            check=False)
         return [dict(zip(("session", "window", "pane", "pid", "dead"), l.split())) for l in out.splitlines()]
 
-    def assign(self, agent_id, **stub):
-        stub.setdefault("durationMs", 300)
-        stub.setdefault("progressLines", 1)
-        rc, r, _ = self.sb.request(req("debug.assign", {"agentId": agent_id, "stub": stub}, idempotencyKey=key("asg")))
+    def assign(self, agent_id, scenario="success", durationMs=300, progressLines=1):
+        fake = {"scenario": scenario, "durationMs": durationMs, "progressLines": progressLines}
+        rc, r, _ = self.sb.request(req("debug.assign", {"agentId": agent_id, "fake": fake}, idempotencyKey=key("asg")))
         self.assertTrue(r["ok"], r)
         return r["data"]
 
@@ -147,16 +146,20 @@ class Delivery(TeamCase):
 
     def test_unfinished_assignment_never_becomes_succeeded(self):
         team = self.start_team(1)
-        d = self.assign(team["agents"][0]["agentId"], exitWithoutFinal=True)
+        d = self.assign(team["agents"][0]["agentId"], scenario="slow", durationMs=30000, progressLines=30)
+        wait_until(lambda: self.assignment(team["teamId"], d["assignmentId"])["status"] == "running")
+        os.kill(self.assignment(team["teamId"], d["assignmentId"])["processPid"], signal.SIGKILL)  # runner dies
         wait_until(lambda: os.listdir(os.path.join(self.state_dir(), "agents", team["agents"][0]["agentId"], "done")),
-                   message="runner to exit")
-        time.sleep(1.0)
-        self.assertEqual(self.assignment(team["teamId"], d["assignmentId"])["status"], "running")
+                   message="worker to archive the request")
+        # S07: reconciliation settles it truthfully as `reconciling` (RUNNER_GONE) - never succeeded
+        a = wait_until(lambda: self.assignment(team["teamId"], d["assignmentId"])["status"] == "reconciling"
+                       and self.assignment(team["teamId"], d["assignmentId"]), message="reconciling")
+        self.assertEqual(a["diagnosticCode"], "RUNNER_GONE")
         self.assertEqual(self.sb.snapshot(team["teamId"])["tasks"][0]["status"], "running")
 
     def test_failed_outcome_and_agent_back_to_idle(self):
         team = self.start_team(1)
-        d = self.assign(team["agents"][0]["agentId"], outcome="failed")
+        d = self.assign(team["agents"][0]["agentId"], scenario="provider_failure")
         wait_until(lambda: self.assignment(team["teamId"], d["assignmentId"])["status"] == "failed")
         self.assertEqual(self.sb.snapshot(team["teamId"])["tasks"][0]["status"], "failed")
         wait_until(lambda: self.agent(team["teamId"], team["agents"][0]["agentId"])["availability"] == "idle")
@@ -193,7 +196,7 @@ class Liveness(TeamCase):
     def test_dead_pane_marks_agent_offline_and_running_work_reconciling(self):
         team = self.start_team(2)
         victim = team["agents"][0]
-        d = self.assign(victim["agentId"], durationMs=20000, progressLines=1)
+        d = self.assign(victim["agentId"], scenario="slow", durationMs=20000, progressLines=1)
         wait_until(lambda: self.assignment(team["teamId"], d["assignmentId"])["status"] == "running")
         pid = int(self.sb.tmux("display-message", "-p", "-t", victim["paneId"], "#{pane_pid}"))
         os.killpg(os.getpgid(pid), signal.SIGKILL)
@@ -294,7 +297,7 @@ class AttachAndStop(TeamCase):
         self.sb.tmux("new-session", "-d", "-s", "not-ours", "sleep 600")
         before_default = self.sb.tmux("list-sessions", "-F", "#{session_id} #{session_name}", socket=None)
         team = self.start_team(2)
-        d = self.assign(team["agents"][1]["agentId"], durationMs=2500, progressLines=5)
+        d = self.assign(team["agents"][1]["agentId"], scenario="slow", durationMs=2500, progressLines=5)
         out1, st1 = self.attach_and_detach(team["teamId"])
         self.assertIn(b"detached", out1)
         self.assertEqual(st1 >> 8, 0)
@@ -325,7 +328,7 @@ class AttachAndStop(TeamCase):
 
     def test_stop_cancels_active_work_and_is_repeatable(self):
         team = self.start_team(2)
-        d = self.assign(team["agents"][0]["agentId"], durationMs=20000)
+        d = self.assign(team["agents"][0]["agentId"], scenario="slow", durationMs=20000)
         wait_until(lambda: self.assignment(team["teamId"], d["assignmentId"])["status"] == "running")
         rc, r, _ = self.sb.request(req("team.stop", {"teamId": team["teamId"]}, idempotencyKey=key()))
         self.assertTrue(r["ok"], r)

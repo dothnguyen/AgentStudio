@@ -79,12 +79,14 @@ ENTITIES: Dict[str, Entity] = {
             "paused": ("running", "failed", "cancelled"),
             "succeeded": (), "failed": (), "cancelled": ()}),
         ("team_id", "task_id", "workflow", "current_stage", "retry_count", "retry_budget", "base_commit",
-         "transition_reason"),
+         "transition_reason", "developer_agent_id", "reviewer_agent_id", "current_agent_id", "config_json",
+         "last_finding", "deadline_at"),
         "workflow_run_id", ("team_id", "task_id")),
     "stage_attempt": Entity(
         "stage_attempt", "stage_attempts", "status", STAGE_ATTEMPT_STATES, frozenset({"active"}),
         _t({"active": ("completed", "abandoned"), "completed": (), "abandoned": ()}),
-        ("team_id", "workflow_run_id", "stage", "attempt", "outcome", "artifacts_json"),
+        ("team_id", "workflow_run_id", "stage", "attempt", "outcome", "artifacts_json", "agent_id", "assignment_id",
+         "phase", "validation_json", "verdict_json", "diff_json", "prompt_path"),
         None, ("team_id", "workflow_run_id")),
     "assignment": Entity(
         "assignment", "assignments", "status", ASSIGNMENT_STATES, frozenset({"queued"}),
@@ -232,3 +234,21 @@ MIGRATION_2 = [
 
 # v3: the immutable request handed to the runner (prompt references, stub settings in debug builds).
 MIGRATION_3 = ["ALTER TABLE assignments ADD COLUMN request_json TEXT"]
+
+# v4: workflow bookkeeping (P00-S06).
+MIGRATION_4 = [
+    "ALTER TABLE workflow_runs ADD COLUMN developer_agent_id TEXT REFERENCES agents(id)",
+    "ALTER TABLE workflow_runs ADD COLUMN reviewer_agent_id TEXT REFERENCES agents(id)",
+    "ALTER TABLE workflow_runs ADD COLUMN current_agent_id TEXT",
+    "ALTER TABLE workflow_runs ADD COLUMN config_json TEXT",
+    "ALTER TABLE workflow_runs ADD COLUMN last_finding TEXT",
+    "ALTER TABLE workflow_runs ADD COLUMN deadline_at TEXT",
+    "ALTER TABLE stage_attempts ADD COLUMN agent_id TEXT REFERENCES agents(id)",
+    "ALTER TABLE stage_attempts ADD COLUMN assignment_id TEXT REFERENCES assignments(id)",
+    "ALTER TABLE stage_attempts ADD COLUMN phase TEXT",
+    "ALTER TABLE stage_attempts ADD COLUMN validation_json TEXT",
+    "ALTER TABLE stage_attempts ADD COLUMN verdict_json TEXT",
+    "ALTER TABLE stage_attempts ADD COLUMN diff_json TEXT",
+    "ALTER TABLE stage_attempts ADD COLUMN prompt_path TEXT",
+    "CREATE INDEX workflow_runs_by_status ON workflow_runs (status)",
+]

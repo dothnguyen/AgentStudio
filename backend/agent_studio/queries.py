@@ -103,3 +103,39 @@ def events_after(conn, cursor: int, limit: int = 200, team_id: Optional[str] = N
         return {"dbId": current_db, "events": [event_to_json(r) for r in rows], "nextCursor": next_cursor,
                 "head": top, "hasMore": has_more}
     return _read(conn, run)
+
+
+def task_detail(conn, task_id: str) -> dict:
+    """One task with its assignments and its event history (read-only, one consistent read)."""
+    def run():
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if row is None:
+            raise AsError("NOT_FOUND", f"Task {task_id} does not exist.")
+        assignments = conn.execute("SELECT * FROM assignments WHERE task_id = ? ORDER BY created_at, id",
+                                   (task_id,)).fetchall()
+        ids = [a["id"] for a in assignments]
+        events = conn.execute(
+            f"SELECT * FROM events WHERE task_id = ? OR assignment_id IN ({','.join('?' * len(ids)) or 'NULL'}) "
+            f"ORDER BY seq LIMIT 1000", [task_id] + ids).fetchall()
+        return {"dbId": db_id(conn), "cursor": head(conn), "task": row_to_json(row),
+                "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
+    return _read(conn, run)
+
+
+def workflow_detail(conn, wf_id: str) -> dict:
+    """One workflow run with its stage attempts, task, assignments, and event history."""
+    def run():
+        wf = conn.execute("SELECT * FROM workflow_runs WHERE id = ?", (wf_id,)).fetchone()
+        if wf is None:
+            raise AsError("NOT_FOUND", f"Workflow run {wf_id} does not exist.")
+        stages = conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? ORDER BY created_at, rowid",
+                              (wf_id,)).fetchall()
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (wf["task_id"],)).fetchone()
+        assignments = conn.execute("SELECT * FROM assignments WHERE task_id = ? ORDER BY created_at, rowid",
+                                   (wf["task_id"],)).fetchall()
+        events = conn.execute("SELECT * FROM events WHERE workflow_run_id = ? OR task_id = ? ORDER BY seq LIMIT 2000",
+                              (wf_id, wf["task_id"])).fetchall()
+        return {"dbId": db_id(conn), "cursor": head(conn), "workflowRun": row_to_json(wf),
+                "stageAttempts": [row_to_json(r) for r in stages], "task": row_to_json(task),
+                "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
+    return _read(conn, run)

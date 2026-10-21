@@ -239,7 +239,7 @@ class WriteAuthority(unittest.TestCase):
     def test_source_connections_use_their_role(self):
         """Fails if a client/runner/reader code path opens a coordinator (or other unexpected) connection."""
         allowed = {"coordinator.py": {"coordinator"}, "client.py": {"client"}, "dispatch.py": {"reader"},
-                   "runner.py": {"runner"}}
+                   "runner.py": {"runner"}, "watch.py": {"reader"}}  # tests/ harnesses are outside the package
         found = {}
         for name in os.listdir(PKG):
             if not name.endswith(".py"):
@@ -298,7 +298,10 @@ class Reports(unittest.TestCase):
         self.assertEqual(reports.apply_pending(self.st, handler=finish), 0)
         status = self.conn.execute("SELECT status FROM assignments WHERE id = ?", (self.asg,)).fetchone()[0]
         self.assertEqual(status, "cancelled")
-        self.assertEqual(count(self.conn, "events"), before)
+        # S07: the rejection itself is visible as exactly one event; no state changed
+        self.assertEqual(count(self.conn, "events"), before + 1)
+        last = self.conn.execute("SELECT name, to_state FROM events ORDER BY seq DESC LIMIT 1").fetchone()
+        self.assertEqual(tuple(last), ("assignment.report_rejected", "cancelled"))
         outcome = self.conn.execute("SELECT outcome FROM report_applications").fetchone()[0]
         self.assertEqual(outcome, "rejected:INVALID_TRANSITION")
 

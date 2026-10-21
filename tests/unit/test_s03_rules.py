@@ -4,6 +4,7 @@ import unittest
 
 from tests import helpers  # noqa: F401
 from agent_studio import report_rules, reports, state, teams
+from agent_studio.providers.base import REPORT_PROTOCOL
 from agent_studio.protocol import AsError
 from agent_studio.store import Store
 
@@ -24,6 +25,17 @@ def setup():
                                        "policy": "read_only", "provider_id": "fake", "request_json": {"stub": {}}})
         tx.transition("task", task, "assigned")
     return path, conn, st, agent, task, asg
+
+
+def final(asg, agent, status, **over):
+    ok = status == "succeeded"
+    r = {"protocol": REPORT_PROTOCOL, "assignmentId": asg, "agentId": agent, "providerId": "fake", "attempt": 1,
+         "policy": "read_only", "status": status, "exitCode": 0, "summary": "s", "artifacts": [], "attention": None,
+         "diagnosticCode": None if ok else "X",
+         "evidence": {"providerTerminalEvent": ok, "terminalOk": ok, "signal": None, "timedOut": False,
+                      "cancelRequested": False, "truncated": False, "validation": []}}
+    r.update(over)
+    return r
 
 
 def status(conn, table, id_):
@@ -79,7 +91,7 @@ class ReportRules(unittest.TestCase):
     def test_inconclusive_goes_to_reconciling_not_success(self):
         self.claim()
         self.start()
-        reports.submit(self.runner, self.asg, 1, "final", {"agentId": self.agent, "attempt": 1, "status": "inconclusive"})
+        reports.submit(self.runner, self.asg, 1, "final", final(self.asg, self.agent, "inconclusive"))
         self.apply()
         self.assertEqual(status(self.conn, "assignments", self.asg), "reconciling")
         self.assertEqual(status(self.conn, "tasks", self.task), "running")
@@ -88,12 +100,30 @@ class ReportRules(unittest.TestCase):
     def test_wrong_attempt_and_unknown_status_rejected(self):
         self.claim()
         self.start()
-        reports.submit(self.runner, self.asg, 1, "final", {"agentId": self.agent, "attempt": 2, "status": "succeeded"})
+        reports.submit(self.runner, self.asg, 1, "final", final(self.asg, self.agent, "succeeded", attempt=2))
         self.apply()
         self.assertEqual(self.outcome(), "rejected:REPORT_MISMATCH")
-        reports.submit(self.runner, self.asg, 2, "final", {"agentId": self.agent, "attempt": 1, "status": "great"})
+        reports.submit(self.runner, self.asg, 2, "final", final(self.asg, self.agent, "great"))
         self.apply()
+        self.assertEqual(self.outcome(), "rejected:BAD_REPORT")
         self.assertEqual(status(self.conn, "assignments", self.asg), "running")
+
+    def test_claimed_success_without_evidence_becomes_reconciling(self):
+        self.claim()
+        self.start()
+        reports.submit(self.runner, self.asg, 1, "final", final(self.asg, self.agent, "succeeded", exitCode=1))
+        self.apply()
+        self.assertEqual(status(self.conn, "assignments", self.asg), "reconciling")
+        self.assertEqual(status(self.conn, "tasks", self.task), "running")
+
+    def test_valid_success_finishes(self):
+        self.claim()
+        self.start()
+        reports.submit(self.runner, self.asg, 1, "final", final(self.asg, self.agent, "succeeded"))
+        self.apply()
+        self.assertEqual(status(self.conn, "assignments", self.asg), "succeeded")
+        self.assertEqual(status(self.conn, "tasks", self.task), "succeeded")
+        self.assertEqual(status(self.conn, "agents", self.agent), "idle")
 
     def test_pane_command_contains_only_ids_and_paths(self):
         cmd = teams.pane_command("11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222")

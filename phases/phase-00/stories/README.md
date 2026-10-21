@@ -4,13 +4,13 @@ Read [PRD.md](../../../PRD.md) and the [P00 implementation contract](../architec
 
 | Story | Deliverable | Depends on | Status |
 |---|---|---|---|
-| [S01](./P00-S01-wsl-boundary-and-coordinator.md) | Windows↔WSL boundary proof, entry shim, Python coordinator daemon, command inbox | — | In Review (≥5 min idle check pending) |
+| [S01](./P00-S01-wsl-boundary-and-coordinator.md) | Windows↔WSL boundary proof, entry shim, Python coordinator daemon, command inbox | — | Done |
 | [S02](./P00-S02-durable-state-and-events.md) | SQLite schema, write authority, event journal | S01 | Done |
 | [S03](./P00-S03-tmux-workers.md) | N owned tmux panes; coordinator claims + request files | S01–S02 | Done |
-| [S04](./P00-S04-provider-contract-and-fake.md) | Adapter contract, permission policies, runner, deterministic fake | S02–S03 | To Do |
-| [S05](./P00-S05-direct-dispatch.md) | Direct-to-idle assignment (fake) | S04 | To Do |
-| [S06](./P00-S06-automatic-workflow.md) | Two-role workflow with git diffs and truth table (fake) | S05 | To Do |
-| [S07](./P00-S07-recovery-resolve-and-stop.md) | Restart reconciliation, `assignment.resolve`, scoped stop | S05–S06 | To Do |
+| [S04](./P00-S04-provider-contract-and-fake.md) | Adapter contract, permission policies, runner, deterministic fake | S02–S03 | Done |
+| [S05](./P00-S05-direct-dispatch.md) | Direct-to-idle assignment (fake) | S04 | Done |
+| [S06](./P00-S06-automatic-workflow.md) | Two-role workflow with git diffs and truth table (fake) | S05 | Done |
+| [S07](./P00-S07-recovery-resolve-and-stop.md) | Restart reconciliation, `assignment.resolve`, scoped stop | S05–S06 | Done |
 | [S08](./P00-S08-codex-adapter.md) | Codex adapter | S04, S05 | To Do |
 | [S09](./P00-S09-claude-adapter.md) | Claude Code adapter | S04, S05 | To Do |
 | [S10](./P00-S10-agy-adapter.md) | Antigravity CLI adapter | S04, S05 | To Do |

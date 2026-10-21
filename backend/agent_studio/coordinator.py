@@ -14,8 +14,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, envresolve, fixtures, inbox, paths, procid, report_rules, reports, state, teams, \
-    tmuxctl
+from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, report_rules, reports, \
+    resolve, state, tasks, teams, tmuxctl, workflow
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
@@ -147,6 +147,11 @@ HANDLERS = {
     "debug.assign": _handle_debug_assign,
     "team.start": lambda args, tx, ctx: teams.team_start(tx, args, ctx),
     "team.stop": lambda args, tx, ctx: teams.team_stop(tx, args, ctx),
+    "task.direct": lambda args, tx, ctx: tasks.task_direct(tx, args, ctx),
+    "assignment.cancel": lambda args, tx, ctx: tasks.assignment_cancel(tx, args, ctx),
+    "workflow.start": lambda args, tx, ctx: workflow.start(tx, args, ctx),
+    "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
+    "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),
 }
 MONITOR_INTERVAL_S = 2.0
 
@@ -163,6 +168,7 @@ def process_pending(store: Store, ctx: dict) -> int:
                 if handler is None:
                     raise AsError(UNKNOWN_COMMAND, f"The coordinator does not handle {row['command']!r}.")
                 data = handler(json.loads(row["args_json"]), tx, ctx)
+                crashpoints.hit("before_command_commit")
                 if isinstance(data, teams.Failure):  # keep the recorded state change, answer with the error
                     resp = {"ok": False, "error": data.error.to_error()}
                     if data.error.data is not None:
@@ -170,6 +176,7 @@ def process_pending(store: Store, ctx: dict) -> int:
                     inbox.complete(conn, row["seq"], resp)
                 else:
                     inbox.complete(conn, row["seq"], {"ok": True, "data": data})
+            crashpoints.hit("after_command_commit")
         except AsError as e:  # the transaction rolled back; record the rejection on its own
             resp = {"ok": False, "error": e.to_error()}
             if e.data is not None:
@@ -181,6 +188,18 @@ def process_pending(store: Store, ctx: dict) -> int:
                                               "message": "Internal coordinator error.", "retryable": False}})
         n += 1
     return n
+
+
+def _reap_children() -> None:
+    """Collect finished children we started with Popen and never waited for (detached validators). Safe here:
+    the loop is single-threaded, so no subprocess.run() is waiting at the same time."""
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            return
+        if pid == 0:
+            return
 
 
 def run(enable_debug: bool = False) -> int:
@@ -233,15 +252,32 @@ def run(enable_debug: bool = False) -> int:
 
     tmux = tmuxctl.Tmux(env=env)
     ctx = {"debug": enable_debug, "stateDir": sd, "tmux": tmux}
+    crashpoints.configure(enable_debug, sd)
+    startup = {"at": state.utcnow()}
+    for name, step in (("reports", lambda: reports.apply_pending(store, report_rules.apply)),
+                       ("panes", lambda: teams.monitor(store, tmux)),
+                       ("assignments", lambda: reconcile.tick(store, ctx)),
+                       ("orphanSessions", lambda: reconcile.orphan_sessions(store, tmux))):
+        try:
+            startup[name] = step()
+        except Exception as e:  # recorded, never fatal: the loop retries every tick
+            startup[name] = {"error": str(e)}
+            _log(f"startup reconciliation step {name} failed:\n{traceback.format_exc()}")
+    runtime = procid.read_json(_p(sd, RUNTIME_FILE)) or {}
+    procid.write_json_atomic(_p(sd, RUNTIME_FILE), dict(runtime, startupReconciliation=startup))
+    _log(f"startup reconciliation: {json.dumps(startup, default=str)[:2000]}")
     next_monitor = 0.0
     while not stop_flag["stop"]:
         try:
+            reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
-            reports.apply_pending(store, report_rules.apply)
+            workflow.advance(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:
+                _reap_children()
                 teams.monitor(store, tmux)
+                reconcile.tick(store, ctx)
                 next_monitor = time.monotonic() + MONITOR_INTERVAL_S
         except Exception:
             _log(f"loop error:\n{traceback.format_exc()}")

@@ -2,7 +2,10 @@
 
 Implemented so far: P00-S01 (entry shim, coordinator daemon, command inbox, `serve`, health, preflight, Windows
 boundary scripts), P00-S02 (schema, role-enforced write authority, event journal, snapshot/events), and P00-S03
-(one tmux window with one pane per agent, request-file delivery, pane liveness, attach, scoped stop). Contract: [architecture](../phases/phase-00/architecture.md).
+(one tmux window with one pane per agent, request-file delivery, pane liveness, attach, scoped stop), P00-S04
+(provider adapter contract, real runner with evidence and limits, test-only fake provider), P00-S05
+(direct tasks to idle agents, `task show`, `assignment cancel`), P00-S06 (Developer → Reviewer workflow),
+and P00-S07 (restart reconciliation, `assignment resolve`, bounded stop). Recovery guide: [RECOVERY.md](RECOVERY.md). Contract: [architecture](../phases/phase-00/architecture.md).
 
 ## Layout
 
@@ -23,7 +26,12 @@ boundary scripts), P00-S02 (schema, role-enforced write authority, event journal
 | `agent_studio/tmuxctl.py` | tmux on Agent Studio's own server (`tmux -L agent-studio`); IDs only, never indices or keystrokes. |
 | `agent_studio/teams.py` | `team.start` / `team.stop`, claim + request-file delivery, redelivery, pane-liveness monitor. |
 | `bin/agent-studio-worker` | Bash loop in each pane: inbox → active → `agent-studio runner` → done. No state decisions. |
-| `agent_studio/runner.py`, `report_rules.py` | Runs one assignment and reports; how the coordinator applies start/progress/final reports. |
+| `agent_studio/runner.py` | Runs one assignment via its adapter: private evidence, output cap, deadline, cancel, validated report. |
+| `agent_studio/providers/` | Adapter contract (`base.py`), registry, test-only `fake`, placeholders for the four real CLIs. See its README. |
+| `agent_studio/tasks.py`, `watch.py` | `task.direct` acceptance rules and `assignment.cancel`; `--wait` follows the journal. |
+| `agent_studio/workflow.py`, `gitws.py`, `validation.py` | Workflow engine and truth table; safe git diff capture; config + detached validator. |
+| `agent_studio/reconcile.py`, `resolve.py` | Startup/periodic reconciliation; operator resolution (retry / fail / cancel). |
+| `agent_studio/contract.py`, `report_rules.py` | Normalized-report validation; how the coordinator applies start/progress/final reports. |
 | `../scripts/windows/` | PowerShell module, boundary spike, lifetime check, keep-alive. |
 
 Requirements inside WSL: bash, Python 3.8+ (standard library only), tmux, util-linux. Nothing to `pip install`.
@@ -43,7 +51,7 @@ for fresh checkouts, otherwise run `sed -i 's/\r$//' backend/bin/agent-studio`.
 ```bash
 agent-studio health --pretty
 agent-studio coordinator start             # idempotent; add --enable-debug for debug.echo
-agent-studio preflight --workspace ~/some/project --pretty
+agent-studio preflight --workspace ~/some/project --provider claude --provider codex --pretty
 agent-studio snapshot --pretty            # works even when the coordinator is stopped
 agent-studio events --after 0 --limit 50 --pretty
 agent-studio debug echo --text 'hello'     # debug coordinators only
@@ -70,7 +78,13 @@ agent-studio coordinator start --enable-debug            # debug: allows the tes
 agent-studio team start --workspace ~/scratch/demo --agent fake:developer:Dev --agent fake:reviewer:Rev --pretty
 #   -> teamId, one paneId per agent, and attach commands
 agent-studio team attach --team <teamId>                 # this terminal becomes the tmux window
-agent-studio debug assign --agent <agentId> --duration-ms 8000 --lines 8   # stub work you can watch
+agent-studio debug assign --agent <agentId> --scenario slow --duration-ms 8000 --lines 8   # fake work to watch
+#   other scenarios: success, provider_failure, permission_denied, crash, timeout (with --deadline-ms), ...
+agent-studio task direct --team <teamId> --agent <agentId> --policy read_only --text "Summarise the README" --wait
+#   fake agents: add --scenario slow --duration-ms 8000 to watch it run; --text-file PATH (or -) for long tasks
+agent-studio task show --task <taskId> --pretty
+agent-studio assignment cancel --assignment <assignmentId>
+agent-studio assignment resolve --assignment <assignmentId> --action retry|fail|cancel   # see RECOVERY.md
 agent-studio snapshot --team <teamId> --pretty           # status comes from here, never from pane text
 agent-studio team stop --team <teamId>
 ```
@@ -82,6 +96,24 @@ tmux keys (prefix `Ctrl-b`): `d` detach (the team keeps working) · `z` zoom/unz
 arrows or `o` move between panes · `[` scroll back (`q` to leave) · `w` pick a window. Reattach with the same
 `team attach` command. You can also list Agent Studio's sessions with `tmux -L agent-studio ls`; your own
 `tmux ls` server is separate.
+
+## Run the Developer → Reviewer workflow
+
+The workspace must be a git repository (clean, at least one commit) with a committed
+`.agent-studio/workflow.json`, for example:
+
+```json
+{"version": 1, "validation": {"argv": ["python3", "-m", "unittest"], "timeoutMs": 600000}}
+```
+
+```bash
+agent-studio workflow start --team <teamId> --developer <agentId> --reviewer <agentId> --text "Fix the add() bug" --wait
+agent-studio workflow show --workflow <workflowRunId> --pretty
+agent-studio workflow cancel --workflow <workflowRunId>
+```
+
+Artifacts per stage live in `~/.local/state/agent-studio/workflows/<id>/<nn>-<stage>/`
+(`prompt.txt`, `diff.patch`, `untracked.txt`, `validation.out`, `validation.json`).
 
 ## Windows boundary checks (PowerShell, from `scripts\windows`)
 

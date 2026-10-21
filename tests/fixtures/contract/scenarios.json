@@ -1,0 +1,19 @@
+{
+  "description": "Fake-provider scenario -> normalized outcome. Each case is run through the real runner (and the S03 tmux path for a subset) by tests/integration/test_s04_runner.py.",
+  "cases": [
+    {"scenario": "success",           "expect": {"status": "succeeded",     "diagnosticCode": null,                     "providerTerminalEvent": true,  "exitCode": 0}},
+    {"scenario": "slow", "options": {"durationMs": 1500}, "expect": {"status": "succeeded", "diagnosticCode": null, "providerTerminalEvent": true, "exitCode": 0}},
+    {"scenario": "verdict_pass",      "expect": {"status": "succeeded",     "diagnosticCode": null,                     "providerTerminalEvent": true,  "verdict": {"verdict": "pass", "findings": []}}},
+    {"scenario": "verdict_fail",      "expect": {"status": "succeeded",     "diagnosticCode": null,                     "providerTerminalEvent": true,  "verdict": {"verdict": "fail", "findings": ["test_add fails: expected 4, got 5", "shell text is data: $(touch CANARY_FINDING) `touch CANARY_BACKTICK`; rm -rf ~ && echo pwned"]}}},
+    {"scenario": "verdict_malformed", "expect": {"status": "inconclusive",  "diagnosticCode": "MALFORMED_VERDICT",      "providerTerminalEvent": true}},
+    {"scenario": "provider_failure",  "expect": {"status": "failed",        "diagnosticCode": "PROVIDER_ERROR",         "providerTerminalEvent": true,  "exitCode": 1}},
+    {"scenario": "permission_denied", "expect": {"status": "waiting_input", "diagnosticCode": "PERMISSION_DENIED",      "providerTerminalEvent": true,  "exitCode": 0}},
+    {"scenario": "malformed_final",   "expect": {"status": "inconclusive",  "diagnosticCode": "MALFORMED_OUTPUT",       "providerTerminalEvent": false, "exitCode": 0}},
+    {"scenario": "no_final",          "expect": {"status": "inconclusive",  "diagnosticCode": "NO_TERMINAL_EVENT",      "providerTerminalEvent": false, "exitCode": 0}},
+    {"scenario": "crash",             "expect": {"status": "failed",        "diagnosticCode": "PROVIDER_CRASHED",       "providerTerminalEvent": false, "exitCode": null}},
+    {"scenario": "waiting_input",     "expect": {"status": "waiting_input", "diagnosticCode": "INPUT_REQUIRED",         "providerTerminalEvent": false, "exitCode": 0}},
+    {"scenario": "nonzero_success",   "expect": {"status": "inconclusive",  "diagnosticCode": "CONTRADICTORY_EVIDENCE", "providerTerminalEvent": true,  "exitCode": 3}},
+    {"scenario": "timeout", "deadlineMs": 1500, "expect": {"status": "failed", "diagnosticCode": "TIMEOUT", "providerTerminalEvent": false}},
+    {"scenario": "flood", "options": {"progressLines": 20000}, "outputBudgetBytes": 4096, "expect": {"status": "succeeded", "diagnosticCode": null, "providerTerminalEvent": true}}
+  ]
+}

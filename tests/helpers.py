@@ -107,3 +107,29 @@ def req(command, args=None, **extra):
     r = {"protocol": "agent-studio/v1", "command": command, "args": args or {}}
     r.update(extra)
     return r
+
+
+def make_repo(config=None, check_for="fixed.txt"):
+    """A disposable git workspace whose validation passes only when `check_for` exists."""
+    import json as _json
+    ws = tempfile.mkdtemp(prefix="as-repo-")
+    git = lambda *a: subprocess.run(["git", "-C", ws] + list(a), check=True, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL)
+    git("init", "-q")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "test")
+    os.makedirs(os.path.join(ws, ".agent-studio"))
+    cfg = config or {"version": 1, "validation": {"argv": ["python3", "check.py"], "timeoutMs": 20000}}
+    with open(os.path.join(ws, ".agent-studio", "workflow.json"), "w") as f:
+        _json.dump(cfg, f)
+    with open(os.path.join(ws, "check.py"), "w") as f:
+        f.write("import os, sys\nprint('looking for %s')\nsys.exit(0 if os.path.exists('%s') else 1)\n"
+                % (check_for, check_for))
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    return ws
+
+
+def reset_repo(ws):
+    for args in (["reset", "-q", "--hard"], ["clean", "-qfdx"]):
+        subprocess.run(["git", "-C", ws] + args, check=True)

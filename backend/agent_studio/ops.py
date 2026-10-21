@@ -8,7 +8,8 @@ import shutil
 import subprocess
 import uuid
 
-from . import PROTOCOL, VERSION, coordinator, envresolve, paths, procid
+from . import PROTOCOL, VERSION, coordinator, envresolve, paths, procid, providers
+from .providers.base import POLICIES, POLICY_UNSUPPORTED, PROVIDER_UNAVAILABLE
 from .protocol import AsError, STATE_DIR_UNUSABLE, TMUX_NOT_FOUND, WORKSPACE_NOT_FOUND, req_text
 
 WINDOWS_PATH_RE = re.compile(r"^(?:[A-Za-z]:(?:[\\/]|$)|\\\\)")
@@ -126,6 +127,23 @@ def preflight(args: dict) -> dict:
         except (OSError, subprocess.SubprocessError) as e:
             record("tmux", AsError(TMUX_NOT_FOUND, f"tmux at {tmux} did not run ({e}).",
                                    remediation="Reinstall tmux in WSL."))
+
+    wanted = args.get("providers") or []
+    policies = args.get("policies") or list(POLICIES)
+    if not isinstance(wanted, list) or len(wanted) > 8 or not all(isinstance(p, str) for p in wanted):
+        raise AsError("BAD_REQUEST", "providers must be a list of at most 8 provider IDs.")
+    if not isinstance(policies, list) or not set(policies) <= set(POLICIES):
+        raise AsError("BAD_REQUEST", f"policies must be a subset of {list(POLICIES)}.")
+    for pid, probe in providers.probe_many(wanted, env, allow_test_only=True).items():
+        if not probe.get("available"):
+            record(f"provider:{pid}", AsError(PROVIDER_UNAVAILABLE, f"{pid}: {probe.get('reason')}"), probe=probe)
+            continue
+        unsupported = [p for p in policies if probe.get("policies", {}).get(p) in (None, "unsupported")]
+        if unsupported:
+            record(f"provider:{pid}", AsError(POLICY_UNSUPPORTED, f"{pid} has no verified mapping for "
+                                                                  f"{', '.join(unsupported)}."), probe=probe)
+        else:
+            record(f"provider:{pid}", probe=probe)
 
     data = {"ready": first_error is None, "workspace": workspace, "checks": checks, "warnings": warnings,
             "environment": {"mode": envinfo["mode"], "source": envinfo["source"]}}

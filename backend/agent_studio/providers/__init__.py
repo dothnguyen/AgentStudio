@@ -2,6 +2,7 @@
 replacing one never requires a coordinator, runner, or workflow change."""
 from __future__ import annotations
 
+import copy
 import importlib
 import os
 from typing import Dict, List
@@ -33,11 +34,42 @@ def get(provider_id: str, allow_test_only: bool = False) -> Adapter:
     return adapter
 
 
-def probe_many(provider_ids, env: dict, allow_test_only: bool) -> Dict[str, dict]:
+FIXTURE_ENV = "AGENT_STUDIO_TEST_FIXTURE_PROVIDERS"
+
+
+def fixture_aliases(env: dict, debug: bool) -> Dict[str, str]:
+    """Test-only: in a DEBUG coordinator, `codex=fake,claude=fake,...` runs a test-only adapter under a peer's ID
+    so tests can prove every provider ID takes the identical path. Ignored by production coordinators."""
+    if not debug:
+        return {}
+    out = {}
+    for item in filter(None, (env.get(FIXTURE_ENV) or "").split(",")):
+        pid, _, base = item.partition("=")
+        if pid in PEERS and base in TEST_ONLY:
+            out[pid] = base
+    return out
+
+
+def resolve(provider_id: str, allow_test_only: bool = False, fixture: str = None) -> Adapter:
+    """The adapter for provider_id, or - for a test fixture alias - a test-only adapter wearing that ID."""
+    if not fixture:
+        return get(provider_id, allow_test_only)
+    if provider_id not in PEERS or fixture not in TEST_ONLY:
+        raise AsError("BAD_REQUEST", f"Invalid fixture alias {provider_id}={fixture}.")
+    adapter = copy.copy(get(fixture, allow_test_only=True))
+    adapter.provider_id = provider_id
+    adapter.fixture_of = fixture
+    return adapter
+
+
+def probe_many(provider_ids, env: dict, allow_test_only: bool, aliases: Dict[str, str] = None) -> Dict[str, dict]:
     out = {}
     for pid in dict.fromkeys(provider_ids):
         try:
-            out[pid] = get(pid, allow_test_only).probe(env)
+            probe = resolve(pid, allow_test_only, (aliases or {}).get(pid)).probe(env)
+            if (aliases or {}).get(pid):
+                probe["fixtureOf"] = aliases[pid]
+            out[pid] = probe
         except AsError as e:
             out[pid] = {"providerId": pid, "available": False, "reason": e.message, "code": e.code}
     return out

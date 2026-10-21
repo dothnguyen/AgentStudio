@@ -15,14 +15,24 @@ def boot_id() -> str:
         return ""
 
 
-def start_time(pid: int) -> Optional[int]:
+def _stat(pid: int):
     try:
         with open(f"/proc/{pid}/stat", "rb") as f:
             data = f.read()
     except OSError:
         return None
-    rest = data[data.rindex(b")") + 2:].split()
-    return int(rest[19])  # field 22 (starttime); rest[0] is field 3
+    return data[data.rindex(b")") + 2:].split()  # rest[0] is field 3 (state)
+
+
+def start_time(pid: int) -> Optional[int]:
+    rest = _stat(pid)
+    return int(rest[19]) if rest else None  # field 22 (starttime)
+
+
+def alive_state(pid: int) -> bool:
+    """False for zombies ('Z') and dead ('X') entries: they still have a PID and start time but run nothing."""
+    rest = _stat(pid)
+    return bool(rest) and rest[0] not in (b"Z", b"X")
 
 
 def identity(pid: int) -> dict:
@@ -34,7 +44,7 @@ def matches(ident: dict) -> bool:
     if not isinstance(pid, int) or pid <= 0:
         return False
     return ident.get("bootId") == boot_id() and ident.get("startTime") is not None \
-        and start_time(pid) == ident.get("startTime")
+        and start_time(pid) == ident.get("startTime") and alive_state(pid)
 
 
 def lock_is_held(path: str) -> bool:

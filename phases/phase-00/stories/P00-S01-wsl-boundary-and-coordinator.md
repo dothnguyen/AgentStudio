@@ -1,6 +1,6 @@
 # P00-S01 — WSL boundary, entry shim, and coordinator daemon
 
-Status: In Review — everything verified on the target machine except a long-wait (≥5 min) idle-shutdown check
+Status: Done
 Depends on: none
 Architecture: [P00 implementation contract](../architecture.md), sections A–C
 
@@ -39,7 +39,7 @@ Prove the Windows↔WSL crossing that broke the previous Electron + NTM attempt 
 - [x] A PowerShell `serve` session on Windows reaches the same coordinator.
 - [x] Hostile payloads round-trip byte-exact from Windows PowerShell 5.1 through the real `wsl.exe --exec` (13/13 one-shot, 100/100 serve).
 - [x] Killing the Windows caller leaves the coordinator running (same PID before/after).
-- [ ] Closing all terminals past the idle timeout leaves the coordinator running — survived a 67 s wait with no keep-alive; repeat with ≥5 min (`check-lifetime.ps1`) to close this item.
+- [x] Closing all terminals leaves the coordinator running — survived 67 s and, on a second run, 2 min 31 s with every WSL window closed and no keep-alive (same PID). The planned ≥5 min wait was not run; the operator accepted this evidence on 2026-10-22. If a later session finds the distro stopped while idle, use `start-keepalive.ps1`.
 - [x] Login-PATH executables (nvm-style, interactive-only `.bashrc`) resolve (automated).
 - [x] Preflight fails before creating any tmux session; stdout is pure JSON; logs contain no payloads (automated).
 - [x] Evidence records distro, WSL version, coordinator PID, protocol version, latencies, and negative-case codes (`phases/phase-00/evidence/s01/`).
@@ -50,7 +50,7 @@ Prove the Windows↔WSL crossing that broke the previous Electron + NTM attempt 
 - `boundary-spike.ps1` under PowerShell 7.4.6 on Linux, with a stand-in `wsl.exe` that forwards `-d <distro> --exec …`: one-shot 13/13 and serve 100/100 hostile payloads byte-exact; malformed line → `BAD_REQUEST` with the session kept open; coordinator PID unchanged after the client was killed. Serve round-trip median ≈10 ms; one-shot median ≈110 ms (no `wsl.exe` start-up cost included).
 - Found and fixed during testing: the shim depended on PATH for `readlink`/`dirname`, so a `wsl.exe --exec` call with a stripped PATH would fail before Python started.
 - Target machine (2026-10-21, Windows PowerShell 5.1.26100, Ubuntu-24.04, WSL2 kernel 5.15.167.4, Python 3.12.3): `boundary-spike.ps1` passed — 13/13 one-shot and 100/100 serve payloads byte-exact, malformed line → `BAD_REQUEST` with the session kept, coordinator PID 478046 unchanged after the caller was killed, login-shell environment captured. Latency: one-shot `wsl.exe` call median 316 ms (p95 339 ms) vs serve round trip median 11 ms (p95 12 ms) — confirms P01 should hold one persistent `serve` process.
-- `check-lifetime.ps1`: coordinator survived (same PID, no keep-alive) but Record→Verify was only 67 s; a ≥5 min wait is still needed.
+- `check-lifetime.ps1`: coordinator survived both runs (67 s and 2 min 31 s; same PID 478046, no keep-alive). Evidence: `phases/phase-00/evidence/s01/lifetime-*.json`.
 - Found on the target machine: with a wrong distro name, `wsl.exe` writes a UTF-16 error to stdout that the first script version hid. The module now checks the distro first, shows WSL's message, falls back to `--cd ~` for the home folder, and checks that `agent-studio` is installed.
 
 Do not begin UI wiring here.

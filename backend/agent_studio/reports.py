@@ -65,13 +65,18 @@ def apply_pending(store: Store, handler: Handler = record_only, limit: int = 100
                 if tx.conn.execute("SELECT 1 FROM report_applications WHERE report_id = ?", (report["id"],)).fetchone():
                     continue  # applied by an earlier pass; applying is idempotent
                 outcome, seq = handler(tx, report)
+                from . import crashpoints
+                crashpoints.hit("before_report_apply_commit")
                 tx.conn.execute("INSERT INTO report_applications (report_id, applied_at, outcome, event_seq) "
                                 "VALUES (?, ?, ?, ?)", (report["id"], utcnow(), outcome, seq))
             applied += 1
         except AsError as e:
             # The handler rejected the report (e.g. invalid transition). Record that once, without state change.
             with store.transaction(actor="runner", report_id=report["id"]) as tx:
+                seq = tx.note("assignment", report["assignment_id"], "assignment.report_rejected",
+                              {"reportSeq": report["report_seq"], "kind": report["kind"], "code": e.code,
+                               "message": e.message[:300]})
                 tx.conn.execute("INSERT INTO report_applications (report_id, applied_at, outcome, event_seq) "
-                                "VALUES (?, ?, ?, NULL)", (report["id"], utcnow(), f"rejected:{e.code}"))
+                                "VALUES (?, ?, ?, ?)", (report["id"], utcnow(), f"rejected:{e.code}", seq))
             applied += 1
     return applied

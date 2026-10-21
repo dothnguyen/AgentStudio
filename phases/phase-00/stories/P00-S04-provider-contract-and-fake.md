@@ -1,6 +1,6 @@
 # P00-S04 — Adapter contract, permission policies, runner, and deterministic fake
 
-Status: To Do
+Status: Done
 Depends on: P00-S02, P00-S03
 Architecture: [P00 implementation contract](../architecture.md), section F
 
@@ -30,9 +30,20 @@ Define one provider-neutral execution API and permission vocabulary before any r
 
 ## Done when
 
-- [ ] Fake assignments flow through worker shim, runner, report inbox, coordinator, and snapshot.
-- [ ] Results are authoritative without reading tmux screen content.
-- [ ] Adding a provider requires only a new directory under `providers/`, no workflow or coordinator change.
-- [ ] Contract fixtures document successful and failed normalized reports.
+- [x] Fake assignments flow through worker shim, runner, report inbox, coordinator, and snapshot.
+- [x] Results are authoritative without reading tmux screen content.
+- [x] Adding a provider requires only a new directory under `providers/`, no workflow or coordinator change.
+- [x] Contract fixtures document successful and failed normalized reports.
+
+## Evidence (2026-10-21)
+
+- `python3 -m unittest discover -s tests -t .` → 140 tests OK: Ubuntu 22.04 / Python 3.10 / tmux 3.2a (in chunks: unit 81, S01+S02 29, S03 18, S04 12) and Python 3.13 / tmux 3.4 in one run (127 s; one root-only skip).
+- Contract: `contract.validate_report` checked field by field (missing, wrong type, unknown status/protocol/policy, every mismatched ID, every way a "success" can lack evidence); the shared outcome table; cancel vs timeout vs waiting-input distinct; zero exit without a valid final never succeeds.
+- Fake provider (`providers/fake/`): all 14 scenarios in `tests/fixtures/contract/scenarios.json` run through the real runner and the coordinator's report rules with the documented outcome; example reports in `tests/fixtures/contract/examples/`.
+- Safety: hostile prompt (quotes, `$(...)`, backticks, `&&`, redirects, newline, CJK, emoji) reaches the provider byte-identical (SHA-256 match) and never runs — no canary files; argv contains no task text; provider env is allowlisted (a planted `SECRET_TOKEN` is not passed); evidence files are `0600`; output capped (flood case truncated at 4 KiB, still judged correctly).
+- Control: SIGTERM to the runner → `cancelled`, provider gone; SIGKILL to the runner → provider killed by `PR_SET_PDEATHSIG`, assignment stays `running` (explicit, not invented); deadline → `failed TIMEOUT`.
+- Policy: `read_only` write attempt → `waiting_input PERMISSION_DENIED`, nothing written; `workspace_write` writes; an unmapped policy is refused at `prepare` (no process started) and at preflight (`POLICY_UNSUPPORTED`).
+- Through the team: tmux worker → runner → inbox → coordinator → snapshot, including a contradictory "success" applied as `reconciling`; the runner finished while the coordinator was stopped and its reports were applied after restart; `team.start` with a not-yet-implemented provider is refused (`PROVIDER_UNAVAILABLE`) without substitution; probe results stored per agent and provider version/policy mapping recorded in the `assignment.running` event.
+- Found while testing: `teams.py` still listed provider names (now from the registry; guarded by a test).
 
 Do not grant unrestricted permissions to make a fake or real run pass.

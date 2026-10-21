@@ -1,13 +1,16 @@
-"""How the coordinator applies worker reports to state (P00-S03 minimal rules; S04 adds evidence validation).
+"""How the coordinator applies worker reports to state.
 
 Rules that already hold:
   * a report must match its assignment's agent and attempt, or it is rejected without any state change;
   * `start` is the only way from claimed to running, and it must carry a full process identity;
   * a final report can only finish a running/waiting assignment; terminal assignments never change;
+  * a final report must pass contract.validate_report (protocol, fields, matching assignment/agent/provider/
+    attempt/policy); a report that claims success without the evidence is applied as `inconclusive`;
   * an `inconclusive` final goes to `reconciling`, never to `succeeded`.
 """
 from __future__ import annotations
 
+from . import contract
 from .protocol import AsError
 from .store import Tx
 
@@ -38,11 +41,12 @@ def apply(tx: Tx, report: dict):
     if kind == "start":
         if not (_int(payload.get("pid")) and _int(payload.get("startTime")) and isinstance(payload.get("bootId"), str)):
             raise AsError(REPORT_MISMATCH, "A start report needs pid, startTime and bootId.")
+        data["provider"] = payload.get("provider")
         seq = tx.transition("assignment", asg["id"], "running", expect=["claimed"], payload=data, set_values={
             "process_pid": payload["pid"], "process_start_time": payload["startTime"],
             "process_boot_id": payload["bootId"]})
         task = tx.get("task", asg["task_id"])
-        if task["status"] == "assigned":
+        if task["status"] == "assigned" and task["origin"] == "direct":
             tx.transition("task", task["id"], "running")
         agent = tx.get("agent", asg["agent_id"])
         if agent["availability"] == "idle":
@@ -53,19 +57,31 @@ def apply(tx: Tx, report: dict):
         if asg["status"] not in ACTIVE_ASSIGNMENT:
             raise AsError(REPORT_MISMATCH, f"Assignment is {asg['status']}; late {kind} report ignored.")
         message = str(payload.get("message", ""))[:500]
-        return "recorded", tx.note("assignment", asg["id"], f"assignment.{kind}", dict(data, message=message))
+        extra = {"providerProcess": payload["providerProcess"]} if isinstance(payload.get("providerProcess"), dict) else {}
+        return "recorded", tx.note("assignment", asg["id"], f"assignment.{kind}", dict(data, message=message, **extra))
 
     if kind == "final":
-        status = payload.get("status")
-        if status not in FINAL_MAP:
-            raise AsError(REPORT_MISMATCH, f"Unknown final status {status!r}.")
+        expect = {"assignmentId": asg["id"], "agentId": asg["agent_id"], "providerId": asg["provider_id"],
+                  "attempt": asg["attempt"], "policy": asg["policy"]}
+        report_body = {k: v for k, v in payload.items()}
+        try:
+            contract.validate_report(report_body, expect)
+            status = report_body["status"]
+            code = report_body.get("diagnosticCode")
+        except AsError as e:
+            if e.code != contract.CONTRADICTORY:
+                raise  # malformed or mismatched: rejected, nothing changes
+            status, code = "inconclusive", contract.CONTRADICTORY  # claimed success without the evidence
+            data["contradiction"] = e.message
         a_state, t_state, g_state = FINAL_MAP[status]
-        result = {"status": status, "summary": str(payload.get("summary", ""))[:2000],
-                  "stub": bool(payload.get("stub")), "diagnosticCode": payload.get("diagnosticCode")}
-        seq = tx.transition("assignment", asg["id"], a_state, expect=["running", "waiting_input"], payload=data,
-                            set_values={"result_json": result, "diagnostic_code": payload.get("diagnosticCode")})
+        data.update(status=status, diagnosticCode=code)
+        seq = tx.transition("assignment", asg["id"], a_state, expect=["running", "waiting_input", "reconciling"],
+                            payload=data,
+                            set_values={"result_json": report_body, "diagnostic_code": code})
         task = tx.get("task", asg["task_id"])
-        if t_state and task["status"] != t_state and t_state in _task_targets(task["status"]):
+        # A workflow task's status belongs to the workflow engine; one stage finishing never finishes the task.
+        if task["origin"] == "direct" and t_state and task["status"] != t_state and \
+                t_state in _task_targets(task["status"]):
             tx.transition("task", task["id"], t_state)
         agent = tx.get("agent", asg["agent_id"])
         if agent["availability"] in ("busy", "waiting_input") and agent["availability"] != g_state:

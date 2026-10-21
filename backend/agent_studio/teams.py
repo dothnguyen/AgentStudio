@@ -7,7 +7,7 @@ import shlex
 import uuid
 from typing import List, Optional
 
-from . import ops, procid, tmuxctl
+from . import ops, procid, providers, tmuxctl
 from .protocol import AsError, BAD_REQUEST
 from .runner import request_path
 from .store import Store, Tx, new_id
@@ -64,13 +64,13 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
         raise AsError(BAD_REQUEST, "roster must be a non-empty list of agents.")
     if len(roster) > MAX_ROSTER:
         raise AsError(BAD_REQUEST, f"A P00 team has at most {MAX_ROSTER} agents (got {len(roster)}).")
-    providers = {"codex", "claude", "agy", "opencode"} | ({"fake"} if allow_fake else set())
+    allowed = set(providers.PEERS) | (set(providers.TEST_ONLY) if allow_fake else set())
     seen, clean = set(), []
     for i, m in enumerate(roster):
         if not isinstance(m, dict):
             raise AsError(BAD_REQUEST, f"roster[{i}] must be an object.")
         pid = m.get("providerId")
-        if pid not in providers:
+        if pid not in allowed:
             hint = " (fake is test-only)" if pid == "fake" else ""
             raise AsError(BAD_REQUEST, f"roster[{i}].providerId {pid!r} is not supported{hint}.")
         aid = m.get("agentId") or new_id()
@@ -93,6 +93,12 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
 def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     roster = validate_roster(args, allow_fake=ctx["debug"])
     workspace = ops.canonical_workspace(args["workspace"])
+    probes = providers.probe_many([m["providerId"] for m in roster], dict(os.environ), allow_test_only=ctx["debug"],
+                                  aliases=providers.fixture_aliases(os.environ, ctx["debug"]))
+    missing = {pid: p.get("reason") for pid, p in probes.items() if not p.get("available")}
+    if missing:  # never substitute another provider or start a partial team
+        raise AsError(providers.PROVIDER_UNAVAILABLE, "Provider(s) not ready: " +
+                      "; ".join(f"{k}: {v}" for k, v in missing.items()), data={"probes": probes})
     for m in roster:
         if tx.conn.execute("SELECT 1 FROM agents WHERE id = ?", (m["agentId"],)).fetchone():
             raise AsError(BAD_REQUEST, f"Agent {m['agentId']} already exists in another team.")
@@ -102,7 +108,8 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     tx.create("team", {"name": name, "workspace": workspace, "ownership_marker": marker}, entity_id=team_id)
     for i, m in enumerate(roster):
         tx.create("agent", {"team_id": team_id, "ordinal": i, "provider_id": m["providerId"], "role": m["role"],
-                            "display_name": m["displayName"]}, entity_id=m["agentId"])
+                            "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]]},
+                  entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
         for box in ("inbox", "active", "done"):
             os.makedirs(os.path.join(d, box), mode=0o700, exist_ok=True)
@@ -178,12 +185,19 @@ def team_stop(tx: Tx, args: dict, ctx: dict):
                                data={"teamId": team["id"]}))
     if team["status"] != "stopping":
         tx.transition("team", team["id"], "stopping")
+    processes = _owned_processes(tx, team["id"], ctx["stateDir"])
     if check["state"] == "ok":
         tmux.kill_session(team["tmux_session_id"])
         if tmux.session_exists(team["tmux_session_id"]):
             tx.transition("team", team["id"], "error", payload={"reason": "session still present after kill"})
             return Failure(AsError(CLEANUP_INCOMPLETE, "The tmux session is still present after kill-session.",
                                    data={"teamId": team["id"]}))
+    survivors = _reap(processes)
+    if survivors:
+        tx.transition("team", team["id"], "error", payload={"reason": "processes survived the stop",
+                                                            "processes": survivors})
+        return Failure(AsError(CLEANUP_INCOMPLETE, f"{len(survivors)} recorded process(es) are still running after "
+                               "the bounded stop.", data={"teamId": team["id"], "processes": survivors}))
     for a in tx.conn.execute(f"SELECT id, status FROM assignments WHERE team_id = ? AND status IN "
                              f"({','.join('?' * len(ACTIVE))})", (team["id"],) + ACTIVE).fetchall():
         tx.transition("assignment", a["id"], "cancelled", set_values={"diagnostic_code": "TEAM_STOPPED"},
@@ -202,14 +216,53 @@ def team_stop(tx: Tx, args: dict, ctx: dict):
             "tmuxInventory": {"before": before, "after": after}}
 
 
+def _owned_processes(tx: Tx, team_id: str, state_dir: str) -> list:
+    """Recorded runner and provider identities of the team's active assignments - the only processes stop touches."""
+    from .runner import run_dir
+    out = []
+    for a in tx.conn.execute("SELECT id, process_pid, process_start_time, process_boot_id FROM assignments "
+                             "WHERE team_id = ? AND status IN ('claimed', 'running', 'waiting_input', 'reconciling')",
+                             (team_id,)).fetchall():
+        if a["process_pid"] is not None:
+            out.append({"role": "runner", "assignmentId": a["id"], "pid": a["process_pid"],
+                        "startTime": a["process_start_time"], "bootId": a["process_boot_id"]})
+        meta = procid.read_json(os.path.join(run_dir(state_dir, a["id"]), "meta.json"))
+        if isinstance(meta, dict) and isinstance(meta.get("providerProcess"), dict):
+            out.append(dict(meta["providerProcess"], role="provider", assignmentId=a["id"]))
+    return out
+
+
+def _reap(processes: list, grace_s: float = 2.0) -> list:
+    """Wait briefly for verified processes to exit, then SIGTERM, then SIGKILL - each step re-verifies identity."""
+    import signal
+    import time
+
+    def alive():
+        return [p for p in processes if procid.matches(p)]
+
+    for sig in (None, signal.SIGTERM, signal.SIGKILL):
+        if sig is not None:
+            for p in alive():
+                try:
+                    os.kill(p["pid"], sig)
+                except ProcessLookupError:
+                    pass
+        deadline = time.monotonic() + grace_s
+        while alive() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        if not alive():
+            return []
+    return [{k: p[k] for k in ("role", "assignmentId", "pid")} for p in alive()]
+
+
 # ---- delivery -------------------------------------------------------------------------------------
 
 def write_request(state_dir: str, conn, assignment_id: str) -> None:
-    a = conn.execute("SELECT a.*, t.goal, t.workspace FROM assignments a JOIN tasks t ON t.id = a.task_id "
-                     "WHERE a.id = ?", (assignment_id,)).fetchone()
+    a = conn.execute("SELECT a.*, t.goal, t.workspace, g.role FROM assignments a JOIN tasks t ON t.id = a.task_id "
+                     "JOIN agents g ON g.id = a.agent_id WHERE a.id = ?", (assignment_id,)).fetchone()
     body = {"protocol": "agent-studio/request/v1", "teamId": a["team_id"], "agentId": a["agent_id"],
             "assignmentId": a["id"], "attempt": a["attempt"], "providerId": a["provider_id"], "policy": a["policy"],
-            "workspace": a["workspace"], "goal": a["goal"],
+            "workspace": a["workspace"], "goal": a["goal"], "role": a["role"],
             "request": json.loads(a["request_json"]) if a["request_json"] else {}}
     target = request_path(state_dir, a["agent_id"], a["id"], box="inbox")
     os.makedirs(os.path.dirname(target), mode=0o700, exist_ok=True)
@@ -239,6 +292,8 @@ def dispatch_claims(store: Store, state_dir: str) -> int:
         done_agents.add(r["agent_id"])
         with store.transaction() as tx:
             tx.transition("assignment", r["id"], "claimed", expect=["queued"])
+        from . import crashpoints
+        crashpoints.hit("after_claim_commit")  # test-only: redelivery must cover this window
         write_request(state_dir, store.conn, r["id"])
         n += 1
     return n
@@ -310,8 +365,15 @@ def debug_assign(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(BAD_REQUEST, f"Team is {team['status']}, not running.")
     task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": team["workspace"],
                               "goal": args["goal"]})
+    request = {"providerOptions": args.get("providerOptions") or {}}
+    alias = providers.fixture_aliases(os.environ, ctx["debug"]).get(agent["provider_id"])
+    if alias:
+        request["fixtureAdapter"] = alias
+    for k in ("deadlineMs", "outputBudgetBytes"):
+        if args.get(k) is not None:
+            request[k] = args[k]
     asg = tx.create("assignment", {"team_id": team["id"], "task_id": task, "agent_id": agent["id"], "attempt": 1,
-                                   "policy": "read_only", "provider_id": agent["provider_id"],
-                                   "request_json": {"stub": args["stub"]}})
+                                   "policy": args.get("policy", "read_only"), "provider_id": agent["provider_id"],
+                                   "request_json": request})
     tx.transition("task", task, "assigned")
     return {"taskId": task, "assignmentId": asg, "agentId": agent["id"], "receipt": "accepted"}

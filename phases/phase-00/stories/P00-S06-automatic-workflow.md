@@ -1,6 +1,6 @@
 # P00-S06 — Automatic provider-neutral two-role workflow
 
-Status: To Do
+Status: Done
 Depends on: P00-S05
 Architecture: [P00 implementation contract](../architecture.md), section G
 
@@ -31,7 +31,19 @@ Run the built-in workflow automatically: Developer implements, coordinator captu
 
 ## Done when
 
-- [ ] Deterministic tests prove pass, bounded repair, double failure, pause, and every truth-table row.
-- [ ] Base commit, diffs, validation results, handoffs, and verdicts are durable with source assignment IDs.
-- [ ] The workflow completes after the invoking CLI exits.
-- [ ] No stage relies on pane text or provider-specific flags.
+- [x] Deterministic tests prove pass, bounded repair, double failure, pause, and every truth-table row.
+- [x] Base commit, diffs, validation results, handoffs, and verdicts are durable with source assignment IDs.
+- [x] The workflow completes after the invoking CLI exits.
+- [x] No stage relies on pane text or provider-specific flags.
+
+## Evidence (2026-10-22)
+
+- `python3 -m unittest discover -s tests -t .` → 171 tests OK: Ubuntu 22.04 / Python 3.10 / tmux 3.2a / git 2.34 (in chunks) and Python 3.13 / tmux 3.4 in one run (247 s; one root-only skip). S06: `tests/integration/test_s06_workflow.py` (10) and `tests/unit/test_s06_parts.py` (7).
+- Developer ok → validation fail → Reviewer fail → repair → validation pass → Reviewer pass: `succeeded`, exactly four stage attempts and assignments, retry count 1; handoffs chain `fromAssignmentId → toAssignmentId`; verdict and validation events carry their source assignment IDs; base commit equals `git HEAD` at start; diffs, validation output and prompts are files on disk.
+- Reviewer fails twice → `failed` with the repair budget reason and last finding; no fifth attempt after waiting.
+- Truth table: pass+pass → succeeded in two stages; pass+fail → repair; fail+pass → repair ("validation failed"); fail+fail → repair then failed. Pauses: Developer `PROVIDER_ERROR`, `NO_TERMINAL_EVENT`, `PERMISSION_DENIED`; Reviewer malformed or missing verdict (`MALFORMED_VERDICT`). A Reviewer write attempt is denied by `read_only`, surfaced as `PERMISSION_DENIED`, and nothing is written.
+- Preconditions: `WORKSPACE_DIRTY`, `SAME_AGENT`, `WORKSPACE_BUSY` (both directions), `WORKSPACE_NOT_GIT`, `WORKFLOW_CONFIG_INVALID`; cancel of a running workflow → workflow and task `cancelled`, agents idle; overall deadline → `failed` and the stage cancelled.
+- Cross-provider: codex developer + claude reviewer, and opencode developer + agy reviewer (fixture aliases); the provider-name guard test covers `workflow.py`.
+- Shell safety: task text and reviewer findings containing `$(...)`, backticks, `&&`, `rm -rf ~` appear literally in prompts and never run (no canary files); validation argv `$(...)` is printed, not executed; git ignores planted `core.fsmonitor`, `diff.external`, and `core.pager` commands.
+- A `workflow start --wait` killed mid-run: the workflow still advanced through its stages.
+- Design notes: workflow tasks are owned by the engine (stage reports no longer move them); validation runs in a detached process; `workflow.cancel` added because paused runs hold the workspace until `assignment.resolve` (S07).

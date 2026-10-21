@@ -8,7 +8,8 @@ import traceback
 import copy
 
 from . import PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tmuxctl
-from .runner import FINAL_STATUSES
+from .providers.base import POLICIES
+from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
 from .protocol import (AsError, BAD_REQUEST, INTERNAL, UNKNOWN_COMMAND, UNSUPPORTED_PROTOCOL, envelope, req_bool,
                        req_int, req_text, validate_id, validate_idempotency_key)
@@ -61,19 +62,111 @@ def _validate_team_stop(args):
     return {"teamId": validate_uuid(args.get("teamId"), "teamId")}
 
 
+def _validate_fake_options(opts):
+    if not isinstance(opts, dict):
+        raise AsError(BAD_REQUEST, "fake options must be an object.")
+    scenario = opts.get("scenario", "success")
+    if scenario not in SCENARIOS:
+        raise AsError(BAD_REQUEST, f"fake.scenario must be one of {list(SCENARIOS)}.")
+    out = {"scenario": scenario, "durationMs": req_int(opts, "durationMs", 0, 600000, 1000),
+           "progressLines": req_int(opts, "progressLines", 0, 100000, 3)}
+    write = req_text(opts, "writeFile", 200, required=False)
+    if write:
+        out["writeFile"] = write
+    return out
+
+
 def _validate_debug_assign(args):
-    stub = args.get("stub") or {}
-    if not isinstance(stub, dict):
-        raise AsError(BAD_REQUEST, "stub must be an object.")
-    outcome = stub.get("outcome", "succeeded")
-    if outcome not in FINAL_STATUSES:
-        raise AsError(BAD_REQUEST, f"stub.outcome must be one of {list(FINAL_STATUSES)}.")
-    return {"agentId": validate_uuid(args.get("agentId"), "agentId"),
-            "goal": req_text(args, "goal", 4096, required=False) or "debug stub task",
-            "stub": {"durationMs": req_int(stub, "durationMs", 0, 60000, 1500),
-                     "progressLines": req_int(stub, "progressLines", 0, 20, 3),
-                     "outcome": outcome, "exitWithoutFinal": req_bool(stub, "exitWithoutFinal"),
-                     "summary": req_text(stub, "summary", 500, required=False) or f"stub {outcome}"}}
+    policy = args.get("policy", "read_only")
+    if policy not in POLICIES:
+        raise AsError(BAD_REQUEST, f"policy must be one of {list(POLICIES)}.")
+    out = {"agentId": validate_uuid(args.get("agentId"), "agentId"),
+           "goal": req_text(args, "goal", 16384, required=False) or "debug fake task",
+           "policy": policy, "providerOptions": _validate_fake_options(args.get("fake") or {})}
+    if "deadlineMs" in args:
+        out["deadlineMs"] = req_int(args, "deadlineMs", 100, 6 * 3600 * 1000, 0)
+    if "outputBudgetBytes" in args:
+        out["outputBudgetBytes"] = req_int(args, "outputBudgetBytes", 1024, 64 * 1024 * 1024, 0)
+    return out
+
+
+MAX_TASK_BYTES = 32 * 1024
+
+
+def _validate_task_direct(args):
+    policy = args.get("policy")
+    if policy not in POLICIES:
+        raise AsError(BAD_REQUEST, f"policy must be one of {list(POLICIES)} (there is no unrestricted mode).")
+    out = {"teamId": validate_uuid(args.get("teamId"), "teamId"),
+           "agentId": validate_uuid(args.get("agentId"), "agentId"),
+           "text": req_text(args, "text", MAX_TASK_BYTES, allow_empty=False), "policy": policy}
+    if not out["text"].strip():
+        raise AsError(BAD_REQUEST, "Task text must not be blank.")
+    if "deadlineMs" in args:
+        out["deadlineMs"] = req_int(args, "deadlineMs", 100, 6 * 3600 * 1000, 0)
+    if args.get("debugProviderOptions") is not None:
+        out["debugProviderOptions"] = _validate_fake_options(args["debugProviderOptions"])
+    return out
+
+
+STAGE_NAMES = ("developer", "reviewer", "developer_repair", "reviewer_recheck")
+
+
+def _validate_workflow_start(args):
+    out = {"teamId": validate_uuid(args.get("teamId"), "teamId"),
+           "developerAgentId": validate_uuid(args.get("developerAgentId"), "developerAgentId"),
+           "reviewerAgentId": validate_uuid(args.get("reviewerAgentId"), "reviewerAgentId"),
+           "text": req_text(args, "text", MAX_TASK_BYTES, allow_empty=False)}
+    if not out["text"].strip():
+        raise AsError(BAD_REQUEST, "Task text must not be blank.")
+    if args.get("allowDirtyTree"):
+        out["allowDirtyTree"] = req_bool(args, "allowDirtyTree")
+    opts = args.get("debugStageOptions")
+    if opts is not None:
+        if not isinstance(opts, dict) or not set(opts) <= set(STAGE_NAMES):
+            raise AsError(BAD_REQUEST, f"debugStageOptions keys must be among {list(STAGE_NAMES)}.")
+        out["debugStageOptions"] = {k: _validate_fake_options(v) for k, v in opts.items()}
+    return out
+
+
+def _validate_workflow_id(args):
+    return {"workflowRunId": validate_uuid(args.get("workflowRunId"), "workflowRunId")}
+
+
+def _workflow_show(args, req):
+    wf_id = validate_uuid(args.get("workflowRunId"), "workflowRunId")
+    conn = _reader()
+    try:
+        return queries.workflow_detail(conn, wf_id)
+    finally:
+        conn.close()
+
+
+def _validate_resolve(args):
+    action = args.get("action")
+    if action not in ("retry", "fail", "cancel"):
+        raise AsError(BAD_REQUEST, "action must be retry, fail, or cancel.")
+    out = {"assignmentId": validate_uuid(args.get("assignmentId"), "assignmentId"), "action": action}
+    if args.get("policy") is not None:
+        if action != "retry" or args["policy"] not in POLICIES:
+            raise AsError(BAD_REQUEST, f"policy is only for retry, one of {list(POLICIES)}.")
+        out["policy"] = args["policy"]
+    if args.get("debugProviderOptions") is not None:
+        out["debugProviderOptions"] = _validate_fake_options(args["debugProviderOptions"])
+    return out
+
+
+def _validate_cancel(args):
+    return {"assignmentId": validate_uuid(args.get("assignmentId"), "assignmentId")}
+
+
+def _task_show(args, req):
+    task_id = validate_uuid(args.get("taskId"), "taskId")
+    conn = _reader()
+    try:
+        return queries.task_detail(conn, task_id)
+    finally:
+        conn.close()
 
 
 SESSION_NOT_FOUND = "SESSION_NOT_FOUND"
@@ -144,6 +237,13 @@ COMMANDS = {
     "team.start": _inbox("team.start", _validate_team_start),
     "team.stop": _inbox("team.stop", _validate_team_stop),
     "team.attach": _team_attach,
+    "task.direct": _inbox("task.direct", _validate_task_direct),
+    "task.show": _task_show,
+    "assignment.cancel": _inbox("assignment.cancel", _validate_cancel),
+    "assignment.resolve": _inbox("assignment.resolve", _validate_resolve),
+    "workflow.start": _inbox("workflow.start", _validate_workflow_start),
+    "workflow.cancel": _inbox("workflow.cancel", _validate_workflow_id),
+    "workflow.show": _workflow_show,
 }
 
 
