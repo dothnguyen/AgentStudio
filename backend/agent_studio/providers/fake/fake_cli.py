@@ -26,11 +26,13 @@ def main():
     p.add_argument("--duration-ms", type=int, default=1000)
     p.add_argument("--lines", type=int, default=3)
     p.add_argument("--write")
+    p.add_argument("--model")
+    p.add_argument("--reasoning", choices=("low", "medium", "high"))
     a = p.parse_args()
     prompt = sys.stdin.buffer.read()
     sha = hashlib.sha256(prompt).hexdigest()
     emit({"type": "init", "session": "fake-" + uuid.uuid4().hex[:12], "promptSha256": sha, "promptBytes": len(prompt),
-          "sandbox": a.sandbox, "cwd": os.getcwd()})
+          "sandbox": a.sandbox, "cwd": os.getcwd(), "model": a.model, "reasoning": a.reasoning})
     duration = (60.0 if a.scenario == "slow" and a.duration_ms <= 1000 else a.duration_ms / 1000.0)
     if a.scenario == "timeout":
         time.sleep(3600)

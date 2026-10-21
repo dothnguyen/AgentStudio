@@ -38,6 +38,18 @@ def _mutating_in_workspace(tx: Tx, workspace: str) -> Optional[str]:
     return f"workflow {row['id']}" if row else None
 
 
+def build_request(agent: dict, workspace: str, extra: dict = None) -> dict:
+    """Freeze, at assignment creation, what the runner will use: model, reasoning, and the workspace role context
+    (text + source hashes), so the journal shows exactly what each attempt was given."""
+    from . import roles
+    request = dict(extra or {})
+    request["model"] = agent.get("model")
+    request["reasoning"] = agent.get("reasoning")
+    ctx = roles.context_for(workspace, agent["role"])
+    request["roleContext"] = ctx
+    return request
+
+
 def adapter_for(agent: dict, ctx: dict):
     alias = providers.fixture_aliases(os.environ, ctx["debug"]).get(agent["provider_id"])
     return providers.resolve(agent["provider_id"], allow_test_only=ctx["debug"], fixture=alias), alias
@@ -71,7 +83,7 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         if holder:
             raise AsError(WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).",
                           data={"workspace": team["workspace"]})
-    request = {}
+    request = build_request(agent, team["workspace"])
     if args.get("deadlineMs"):
         request["deadlineMs"] = args["deadlineMs"]
     if args.get("debugProviderOptions") is not None:
@@ -84,9 +96,11 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
     task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": team["workspace"],
                               "goal": args["text"]})
     asg = tx.create("assignment", {"team_id": team["id"], "task_id": task, "agent_id": agent["id"], "attempt": 1,
-                                   "policy": policy, "provider_id": agent["provider_id"], "request_json": request})
+                                   "policy": policy, "provider_id": agent["provider_id"], "request_json": request},
+                    payload=_request_summary(request))
     tx.transition("task", task, "assigned")
-    return {"receipt": "accepted", "teamId": team["id"], "agentId": agent["id"], "taskId": task,
+    return {"receipt": "accepted", "model": agent.get("model"), "reasoning": agent.get("reasoning"),
+            "roleSources": request["roleContext"]["sources"], "roleWarnings": request["roleContext"]["warnings"], "teamId": team["id"], "agentId": agent["id"], "taskId": task,
             "assignmentId": asg, "policy": policy, "providerId": agent["provider_id"]}
 
 
@@ -166,3 +180,10 @@ def assignment_cancel(tx: Tx, args: dict, ctx: dict) -> dict:
     # waiting_input, or running/reconciling with the runner gone: nothing can still act, so cancel now.
     _finish_cancel(tx, asg, f"cancelled while {status}")
     return dict(out, outcome="cancelled", status="cancelled")
+
+
+def _request_summary(request: dict) -> dict:
+    rc = request.get("roleContext") or {}
+    return {"model": request.get("model"), "reasoning": request.get("reasoning"),
+            "roleContextSha256": rc.get("sha256"), "roleSources": rc.get("sources", []),
+            "roleWarnings": rc.get("warnings", [])}

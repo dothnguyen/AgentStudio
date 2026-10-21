@@ -33,7 +33,13 @@ class FakeAdapter(Adapter):
     def version(self, env: dict) -> str:
         return "fake 1.0 (test-only)"
 
-    def probe(self, env: dict) -> dict:
+    def reasoning_levels(self):
+        return ("low", "medium", "high")
+
+    def model_selectable(self) -> bool:
+        return True
+
+    def probe(self, env: dict, deep: bool = False) -> dict:
         return dict(self.describe(env), available=True, executable=FAKE_CLI, authenticated=True)
 
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
@@ -48,6 +54,10 @@ class FakeAdapter(Adapter):
                 raise AsError("BAD_REQUEST", f"fake {name} must be an integer 0..{hi}.")
         argv = [sys.executable, "-I", FAKE_CLI, "--scenario", scenario] + self.policy_mapping()[inp.policy] + \
                ["--duration-ms", str(duration), "--lines", str(lines)]
+        if inp.model:
+            argv += ["--model", inp.model]
+        if inp.reasoning:
+            argv += ["--reasoning", inp.reasoning]
         write = o.get("writeFile")
         if write is not None:
             if not isinstance(write, str) or not SAFE_REL.match(write):

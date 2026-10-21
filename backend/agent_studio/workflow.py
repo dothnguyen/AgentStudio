@@ -200,8 +200,9 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: str, ctx: dict, from_assig
                                      "attempt": attempt, "agent_id": agent_id, "phase": "assignment",
                                      "prompt_path": prompt_path})
     adapter, alias = tasks.adapter_for(agent, ctx)
-    request = {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"), "workflowRunId": wf_id,
-               "stage": stage}
+    request = tasks.build_request(agent, tx.get("task", wf["task_id"])["workspace"],
+                                  {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"),
+                                   "workflowRunId": wf_id, "stage": stage})
     stage_opts = provider_options or (config.get("debugStageOptions") or {}).get(stage)
     if stage_opts and ctx["debug"] and getattr(adapter, "test_only", False):
         request["providerOptions"] = stage_opts
@@ -209,7 +210,8 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: str, ctx: dict, from_assig
         request["fixtureAdapter"] = alias
     asg = tx.create("assignment", {"team_id": wf["team_id"], "task_id": wf["task_id"], "agent_id": agent_id,
                                    "stage_attempt_id": sa, "attempt": attempt, "policy": POLICY[stage],
-                                   "provider_id": agent["provider_id"], "request_json": request})
+                                   "provider_id": agent["provider_id"], "request_json": request},
+                    payload=tasks._request_summary(request))
     tx.update("stage_attempt", sa, {"assignment_id": asg}, "stage_attempt.dispatched",
               {"assignmentId": asg, "policy": POLICY[stage]})
     tx.update("workflow_run", wf_id, {"current_stage": stage, "current_agent_id": agent_id}, "workflow_run.handoff",

@@ -1,0 +1,228 @@
+{
+  "provider": "codex",
+  "version": "0.163.0",
+  "executable": "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+  "model": "gpt-5.6-sol",
+  "reasoning": "medium",
+  "probe": {
+    "providerId": "codex",
+    "version": "0.163.0",
+    "testOnly": false,
+    "capabilities": {
+      "headless": true,
+      "structuredProgress": true,
+      "structuredFinal": true,
+      "resume": "unsupported",
+      "interactiveInput": "unsupported"
+    },
+    "modelSelectable": true,
+    "reasoningLevels": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh"
+    ],
+    "policies": {
+      "read_only": [
+        "--sandbox",
+        "read-only",
+        "-c",
+        "approval_policy=\"never\""
+      ],
+      "workspace_write": [
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        "approval_policy=\"never\"",
+        "-c",
+        "sandbox_workspace_write.network_access=false"
+      ]
+    },
+    "available": true,
+    "executable": "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+    "login": {
+      "loggedIn": true,
+      "method": "ChatGPT"
+    },
+    "authVerified": true,
+    "deepProbe": {
+      "ok": true,
+      "detail": "ok",
+      "at": 1792625410.228603,
+      "seconds": 3.6
+    }
+  },
+  "evidenceDir": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex",
+  "steps": [
+    {
+      "name": "read_only_reply",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 3.7,
+      "summary": "AGENT_STUDIO_OK",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 13225,
+        "cached_input_tokens": 11008,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 9,
+        "reasoning_output_tokens": 0
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+        "exec",
+        "--json",
+        "--color",
+        "never",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--cd",
+        "/tmp/agent-studio-verify-5qlusyel/read_only_reply",
+        "--sandbox",
+        "read-only",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"medium\"",
+        "-"
+      ],
+      "passed": true
+    },
+    {
+      "name": "workspace_write_creates_file",
+      "policy": "workspace_write",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 8.3,
+      "summary": "DONE",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 40886,
+        "cached_input_tokens": 35328,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 174,
+        "reasoning_output_tokens": 11
+      },
+      "filesAfter": [
+        "README.md",
+        "agent_studio_check.txt"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+        "exec",
+        "--json",
+        "--color",
+        "never",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--cd",
+        "/tmp/agent-studio-verify-5qlusyel/workspace_write_creates_file",
+        "--sandbox",
+        "workspace-write",
+        "-c",
+        "approval_policy=\"never\"",
+        "-c",
+        "sandbox_workspace_write.network_access=false",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"medium\"",
+        "-"
+      ],
+      "passed": true
+    },
+    {
+      "name": "read_only_blocks_write",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 4.9,
+      "summary": "I could not create `agent_studio_denied.txt` because the workspace is read-only.",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 26590,
+        "cached_input_tokens": 24064,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 89,
+        "reasoning_output_tokens": 0
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+        "exec",
+        "--json",
+        "--color",
+        "never",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--cd",
+        "/tmp/agent-studio-verify-5qlusyel/read_only_blocks_write",
+        "--sandbox",
+        "read-only",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"medium\"",
+        "-"
+      ],
+      "passed": true
+    },
+    {
+      "name": "reviewer_verdict",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 287.5,
+      "summary": "{\"verdict\": \"pass\", \"findings\": []}",
+      "verdict": {
+        "verdict": "pass",
+        "findings": []
+      },
+      "usage": {
+        "input_tokens": 13240,
+        "cached_input_tokens": 11008,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 17,
+        "reasoning_output_tokens": 0
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+        "exec",
+        "--json",
+        "--color",
+        "never",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--cd",
+        "/tmp/agent-studio-verify-5qlusyel/reviewer_verdict",
+        "--sandbox",
+        "read-only",
+        "-c",
+        "approval_policy=\"never\"",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"medium\"",
+        "-"
+      ],
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "passed": true,
+  "envSource": "login-shell"
+}

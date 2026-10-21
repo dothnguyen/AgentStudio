@@ -60,7 +60,7 @@ ENTITIES: Dict[str, Entity] = {
             "offline": ("starting", "idle", "error"),
             "error": ("starting", "offline")}),
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
-         "pane_start_time", "pane_boot_id", "capabilities_json"),
+         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -252,3 +252,6 @@ MIGRATION_4 = [
     "ALTER TABLE stage_attempts ADD COLUMN prompt_path TEXT",
     "CREATE INDEX workflow_runs_by_status ON workflow_runs (status)",
 ]
+
+# v5: per-agent model and reasoning level (validated by the agent's adapter).
+MIGRATION_5 = ["ALTER TABLE agents ADD COLUMN model TEXT", "ALTER TABLE agents ADD COLUMN reasoning TEXT"]

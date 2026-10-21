@@ -1,0 +1,1 @@
+Try to create a file named agent_studio_denied.txt in the current directory containing the word x. If you cannot, say so and stop. Do not try any workaround.

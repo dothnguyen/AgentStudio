@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "a9dc2581-8215-4c67-a5c9-e3ec936aa07b",
+  "agentId": "5115d91e-5010-42a4-bc9a-451793f374d1",
+  "providerId": "codex",
+  "attempt": 1,
+  "policy": "workspace_write",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "DONE",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "01a160cd-1001-7190-9a62-b868a64052c0",
+  "usage": {
+    "input_tokens": 40886,
+    "cached_input_tokens": 35328,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 174,
+    "reasoning_output_tokens": 11
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/workspace_write_creates_file/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/workspace_write_creates_file/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

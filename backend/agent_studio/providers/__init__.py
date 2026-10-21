@@ -62,11 +62,13 @@ def resolve(provider_id: str, allow_test_only: bool = False, fixture: str = None
     return adapter
 
 
-def probe_many(provider_ids, env: dict, allow_test_only: bool, aliases: Dict[str, str] = None) -> Dict[str, dict]:
+def probe_many(provider_ids, env: dict, allow_test_only: bool, aliases: Dict[str, str] = None,
+               deep: bool = False) -> Dict[str, dict]:
     out = {}
     for pid in dict.fromkeys(provider_ids):
         try:
-            probe = resolve(pid, allow_test_only, (aliases or {}).get(pid)).probe(env)
+            adapter = resolve(pid, allow_test_only, (aliases or {}).get(pid))
+            probe = adapter.probe(env, deep=True) if deep and adapter.supports_deep_probe() else adapter.probe(env)
             if (aliases or {}).get(pid):
                 probe["fixtureOf"] = aliases[pid]
             out[pid] = probe

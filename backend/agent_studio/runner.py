@@ -275,8 +275,11 @@ def run(agent_id: str, assignment_id: str) -> int:
         adapter, desc = None, {"providerId": provider_id, "error": e.message}
     ident = procid.identity(os.getpid())
     report("start", {"pid": ident["pid"], "startTime": ident["startTime"], "bootId": ident["bootId"], "provider": desc})
+    rq = req.get("request") or {}
+    settings = ", ".join(x for x in (rq.get("model") and f"model {rq['model']}",
+                                     rq.get("reasoning") and f"reasoning {rq['reasoning']}") if x)
     _say(f"assignment {assignment_id[:8]} started - {provider_id} {desc.get('version') or ''}, "
-         f"attempt {attempt}, policy {req.get('policy')}")
+         f"attempt {attempt}, policy {req.get('policy')}" + (f", {settings}" if settings else ""))
     _say("task: " + one_line(str(req.get("goal", ""))))
 
     rd = run_dir(sd, assignment_id)
@@ -291,15 +294,19 @@ def run(agent_id: str, assignment_id: str) -> int:
             with open(src, "rb") as f:
                 prompt = f.read(2 * 1024 * 1024)
     if prompt is None:
-        prompt = ((f"Role: {role}\n\n" if role else "") + str(req.get("goal", ""))).encode("utf-8")
-    _write_private(prompt_path, prompt)
+        prompt = ("===== TASK =====\n" + str(req.get("goal", "")) + "\n===== END TASK =====\n").encode("utf-8")
+    role_text = ((r.get("roleContext") or {}).get("text") or "")
+    if not role_text and role:
+        role_text = f"===== AGENT STUDIO ROLE: {role} =====\n(no role configuration)\n===== END ROLE =====\n"
+    _write_private(prompt_path, role_text.encode("utf-8") + (b"\n" if role_text else b"") + prompt)
     inp = AssignmentInput(
         assignment_id=assignment_id, agent_id=agent_id, provider_id=str(provider_id), attempt=attempt,
         workspace=str(req.get("workspace")), prompt_path=prompt_path, role_instructions=role,
         policy=str(req.get("policy")), deadline_s=_clamp(r.get("deadlineMs"), DEFAULT_DEADLINE_MS, 100,
                                                           MAX_DEADLINE_MS) / 1000.0,
         output_budget_bytes=_clamp(r.get("outputBudgetBytes"), DEFAULT_BUDGET, 1024, MAX_BUDGET),
-        model=r.get("model"), options=r.get("providerOptions") or {})
+        model=r.get("model"), reasoning=r.get("reasoning"), options=r.get("providerOptions") or {},
+        expects_verdict=r.get("stage") in ("reviewer", "reviewer_recheck"))
     oc = {"outputPath": os.path.join(rd, "stdout.jsonl"), "stderrPath": os.path.join(rd, "stderr.log"),
           "exitCode": None, "signal": None, "timedOut": False, "cancelRequested": False, "truncated": False}
     st = ParseState()

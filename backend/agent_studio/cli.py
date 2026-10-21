@@ -18,14 +18,18 @@ from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, dumps, envelope
 USAGE = """agent-studio <command>
 
   health                                   backend, coordinator, environment, keep-alive status
-  preflight --workspace PATH [--provider ID ...] [--policy P ...]
-                                           state dir, workspace, tmux, and selected providers/policies
+  preflight --workspace PATH [--provider ID ...] [--policy P ...] [--role NAME ...] [--deep]
+                                           state dir, workspace, tmux, providers/policies, workspace roles;
+                                           --deep proves provider authentication with a tiny read-only task
+  provider verify --provider ID [--model M] [--reasoning R]
+                                           on-machine evidence for an adapter story (real runs, captured output)
   coordinator start [--enable-debug]       start the coordinator daemon (idempotent)
   coordinator stop                         stop the recorded coordinator process
   snapshot [--team ID] [--include-stopped]  current teams, agents, tasks, workflow runs, assignments + cursor
   events [--after N] [--limit N] [--team ID] [--db-id ID]   journal events after a cursor
-  team start --workspace PATH --agent PROVIDER:ROLE[:NAME] [--agent ...] [--name NAME]
-                                           launch one tmux window with one pane per agent
+  team start --workspace PATH [--agent PROVIDER:ROLE[:NAME][,model=M][,reasoning=R] ...] [--name NAME]
+                                           one tmux window with one pane per agent; without --agent the
+                                           roster comes from <workspace>/.agent-studio/team.json
   team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
   team stop --team ID                      stop only that team's verified tmux session
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
@@ -87,6 +91,8 @@ def _human_request(argv) -> dict:
     pf.add_argument("--workspace", required=True)
     pf.add_argument("--provider", action="append", default=[])
     pf.add_argument("--policy", action="append", default=[])
+    pf.add_argument("--role", action="append", default=[])
+    pf.add_argument("--deep", action="store_true")
     co = sub.add_parser("coordinator", add_help=False)
     co.add_argument("action", choices=["start", "stop"])
     co.add_argument("--enable-debug", action="store_true")
@@ -164,6 +170,10 @@ def _human_request(argv) -> dict:
             req["args"]["providers"] = ns.provider
         if ns.policy:
             req["args"]["policies"] = ns.policy
+        if ns.role:
+            req["args"]["roles"] = ns.role
+        if ns.deep:
+            req["args"]["deep"] = True
     elif ns.cmd == "coordinator":
         req["command"] = f"coordinator.{ns.action}"
         if ns.action == "start":
@@ -223,18 +233,26 @@ def _human_request(argv) -> dict:
         req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "team":
         if ns.action == "start":
-            if not ns.workspace or not ns.agent:
-                raise AsError(BAD_REQUEST, "team start needs --workspace and at least one --agent PROVIDER:ROLE[:NAME]")
+            if not ns.workspace:
+                raise AsError(BAD_REQUEST, "team start needs --workspace")
             roster = []
             for spec in ns.agent:
-                parts = spec.split(":", 2)
+                head, *opts = spec.split(",")
+                parts = head.split(":", 2)
                 if len(parts) < 2:
-                    raise AsError(BAD_REQUEST, f"--agent {spec!r} must look like PROVIDER:ROLE[:NAME]")
+                    raise AsError(BAD_REQUEST, f"--agent {spec!r} must look like PROVIDER:ROLE[:NAME][,model=M][,reasoning=R]")
                 member = {"providerId": parts[0], "role": parts[1]}
                 if len(parts) == 3:
                     member["displayName"] = parts[2]
+                for opt in opts:
+                    k, sep, v = opt.partition("=")
+                    if not sep or k not in ("model", "reasoning") or not v:
+                        raise AsError(BAD_REQUEST, f"--agent option {opt!r}: use model=NAME or reasoning=LEVEL")
+                    member[k] = v
                 roster.append(member)
-            req.update(command="team.start", args={"workspace": ns.workspace, "roster": roster})
+            req.update(command="team.start", args={"workspace": ns.workspace})
+            if roster:
+                req["args"]["roster"] = roster
             if ns.name:
                 req["args"]["name"] = ns.name
         else:
@@ -292,6 +310,21 @@ def main(argv=None) -> int:
             sys.stderr.write(e.message + "\n")
             return 2
         return runner.run(ns.agent, ns.assignment)
+    if cmd == "provider":
+        from . import provider_verify
+        p = _Parser(prog="agent-studio provider", add_help=False)
+        p.add_argument("action", choices=["verify"])
+        p.add_argument("--provider", required=True)
+        p.add_argument("--model")
+        p.add_argument("--reasoning")
+        try:
+            ns = p.parse_args(argv[1:])
+            data = provider_verify.verify(ns.provider, ns.model, ns.reasoning)
+            return _emit(envelope(None, data["passed"], data=data, error=None if data["passed"] else
+                                  {"code": "VERIFY_FAILED", "message": "; ".join(data["failures"])[:2000],
+                                   "retryable": False}), pretty)
+        except AsError as e:
+            return _emit(envelope(None, False, error=e.to_error()), pretty)
     if cmd == "validate":
         if argv[1:2] != ["--dir"] or len(argv) != 3:
             sys.stderr.write("usage: agent-studio validate --dir DIR (internal)\n")

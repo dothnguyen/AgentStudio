@@ -85,20 +85,36 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
         name = m.get("displayName") or f"{role.strip()}-{i + 1}"
         if not isinstance(name, str) or len(name) > 64:
             raise AsError(BAD_REQUEST, f"roster[{i}].displayName must be at most 64 characters.")
-        clean.append({"agentId": aid, "providerId": pid, "role": one_line(role.strip(), 64),
-                      "displayName": one_line(name.strip(), 64)})
+        member = {"agentId": aid, "providerId": pid, "role": one_line(role.strip(), 64),
+                  "displayName": one_line(name.strip(), 64)}
+        for key in ("model", "reasoning"):
+            value = m.get(key)
+            if value is not None and (not isinstance(value, str) or not value or len(value) > 128):
+                raise AsError(BAD_REQUEST, f"roster[{i}].{key} must be a non-empty string of at most 128 characters.")
+            member[key] = value
+        clean.append(member)
     return clean
 
 
 def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
-    roster = validate_roster(args, allow_fake=ctx["debug"])
     workspace = ops.canonical_workspace(args["workspace"])
+    if not args.get("roster"):
+        from . import roles
+        args = dict(args, roster=roles.load_team(workspace))  # .agent-studio/team.json
+    roster = validate_roster(args, allow_fake=ctx["debug"])
     probes = providers.probe_many([m["providerId"] for m in roster], dict(os.environ), allow_test_only=ctx["debug"],
                                   aliases=providers.fixture_aliases(os.environ, ctx["debug"]))
     missing = {pid: p.get("reason") for pid, p in probes.items() if not p.get("available")}
     if missing:  # never substitute another provider or start a partial team
         raise AsError(providers.PROVIDER_UNAVAILABLE, "Provider(s) not ready: " +
                       "; ".join(f"{k}: {v}" for k, v in missing.items()), data={"probes": probes})
+    aliases = providers.fixture_aliases(os.environ, ctx["debug"])
+    for i, m in enumerate(roster):  # each agent's own model / reasoning, checked by its adapter
+        adapter = providers.resolve(m["providerId"], allow_test_only=ctx["debug"], fixture=aliases.get(m["providerId"]))
+        try:
+            adapter.validate_settings(m.get("model"), m.get("reasoning"))
+        except AsError as e:
+            raise AsError(e.code, f"roster[{i}] ({m['displayName']}): {e.message}")
     for m in roster:
         if tx.conn.execute("SELECT 1 FROM agents WHERE id = ?", (m["agentId"],)).fetchone():
             raise AsError(BAD_REQUEST, f"Agent {m['agentId']} already exists in another team.")
@@ -108,13 +124,16 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     tx.create("team", {"name": name, "workspace": workspace, "ownership_marker": marker}, entity_id=team_id)
     for i, m in enumerate(roster):
         tx.create("agent", {"team_id": team_id, "ordinal": i, "provider_id": m["providerId"], "role": m["role"],
-                            "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]]},
+                            "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]],
+                            "model": m.get("model"), "reasoning": m.get("reasoning")},
                   entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
         for box in ("inbox", "active", "done"):
             os.makedirs(os.path.join(d, box), mode=0o700, exist_ok=True)
         with open(os.path.join(d, "banner"), "w", encoding="utf-8") as f:
-            f.write(f"Agent Studio - {m['displayName']}  [{m['providerId']} / {m['role']}]\n"
+            settings = " ".join(x for x in (m.get("model") or "", f"reasoning {m['reasoning']}" if m.get("reasoning") else "") if x)
+            f.write(f"Agent Studio - {m['displayName']}  [{m['providerId']} / {m['role']}]"
+                    + (f"  ({one_line(settings, 120)})" if settings else "") + "\n"
                     f"team {team_id[:8]}  agent {m['agentId'][:8]}  workspace {one_line(workspace, 200)}\n")
     tmux: tmuxctl.Tmux = ctx["tmux"]
     session = tmux.create_team_session(
@@ -135,7 +154,10 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
                                               "pane_state": "alive"}, "agent.pane_assigned",
                       {"paneId": pane["pane_id"]})
             tx.transition("agent", m["agentId"], "idle")
-            agents_out.append(dict(m, paneId=pane["pane_id"]))
+            from . import roles
+            rc = roles.context_for(workspace, m["role"])
+            agents_out.append(dict(m, paneId=pane["pane_id"], roleConfigured=rc["configured"],
+                                   roleSources=rc["sources"], roleWarnings=rc["warnings"]))
         tx.transition("team", team_id, "running")
     except BaseException:
         tmux.run("kill-session", "-t", session["session_id"], check=False)
@@ -365,7 +387,8 @@ def debug_assign(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(BAD_REQUEST, f"Team is {team['status']}, not running.")
     task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": team["workspace"],
                               "goal": args["goal"]})
-    request = {"providerOptions": args.get("providerOptions") or {}}
+    from .tasks import build_request
+    request = build_request(agent, team["workspace"], {"providerOptions": args.get("providerOptions") or {}})
     alias = providers.fixture_aliases(os.environ, ctx["debug"]).get(agent["provider_id"])
     if alias:
         request["fixtureAdapter"] = alias

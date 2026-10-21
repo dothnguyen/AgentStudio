@@ -141,7 +141,22 @@ There is no unrestricted policy in P00. Each adapter records the exact provider 
 
 `status ∈ {succeeded, failed, cancelled, waiting_input, inconclusive}`. Success requires a valid final report, matching IDs, a compatible terminal provider outcome, acceptable exit status, and no unresolved required permission denial. Missing or contradictory evidence is `inconclusive` or `failed`. Headless permission prompts or soft denials normalize to `waiting_input` (blocked by policy) or `failed` with a reason; P00 does not implement interactive reply.
 
-**Implementation (S04).** Adapters live in `backend/agent_studio/providers/<id>/` and are discovered from that directory; see `providers/README.md`. The shared outcome rules in `Adapter.finalize` decide the normalized status for every provider; adapters only translate output. The runner writes `prompt.txt`, `stdout.jsonl` (capped by `outputBudgetBytes`), `stderr.log`, `meta.json`, and `result.json` under `runs/<assignmentId>/` (`0600`), runs the provider in its own process group with `PR_SET_PDEATHSIG`, enforces `deadlineMs`, treats SIGTERM/SIGHUP/SIGINT as a cancellation request, and passes only allowlisted environment variables. The coordinator re-validates every final report; a "success" without its evidence becomes `inconclusive` → `reconciling`. Until S08–S11 the four peer directories hold honest placeholders (`available: false`), so preflight and `team.start` refuse them rather than substituting. After a `waiting_input` result the agent stays `waiting_input` (its queue waits) until the operator resolves it (S07).
+**Implementation (S04).** Adapters live in `backend/agent_studio/providers/<id>/` and are discovered from that directory; see `providers/README.md`. The shared outcome rules in `Adapter.finalize` decide the normalized status for every provider; adapters only translate output. The runner writes `prompt.txt`, `stdout.jsonl` (capped by `outputBudgetBytes`), `stderr.log`, `meta.json`, and `result.json` under `runs/<assignmentId>/` (`0600`), runs the provider in its own process group with `PR_SET_PDEATHSIG`, enforces `deadlineMs`, treats SIGTERM/SIGHUP/SIGINT as a cancellation request, and passes only allowlisted environment variables. The coordinator re-validates every final report; a "success" without its evidence becomes `inconclusive` → `reconciling`. Until its adapter story lands, a peer directory holds an honest placeholder (Codex landed in S08) (`available: false`), so preflight and `team.start` refuse them rather than substituting. After a `waiting_input` result the agent stays `waiting_input` (its queue waits) until the operator resolves it (S07).
+
+**Per-agent settings and workspace roles (S08).** Each agent may carry its own `model` and `reasoning` (roster
+fields, `--agent PROVIDER:ROLE[:NAME][,model=M][,reasoning=R]`, or `.agent-studio/team.json`). The adapter declares
+`model_selectable()` and `reasoning_levels()`; `validate_settings` refuses anything else with `SETTING_UNSUPPORTED`
+at `team.start`, before any pane exists, and again at `prepare`. Placeholder adapters accept no settings.
+Roles come from the workspace (`backend/agent_studio/roles.py`): `.agent-studio/roles.json`
+(`{"version":1,"roles":{"<role>":{"description","instructions":"roles/x.md","skills":["name"]}}}`), the fallback
+`.agent-studio/roles/<role>.md`, and `.agent-studio/skills/<name>/SKILL.md`. Paths cannot leave `.agent-studio`
+(no `..`, absolute paths or symlink escapes); limits are 2 KB description, 16 KiB instructions, 32 KiB per skill,
+96 KiB in total, with warnings for anything skipped or truncated. At assignment creation the role context, model
+and reasoning are frozen into the request (the `assignment.created` event records model, reasoning, context SHA-256
+and sources), so editing role files never changes work already queued. The runner writes the prompt as role context
+(`===== AGENT STUDIO ROLE … =====`, then `===== SKILL … =====` blocks) followed by the task or workflow-stage prompt.
+Providers still read their own native files (AGENTS.md, CLAUDE.md, …) from the workspace.
+`preflight --role NAME` shows what a role resolves to; `preflight --deep` runs each adapter's authentication micro-task.
 
 Starting points—**verify against installed `--help`/version in each adapter story; links may be stale**:
 

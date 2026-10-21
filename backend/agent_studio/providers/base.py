@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -22,6 +23,8 @@ UNSUPPORTED = "unsupported"
 REPORT_PROTOCOL = "agent-studio/assignment/v1"
 POLICY_UNSUPPORTED = "POLICY_UNSUPPORTED"
 PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+SETTING_UNSUPPORTED = "SETTING_UNSUPPORTED"
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
 
 # Environment variables a provider may receive. Anything else (tokens in random variables, our own
 # AGENT_STUDIO_* settings, the caller's TMUX) is dropped unless an adapter explicitly adds it.
@@ -44,8 +47,10 @@ class AssignmentInput:
     deadline_s: float
     output_budget_bytes: int
     model: Optional[str] = None
+    reasoning: Optional[str] = None
     provider_session_id: Optional[str] = None
     options: dict = field(default_factory=dict)  # provider-specific, validated by the adapter
+    expects_verdict: bool = False                # reviewer stages: read a verdict from the final message
 
 
 @dataclass
@@ -84,6 +89,24 @@ class ParseState:
     verdict: object = MISSING
     usage: Optional[dict] = None
     events: int = 0
+    final_text: Optional[str] = None          # the provider's last message, when it has one
+
+
+def extract_verdict(text: Optional[str]):
+    """Find a reviewer verdict in free text: the last line (or fenced block) that parses as a JSON object with a
+    "verdict" key. Returns the object or None. Never evaluates anything."""
+    if not text:
+        return None
+    candidates = [l.strip().strip("`").strip() for l in text.strip().splitlines()]
+    for blob in reversed(candidates):
+        if blob.startswith("{") and '"verdict"' in blob:
+            try:
+                obj = json.loads(blob)
+            except ValueError:
+                continue
+            if isinstance(obj, dict) and "verdict" in obj:
+                return obj
+    return None
 
 
 def valid_verdict(v) -> bool:
@@ -106,15 +129,38 @@ class Adapter:
     def version(self, env: dict) -> Optional[str]:
         return None
 
+    def reasoning_levels(self) -> Tuple[str, ...]:
+        """Reasoning levels this adapter can map to a verified provider setting; () when it cannot."""
+        return ()
+
+    def model_selectable(self) -> bool:
+        return False
+
+    def validate_settings(self, model: Optional[str], reasoning: Optional[str]) -> None:
+        if model is not None:
+            if not self.model_selectable():
+                raise AsError(SETTING_UNSUPPORTED, f"{self.provider_id}: choosing a model is not supported.")
+            if not isinstance(model, str) or not MODEL_RE.match(model):
+                raise AsError(SETTING_UNSUPPORTED, f"{self.provider_id}: invalid model name {model!r}.")
+        if reasoning is not None:
+            levels = self.reasoning_levels()
+            if reasoning not in levels:
+                raise AsError(SETTING_UNSUPPORTED, f"{self.provider_id}: reasoning level {reasoning!r} is not "
+                                                   f"supported (supported: {', '.join(levels) or 'none'}).")
+
     def describe(self, env: dict) -> dict:
         mapping = self.policy_mapping()
         return {"providerId": self.provider_id, "version": self.version(env), "testOnly": self.test_only,
-                "capabilities": self.capabilities(),
+                "capabilities": self.capabilities(), "modelSelectable": self.model_selectable(),
+                "reasoningLevels": list(self.reasoning_levels()),
                 "policies": {p: (mapping.get(p) if mapping.get(p) is not None else UNSUPPORTED) for p in POLICIES}}
 
-    def probe(self, env: dict) -> dict:
+    def probe(self, env: dict, deep: bool = False) -> dict:
         """Real adapters must prove authentication with a disposable read-only task, never by --version alone."""
         return dict(self.describe(env), available=False, reason="probe() not implemented")
+
+    def supports_deep_probe(self) -> bool:
+        return False
 
     # ---- execution -----------------------------------------------------------------------------
     def prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
@@ -137,6 +183,10 @@ class Adapter:
     def finalize(self, inp: AssignmentInput, st: ParseState, oc: dict) -> dict:
         """oc: exitCode, signal, timedOut, cancelRequested, truncated, outputPath, stderrPath."""
         term, attention, code = st.terminal, None, None
+        if st.verdict is MISSING and inp.expects_verdict and term is not None and term.get("ok"):
+            found = extract_verdict(st.final_text)
+            if found is not None:
+                st.verdict = found
         verdict = None if st.verdict is MISSING else st.verdict
         if oc.get("cancelRequested"):
             status, code = "cancelled", "CANCELLED"
@@ -219,6 +269,6 @@ class NotImplementedAdapter(Adapter):
         self.provider_id = provider_id
         self.story = story
 
-    def probe(self, env: dict) -> dict:
+    def probe(self, env: dict, deep: bool = False) -> dict:
         return dict(self.describe(env), available=False,
                     reason=f"The {self.provider_id} adapter is not implemented yet ({self.story}).")

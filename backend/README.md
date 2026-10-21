@@ -97,6 +97,37 @@ arrows or `o` move between panes · `[` scroll back (`q` to leave) · `w` pick a
 `team attach` command. You can also list Agent Studio's sessions with `tmux -L agent-studio ls`; your own
 `tmux ls` server is separate.
 
+## Real providers: models, reasoning, roles and skills
+
+Each agent can have its own model and reasoning level, and every agent follows the role configured in the
+workspace. Settings the adapter has not verified are refused (`SETTING_UNSUPPORTED`) before any pane opens.
+
+```bash
+agent-studio team start --workspace ~/work/project \
+    --agent codex:Developer:dev,model=gpt-5.1-codex,reasoning=high \
+    --agent codex:Reviewer:rev,reasoning=medium
+agent-studio provider verify --provider codex --model gpt-5.1-codex --reasoning high   # real runs, kept as evidence
+agent-studio preflight --workspace ~/work/project --provider codex --role Developer --deep
+```
+
+Codex reasoning levels: `minimal low medium high xhigh`. Without `--agent`, the roster comes from the workspace:
+
+```
+.agent-studio/team.json          {"version": 1, "agents": [{"providerId": "codex", "role": "Developer", "name": "dev",
+                                                            "model": "gpt-5.1-codex", "reasoning": "high"}]}
+.agent-studio/roles.json         {"version": 1, "roles": {"Developer": {"description": "Implements features",
+                                                                       "instructions": "roles/developer.md",
+                                                                       "skills": ["python-testing"]}}}
+.agent-studio/roles/<Role>.md    instructions (used directly when roles.json does not list the role)
+.agent-studio/skills/<name>/SKILL.md
+```
+
+The role description, instructions and listed skills are placed in front of every prompt for that agent (direct
+tasks and workflow stages), frozen when the assignment is created. Paths cannot leave `.agent-studio`; sizes are
+capped (16 KiB instructions, 32 KiB per skill, 96 KiB total) with warnings in the `team.start` / `task.direct`
+receipts. The provider still reads its own native files (e.g. `AGENTS.md`) as usual. Provider details:
+`agent_studio/providers/codex/CONTRACT.md`.
+
 ## Run the Developer → Reviewer workflow
 
 The workspace must be a git repository (clean, at least one commit) with a committed

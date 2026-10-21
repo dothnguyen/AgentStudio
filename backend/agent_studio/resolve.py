@@ -125,7 +125,9 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
                 {"stage": current["stage"], "fromAssignmentId": a["id"], "toAssignmentId": new})
         return dict(out, status="retried", newAssignmentId=new, stage=current["stage"])
 
-    request = json.loads(a["request_json"]) if a["request_json"] else {}
+    old = json.loads(a["request_json"]) if a["request_json"] else {}
+    request = tasks.build_request(agent, task["workspace"],
+                                  {k: v for k, v in old.items() if k in ("deadlineMs", "providerOptions", "promptFile")})
     if args.get("debugProviderOptions") is not None:
         request["providerOptions"] = args["debugProviderOptions"]
     if alias:
@@ -133,7 +135,7 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
     new = tx.create("assignment", {"team_id": a["team_id"], "task_id": task["id"], "agent_id": agent["id"],
                                    "attempt": a["attempt"] + 1, "policy": policy, "provider_id": agent["provider_id"],
                                    "request_json": request},
-                    payload={"retryOf": a["id"], "policyChange": policy_change})
+                    payload=dict(tasks._request_summary(request), retryOf=a["id"], policyChange=policy_change))
     if task["status"] == "waiting_input":
         tx.transition("task", task["id"], "running", payload={"reason": "retried"})
     tx.note("task", task["id"], "task.retried", {"fromAssignmentId": a["id"], "toAssignmentId": new,

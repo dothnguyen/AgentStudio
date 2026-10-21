@@ -1,4 +1,4 @@
-"""codex adapter. Placeholder until P00-S08 verifies the installed CLI; see CONTRACT.md."""
-from ..base import NotImplementedAdapter
+"""Codex CLI adapter (P00-S08). See CONTRACT.md."""
+from .adapter import CodexAdapter
 
-ADAPTER = NotImplementedAdapter("codex", "P00-S08")
+ADAPTER = CodexAdapter()

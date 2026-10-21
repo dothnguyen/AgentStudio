@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Test stand-in for codex-cli 0.163.0. Emits the real `exec --json` event shapes (see the adapter CONTRACT.md)
+and honours --sandbox for file writes. Controlled by fake-codex.json next to this file (the adapter's environment
+allowlist would strip test variables); appends every exec invocation to calls.jsonl next to this file."""
+import json
+import os
+import re
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+try:
+    with open(os.path.join(HERE, "fake-codex.json")) as f:
+        CTL = json.load(f)
+except (OSError, ValueError):
+    CTL = {}
+HELP = """Run Codex non-interactively
+Usage: codex exec [OPTIONS] [PROMPT] [COMMAND]
+  -c, --config <key=value>
+  -m, --model <MODEL>
+  -s, --sandbox <SANDBOX_MODE>  [possible values: read-only, workspace-write, danger-full-access]
+      --skip-git-repo-check
+      --ephemeral
+  -C, --cd <DIR>
+      --color <COLOR>
+      --json
+  -o, --output-last-message <FILE>
+"""
+
+
+def out(obj):
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+
+
+def main(argv):
+    if argv[:1] == ["--version"]:
+        print("codex-cli " + CTL.get("version", "0.163.0"))
+        return 0
+    if argv[:2] == ["exec", "--help"]:
+        print(HELP if not CTL.get("oldHelp") else HELP.replace("--ephemeral", ""))
+        return 0
+    if argv[:2] == ["login", "status"]:
+        if CTL.get("loggedOut"):
+            print("Not logged in", file=sys.stderr)
+            return 1
+        print("Logged in using ChatGPT")
+        return 0
+    if argv[:1] != ["exec"]:
+        print("unsupported in fake", file=sys.stderr)
+        return 2
+    opts, i, args = {"config": []}, 1, argv[1:]
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--sandbox", "-s", "--model", "-m", "--cd", "-C", "--color"):
+            opts[a.lstrip("-")[:2] if False else a] = argv[i + 1]
+            i += 2
+        elif a in ("-c", "--config"):
+            opts["config"].append(argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    prompt = sys.stdin.read() if argv[-1] == "-" else ""
+    sandbox = opts.get("--sandbox") or opts.get("-s")
+    cwd = opts.get("--cd") or opts.get("-C") or os.getcwd()
+    model = opts.get("--model") or opts.get("-m")
+    with open(os.path.join(HERE, "calls.jsonl"), "a") as f:
+        f.write(json.dumps({"argv": args, "prompt": prompt, "sandbox": sandbox, "model": model,
+                            "config": opts["config"], "cwd": cwd}) + "\n")
+    mode = CTL.get("mode", "normal")
+    out({"type": "thread.started", "thread_id": "0199a213-81c0-7800-8aa1-bbab2a035a53"})
+    out({"type": "turn.started"})
+    if mode == "reconnect_forever":
+        for n in range(1, 6):
+            out({"type": "error", "message": f"Reconnecting... {n}/5"})
+            time.sleep(0.2)
+        time.sleep(3600)
+        return 0
+    if mode == "turn_failed":
+        out({"type": "turn.failed", "error": {"message": "stream disconnected before completion"}})
+        return 1
+    out({"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "**Planning** the reply"}})
+    reply = "Done."
+    m = re.search(r"Create a file named (\S+) in the current directory", prompt)
+    if m:
+        name = m.group(1)
+        out({"type": "item.started", "item": {"id": "item_1", "type": "command_execution",
+                                              "command": f"bash -lc 'echo > {name}'", "aggregated_output": "",
+                                              "exit_code": None, "status": "in_progress"}})
+        if sandbox == "workspace-write":
+            body = re.search(r"single line (\S+)", prompt)
+            with open(os.path.join(cwd, name), "w") as f:
+                f.write((body.group(1) if body else "x") + "\n")
+            out({"type": "item.completed", "item": {"id": "item_2", "type": "file_change", "status": "completed",
+                                                    "changes": [{"path": os.path.join(cwd, name), "kind": "add"}]}})
+            reply = "DONE"
+        else:
+            out({"type": "item.completed", "item": {"id": "item_1", "type": "command_execution",
+                                                    "command": f"bash -lc 'echo > {name}'",
+                                                    "aggregated_output": "Read-only file system", "exit_code": 1,
+                                                    "status": "failed"}})
+            reply = "I cannot create the file: the sandbox is read-only."
+    m = re.search(r"Reply with exactly (\S+) and nothing else", prompt)
+    if m:
+        reply = m.group(1)
+    m = re.search(r"Reply with exactly this single line and nothing else: (\{.*\})", prompt)
+    if m:
+        reply = m.group(1)
+    if CTL.get("echoSettings"):
+        reply += "\nsettings " + json.dumps({"model": model, "config": opts["config"]})
+    out({"type": "item.completed", "item": {"id": "item_9", "type": "agent_message", "text": reply}})
+    out({"type": "turn.completed", "usage": {"input_tokens": 1200, "cached_input_tokens": 0, "output_tokens": 12}})
+    return 0
+
+
+sys.exit(main(sys.argv[1:]))

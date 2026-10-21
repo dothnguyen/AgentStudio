@@ -1,0 +1,40 @@
+{
+  "argv": [
+    "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+    "exec",
+    "--json",
+    "--color",
+    "never",
+    "--ephemeral",
+    "--skip-git-repo-check",
+    "--cd",
+    "/tmp/agent-studio-verify-5qlusyel/read_only_blocks_write",
+    "--sandbox",
+    "read-only",
+    "-c",
+    "approval_policy=\"never\"",
+    "--model",
+    "gpt-5.6-sol",
+    "-c",
+    "model_reasoning_effort=\"medium\"",
+    "-"
+  ],
+  "cwd": "/tmp/agent-studio-verify-5qlusyel/read_only_blocks_write",
+  "envKeys": [
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "USER",
+    "XDG_RUNTIME_DIR"
+  ],
+  "providerProcess": {
+    "pid": 483910,
+    "startTime": 7924972,
+    "bootId": "87f4231f-c1a7-44ef-a1d1-a2ca64396634"
+  },
+  "deadlineSeconds": 300,
+  "outputBudgetBytes": 4194304
+}

@@ -64,7 +64,7 @@ class Scenarios(unittest.TestCase):
         rc, out, err = self.h.run(asg)
         self.assertEqual(rc, 0, out)
         prompt = open(self.h.evidence(asg, "prompt.txt"), "rb").read()
-        self.assertTrue(prompt.endswith(HOSTILE_GOAL.encode("utf-8")))
+        self.assertTrue(prompt.endswith(("===== TASK =====\n" + HOSTILE_GOAL + "\n===== END TASK =====\n").encode("utf-8")))
         events = [json.loads(l) for l in open(self.h.evidence(asg, "stdout.jsonl"), encoding="utf-8")]
         self.assertEqual(events[0]["promptSha256"], hashlib.sha256(prompt).hexdigest())
         for where in (self.ws, os.getcwd(), os.path.expanduser("~")):

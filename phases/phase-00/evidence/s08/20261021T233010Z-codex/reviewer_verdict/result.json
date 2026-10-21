@@ -1,0 +1,38 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "0e058855-5229-4b5f-b84e-ebf2f7177d49",
+  "agentId": "bfda805c-d20c-465b-b50d-2685f2b29ae6",
+  "providerId": "codex",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "{\"verdict\": \"pass\", \"findings\": []}",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "01a160cd-432a-7cf0-aa91-40bdfb6f0d41",
+  "usage": {
+    "input_tokens": 13240,
+    "cached_input_tokens": 11008,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 17,
+    "reasoning_output_tokens": 0
+  },
+  "verdict": {
+    "verdict": "pass",
+    "findings": []
+  },
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/reviewer_verdict/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/reviewer_verdict/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

@@ -134,7 +134,7 @@ def preflight(args: dict) -> dict:
         raise AsError("BAD_REQUEST", "providers must be a list of at most 8 provider IDs.")
     if not isinstance(policies, list) or not set(policies) <= set(POLICIES):
         raise AsError("BAD_REQUEST", f"policies must be a subset of {list(POLICIES)}.")
-    for pid, probe in providers.probe_many(wanted, env, allow_test_only=True).items():
+    for pid, probe in providers.probe_many(wanted, env, allow_test_only=True, deep=bool(args.get("deep"))).items():
         if not probe.get("available"):
             record(f"provider:{pid}", AsError(PROVIDER_UNAVAILABLE, f"{pid}: {probe.get('reason')}"), probe=probe)
             continue
@@ -144,6 +144,20 @@ def preflight(args: dict) -> dict:
                                                                   f"{', '.join(unsupported)}."), probe=probe)
         else:
             record(f"provider:{pid}", probe=probe)
+
+    roles_wanted = args.get("roles") or []
+    if not isinstance(roles_wanted, list) or len(roles_wanted) > 16 or not all(isinstance(r, str) for r in roles_wanted):
+        raise AsError("BAD_REQUEST", "roles must be a list of at most 16 role names.")
+    if workspace:
+        from . import roles as roles_mod
+        for role in roles_wanted:
+            try:
+                rc = roles_mod.context_for(workspace, role)
+                warnings.extend({"code": "ROLE_CONFIG", "message": f"{role}: {w}"} for w in rc["warnings"])
+                record(f"role:{role}", configured=rc["configured"], sources=rc["sources"], warnings=rc["warnings"],
+                       contextBytes=len(rc["text"].encode()))
+            except AsError as e:
+                record(f"role:{role}", e)
 
     data = {"ready": first_error is None, "workspace": workspace, "checks": checks, "warnings": warnings,
             "environment": {"mode": envinfo["mode"], "source": envinfo["source"]}}

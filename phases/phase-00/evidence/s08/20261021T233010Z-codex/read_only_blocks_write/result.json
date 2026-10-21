@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "6993a0cd-99e8-48c0-9d16-2bd80874f2fe",
+  "agentId": "c10cd979-dd1e-43e5-a9d9-8448d42aa1d8",
+  "providerId": "codex",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "I could not create `agent_studio_denied.txt` because the workspace is read-only.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "01a160cd-3030-7f30-9cf8-05bd556a8f3a",
+  "usage": {
+    "input_tokens": 26590,
+    "cached_input_tokens": 24064,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 89,
+    "reasoning_output_tokens": 0
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/read_only_blocks_write/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261021T233010Z-codex/read_only_blocks_write/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}
