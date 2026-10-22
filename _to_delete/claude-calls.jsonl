@@ -1,0 +1,1 @@
+{"argv": ["--print", "--output-format", "stream-json", "--verbose", "--tools", "Read"], "prompt": "hi\n", "cwd": "/sessions/rcw-01cxyxqrafjdqvfwua2cnnu5/mnt/AgentStudio/tests/fixtures/claude/bin", "model": null, "effort": null, "mode": null, "tools": ["Read"]}

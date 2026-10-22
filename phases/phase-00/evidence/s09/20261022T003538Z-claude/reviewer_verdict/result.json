@@ -1,0 +1,38 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "df581f3d-1c76-47c5-a553-b77a0d51f08e",
+  "agentId": "1c3ab671-1b28-4383-b773-3c5b52b803e7",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "{\"verdict\": \"pass\", \"findings\": []}",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "82b2ca66-a897-495a-95a5-4485faef0b32",
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 730,
+    "cache_read_input_tokens": 4119,
+    "output_tokens": 18,
+    "total_cost_micro_usd": 3516
+  },
+  "verdict": {
+    "verdict": "pass",
+    "findings": []
+  },
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/reviewer_verdict/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/reviewer_verdict/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

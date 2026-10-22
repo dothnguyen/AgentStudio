@@ -1,0 +1,225 @@
+"""Claude Code adapter (P00-S09). Verified against Claude Code 2.1.307 (`claude --help`, `claude auth status`, and
+real `claude -p --output-format stream-json` output); see CONTRACT.md. Every flag used is checked in the installed
+CLI's help at probe time; nothing is guessed."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+from typing import Dict, List, Optional
+
+from ...protocol import AsError
+from .. import cli_support
+from ..base import BASE_ENV, POLICIES, UNSUPPORTED, Adapter, AssignmentInput, ParseState, Prepared
+
+short = cli_support.short
+
+REQUIRED_FLAGS = ("--print", "--output-format", "--verbose", "--permission-mode", "--permission-prompts", "--tools",
+                  "--allowedTools", "--strict-mcp-config", "--restricted", "--no-session-persistence", "--model",
+                  "--effort")
+REQUIRED_MODES = ("dontAsk", "acceptEdits")
+NEVER = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "bypassPermissions", "auto",
+         "Bash", "--add-dir")
+REASONING = ("low", "medium", "high", "xhigh", "max")
+READ_TOOLS = "Read,Grep,Glob"
+COMMON = ["--print", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
+          "--strict-mcp-config",             # only MCP servers we pass (none)
+          "--permission-prompts", "none",    # nothing can wait on a prompt: anything that would ask is denied
+          "--restricted"]                    # no code-running tools, file tools confined to the workspace
+POLICY_FLAGS = {
+    "read_only": ["--permission-mode", "dontAsk", "--tools", READ_TOOLS, "--allowedTools", READ_TOOLS],
+    "workspace_write": ["--permission-mode", "acceptEdits", "--tools", READ_TOOLS + ",Edit,Write,NotebookEdit",
+                        "--allowedTools", READ_TOOLS],
+}
+ENV = BASE_ENV + ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL",
+                  "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+                  "AWS_REGION", "AWS_PROFILE", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION",
+                  "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy",
+                  "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR")
+AUTH_RE = re.compile(r"not logged in|/login|invalid api key|authentication_error|oauth token|\b401\b", re.I)
+_inspect_cache: Dict[tuple, dict] = {}
+
+
+class ClaudeAdapter(Adapter):
+    provider_id = "claude"
+
+    # ---- declaration -------------------------------------------------------------------------
+    def capabilities(self) -> dict:
+        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": UNSUPPORTED,
+                "interactiveInput": UNSUPPORTED}
+
+    def policy_mapping(self) -> Dict[str, Optional[List[str]]]:
+        return {p: list(POLICY_FLAGS[p]) for p in POLICIES}
+
+    def reasoning_levels(self):
+        return REASONING
+
+    def model_selectable(self) -> bool:
+        return True
+
+    def supports_deep_probe(self) -> bool:
+        return True
+
+    # ---- installed CLI ------------------------------------------------------------------------
+    def executable(self, env: dict) -> Optional[str]:
+        return shutil.which("claude", path=env.get("PATH", ""))
+
+    def inspect(self, env: dict) -> dict:
+        exe = self.executable(env)
+        if not exe:
+            return {"found": False}
+        real = os.path.realpath(exe)
+        key = (real, os.stat(real).st_mtime_ns)
+        if key in _inspect_cache:
+            return _inspect_cache[key]
+        try:
+            ver = cli_support.run_quiet([exe, "--version"], env, ENV)
+            version_text = ver.stdout.decode("utf-8", "replace").strip()
+            if ver.returncode != 0 or not version_text:
+                err = short(ver.stderr.decode("utf-8", "replace") or f"exit {ver.returncode}", 200)
+                return {"found": True, "path": exe, "error": f"`claude --version` failed: {err}"}
+            hlp = cli_support.run_quiet([exe, "--help"], env, ENV)
+        except (OSError, subprocess.SubprocessError) as e:
+            return {"found": True, "path": exe, "error": f"could not run claude: {e}"}
+        m = re.search(r"(\d+\.\d+\.\d+\S*)", version_text)
+        help_text = hlp.stdout.decode("utf-8", "replace")
+        info = {"found": True, "path": exe, "version": m.group(1) if m else version_text[:60],
+                "versionText": version_text[:120],
+                "missingFlags": [f for f in REQUIRED_FLAGS if f not in help_text]
+                + [f"--permission-mode {x}" for x in REQUIRED_MODES if f'"{x}"' not in help_text]}
+        _inspect_cache[key] = info
+        return info
+
+    def version(self, env: dict) -> Optional[str]:
+        return self.inspect(env).get("version")
+
+    def login_status(self, env: dict) -> dict:
+        try:
+            p = cli_support.run_quiet([self.executable(env), "auth", "status"], env, ENV)
+        except (OSError, subprocess.SubprocessError) as e:
+            return {"loggedIn": False, "detail": f"auth status could not run: {e}"}
+        text = p.stdout.decode("utf-8", "replace")
+        try:
+            data = json.loads(text)
+            return {"loggedIn": bool(data.get("loggedIn")) and p.returncode == 0, "method": data.get("authMethod"),
+                    "apiProvider": data.get("apiProvider")}
+        except ValueError:
+            return {"loggedIn": p.returncode == 0 and "not logged in" not in text.lower(), "method": None}
+
+    def probe(self, env: dict, deep: bool = False) -> dict:
+        d = self.describe(env)
+        info = self.inspect(env)
+        if not info.get("found"):
+            return dict(d, available=False, code="PROVIDER_NOT_FOUND",
+                        reason="claude was not found on the login PATH (install: npm install -g @anthropic-ai/claude-code).")
+        if info.get("error"):
+            return dict(d, available=False, executable=info["path"], reason=info["error"])
+        if info["missingFlags"]:
+            return dict(d, available=False, executable=info["path"], code="CAPABILITY_GAP",
+                        reason=f"claude {info['version']} lacks required options: {', '.join(info['missingFlags'])}.")
+        login = self.login_status(env)
+        if not login["loggedIn"]:
+            return dict(d, available=False, executable=info["path"], code="AUTH_REQUIRED",
+                        reason="claude is not logged in (run: claude auth login).")
+        out = dict(d, available=True, executable=info["path"], login=login)
+        return cli_support.apply_deep(out, self, info, env, deep)
+
+    # ---- execution ----------------------------------------------------------------------------
+    def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
+        exe = self.executable(env)
+        if not exe:
+            raise AsError("PROVIDER_UNAVAILABLE", "claude was not found on the login PATH.")
+        self.validate_settings(inp.model, inp.reasoning)
+        argv = [exe] + COMMON + POLICY_FLAGS[inp.policy]
+        if any(a in NEVER for a in argv):
+            raise AsError("BAD_ADAPTER", "refusing a permission-bypass flag or a code-running tool")
+        if inp.model:
+            argv += ["--model", inp.model]
+        if inp.reasoning:
+            argv += ["--effort", inp.reasoning]
+        # The prompt arrives on stdin (the private prompt file); the workspace is the working directory.
+        return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
+
+    def parse_line(self, line: bytes, state: ParseState):
+        state.events += 1
+        try:
+            ev = json.loads(line.decode("utf-8"))
+            if not isinstance(ev, dict):
+                raise ValueError
+        except UnicodeDecodeError:
+            state.malformed += 1
+            return [("attention", "claude output line is not UTF-8")]
+        except ValueError:
+            text = line.decode("utf-8", "replace").strip()
+            if text.startswith("{"):
+                state.malformed += 1
+                return [("attention", "unparseable claude output line")]
+            if text and AUTH_RE.search(text):
+                return [("attention", short(text))]
+            return [("progress", short(text))] if text else []
+        t, sub = ev.get("type"), ev.get("subtype")
+        if t == "system":
+            if sub == "init":
+                state.session_id = str(ev.get("session_id", ""))[:100] or None
+                return [("progress", f"claude session {state.session_id} model {short(ev.get('model', '?'), 60)} "
+                                     f"mode {ev.get('permissionMode')}")]
+            if sub == "api_retry":
+                return [("attention", f"API retry {ev.get('attempt')}/{ev.get('max_retries')} "
+                                      f"({ev.get('error_status') or ev.get('error')})")]
+            if sub == "permission_denied":
+                item = f"{ev.get('tool_name', '?')}: {short(ev.get('decision_reason') or '', 160)}"
+                state.extra.setdefault("streamDenials", []).append(item)
+                return [("attention", f"permission denied - {item}")]
+            return []
+        if t == "assistant":
+            out = []
+            for c in (ev.get("message") or {}).get("content") or []:
+                if not isinstance(c, dict):
+                    continue
+                if c.get("type") == "text" and c.get("text"):
+                    state.final_text = c["text"]
+                    out.append(("progress", "message: " + short(c["text"], 200)))
+                elif c.get("type") == "tool_use":
+                    inp = c.get("input") if isinstance(c.get("input"), dict) else {}
+                    target = inp.get("file_path") or inp.get("pattern") or inp.get("path") or ""
+                    out.append(("progress", f"tool {c.get('name')} {short(target, 160)}".rstrip()))
+            return out
+        if t == "user":
+            out = []
+            for c in (ev.get("message") or {}).get("content") or []:
+                if isinstance(c, dict) and c.get("type") == "tool_result" and c.get("is_error"):
+                    out.append(("attention", "tool error: " + short(c.get("content"), 200)))
+            return out
+        if t == "result":
+            state.session_id = str(ev.get("session_id") or state.session_id or "")[:100] or None
+            usage = ev.get("usage") if isinstance(ev.get("usage"), dict) else {}
+            state.usage = {k: v for k, v in usage.items() if isinstance(v, int) and not isinstance(v, bool)}
+            if isinstance(ev.get("total_cost_usd"), (int, float)):
+                state.usage["total_cost_micro_usd"] = int(round(ev["total_cost_usd"] * 1_000_000))
+            denials = ev.get("permission_denials")
+            if isinstance(denials, list):  # the authoritative record of denials for the run
+                for d in denials[:20]:
+                    if isinstance(d, dict):
+                        ti = d.get("tool_input") if isinstance(d.get("tool_input"), dict) else {}
+                        state.denials.append(f"{d.get('tool_name', '?')}: "
+                                             f"{short(ti.get('file_path') or ti.get('command') or '', 160)}")
+            text = ev.get("result") if isinstance(ev.get("result"), str) else ""
+            if text:
+                state.final_text = text
+            ok = sub == "success" and not ev.get("is_error")
+            if ok:
+                state.terminal = {"ok": True, "summary": (text or "claude finished")[:2000]}
+                return [("progress", f"result: {ev.get('terminal_reason') or 'completed'}")]
+            code = "AUTH_REQUIRED" if AUTH_RE.search(text or "") else "PROVIDER_ERROR"
+            reason = ev.get("terminal_reason") or sub
+            state.terminal = {"ok": False, "code": code,
+                              "summary": short(text or f"claude ended with {reason}", 2000)}
+            return [("attention", f"result {reason}: {short(text, 200)}")]
+        return []
+
+    def finalize(self, inp: AssignmentInput, st: ParseState, oc: dict) -> dict:
+        if st.terminal is None and st.extra.get("streamDenials") and not st.denials:
+            st.denials.extend(st.extra["streamDenials"])  # no final result: keep what the stream reported
+        return super().finalize(inp, st, oc)

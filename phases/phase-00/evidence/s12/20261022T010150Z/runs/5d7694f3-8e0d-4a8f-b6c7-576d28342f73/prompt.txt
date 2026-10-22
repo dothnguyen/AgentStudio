@@ -1,0 +1,39 @@
+===== AGENT STUDIO ROLE: Reviewer =====
+Description: Reviews diffs strictly but briefly
+
+Check that the change does what the task asks and nothing else.
+
+===== END ROLE =====
+
+You are the Reviewer in an Agent Studio workflow. You have read-only access: do not modify files.
+Review DIFF against TASK, taking VALIDATION into account. End your reply with exactly one line of
+JSON: {"verdict": "pass" or "fail", "findings": ["..."]}. Use "fail" for anything that must change.
+
+===== TASK =====
+Fix the bug in calc.py: add(a, b) must return the sum of a and b. Do not change the tests. FIXTURE-BUG
+===== END TASK =====
+
+===== DIFF =====
+diff --git a/calc.py b/calc.py
+index 0d397d8..10b6df6 100644
+--- a/calc.py
++++ b/calc.py
+@@ -1,6 +1,6 @@
+ def add(a, b):
+     """Return the sum of a and b."""
+-    return a - b
++    return a + b
+ 
+ 
+ def mul(a, b):
+
+===== END DIFF =====
+
+===== VALIDATION =====
+Validation PASSED.
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+
+===== END VALIDATION =====

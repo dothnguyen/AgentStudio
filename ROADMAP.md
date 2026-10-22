@@ -12,7 +12,7 @@ NTM and OrchestMux are retired from the new runtime path. Previous Phase 00 work
 
 | Phase | Outcome | Gate |
 |---|---|---|
-| P00 — Backend proof of concept | Proven Windows↔WSL boundary; configurable roster; N native tmux panes; direct idle-agent task; two-provider automatic workflow; durable status, resolution, and recovery. | Real gate in [P00-S12](./phases/phase-00/stories/P00-S12-live-gate.md) passes before UI work begins. |
+| P00 — Backend proof of concept | Proven Windows↔WSL boundary; configurable roster; N native tmux panes; direct idle-agent task; two-provider automatic workflow; durable status, resolution, and recovery. | Real gate in [P00-S12](./phases/phase-00/stories/P00-S12-live-gate.md) **passed 2026-10-22** with Codex + Claude Code; P00 closes when S10 (agy) and S11 (OpenCode) are Done or Blocked with a recorded gap. |
 | P01 — Desktop Command Center | Electron setup, team/task/workflow status, dispatch, resolve, and Stop over `serve`; Open terminals attaches native tmux. | Fresh user can operate the proven backend without WSL CLI knowledge. |
 | P02 — Reusable teams | Saved profiles, role instructions, multiple workspaces, and history. | Relaunch a saved mixed-provider team in a new folder. |
 | P03 — Workflow library | Configurable deterministic stages, routing, validations, and bounded retries. | Two user-defined workflows run and recover transparently. |

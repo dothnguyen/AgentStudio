@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "5c129f6e-67ca-43b5-b70f-76e24359c522",
+  "agentId": "6845c763-0431-4597-b354-342ce98b9b3e",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "workspace_write",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "DONE",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "b9365ea2-df13-40d3-af1f-3ee1ddde170f",
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 6282,
+    "cache_read_input_tokens": 6079,
+    "output_tokens": 135,
+    "total_cost_micro_usd": 27094
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/workspace_write_creates_file/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/workspace_write_creates_file/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

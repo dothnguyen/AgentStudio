@@ -1,0 +1,51 @@
+﻿{
+    "phase":  "Reconnect",
+    "verifiedAt":  "2026-10-22T01:09:05.8972131Z",
+    "recorded":  {
+                     "teamId":  "4c7c7718-706a-464b-b087-7a3671f21556",
+                     "taskId":  "53c944ba-64e0-4e13-826e-3d08af690702",
+                     "assignmentId":  "acfad410-7f86-42fd-9806-b2dff4ccc1c5",
+                     "status":  "succeeded",
+                     "coordinatorPid":  492614,
+                     "coordinatorStart":  8488703,
+                     "recordedAt":  "2026-10-22T01:06:08.5184531Z"
+                 },
+    "coordinator":  {
+                        "running":  true,
+                        "pid":  492614,
+                        "startTime":  8488703,
+                        "startedAt":  "2026-10-22T01:03:19.014Z",
+                        "uptimeSeconds":  346.847,
+                        "version":  "0.1.0",
+                        "debugCommands":  false,
+                        "logFile":  "/home/dothn/.local/state/agent-studio/coordinator.log"
+                    },
+    "team":  "running",
+    "assignment":  "succeeded",
+    "stop":  {
+                 "sessionWasPresent":  true,
+                 "stopped":  true,
+                 "teamId":  "4c7c7718-706a-464b-b087-7a3671f21556",
+                 "tmuxInventory":  {
+                                       "after":  [
+                                                     {
+                                                         "session_id":  "$2",
+                                                         "session_name":  "as-059bb704f1e54dc1"
+                                                     }
+                                                 ],
+                                       "before":  [
+                                                      {
+                                                          "session_id":  "$2",
+                                                          "session_name":  "as-059bb704f1e54dc1"
+                                                      },
+                                                      {
+                                                          "session_id":  "$4",
+                                                          "session_name":  "as-4c7c7718706a464b"
+                                                      }
+                                                  ]
+                                   }
+             },
+    "failures":  [
+
+                 ]
+}

@@ -1,0 +1,42 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "5d7694f3-8e0d-4a8f-b6c7-576d28342f73",
+  "agentId": "478c2dc2-fa6c-43e6-9c64-1bbef2e0c627",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "The diff changes only `add` in `calc.py`, from `a - b` to `a + b`. That fixes the bug and does what the task asks.\n\n- **Scope:** No other lines changed. The tests weren't touched; git status shows only `calc.py` as modified.\n- **Validation:** Both tests pass.\n- **Note:** There's an untracked `__pycache__/` folder, probably left over from running the tests. It isn't in the diff, so it doesn't affect the verdict, but it shouldn't be committed.\n\n{\"verdict\": \"pass\", \"findings\": [\"add() now returns a + b as required; change is minimal and limited to calc.py\", \"Tests unchanged; validation passed (2 tests OK)\", \"Untracked __pycache__/ is a test-run leftover and should not be committed\"]}",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "3332d337-bab7-4747-9b45-10c26795a56b",
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1173,
+    "cache_read_input_tokens": 4142,
+    "output_tokens": 320,
+    "total_cost_micro_usd": 16620
+  },
+  "verdict": {
+    "verdict": "pass",
+    "findings": [
+      "add() now returns a + b as required; change is minimal and limited to calc.py",
+      "Tests unchanged; validation passed (2 tests OK)",
+      "Untracked __pycache__/ is a test-run leftover and should not be committed"
+    ]
+  },
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/runs/5d7694f3-8e0d-4a8f-b6c7-576d28342f73/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/runs/5d7694f3-8e0d-4a8f-b6c7-576d28342f73/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

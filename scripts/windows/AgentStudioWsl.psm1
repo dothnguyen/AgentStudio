@@ -159,7 +159,7 @@ function New-IdempotencyKey([string]$Prefix = 'win') { return "$Prefix-" + [guid
 
 function Get-Percentile([double[]]$Values, [double]$P) {
     if (-not $Values -or $Values.Count -eq 0) { return $null }
-    $sorted = $Values | Sort-Object
+    $sorted = @($Values | Sort-Object)   # @() keeps a one-sample list a list under StrictMode
     $idx = [math]::Min($sorted.Count - 1, [math]::Max(0, [int][math]::Ceiling($P * $sorted.Count) - 1))
     return [math]::Round($sorted[$idx], 2)
 }

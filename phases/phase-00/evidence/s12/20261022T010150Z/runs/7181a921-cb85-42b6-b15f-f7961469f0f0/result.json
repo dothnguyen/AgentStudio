@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "7181a921-cb85-42b6-b15f-f7961469f0f0",
+  "agentId": "f3372fad-4204-493e-a934-f4cdd305af3b",
+  "providerId": "codex",
+  "attempt": 1,
+  "policy": "workspace_write",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "Updated `add(a, b)` in [calc.py](/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab/calc.py) to return `a + b`.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "01a16121-96f5-7a12-9e96-e81edea2e8a0",
+  "usage": {
+    "input_tokens": 42300,
+    "cached_input_tokens": 36608,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 225,
+    "reasoning_output_tokens": 0
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/runs/7181a921-cb85-42b6-b15f-f7961469f0f0/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/runs/7181a921-cb85-42b6-b15f-f7961469f0f0/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

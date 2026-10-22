@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--no-session-persistence",
+    "--strict-mcp-config",
+    "--permission-prompts",
+    "none",
+    "--restricted",
+    "--permission-mode",
+    "acceptEdits",
+    "--tools",
+    "Read,Grep,Glob,Edit,Write,NotebookEdit",
+    "--allowedTools",
+    "Read,Grep,Glob"
+  ],
+  "cwd": "/tmp/agent-studio-verify-9y9lkwru/workspace_write_creates_file",
+  "envKeys": [
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "USER",
+    "XDG_RUNTIME_DIR"
+  ],
+  "providerProcess": {
+    "pid": 486627,
+    "startTime": 8316069,
+    "bootId": "87f4231f-c1a7-44ef-a1d1-a2ca64396634"
+  },
+  "deadlineSeconds": 600,
+  "outputBudgetBytes": 4194304
+}

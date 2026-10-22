@@ -1,0 +1,29 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "95d82246-9688-4870-a991-04d5a5cd085c",
+  "agentId": "f3372fad-4204-493e-a934-f4cdd305af3b",
+  "providerId": "codex",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "failed",
+  "exitCode": 0,
+  "summary": "Stopped at the deadline.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": "TIMEOUT",
+  "providerSessionId": "01a16122-a73b-7932-b3cd-07449b83dac1",
+  "usage": null,
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/runs/95d82246-9688-4870-a991-04d5a5cd085c/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/runs/95d82246-9688-4870-a991-04d5a5cd085c/stderr.log",
+    "providerTerminalEvent": false,
+    "terminalOk": false,
+    "signal": null,
+    "timedOut": true,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

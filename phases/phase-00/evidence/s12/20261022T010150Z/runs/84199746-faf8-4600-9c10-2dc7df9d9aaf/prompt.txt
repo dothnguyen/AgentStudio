@@ -1,0 +1,10 @@
+===== AGENT STUDIO ROLE: Reviewer =====
+Description: Reviews diffs strictly but briefly
+
+Check that the change does what the task asks and nothing else.
+
+===== END ROLE =====
+
+===== TASK =====
+Read every file in this repository. Then write a detailed explanation of each function and each test, at least 400 words in total. Do not modify anything.
+===== END TASK =====

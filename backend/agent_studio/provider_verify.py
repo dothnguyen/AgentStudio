@@ -3,9 +3,11 @@ assignment uses, in disposable git repositories, and keep the raw output as evid
 coordinator, the database or the user's workspaces."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
+import sys
 import subprocess
 import tempfile
 import time
@@ -116,6 +118,12 @@ def _check(step: dict, ws: str, report: dict) -> list:
 
 
 def verify(provider_id: str, model=None, reasoning=None) -> dict:
+    """Progress lines go to stderr: stdout carries exactly one JSON response (CLI contract)."""
+    with contextlib.redirect_stdout(sys.stderr):
+        return _verify(provider_id, model, reasoning)
+
+
+def _verify(provider_id: str, model=None, reasoning=None) -> dict:
     allow_test = provider_id == "fake" and os.environ.get("AGENT_STUDIO_ALLOW_TEST_PROVIDERS") == "1"
     adapter = providers.get(provider_id, allow_test_only=allow_test)
     env, envinfo = envresolve.resolve()

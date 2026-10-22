@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "/home/dothn/.nvm/versions/node/v24.22.0/bin/codex",
+    "exec",
+    "--json",
+    "--color",
+    "never",
+    "--ephemeral",
+    "--skip-git-repo-check",
+    "--cd",
+    "/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab",
+    "--sandbox",
+    "read-only",
+    "-c",
+    "approval_policy=\"never\"",
+    "-"
+  ],
+  "cwd": "/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab",
+  "envKeys": [
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "USER",
+    "XDG_RUNTIME_DIR"
+  ],
+  "providerProcess": {
+    "pid": 493145,
+    "startTime": 8491158,
+    "bootId": "87f4231f-c1a7-44ef-a1d1-a2ca64396634"
+  },
+  "deadlineSeconds": 3.0,
+  "outputBudgetBytes": 4194304
+}

@@ -7,11 +7,10 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
-import time
 from typing import Dict, List, Optional
 
 from ...protocol import AsError
+from .. import cli_support
 from ..base import (BASE_ENV, POLICIES, UNSUPPORTED, Adapter, AssignmentInput, ParseState, Prepared)
 
 REQUIRED_FLAGS = ("--json", "--sandbox", "--model", "--config", "--skip-git-repo-check", "--ephemeral", "--color",
@@ -27,8 +26,6 @@ POLICY_FLAGS = {
 ENV = BASE_ENV + ("CODEX_HOME", "OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORGANIZATION",
                   "OPENAI_PROJECT", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy",
                   "SSL_CERT_FILE", "SSL_CERT_DIR")
-PROBE_TOKEN = "AGENT_STUDIO_OK"
-DEEP_PROBE_TTL_S = 24 * 3600
 _inspect_cache: Dict[tuple, dict] = {}
 
 
@@ -120,72 +117,8 @@ class CodexAdapter(Adapter):
         if not login["loggedIn"]:
             return dict(d, available=False, executable=info["path"], code="AUTH_REQUIRED",
                         reason="codex is not logged in (run: codex login).")
-        out = dict(d, available=True, executable=info["path"], login=login, authVerified=False)
-        cached = self._cached_deep(info)
-        if deep:
-            cached = self._deep_probe(info, env)
-        if cached:
-            out.update(authVerified=cached.get("ok", False), deepProbe=cached)
-            if not cached.get("ok"):
-                out.update(available=False, code="AUTH_REQUIRED",
-                           reason=f"codex could not complete a read-only micro-task: {cached.get('detail')}")
-        return out
-
-    def _cache_path(self) -> Optional[str]:
-        from ... import paths
-        try:
-            return os.path.join(paths.ensure_state_dir(), "provider-probes.json")
-        except AsError:
-            return None
-
-    def _cached_deep(self, info: dict) -> Optional[dict]:
-        path = self._cache_path()
-        try:
-            with open(path, encoding="utf-8") as f:
-                entry = json.load(f).get(f"codex:{info['path']}:{info['version']}")
-        except (OSError, ValueError, TypeError):
-            return None
-        if entry and time.time() - entry.get("at", 0) < DEEP_PROBE_TTL_S:
-            return entry
-        return None
-
-    def _deep_probe(self, info: dict, env: dict) -> dict:
-        ws = tempfile.mkdtemp(prefix="agent-studio-codex-probe-")
-        prompt = os.path.join(ws, ".prompt")
-        with open(prompt, "w", encoding="utf-8") as f:
-            f.write(f"Reply with exactly {PROBE_TOKEN} and nothing else. Do not run commands or edit files.")
-        inp = AssignmentInput(assignment_id="00000000-0000-4000-8000-000000000000",
-                              agent_id="00000000-0000-4000-8000-000000000000", provider_id="codex", attempt=1,
-                              workspace=ws, prompt_path=prompt, role_instructions="", policy="read_only",
-                              deadline_s=180, output_budget_bytes=1 << 20)
-        prep = self.prepare(inp, env)
-        st = ParseState()
-        started = time.time()
-        try:
-            with open(prompt, "rb") as stdin:
-                p = subprocess.run(prep.argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   cwd=ws, env=prep.environment(env), timeout=180)
-            for line in p.stdout.splitlines():
-                self.parse_line(line, st)
-            ok = bool(st.terminal and st.terminal.get("ok")) and PROBE_TOKEN in (st.final_text or "")
-            detail = "ok" if ok else _short((st.terminal or {}).get("summary") or p.stderr.decode("utf-8", "replace"))
-        except subprocess.TimeoutExpired:
-            ok, detail = False, "timed out after 180s (network or authentication problem?)"
-        entry = {"ok": ok, "detail": detail, "at": time.time(), "seconds": round(time.time() - started, 1)}
-        path = self._cache_path()
-        if path:
-            try:
-                with open(path, encoding="utf-8") as f:
-                    cache = json.load(f)
-            except (OSError, ValueError):
-                cache = {}
-            cache[f"codex:{info['path']}:{info['version']}"] = entry
-            tmp = path + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(cache, f)
-            os.chmod(tmp, 0o600)
-            os.replace(tmp, path)
-        return entry
+        out = dict(d, available=True, executable=info["path"], login=login)
+        return cli_support.apply_deep(out, self, info, env, deep)
 
     # ---- execution ----------------------------------------------------------------------------
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
@@ -195,12 +128,13 @@ class CodexAdapter(Adapter):
         self.validate_settings(inp.model, inp.reasoning)
         argv = [exe, "exec", "--json", "--color", "never", "--ephemeral", "--skip-git-repo-check",
                 "--cd", inp.workspace] + POLICY_FLAGS[inp.policy]
+        if any(a in NEVER for a in argv):
+            raise AsError("BAD_ADAPTER", "refusing a sandbox-bypass flag")
         if inp.model:
             argv += ["--model", inp.model]
         if inp.reasoning:
             argv += ["-c", f'model_reasoning_effort="{inp.reasoning}"']
         argv.append("-")  # the prompt comes from stdin (the private prompt file), never the command line
-        assert not any(a in NEVER for a in argv)
         return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
 
     def parse_line(self, line: bytes, state: ParseState):

@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "82790b8d-9465-4b63-8d26-7a7ae80e9f0d",
+  "agentId": "268e305f-18be-4f98-bfc6-863db36d3e2c",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "I can't create `agent_studio_denied.txt`. My tools in this session are read-only (Glob, Grep and Read), and none of them can write files. As you asked, I'm stopping here without trying any workaround.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "dc609720-2053-48e2-9053-31484c433438",
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 748,
+    "cache_read_input_tokens": 4142,
+    "output_tokens": 109,
+    "total_cost_micro_usd": 9000
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003500Z-claude/read_only_blocks_write/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003500Z-claude/read_only_blocks_write/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

@@ -212,7 +212,7 @@ class ThroughTheTeam(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "POLICY_UNSUPPORTED")
         rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "fake", "--policy", "read_only")
         self.assertTrue(r["ok"], r)
-        rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "claude")
+        rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "opencode")  # still a placeholder
         self.assertEqual(r["error"]["code"], "PROVIDER_UNAVAILABLE")
 
     def test_team_start_refuses_unavailable_provider_without_substitution(self):

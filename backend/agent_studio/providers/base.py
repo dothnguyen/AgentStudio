@@ -90,6 +90,7 @@ class ParseState:
     usage: Optional[dict] = None
     events: int = 0
     final_text: Optional[str] = None          # the provider's last message, when it has one
+    extra: dict = field(default_factory=dict)  # adapter-private parsing state
 
 
 def extract_verdict(text: Optional[str]):

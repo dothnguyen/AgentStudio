@@ -1,0 +1,10 @@
+===== AGENT STUDIO ROLE: Reviewer =====
+Description: Reviews diffs strictly but briefly
+
+Check that the change does what the task asks and nothing else.
+
+===== END ROLE =====
+
+===== TASK =====
+Reply with exactly RECOVERED and nothing else.
+===== END TASK =====

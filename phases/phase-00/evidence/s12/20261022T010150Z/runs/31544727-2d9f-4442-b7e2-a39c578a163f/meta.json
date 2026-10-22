@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--no-session-persistence",
+    "--strict-mcp-config",
+    "--permission-prompts",
+    "none",
+    "--restricted",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "Read,Grep,Glob",
+    "--allowedTools",
+    "Read,Grep,Glob"
+  ],
+  "cwd": "/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab",
+  "envKeys": [
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "USER",
+    "XDG_RUNTIME_DIR"
+  ],
+  "providerProcess": {
+    "pid": 493423,
+    "startTime": 8491827,
+    "bootId": "87f4231f-c1a7-44ef-a1d1-a2ca64396634"
+  },
+  "deadlineSeconds": 1800.0,
+  "outputBudgetBytes": 4194304
+}

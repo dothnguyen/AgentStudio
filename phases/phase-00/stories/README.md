@@ -12,10 +12,10 @@ Read [PRD.md](../../../PRD.md) and the [P00 implementation contract](../architec
 | [S06](./P00-S06-automatic-workflow.md) | Two-role workflow with git diffs and truth table (fake) | S05 | Done |
 | [S07](./P00-S07-recovery-resolve-and-stop.md) | Restart reconciliation, `assignment.resolve`, scoped stop | S05–S06 | Done |
 | [S08](./P00-S08-codex-adapter.md) | Codex adapter + per-agent model/reasoning + workspace roles/skills | S04, S05 | Done |
-| [S09](./P00-S09-claude-adapter.md) | Claude Code adapter | S04, S05 | To Do |
+| [S09](./P00-S09-claude-adapter.md) | Claude Code adapter | S04, S05 | Done |
 | [S10](./P00-S10-agy-adapter.md) | Antigravity CLI adapter | S04, S05 | To Do |
 | [S11](./P00-S11-opencode-adapter.md) | OpenCode adapter | S04, S05 | To Do |
-| [S12](./P00-S12-live-gate.md) | Real two-provider live gate | S01–S07 + any two of S08–S11 | To Do |
+| [S12](./P00-S12-live-gate.md) | Real two-provider live gate | S01–S07 + any two of S08–S11 | Done |
 
 S08–S11 are independent peers and may proceed in parallel with S06–S07. Start with the two providers installed and authenticated on the target machine.
 

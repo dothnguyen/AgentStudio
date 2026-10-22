@@ -1,0 +1,221 @@
+{
+  "provider": "claude",
+  "version": "2.1.307",
+  "executable": "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+  "model": null,
+  "reasoning": null,
+  "probe": {
+    "providerId": "claude",
+    "version": "2.1.307",
+    "testOnly": false,
+    "capabilities": {
+      "headless": true,
+      "structuredProgress": true,
+      "structuredFinal": true,
+      "resume": "unsupported",
+      "interactiveInput": "unsupported"
+    },
+    "modelSelectable": true,
+    "reasoningLevels": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "policies": {
+      "read_only": [
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Grep,Glob",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ],
+      "workspace_write": [
+        "--permission-mode",
+        "acceptEdits",
+        "--tools",
+        "Read,Grep,Glob,Edit,Write,NotebookEdit",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ]
+    },
+    "available": true,
+    "executable": "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+    "login": {
+      "loggedIn": true,
+      "method": "claude.ai",
+      "apiProvider": "firstParty"
+    },
+    "authVerified": true,
+    "deepProbe": {
+      "ok": true,
+      "detail": "ok",
+      "at": 1792629300.7576015,
+      "seconds": 3.0
+    }
+  },
+  "evidenceDir": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003500Z-claude",
+  "steps": [
+    {
+      "name": "read_only_reply",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 2.4,
+      "summary": "AGENT_STUDIO_OK",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 735,
+        "cache_read_input_tokens": 4142,
+        "output_tokens": 15,
+        "total_cost_micro_usd": 7016
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--permission-prompts",
+        "none",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Grep,Glob",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ],
+      "passed": true
+    },
+    {
+      "name": "workspace_write_creates_file",
+      "policy": "workspace_write",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 5.5,
+      "summary": "DONE",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 4,
+        "cache_creation_input_tokens": 6345,
+        "cache_read_input_tokens": 6120,
+        "output_tokens": 134,
+        "total_cost_micro_usd": 54680
+      },
+      "filesAfter": [
+        "README.md",
+        "agent_studio_check.txt"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--permission-prompts",
+        "none",
+        "--restricted",
+        "--permission-mode",
+        "acceptEdits",
+        "--tools",
+        "Read,Grep,Glob,Edit,Write,NotebookEdit",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ],
+      "passed": true
+    },
+    {
+      "name": "read_only_blocks_write",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 3.7,
+      "summary": "I can't create `agent_studio_denied.txt`. My tools in this session are read-only (Glob, Grep and Read), and none of them can write files. As you asked, I'm stopping here without trying any workaround.",
+      "verdict": null,
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 748,
+        "cache_read_input_tokens": 4142,
+        "output_tokens": 109,
+        "total_cost_micro_usd": 9000
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--permission-prompts",
+        "none",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Grep,Glob",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ],
+      "passed": true
+    },
+    {
+      "name": "reviewer_verdict",
+      "policy": "read_only",
+      "status": "succeeded",
+      "diagnosticCode": null,
+      "seconds": 3.8,
+      "summary": "{\"verdict\": \"pass\", \"findings\": []}",
+      "verdict": {
+        "verdict": "pass",
+        "findings": []
+      },
+      "usage": {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 749,
+        "cache_read_input_tokens": 4142,
+        "output_tokens": 18,
+        "total_cost_micro_usd": 7188
+      },
+      "filesAfter": [
+        "README.md"
+      ],
+      "argv": [
+        "/home/dothn/.nvm/versions/node/v24.22.0/bin/claude",
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--permission-prompts",
+        "none",
+        "--restricted",
+        "--permission-mode",
+        "dontAsk",
+        "--tools",
+        "Read,Grep,Glob",
+        "--allowedTools",
+        "Read,Grep,Glob"
+      ],
+      "passed": true
+    }
+  ],
+  "failures": [],
+  "passed": true,
+  "envSource": "login-shell"
+}

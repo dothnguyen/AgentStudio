@@ -1,0 +1,29 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "6e4c2441-690e-467f-a828-73ac9da2ec7d",
+  "agentId": "478c2dc2-fa6c-43e6-9c64-1bbef2e0c627",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "failed",
+  "exitCode": null,
+  "summary": "The provider process died without a final result.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": "PROVIDER_CRASHED",
+  "providerSessionId": "2d69a16c-2fb1-424c-91d1-b4b0136ccfee",
+  "usage": null,
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/runs/6e4c2441-690e-467f-a828-73ac9da2ec7d/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/runs/6e4c2441-690e-467f-a828-73ac9da2ec7d/stderr.log",
+    "providerTerminalEvent": false,
+    "terminalOk": false,
+    "signal": 9,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

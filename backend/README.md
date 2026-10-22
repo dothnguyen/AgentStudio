@@ -110,7 +110,7 @@ agent-studio provider verify --provider codex --model gpt-5.1-codex --reasoning 
 agent-studio preflight --workspace ~/work/project --provider codex --role Developer --deep
 ```
 
-Codex reasoning levels: `minimal low medium high xhigh`. Without `--agent`, the roster comes from the workspace:
+Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Reviewer,model=sonnet,reasoning=high`): `--effort` levels `low medium high xhigh max`; Claude agents can read and edit files but never run commands (see `providers/claude/CONTRACT.md`). Without `--agent`, the roster comes from the workspace:
 
 ```
 .agent-studio/team.json          {"version": 1, "agents": [{"providerId": "codex", "role": "Developer", "name": "dev",
@@ -126,7 +126,7 @@ The role description, instructions and listed skills are placed in front of ever
 tasks and workflow stages), frozen when the assignment is created. Paths cannot leave `.agent-studio`; sizes are
 capped (16 KiB instructions, 32 KiB per skill, 96 KiB total) with warnings in the `team.start` / `task.direct`
 receipts. The provider still reads its own native files (e.g. `AGENTS.md`) as usual. Provider details:
-`agent_studio/providers/codex/CONTRACT.md`.
+`agent_studio/providers/<id>/CONTRACT.md`.
 
 ## Run the Developer → Reviewer workflow
 

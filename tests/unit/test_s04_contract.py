@@ -172,7 +172,7 @@ class PrepareSafety(unittest.TestCase):
 
 class Registry(unittest.TestCase):
     def test_peers_are_honest_placeholders(self):
-        implemented = {"codex"}  # P00-S08; the others land in S09-S11
+        implemented = {"codex", "claude"}  # P00-S08, S09; the others land in S10-S11
         for pid in providers.PEERS:
             self.assertTrue(os.path.exists(os.path.join(PKG, "providers", pid, "CONTRACT.md")))
             if pid in implemented:

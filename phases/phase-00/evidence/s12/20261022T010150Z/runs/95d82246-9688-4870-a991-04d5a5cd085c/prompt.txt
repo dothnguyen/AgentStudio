@@ -1,0 +1,10 @@
+===== AGENT STUDIO ROLE: Developer =====
+Description: Implements small, focused fixes
+
+Change only what the task needs. Keep the existing style.
+
+===== END ROLE =====
+
+===== TASK =====
+Read every file in this repository. Then write a detailed explanation of each function and each test, at least 400 words in total. Do not modify anything.
+===== END TASK =====

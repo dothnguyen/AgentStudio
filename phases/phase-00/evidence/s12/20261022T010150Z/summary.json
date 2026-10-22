@@ -1,0 +1,630 @@
+{
+  "recordedAt": "2026-10-22T01:01:50Z",
+  "repo": "/mnt/c/Works/Projects/AgentStudio",
+  "shim": "/mnt/c/Works/Projects/AgentStudio/backend/bin/agent-studio",
+  "steps": [
+    {
+      "id": "1a",
+      "title": "Health and coordinator",
+      "prd": [
+        1
+      ],
+      "result": "PASS",
+      "note": "coordinator pid 484335"
+    },
+    {
+      "id": "1b",
+      "title": "Two different ready providers (deep preflight)",
+      "prd": [
+        1,
+        3,
+        8
+      ],
+      "result": "PASS",
+      "note": "Developer=codex, Reviewer=claude",
+      "providers": {
+        "codex": {
+          "ready": true,
+          "version": "0.163.0",
+          "authVerified": true,
+          "code": null,
+          "reason": null,
+          "policies": {
+            "read_only": [
+              "--sandbox",
+              "read-only",
+              "-c",
+              "approval_policy=\"never\""
+            ],
+            "workspace_write": [
+              "--sandbox",
+              "workspace-write",
+              "-c",
+              "approval_policy=\"never\"",
+              "-c",
+              "sandbox_workspace_write.network_access=false"
+            ]
+          }
+        },
+        "claude": {
+          "ready": true,
+          "version": "2.1.307",
+          "authVerified": true,
+          "code": null,
+          "reason": null,
+          "policies": {
+            "read_only": [
+              "--permission-mode",
+              "dontAsk",
+              "--tools",
+              "Read,Grep,Glob",
+              "--allowedTools",
+              "Read,Grep,Glob"
+            ],
+            "workspace_write": [
+              "--permission-mode",
+              "acceptEdits",
+              "--tools",
+              "Read,Grep,Glob,Edit,Write,NotebookEdit",
+              "--allowedTools",
+              "Read,Grep,Glob"
+            ]
+          }
+        },
+        "agy": {
+          "ready": false,
+          "version": null,
+          "authVerified": null,
+          "code": "PROVIDER_UNAVAILABLE",
+          "reason": "The agy adapter is not implemented yet (P00-S10).",
+          "policies": {
+            "read_only": "unsupported",
+            "workspace_write": "unsupported"
+          }
+        },
+        "opencode": {
+          "ready": false,
+          "version": null,
+          "authVerified": null,
+          "code": "PROVIDER_UNAVAILABLE",
+          "reason": "The opencode adapter is not implemented yet (P00-S11).",
+          "policies": {
+            "read_only": "unsupported",
+            "workspace_write": "unsupported"
+          }
+        }
+      }
+    },
+    {
+      "id": "1c",
+      "title": "Launch the team: one pane per agent, no collisions",
+      "prd": [
+        1
+      ],
+      "result": "PASS",
+      "panes": [
+        "%4",
+        "%5"
+      ],
+      "newSessions": [
+        "as-458b3b1ff3bd4b7a $3"
+      ],
+      "note": "2 panes in as-458b3b1ff3bd4b7a; existing sessions untouched: True"
+    },
+    {
+      "id": "2a",
+      "title": "Direct read_only task and idempotent retry",
+      "prd": [
+        2
+      ],
+      "result": "PASS",
+      "assignment": "749827f6-cd6e-4439-8f8e-f9c1a1792459",
+      "provider": "claude",
+      "summary": "README.md says this project is a tiny calculator called \"calc\", used by the Agent Studio live gate.\n\nI didn't need to review a diff: the working tree is clean and the task only asked for a summary.",
+      "idempotentRetrySameAssignment": true,
+      "note": "succeeded; identical retry -> same assignment: True, no new assignment: True"
+    },
+    {
+      "id": "2b",
+      "title": "Busy agent and second workspace writer rejected",
+      "prd": [
+        2
+      ],
+      "result": "PASS",
+      "busyAgent": "AGENT_BUSY",
+      "busyWorkspace": "WORKSPACE_BUSY",
+      "writer": "succeeded",
+      "note": "busy agent -> AGENT_BUSY; second writer -> WORKSPACE_BUSY; first: succeeded"
+    },
+    {
+      "id": "3",
+      "title": "Automatic Developer -> Reviewer workflow across two providers",
+      "prd": [
+        3,
+        5
+      ],
+      "result": "PASS",
+      "workflow": "b1f62156-7457-4bca-a9c3-f9a3d9c34e3e",
+      "providers": [
+        "claude",
+        "codex"
+      ],
+      "stages": [
+        {
+          "stage": "developer",
+          "status": "completed",
+          "attempt": 1,
+          "outcome": "validation_passed",
+          "verdict": null,
+          "validation": {
+            "durationMs": 41,
+            "error": null,
+            "exitCode": 0,
+            "outputHead": "----------------------------------------------------------------------\nRan 2 tests in 0.000s\n\nOK\n",
+            "outputPath": "/home/dothn/.local/state/agent-studio/workflows/b1f62156-7457-4bca-a9c3-f9a3d9c34e3e/01-developer/validation.out",
+            "outputTruncated": false,
+            "passed": true,
+            "state": "done",
+            "timedOut": false
+          },
+          "diff": {
+            "bytes": 215,
+            "changedFiles": [
+              "calc.py"
+            ],
+            "empty": false,
+            "path": "/home/dothn/.local/state/agent-studio/workflows/b1f62156-7457-4bca-a9c3-f9a3d9c34e3e/01-developer/diff.patch",
+            "truncated": false,
+            "untrackedFiles": []
+          }
+        },
+        {
+          "stage": "reviewer",
+          "status": "completed",
+          "attempt": 1,
+          "outcome": "verdict_pass",
+          "verdict": {
+            "findings": [
+              "add() now returns a + b as required; change is minimal and limited to calc.py",
+              "Tests unchanged; validation passed (2 tests OK)",
+              "Untracked __pycache__/ is a test-run leftover and should not be committed"
+            ],
+            "verdict": "pass"
+          },
+          "validation": null,
+          "diff": null
+        }
+      ],
+      "note": "succeeded; providers ['claude', 'codex']; bug fixed: True"
+    },
+    {
+      "id": "5",
+      "title": "Attach / detach / reattach (WSL and Windows Terminal)",
+      "prd": [
+        5
+      ],
+      "result": "PASS",
+      "note": "operator confirmed"
+    },
+    {
+      "id": "6",
+      "title": "Coordinator restart during an assignment",
+      "prd": [
+        6
+      ],
+      "result": "PASS",
+      "assignment": "84199746-faf8-4600-9c10-2dc7df9d9aaf",
+      "statusWhenStopped": "running",
+      "finalStatus": "succeeded",
+      "providerStarts": 1,
+      "resolved": false,
+      "note": "stopped while running; after restart succeeded; provider started 1 time(s)"
+    },
+    {
+      "id": "8",
+      "title": "Failure drills with recovery",
+      "prd": [
+        8
+      ],
+      "result": "PASS",
+      "drills": {
+        "auth:codex": {
+          "code": "AUTH_REQUIRED",
+          "reason": "codex is not logged in (run: codex login).",
+          "ok": true
+        },
+        "auth:claude": {
+          "code": "AUTH_REQUIRED",
+          "reason": "claude is not logged in (run: claude auth login).",
+          "ok": true
+        },
+        "missingProvider": {
+          "code": "PROVIDER_UNAVAILABLE",
+          "ok": true
+        },
+        "unsupportedPolicy": {
+          "code": "BAD_REQUEST",
+          "message": "policy must be one of ['read_only', 'workspace_write'] (there is no unrestricted mode).",
+          "ok": true
+        },
+        "timeout": {
+          "status": "failed",
+          "code": "TIMEOUT",
+          "ok": true
+        },
+        "providerKilled": {
+          "status": "failed",
+          "code": "PROVIDER_CRASHED",
+          "ok": true
+        },
+        "recoveredAfterDrills": {
+          "status": "succeeded",
+          "ok": true
+        },
+        "malformedAndMissingFinal": {
+          "tests": "test_s04_contract, test_s08_settings_roles, test_s09_claude",
+          "ok": true,
+          "tail": "----------------------------------------------------------------------\nRan 71 tests in 0.846s\n\nOK (skipped=3)\n"
+        }
+      },
+      "note": "auth:codex:ok, auth:claude:ok, missingProvider:ok, unsupportedPolicy:ok, timeout:ok, providerKilled:ok, recoveredAfterDrills:ok, malformedAndMissingFinal:ok"
+    },
+    {
+      "id": "4",
+      "title": "Deterministic repair loop (fake adapter)",
+      "prd": [
+        4
+      ],
+      "result": "PASS",
+      "tail": "extIOWrapper name='/tmp/as-test-27crbr3i/state/agent-studio/workflows/0b26d931-f977-4f91-b8ff-efa117548563/03-developer_repair/prompt.txt' mode='r' encoding='UTF-8'>\n  repair_prompt = open(dev2[\"promptPath\"]).read()\nResourceWarning: Enable tracemalloc to get the object allocation traceback\n.........\n----------------------------------------------------------------------\nRan 10 tests in 73.244s\n\nOK\n",
+      "note": "fake-adapter review -> repair -> pass, and second failure -> failed"
+    },
+    {
+      "id": "7",
+      "title": "Scoped stop",
+      "prd": [
+        7
+      ],
+      "result": "PASS",
+      "stop": {
+        "sessionWasPresent": true,
+        "stopped": true,
+        "teamId": "458b3b1f-f3bd-4b7a-8de2-47b56325d601",
+        "tmuxInventory": {
+          "after": [
+            {
+              "session_id": "$2",
+              "session_name": "as-059bb704f1e54dc1"
+            }
+          ],
+          "before": [
+            {
+              "session_id": "$2",
+              "session_name": "as-059bb704f1e54dc1"
+            },
+            {
+              "session_id": "$3",
+              "session_name": "as-458b3b1ff3bd4b7a"
+            }
+          ]
+        }
+      },
+      "note": "other tmux sessions, ~/.ntm and the workspace unchanged"
+    }
+  ],
+  "workspace": "/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab",
+  "baseCommit": "322f404a62bab80568a291fa696f527cd2645628",
+  "health": {
+    "backendVersion": "0.1.0",
+    "protocol": "agent-studio/v1",
+    "python": "3.12.3",
+    "distro": "Ubuntu-24.04",
+    "wsl": {
+      "isWsl": true,
+      "version": "2",
+      "kernel": "5.15.167.4-microsoft-standard-WSL2"
+    },
+    "stateDir": {
+      "path": "/home/dothn/.local/state/agent-studio",
+      "ok": true
+    },
+    "coordinator": {
+      "running": true,
+      "pid": 484335,
+      "startTime": 7993634,
+      "startedAt": "2026-10-21T23:41:49.576Z",
+      "uptimeSeconds": 4801.52,
+      "version": "0.1.0",
+      "debugCommands": false,
+      "logFile": "/home/dothn/.local/state/agent-studio/coordinator.log"
+    },
+    "environment": {
+      "envMode": "login-interactive",
+      "envSource": "login-shell",
+      "shell": "/bin/bash",
+      "warnings": [],
+      "pathDirs": {
+        "linux": [
+          "/home/dothn/.local/bin",
+          "/home/dothn/.nvm/versions/node/v24.22.0/bin",
+          "/usr/local/sbin",
+          "/usr/local/bin",
+          "/usr/sbin",
+          "/usr/bin",
+          "/sbin",
+          "/bin",
+          "/usr/games",
+          "/usr/local/games",
+          "/usr/lib/wsl/lib",
+          "/snap/bin"
+        ],
+        "windowsInteropCount": 39
+      },
+      "distro": "Ubuntu-24.04",
+      "startupReconciliation": {
+        "at": "2026-10-21T23:41:49.580Z",
+        "reports": 0,
+        "panes": 0,
+        "assignments": {
+          "appliedFromEvidence": 0,
+          "markedReconciling": 0,
+          "cancelled": 0,
+          "escalated": 0
+        },
+        "orphanSessions": []
+      }
+    },
+    "keepAlive": {
+      "active": false
+    }
+  },
+  "coordinator": {
+    "running": true,
+    "alreadyRunning": true,
+    "pid": 484335,
+    "startTime": 7993634,
+    "startedAt": "2026-10-21T23:41:49.576Z",
+    "uptimeSeconds": 4801.775,
+    "version": "0.1.0",
+    "debugCommands": false,
+    "logFile": "/home/dothn/.local/state/agent-studio/coordinator.log"
+  },
+  "providers": {
+    "codex": {
+      "ready": true,
+      "version": "0.163.0",
+      "authVerified": true,
+      "code": null,
+      "reason": null,
+      "policies": {
+        "read_only": [
+          "--sandbox",
+          "read-only",
+          "-c",
+          "approval_policy=\"never\""
+        ],
+        "workspace_write": [
+          "--sandbox",
+          "workspace-write",
+          "-c",
+          "approval_policy=\"never\"",
+          "-c",
+          "sandbox_workspace_write.network_access=false"
+        ]
+      }
+    },
+    "claude": {
+      "ready": true,
+      "version": "2.1.307",
+      "authVerified": true,
+      "code": null,
+      "reason": null,
+      "policies": {
+        "read_only": [
+          "--permission-mode",
+          "dontAsk",
+          "--tools",
+          "Read,Grep,Glob",
+          "--allowedTools",
+          "Read,Grep,Glob"
+        ],
+        "workspace_write": [
+          "--permission-mode",
+          "acceptEdits",
+          "--tools",
+          "Read,Grep,Glob,Edit,Write,NotebookEdit",
+          "--allowedTools",
+          "Read,Grep,Glob"
+        ]
+      }
+    },
+    "agy": {
+      "ready": false,
+      "version": null,
+      "authVerified": null,
+      "code": "PROVIDER_UNAVAILABLE",
+      "reason": "The agy adapter is not implemented yet (P00-S10).",
+      "policies": {
+        "read_only": "unsupported",
+        "workspace_write": "unsupported"
+      }
+    },
+    "opencode": {
+      "ready": false,
+      "version": null,
+      "authVerified": null,
+      "code": "PROVIDER_UNAVAILABLE",
+      "reason": "The opencode adapter is not implemented yet (P00-S11).",
+      "policies": {
+        "read_only": "unsupported",
+        "workspace_write": "unsupported"
+      }
+    }
+  },
+  "inventoryBefore": {
+    "defaultTmux": [
+      "phase-00-proof-03e1d44947e8 $3",
+      "phase-00-proof-1d0b703cedd4 $10",
+      "phase-00-proof-4ad483e5dd70 $0",
+      "phase-00-proof-4f2c12e85c76 $15",
+      "phase-00-proof-b2709f237986 $4",
+      "phase-00-proof-db2e2e2fb1da $5"
+    ],
+    "agentStudioTmux": [
+      "as-059bb704f1e54dc1 $2"
+    ],
+    "ntm": {
+      "exists": true,
+      "files": 15,
+      "fingerprint": "a4fdf553a6fec4ab6a3ef30959d9ac7f6d3c9bfac30a6dbaf1c0b84129dc64ed"
+    }
+  },
+  "team": {
+    "teamId": "458b3b1f-f3bd-4b7a-8de2-47b56325d601",
+    "name": "live-gate-20261022T010150Z",
+    "workspace": "/home/dothn/agent-studio-live/20261022T010150Z-gate-bjy406ab",
+    "agents": [
+      {
+        "agentId": "f3372fad-4204-493e-a934-f4cdd305af3b",
+        "displayName": "Developer-1",
+        "model": null,
+        "paneId": "%4",
+        "providerId": "codex",
+        "reasoning": null,
+        "role": "Developer",
+        "roleConfigured": true,
+        "roleSources": [
+          {
+            "bytes": 58,
+            "kind": "role",
+            "path": ".agent-studio/roles/developer.md",
+            "sha256": "7953b03337a1af783292b13a2a64bd6e7d8c948c57db07edf88d6de93e623d92"
+          }
+        ],
+        "roleWarnings": []
+      },
+      {
+        "agentId": "478c2dc2-fa6c-43e6-9c64-1bbef2e0c627",
+        "displayName": "Reviewer-2",
+        "model": null,
+        "paneId": "%5",
+        "providerId": "claude",
+        "reasoning": null,
+        "role": "Reviewer",
+        "roleConfigured": true,
+        "roleSources": [
+          {
+            "bytes": 64,
+            "kind": "role",
+            "path": ".agent-studio/roles/reviewer.md",
+            "sha256": "f09d130e5a63b8e1cdb1093bea58b564701fd67a6fc1b2036ececba01c607f13"
+          }
+        ],
+        "roleWarnings": []
+      }
+    ],
+    "attach": {
+      "argv": [
+        "/usr/bin/tmux",
+        "-L",
+        "agent-studio",
+        "attach-session",
+        "-t",
+        "=as-458b3b1ff3bd4b7a"
+      ],
+      "keys": {
+        "detach": "Ctrl-b d",
+        "nextPane": "Ctrl-b o",
+        "selectPane": "Ctrl-b <arrow>",
+        "zoomPane": "Ctrl-b z"
+      },
+      "powershell": "wsl.exe -d Ubuntu-24.04 --exec /usr/bin/tmux -L agent-studio attach-session -t =as-458b3b1ff3bd4b7a",
+      "sessionId": "$3",
+      "sessionName": "as-458b3b1ff3bd4b7a",
+      "socket": "agent-studio",
+      "windowsTerminal": "wt.exe -w new wsl.exe -d Ubuntu-24.04 --exec /usr/bin/tmux -L agent-studio attach-session -t =as-458b3b1ff3bd4b7a",
+      "wsl": "/usr/bin/tmux -L agent-studio attach-session -t =as-458b3b1ff3bd4b7a"
+    }
+  },
+  "workflow": {
+    "id": "b1f62156-7457-4bca-a9c3-f9a3d9c34e3e",
+    "status": "succeeded",
+    "providers": [
+      "claude",
+      "codex"
+    ],
+    "stages": [
+      {
+        "stage": "developer",
+        "status": "completed",
+        "attempt": 1,
+        "outcome": "validation_passed",
+        "verdict": null,
+        "validation": {
+          "durationMs": 41,
+          "error": null,
+          "exitCode": 0,
+          "outputHead": "----------------------------------------------------------------------\nRan 2 tests in 0.000s\n\nOK\n",
+          "outputPath": "/home/dothn/.local/state/agent-studio/workflows/b1f62156-7457-4bca-a9c3-f9a3d9c34e3e/01-developer/validation.out",
+          "outputTruncated": false,
+          "passed": true,
+          "state": "done",
+          "timedOut": false
+        },
+        "diff": {
+          "bytes": 215,
+          "changedFiles": [
+            "calc.py"
+          ],
+          "empty": false,
+          "path": "/home/dothn/.local/state/agent-studio/workflows/b1f62156-7457-4bca-a9c3-f9a3d9c34e3e/01-developer/diff.patch",
+          "truncated": false,
+          "untrackedFiles": []
+        }
+      },
+      {
+        "stage": "reviewer",
+        "status": "completed",
+        "attempt": 1,
+        "outcome": "verdict_pass",
+        "verdict": {
+          "findings": [
+            "add() now returns a + b as required; change is minimal and limited to calc.py",
+            "Tests unchanged; validation passed (2 tests OK)",
+            "Untracked __pycache__/ is a test-run leftover and should not be committed"
+          ],
+          "verdict": "pass"
+        },
+        "validation": null,
+        "diff": null
+      }
+    ]
+  },
+  "inventoryAfter": {
+    "defaultTmux": [
+      "phase-00-proof-03e1d44947e8 $3",
+      "phase-00-proof-1d0b703cedd4 $10",
+      "phase-00-proof-4ad483e5dd70 $0",
+      "phase-00-proof-4f2c12e85c76 $15",
+      "phase-00-proof-b2709f237986 $4",
+      "phase-00-proof-db2e2e2fb1da $5"
+    ],
+    "agentStudioTmux": [
+      "as-059bb704f1e54dc1 $2"
+    ],
+    "ntm": {
+      "exists": true,
+      "files": 15,
+      "fingerprint": "a4fdf553a6fec4ab6a3ef30959d9ac7f6d3c9bfac30a6dbaf1c0b84129dc64ed"
+    }
+  },
+  "gate": "PASS",
+  "counts": {
+    "PASS": 11,
+    "FAIL": 0,
+    "BLOCKED": 0,
+    "MANUAL": 0,
+    "SKIP": 0
+  },
+  "bundle": "/home/dothn/.local/state/agent-studio/live-gate/20261022T010150Z"
+}

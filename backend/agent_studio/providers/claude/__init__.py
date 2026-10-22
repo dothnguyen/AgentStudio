@@ -1,4 +1,4 @@
-"""claude adapter. Placeholder until P00-S09 verifies the installed CLI; see CONTRACT.md."""
-from ..base import NotImplementedAdapter
+"""Claude Code adapter (P00-S09). See CONTRACT.md."""
+from .adapter import ClaudeAdapter
 
-ADAPTER = NotImplementedAdapter("claude", "P00-S09")
+ADAPTER = ClaudeAdapter()

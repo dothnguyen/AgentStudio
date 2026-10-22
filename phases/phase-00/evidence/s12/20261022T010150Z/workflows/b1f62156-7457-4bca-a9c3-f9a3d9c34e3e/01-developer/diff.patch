@@ -1,0 +1,12 @@
+diff --git a/calc.py b/calc.py
+index 0d397d8..10b6df6 100644
+--- a/calc.py
++++ b/calc.py
+@@ -1,6 +1,6 @@
+ def add(a, b):
+     """Return the sum of a and b."""
+-    return a - b
++    return a + b
+ 
+ 
+ def mul(a, b):

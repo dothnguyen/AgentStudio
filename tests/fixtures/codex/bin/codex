@@ -41,7 +41,8 @@ def main(argv):
         print(HELP if not CTL.get("oldHelp") else HELP.replace("--ephemeral", ""))
         return 0
     if argv[:2] == ["login", "status"]:
-        if CTL.get("loggedOut"):
+        home = os.environ.get("CODEX_HOME")
+        if CTL.get("loggedOut") or (home and not os.path.exists(os.path.join(home, "auth.json"))):
             print("Not logged in", file=sys.stderr)
             return 1
         print("Logged in using ChatGPT")
@@ -80,6 +81,16 @@ def main(argv):
         out({"type": "turn.failed", "error": {"message": "stream disconnected before completion"}})
         return 1
     out({"type": "item.completed", "item": {"id": "item_0", "type": "reasoning", "text": "**Planning** the reply"}})
+    if "at least 400 words" in prompt:  # the live gate's slow task
+        time.sleep(float(CTL.get("slowSeconds", 10)))
+    if "FIXTURE-BUG" in prompt and sandbox == "workspace-write":
+        path = os.path.join(cwd, "calc.py")
+        with open(path) as f:
+            src = f.read()
+        with open(path, "w") as f:
+            f.write(src.replace("return a - b", "return a + b"))
+        out({"type": "item.completed", "item": {"id": "item_5", "type": "file_change", "status": "completed",
+                                                "changes": [{"path": path, "kind": "update"}]}})
     reply = "Done."
     m = re.search(r"Create a file named (\S+) in the current directory", prompt)
     if m:

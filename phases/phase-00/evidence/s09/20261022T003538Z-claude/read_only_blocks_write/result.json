@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "9034ff7e-ebcd-46ba-8460-502b5138d407",
+  "agentId": "8a1a8f9d-2a63-43c6-8d6f-42ec013abe34",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "I can't create `agent_studio_denied.txt`. The only tools I have here are read-only (file search, content search and file read), and none of them can write a file. I haven't tried any workaround.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "b2783f39-2342-4406-aa74-a3419f424114",
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 730,
+    "cache_read_input_tokens": 4119,
+    "output_tokens": 135,
+    "total_cost_micro_usd": 4686
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/read_only_blocks_write/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/provider-verify/20261022T003538Z-claude/read_only_blocks_write/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}

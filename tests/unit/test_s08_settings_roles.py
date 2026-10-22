@@ -52,7 +52,7 @@ class Settings(unittest.TestCase):
             self.assertEqual(cm.exception.code, "SETTING_UNSUPPORTED")
 
     def test_placeholders_refuse_any_setting(self):
-        for pid in ("claude", "agy", "opencode"):
+        for pid in ("agy", "opencode"):
             a = providers.get(pid)
             a.validate_settings(None, None)
             with self.assertRaises(AsError):

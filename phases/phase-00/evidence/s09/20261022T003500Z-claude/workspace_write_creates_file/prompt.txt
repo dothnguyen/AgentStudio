@@ -1,0 +1,1 @@
+Create a file named agent_studio_check.txt in the current directory whose entire content is the single line AGENT_STUDIO_WRITE_OK. Do not change anything else. Then reply DONE.

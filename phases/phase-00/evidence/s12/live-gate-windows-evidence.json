@@ -1,0 +1,140 @@
+﻿{
+    "phase":  "Run",
+    "recordedAt":  "2026-10-22T01:06:08.5184531Z",
+    "distro":  "Ubuntu-24.04",
+    "entry":  "/home/dothn/.local/bin/agent-studio",
+    "powershell":  "5.1.26100.9711 Desktop",
+    "coordinator":  {
+                        "running":  true,
+                        "pid":  492614,
+                        "startTime":  8488703,
+                        "startedAt":  "2026-10-22T01:03:19.014Z",
+                        "uptimeSeconds":  169.756,
+                        "version":  "0.1.0",
+                        "debugCommands":  false,
+                        "logFile":  "/home/dothn/.local/state/agent-studio/coordinator.log"
+                    },
+    "keepAlive":  {
+                      "active":  true
+                  },
+    "team":  {
+                 "workspace":  "/home/dothn/agent-studio-live/20261022T010608Z-gate-9vezb5gd",
+                 "agents":  [
+                                {
+                                    "agentId":  "90b52357-3e85-45c1-a1f5-76d5041bde4b",
+                                    "displayName":  "Developer-1",
+                                    "model":  null,
+                                    "paneId":  "%6",
+                                    "providerId":  "codex",
+                                    "reasoning":  null,
+                                    "role":  "Developer",
+                                    "roleConfigured":  true,
+                                    "roleSources":  [
+                                                        {
+                                                            "bytes":  58,
+                                                            "kind":  "role",
+                                                            "path":  ".agent-studio/roles/developer.md",
+                                                            "sha256":  "7953b03337a1af783292b13a2a64bd6e7d8c948c57db07edf88d6de93e623d92"
+                                                        }
+                                                    ],
+                                    "roleWarnings":  [
+
+                                                     ]
+                                },
+                                {
+                                    "agentId":  "6a97fd98-7742-420b-86c2-f3d5f2d55e7e",
+                                    "displayName":  "Reviewer-2",
+                                    "model":  null,
+                                    "paneId":  "%7",
+                                    "providerId":  "claude",
+                                    "reasoning":  null,
+                                    "role":  "Reviewer",
+                                    "roleConfigured":  true,
+                                    "roleSources":  [
+                                                        {
+                                                            "bytes":  64,
+                                                            "kind":  "role",
+                                                            "path":  ".agent-studio/roles/reviewer.md",
+                                                            "sha256":  "f09d130e5a63b8e1cdb1093bea58b564701fd67a6fc1b2036ececba01c607f13"
+                                                        }
+                                                    ],
+                                    "roleWarnings":  [
+
+                                                     ]
+                                }
+                            ],
+                 "attach":  {
+                                "argv":  [
+                                             "/usr/bin/tmux",
+                                             "-L",
+                                             "agent-studio",
+                                             "attach-session",
+                                             "-t",
+                                             "=as-4c7c7718706a464b"
+                                         ],
+                                "keys":  {
+                                             "detach":  "Ctrl-b d",
+                                             "nextPane":  "Ctrl-b o",
+                                             "selectPane":  "Ctrl-b \u003carrow\u003e",
+                                             "zoomPane":  "Ctrl-b z"
+                                         },
+                                "powershell":  "wsl.exe -d Ubuntu-24.04 --exec /usr/bin/tmux -L agent-studio attach-session -t =as-4c7c7718706a464b",
+                                "sessionId":  "$4",
+                                "sessionName":  "as-4c7c7718706a464b",
+                                "socket":  "agent-studio",
+                                "windowsTerminal":  "wt.exe -w new wsl.exe -d Ubuntu-24.04 --exec /usr/bin/tmux -L agent-studio attach-session -t =as-4c7c7718706a464b",
+                                "wsl":  "/usr/bin/tmux -L agent-studio attach-session -t =as-4c7c7718706a464b"
+                            },
+                 "teamId":  "4c7c7718-706a-464b-b087-7a3671f21556"
+             },
+    "task":  {
+                 "promptCheck":  {
+                                     "assignment":  "acfad410-7f86-42fd-9806-b2dff4ccc1c5",
+                                     "expected":  "07e7007c140d32071f4af3c320709eecbbc6c01615711c8f0fd40673da21f148",
+                                     "taskSha256":  "07e7007c140d32071f4af3c320709eecbbc6c01615711c8f0fd40673da21f148",
+                                     "match":  true,
+                                     "promptBytes":  939
+                                 },
+                 "textSha256":  "07e7007c140d32071f4af3c320709eecbbc6c01615711c8f0fd40673da21f148",
+                 "textChars":  656,
+                 "assignmentId":  "acfad410-7f86-42fd-9806-b2dff4ccc1c5",
+                 "summary":  "WINDOWS_OK",
+                 "taskId":  "53c944ba-64e0-4e13-826e-3d08af690702",
+                 "status":  "succeeded"
+             },
+    "latencyMs":  {
+                      "snapshot":  {
+                                       "p50":  4.85,
+                                       "p95":  5.49,
+                                       "n":  3
+                                   },
+                      "team.start":  {
+                                         "p50":  1026.16,
+                                         "p95":  1026.16,
+                                         "n":  1
+                                     },
+                      "task.show":  {
+                                        "p50":  15.79,
+                                        "p95":  15.79,
+                                        "n":  1
+                                    },
+                      "health":  {
+                                     "p50":  258.45,
+                                     "p95":  258.45,
+                                     "n":  1
+                                 },
+                      "task.direct":  {
+                                          "p50":  24.6,
+                                          "p95":  24.6,
+                                          "n":  1
+                                      },
+                      "events.after":  {
+                                           "p50":  4.18,
+                                           "p95":  4.18,
+                                           "n":  1
+                                       }
+                  },
+    "failures":  [
+
+                 ]
+}

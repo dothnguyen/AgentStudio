@@ -1,0 +1,35 @@
+{
+  "protocol": "agent-studio/assignment/v1",
+  "assignmentId": "749827f6-cd6e-4439-8f8e-f9c1a1792459",
+  "agentId": "478c2dc2-fa6c-43e6-9c64-1bbef2e0c627",
+  "providerId": "claude",
+  "attempt": 1,
+  "policy": "read_only",
+  "status": "succeeded",
+  "exitCode": 0,
+  "summary": "README.md says this project is a tiny calculator called \"calc\", used by the Agent Studio live gate.\n\nI didn't need to review a diff: the working tree is clean and the task only asked for a summary.",
+  "artifacts": [],
+  "attention": null,
+  "diagnosticCode": null,
+  "providerSessionId": "1f7bb365-ee80-482e-a031-f891a5e90872",
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 947,
+    "cache_read_input_tokens": 9084,
+    "output_tokens": 148,
+    "total_cost_micro_usd": 12369
+  },
+  "verdict": null,
+  "evidence": {
+    "outputPath": "/home/dothn/.local/state/agent-studio/runs/749827f6-cd6e-4439-8f8e-f9c1a1792459/stdout.jsonl",
+    "stderrPath": "/home/dothn/.local/state/agent-studio/runs/749827f6-cd6e-4439-8f8e-f9c1a1792459/stderr.log",
+    "providerTerminalEvent": true,
+    "terminalOk": true,
+    "signal": null,
+    "timedOut": false,
+    "cancelRequested": false,
+    "truncated": false,
+    "malformedLines": 0,
+    "validation": []
+  }
+}
