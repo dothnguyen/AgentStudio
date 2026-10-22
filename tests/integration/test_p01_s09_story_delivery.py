@@ -47,6 +47,15 @@ class StoryDelivery(StartCase):
         self.assertEqual(d["workflowRun"]["status"], "failed")
         self.assertEqual([x["stage"] for x in d["stageAttempts"]], ["review"])
 
+    def test_verdict_stages_tell_the_runner_to_read_a_verdict(self):
+        r = self.start("story-delivery", debugStageOptions={"review": fake("verdict_pass"),
+                                                            "develop": fake("success", "fixed.txt"),
+                                                            "qa": fake("verdict_pass"), "final": fake("verdict_pass")})
+        d = self.wait(r["data"]["workflowRunId"], FINAL + ("paused",), 90)
+        stage = {x["assignmentId"]: x["stage"] for x in d["stageAttempts"]}
+        flags = {stage[a["id"]]: (a.get("request") or {}).get("expectsVerdict") for a in d["assignments"]}
+        self.assertEqual(flags, {"review": True, "develop": False, "qa": True, "final": True})
+
     def test_team_py_summarize_captures_commit(self):
         os.environ["AGENT_STUDIO"] = "/bin/true"
         import importlib.util
