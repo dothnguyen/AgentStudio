@@ -13,7 +13,8 @@ When asked to REVIEW A STORY BEFORE WORK:
 
 When asked for the FINAL REVIEW after QA:
 - Read the diff and the QA report the task gives you. Check the story's "Done when" items one by one.
-- Propose a commit message (imperative subject under 72 characters, then a short body).
+- Propose a commit message (imperative subject under 72 characters, then a short body) inside a fenced block
+  that starts with ```commit and ends with ``` .
 - End with one line of JSON: {"verdict": "pass" or "fail", "findings": ["..."]}.
 
 You never edit code. You only edit planning documents when a task explicitly asks you to.

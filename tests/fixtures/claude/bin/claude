@@ -90,8 +90,14 @@ if CTL.get("mode") == "hang":
 reply = "ok"
 if "at least 400 words" in prompt:  # the live gate's slow task
     time.sleep(float(CTL.get("slowSeconds", 10)))
-if "Reviewer in an Agent Studio workflow" in prompt:
+if "Reviewer in an Agent Studio workflow" in prompt or re.search(r"(STORY BEFORE WORK|QA REVIEW|FINAL REVIEW)", prompt):
     reply = '{"verdict": "pass", "findings": []}'
+    if "FINAL REVIEW" in prompt:
+        reply = "Looks good.\n```commit\nImplement the story\n\nStand-in commit body.\n```\n" + reply
+if re.search(r"(Implement the story|Fix the QA findings)", prompt) and "Write" in tools:
+    with open(os.path.join(cwd, "impl.txt"), "a") as f:
+        f.write("implemented\n")
+    reply = "Implemented."
 m = re.search(r"Create a file named (\S+) in the current directory", prompt)
 if m:
     name, tid = m.group(1), "toolu_" + uuid.uuid4().hex[:20]
