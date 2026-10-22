@@ -58,4 +58,26 @@ Turn a workflow definition file into a validated, immutable in-memory model, or 
 
 ## Evidence
 
-(filled in when the story is done)
+The S01 tests have not been run since the QA fixes (no shell was available). Run these and paste the output here before marking Done:
+
+```
+python3 -m unittest discover -s tests/unit -t .
+```
+
+Output: 
+
+python3 -m unittest discover -s tests/unit -t .
+.........................................................................................................../mnt/c/Works/Projects/AgentStudio/tests/unit/test_s06_parts.py:75: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/tmpsbuxpl0y/diff.patch' mode='r' encoding='UTF-8'>
+  text = open(d["path"]).read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.../mnt/c/Works/Projects/AgentStudio/tests/unit/test_s06_parts.py:40: ResourceWarning: unclosed file <_io.BufferedReader name=7>
+  validation.run_validator(d)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/mnt/c/Works/Projects/AgentStudio/tests/unit/test_s06_parts.py:57: ResourceWarning: unclosed file <_io.TextIOWrapper name='/tmp/tmpg8aspd3i/validation.out' mode='r' encoding='UTF-8'>
+  self.assertIn("$(touch CANARY_ARGV) ; rm -rf ~", open(r["outputPath"]).read())
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.............................................................sss.........................................
+----------------------------------------------------------------------
+Ran 215 tests in 6.032s
+
+OK (skipped=3)
