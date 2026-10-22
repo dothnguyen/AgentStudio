@@ -97,6 +97,9 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
 
 
 def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
+    if not os.access(worker_path(), os.X_OK):  # otherwise every pane exits at once and tmux reports a vanished session
+        raise AsError("BACKEND_UNAVAILABLE", f"The worker shim {worker_path()} is not executable.",
+                      remediation=f"Run: bash {os.path.join(os.path.dirname(os.path.dirname(worker_path())), 'install.sh')}")
     workspace = ops.canonical_workspace(args["workspace"])
     if not args.get("roster"):
         from . import roles
