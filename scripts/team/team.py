@@ -14,6 +14,8 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py qa STORY              you run the unit tests here; QA reviews diff + results
     team.py final STORY           team lead final review + proposed commit message
     team.py commit STORY          commit with the lead's message (asks first)
+    team.py blocked               agents held by a permission denial / unclear restart, and how to free them
+    team.py resolve ROLE --action fail|retry|cancel   free that agent
     team.py stop                  stop the team
 
 STORY is a path like phases/phase-01/stories/P01-S02-something.md (relative to the workspace).
@@ -57,6 +59,9 @@ def cli(*args, stdin=None):
         sys.exit(f"agent-studio gave no JSON response (exit {p.returncode})")
     if not resp.get("ok"):
         err = resp.get("error") or {}
+        if err.get("code") == "AGENT_BUSY" and "waiting_input" in (err.get("message") or ""):
+            sys.exit(f"{err['message']}\n  The agent's previous task stopped on a permission denial and is waiting for "
+                     f"your decision.\n  See it with:  team.py blocked     then:  team.py resolve <ROLE> --action fail")
         sys.exit(f"{err.get('code')}: {err.get('message')}" + (f"\n  -> {err['remediation']}" if err.get("remediation") else ""))
     return resp["data"]
 
@@ -333,6 +338,41 @@ def c_commit(ns):
         print("Committed (including the story's Done status and Evidence from the final review).")
 
 
+def stuck():
+    """Assignments that hold an agent until the operator decides (waiting_input / reconciling)."""
+    d = cli("snapshot", "--team", team()["teamId"])
+    names = {a["id"]: a for a in d.get("agents", [])}
+    return [(a, names.get(a.get("agentId"), {})) for a in d.get("assignments", [])
+            if a["status"] in ("waiting_input", "reconciling")]
+
+
+def c_blocked(_):
+    items = stuck()
+    if not items:
+        print("No agent is waiting for a decision.")
+    for a, ag in items:
+        res = a.get("result") or {}
+        att = res.get("attention") or {}
+        print(f"\n{ag.get('role', '?')} ({ag.get('displayName')}) - assignment {a['id']} is {a['status']}"
+              f" ({res.get('diagnosticCode') or ''})")
+        print(f"  summary: {(res.get('summary') or '')[:300]}")
+        for item in att.get("items") or []:
+            print(f"  {att.get('kind')}: {item}")
+        role = ag.get("role", "ROLE")
+        print(f"  decide with:  team.py resolve {role} --action fail     (accept it as failed; the agent is free)\n"
+              f"                team.py resolve {role} --action retry    (run the same task again)\n"
+              f"                team.py resolve {role} --action cancel")
+
+
+def c_resolve(ns):
+    items = [(a, ag) for a, ag in stuck() if ag.get("role", "").lower() == ns.role.lower()]
+    if not items:
+        sys.exit(f"No {ns.role} assignment is waiting for a decision (team.py blocked shows them all).")
+    for a, _ in items:
+        cli("assignment", "resolve", "--assignment", a["id"], "--action", ns.action)
+        print(f"{ns.role}: assignment {a['id'][:8]} resolved with {ns.action}.")
+
+
 def c_stop(_):
     cli("team", "stop", "--team", team()["teamId"])
     save("team", None)
@@ -343,8 +383,11 @@ def main():
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("start", "attach", "status", "stop"):
+    for name in ("start", "attach", "status", "stop", "blocked"):
         sub.add_parser(name)
+    rp = sub.add_parser("resolve")
+    rp.add_argument("role")
+    rp.add_argument("--action", required=True, choices=["fail", "retry", "cancel"])
     u = sub.add_parser("unpack")
     u.add_argument("brief")
     u.add_argument("--out", required=True)
@@ -354,7 +397,7 @@ def main():
         p.add_argument("--force", action="store_true")
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
-     "review": c_review, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit}[ns.cmd](ns)
+     "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit}[ns.cmd](ns)
 
 
 if __name__ == "__main__":
