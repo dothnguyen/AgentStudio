@@ -6,3 +6,4 @@ This is attempt {{visit}} of stage {{stage}}.
 
 {{task}}
 {{findings}}
+{{validation}}

@@ -36,7 +36,8 @@ class StoryDelivery(StartCase):
         r = self.start("story-delivery", debugStageOptions=opts)["data"]
         d = self.wait(r["workflowRunId"], FINAL + ("paused",), 90)
         self.assertEqual(d["workflowRun"]["status"], "succeeded", d["route"])
-        self.assertEqual(d["route"], "review (pass) → develop → qa (fail) → develop → qa (pass) → final (pass) → $succeed")
+        self.assertEqual(d["route"], "review (pass) → develop → tests (pass) → qa (fail) → develop → tests (pass) → qa (pass) → "
+                                     "final (pass) → $succeed")
         a = {x["id"]: x for x in d["assignments"]}
         last = a[d["stageAttempts"][-1]["assignmentId"]]["result"]
         self.assertIn("```commit", last.get("finalText") or last.get("summary"))

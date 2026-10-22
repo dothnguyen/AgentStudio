@@ -52,6 +52,9 @@ class NoNamesInTheEngine(unittest.TestCase):
         self.assertEqual(hits(mod), [])
         self.assertTrue(any(isinstance(n, ast.FunctionDef) and n.name == "_advance_definition" for n in mod.body))
 
+    def test_tickets_is_clean(self):
+        self.assertEqual(hits(tree("tickets.py")), [])
+
     def test_the_guard_catches_a_violation(self):
         bad = ast.parse("def f(x):\n    return x.role == 'QA' or x.stage == 'develop'\n")
         self.assertEqual(hits(bad), ["QA", "develop"])

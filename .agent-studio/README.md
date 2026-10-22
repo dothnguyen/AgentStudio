@@ -69,7 +69,7 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
 S=phases/phase-02/stories/P02-S01-something.md
 team workflows                      # definitions available (built-in and .agent-studio/workflows)
 team check story-delivery           # validate it against the saved team, no tokens spent
-team run story-delivery --story $S  # 1. lead reviews/fixes the story -> dev (runs tests) -> QA -> lead final review
+team run story-delivery --story $S  # 1. lead reviews/fixes the story -> dev -> unit tests (run by the coordinator, outside any agent sandbox) -> QA -> lead final review
                                     #    a review "fail" stops with the lead's questions; QA/final "fail" goes back to dev
 team commit $S                      # 2. shows the files and the lead's ```commit message, asks, then commits
 ```

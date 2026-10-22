@@ -39,8 +39,58 @@ TASK_STATES = ("queued", "assigned", "running", "waiting_input", "review", "succ
 WORKFLOW_STATES = ("queued", "running", "paused", "succeeded", "failed", "cancelled")
 TEAM_STATES = ("starting", "running", "stopping", "stopped", "error")
 STAGE_ATTEMPT_STATES = ("active", "completed", "abandoned")
+TICKET_KINDS = ("feature", "story", "bug")
+TICKET_SEVERITIES = ("blocker", "major", "minor")
+TICKET_STATES = ("backlog", "ready_unpack", "unpacking", "unpacked", "done", "refine", "refining",
+                 "ready_dev", "in_dev", "ready_test", "in_test", "fail_test", "ready_review", "in_review",
+                 "ready_merge", "merged", "changes_requested", "triage", "triaging", "blocked", "cancelled")
+TICKET_TERMINAL = ("merged", "done", "cancelled")
+TICKET_WORKING = {"unpacking": ("ready_unpack",), "refining": ("refine",), "triaging": ("triage",),
+                  "in_dev": ("ready_dev", "fail_test", "changes_requested"), "in_test": ("ready_test",),
+                  "in_review": ("ready_review",)}
+TICKET_OPERATOR_TARGETS = ("backlog", "ready_unpack", "ready_dev", "ready_test", "ready_review", "refine",
+                           "triage", "fail_test", "changes_requested", "blocked")
+KIND_STATUSES = {
+    "feature": frozenset(("backlog", "ready_unpack", "unpacking", "unpacked", "done", "blocked", "cancelled")),
+    "story": frozenset(("backlog", "refine", "refining", "ready_dev", "in_dev", "ready_test", "in_test",
+                          "ready_review", "in_review", "ready_merge", "merged", "fail_test", "changes_requested",
+                          "blocked", "cancelled")),
+    "bug": frozenset(("triage", "triaging", "ready_dev", "in_dev", "ready_test", "in_test", "ready_review",
+                        "in_review", "ready_merge", "merged", "fail_test", "changes_requested", "blocked", "cancelled")),
+}
+_ticket_transitions = set()
+for _work, _queues in TICKET_WORKING.items():
+    for _queue in _queues:
+        _ticket_transitions.update(((_queue, _work, "coordinator"), (_work, _queue, "coordinator")))
+_ticket_transitions.update((("unpacking", "unpacked", "coordinator"), ("unpacked", "done", "coordinator"),
+    ("refining", "ready_dev", "coordinator"), ("triaging", "ready_dev", "coordinator"),
+    ("in_dev", "ready_test", "coordinator"), ("in_test", "ready_review", "coordinator"),
+    ("in_test", "fail_test", "coordinator"), ("in_review", "ready_merge", "coordinator"),
+    ("in_review", "changes_requested", "coordinator"), ("ready_merge", "merged", "coordinator"),
+    ("ready_merge", "changes_requested", "coordinator"), ("backlog", "refine", "coordinator")))
+for _to in ("unpacked", "ready_dev", "ready_test", "fail_test", "ready_review", "changes_requested", "ready_merge"):
+    _ticket_transitions.add(("blocked", _to, "coordinator"))
+for _from in set(TICKET_STATES) - set(TICKET_TERMINAL) - {"blocked"}:
+    for _to in TICKET_OPERATOR_TARGETS:
+        if _to != _from:
+            _ticket_transitions.add((_from, _to, "operator"))
+    for _actor in ("coordinator", "operator"):
+        _ticket_transitions.update(((_from, "blocked", _actor), (_from, "cancelled", _actor)))
+for _actor in ("coordinator", "operator"):
+    _ticket_transitions.add(("blocked", "cancelled", _actor))
+TICKET_TRANSITIONS = frozenset(_ticket_transitions)
 
 ENTITIES: Dict[str, Entity] = {
+    "ticket": Entity("ticket", "tickets", "status", TICKET_STATES,
+        frozenset({"backlog", "ready_unpack", "refine", "triage"}),
+        _t({s: tuple(t for f, t, _a in TICKET_TRANSITIONS if f == s) +
+               (tuple(x for x in TICKET_STATES if x not in TICKET_TERMINAL and x not in TICKET_WORKING)
+                if s == "blocked" else ()) for s in TICKET_STATES}),
+        ("workspace", "key", "kind", "title", "story_path", "brief_path", "out_dir", "raw_text",
+         "attachments_json", "severity", "duplicate_of", "parent_ticket_id", "return_status", "blocked_reason",
+         "priority", "branch", "worktree_path", "base_commit", "head_commit", "merged_commit", "assignee_agent_id",
+         "lease_until", "run_id", "applied_run_id", "dev_rounds", "test_rounds", "review_rounds", "findings_json",
+         "questions_json"), None),
     "team": Entity(
         "team", "teams", "status", TEAM_STATES, frozenset({"starting"}),
         _t({"starting": ("running", "stopping", "error"),
@@ -326,3 +376,37 @@ def _rebuild_workflow_tables(conn) -> None:
 
 
 MIGRATION_6 = [_rebuild_workflow_tables]
+
+
+def _check_ticket_foreign_keys(conn) -> None:
+    bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad:
+        raise RuntimeError(f"migration 7 broke {len(bad)} foreign key(s): {[tuple(r) for r in bad[:5]]}")
+
+
+MIGRATION_7 = [
+    f"""CREATE TABLE tickets (
+        id {ID}, workspace TEXT NOT NULL, key TEXT NOT NULL, kind TEXT NOT NULL CHECK (kind IN {_in(TICKET_KINDS)}),
+        title TEXT NOT NULL, story_path TEXT, brief_path TEXT, out_dir TEXT, raw_text TEXT, attachments_json TEXT,
+        severity TEXT CHECK (severity IS NULL OR severity IN {_in(TICKET_SEVERITIES)}), duplicate_of TEXT,
+        parent_ticket_id TEXT REFERENCES tickets(id), status TEXT NOT NULL CHECK (status IN {_in(TICKET_STATES)}),
+        return_status TEXT, blocked_reason TEXT, priority INTEGER NOT NULL DEFAULT 100, branch TEXT, worktree_path TEXT,
+        base_commit TEXT, head_commit TEXT, merged_commit TEXT, assignee_agent_id TEXT REFERENCES agents(id), lease_until TEXT,
+        run_id TEXT REFERENCES workflow_runs(id), applied_run_id TEXT REFERENCES workflow_runs(id),
+        dev_rounds INTEGER NOT NULL DEFAULT 0, test_rounds INTEGER NOT NULL DEFAULT 0, review_rounds INTEGER NOT NULL DEFAULT 0,
+        findings_json TEXT, questions_json TEXT, {TS},
+        CHECK ((status = 'blocked') = (return_status IS NOT NULL)))""",
+    "CREATE UNIQUE INDEX tickets_key ON tickets (workspace, key)",
+    "CREATE INDEX tickets_by_workspace_status ON tickets (workspace, status)",
+    """CREATE TABLE ticket_deps (
+        ticket_id TEXT NOT NULL REFERENCES tickets(id), blocked_by_ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        PRIMARY KEY (ticket_id, blocked_by_ticket_id), CHECK (ticket_id <> blocked_by_ticket_id))""",
+    """CREATE TABLE ticket_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        event_seq INTEGER NOT NULL REFERENCES events(seq), at TEXT NOT NULL, actor TEXT NOT NULL,
+        name TEXT NOT NULL, from_status TEXT, to_status TEXT, payload_json TEXT NOT NULL)""",
+    """CREATE TABLE board_state (workspace TEXT PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('running','paused')),
+        reason TEXT, config_json TEXT, review_streak INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)""",
+    """CREATE TABLE board_locks (workspace TEXT NOT NULL, name TEXT NOT NULL, ticket_id TEXT REFERENCES tickets(id),
+        created_at TEXT NOT NULL, PRIMARY KEY (workspace, name))""",
+] + _immutable("ticket_events") + [_check_ticket_foreign_keys]
