@@ -20,7 +20,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import gitws, procid, prompts, tasks, validation
+from . import gitws, procid, prompts, tasks, validation, workflowdef
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -33,6 +33,9 @@ POLICY = {"developer": "workspace_write", "developer_repair": "workspace_write",
           "reviewer": "read_only", "reviewer_recheck": "read_only"}
 ACTIVE = ("queued", "running", "paused")
 SAME_AGENT = "SAME_AGENT"
+ROLE_UNBOUND = "ROLE_UNBOUND"
+ROLE_AMBIGUOUS = "ROLE_AMBIGUOUS"
+BUILTIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
 TEMPLATES = {
     "developer": (
@@ -121,7 +124,122 @@ def _last_dev_attempt(tx: Tx, wf_id: str) -> dict:
 
 # ---- start ------------------------------------------------------------------------------------------
 
+def is_definition_run(wf: dict) -> bool:
+    """P00 runs have no frozen definition and keep the DEV_STAGES / POLICY lookups."""
+    return wf.get("definition_json") is not None
+
+
+def frozen_definition(wf: dict) -> "workflowdef.Definition":
+    """The definition a run was started with. Read only through from_json, never parse_obj."""
+    return workflowdef.from_json(json.loads(wf["definition_json"]))
+
+
+def bind_roles(tx: Tx, team: dict, definition: "workflowdef.Definition", overrides: dict, ctx: dict) -> dict:
+    """One agent per distinct role of the definition: the roster `role` (exactly one match), or an override.
+    Returns {role: agent row}, roles in stage order. Rejects before anything is written."""
+    roles, perms = [], {}
+    for st in definition.stages:
+        if st.type != "agent":
+            continue
+        if st.role not in perms:
+            roles.append(st.role)
+            perms[st.role] = []
+        if st.permission not in perms[st.role]:
+            perms[st.role].append(st.permission)
+    unknown = sorted(set(overrides) - set(roles))
+    if unknown:
+        raise AsError(BAD_REQUEST, f"bindings name role(s) the definition does not use: {unknown}.")
+    team_agents = [dict(r) for r in tx.conn.execute(
+        "SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team["id"],)).fetchall()]
+    bound = {}
+    for role in roles:
+        if role in overrides:
+            try:
+                a = tx.get("agent", overrides[role])
+            except AsError:
+                raise AsError(NOT_FOUND, f"Agent {overrides[role]} (bound to {role}) does not exist.")
+            if a["team_id"] != team["id"]:
+                raise AsError(tasks.AGENT_NOT_IN_TEAM, f"Agent {a['id']} (bound to {role}) is not in team {team['id']}.")
+        else:
+            matches = [x for x in team_agents if x["role"] == role]
+            if not matches:
+                raise AsError(ROLE_UNBOUND, f"No agent in team {team['id']} has the role {role!r}.",
+                              data={"role": role}, remediation=f"Add an agent with role {role!r} or pass --bind "
+                                                               f"{role}=<agent id>.")
+            if len(matches) > 1:
+                raise AsError(ROLE_AMBIGUOUS, f"{len(matches)} agents have the role {role!r}.",
+                              data={"role": role, "agentIds": [m["id"] for m in matches]},
+                              remediation=f"Pass --bind {role}=<agent id>.")
+            a = matches[0]
+        bound[role] = a
+    seen = {}
+    for role, a in bound.items():
+        if a["id"] in seen:
+            raise AsError(SAME_AGENT, f"Roles {seen[a['id']]!r} and {role!r} are bound to the same agent; a role's "
+                                      "work is never reviewed by the agent that did it.",
+                          data={"roles": [seen[a["id"]], role], "agentId": a["id"]})
+        seen[a["id"]] = role
+    for role, a in bound.items():
+        if a["availability"] in ("offline", "error") or a["pane_state"] != "alive":
+            raise AsError(tasks.AGENT_UNAVAILABLE, f"{role} agent {a['display_name']} is {a['availability']}.")
+        adapter, _ = tasks.adapter_for(a, ctx)
+        for policy in perms[role]:
+            if adapter.describe(dict(os.environ))["policies"].get(policy) in (None, "unsupported"):
+                raise AsError(tasks.POLICY_UNSUPPORTED, f"{role} agent's provider {a['provider_id']} has no "
+                                                        f"verified mapping for {policy}.")
+    return bound
+
+
+def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
+    team = tx.get("team", args["teamId"])
+    if team["status"] != "running":
+        raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
+    ws = team["workspace"]
+    definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
+    first = definition.stages[0]
+    if first.type != "agent":
+        raise AsError(BAD_REQUEST, f"Definition {definition.name} starts with a validation stage; that is not "
+                                   "supported until P01-S06.")
+    bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)
+    base = gitws.require_repo(ws)
+    dirty = gitws.dirty_entries(ws)
+    if dirty and not (ctx["debug"] and args.get("allowDirtyTree")):
+        raise AsError(gitws.WORKSPACE_DIRTY, f"The workspace has {len(dirty)} uncommitted change(s); the workflow "
+                                             "needs a clean starting commit.", data={"entries": dirty[:20]},
+                      remediation="Commit or stash your changes first (definition files and prompts included).")
+    config = validation.load_config(ws)
+    holder = tasks._mutating_in_workspace(tx, ws)
+    if holder:
+        raise AsError(tasks.WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).")
+    if args.get("debugStageOptions"):
+        if not ctx["debug"]:
+            raise AsError(BAD_REQUEST, "debugStageOptions is only accepted by debug coordinators.")
+        config["debugStageOptions"] = args["debugStageOptions"]
+    deadline = (datetime.now(timezone.utc) + timedelta(milliseconds=config["workflowDeadlineMs"])
+                ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    bindings = {role: a["id"] for role, a in bound.items()}
+    task = tx.create("task", {"team_id": team["id"], "origin": "workflow", "workspace": ws, "goal": args["text"]})
+    tx.transition("task", task, "assigned")
+    tx.transition("task", task, "running")
+    wf = tx.create("workflow_run", {"team_id": team["id"], "task_id": task, "workflow": "definition",
+                                    "retry_budget": 0, "retry_count": 0, "base_commit": base, "config_json": config,
+                                    "deadline_at": deadline, "definition_name": definition.name,
+                                    "definition_json": workflowdef.to_json(definition),
+                                    "definition_sha256": definition.source_sha256, "bindings_json": bindings,
+                                    "step_count": 1},
+                   payload={"baseCommit": base, "validationArgv": config["validation"]["argv"],
+                            "definition": definition.name, "definitionSha256": definition.source_sha256,
+                            "bindings": bindings})
+    tx.transition("workflow_run", wf, "running", set_values={"transition_reason": "started"})
+    asg = _dispatch(tx, wf, first.id, None, ctx, from_assignment=None, data={})
+    return {"receipt": "accepted", "workflowRunId": wf, "taskId": task, "baseCommit": base,
+            "definition": definition.name, "definitionSha256": definition.source_sha256, "bindings": bindings,
+            "assignmentId": asg, "validationArgv": config["validation"]["argv"]}
+
+
 def start(tx: Tx, args: dict, ctx: dict) -> dict:
+    if args.get("definition"):
+        return _start_definition(tx, args, ctx)
     team = tx.get("team", args["teamId"])
     if team["status"] != "running":
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
@@ -176,21 +294,32 @@ def start(tx: Tx, args: dict, ctx: dict) -> dict:
             "assignmentId": first, "validationArgv": config["validation"]["argv"]}
 
 
-def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: str, ctx: dict, from_assignment: Optional[str],
-              provider_options: Optional[dict] = None) -> str:
+def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, from_assignment: Optional[str],
+              provider_options: Optional[dict] = None, data: Optional[dict] = None) -> str:
+    """Create the stage attempt and its assignment. P00 runs pass the composed prompt. Definition runs may pass None
+    and `data` (diff, validation, findings, summary), and the frozen template is rendered here."""
     wf = tx.get("workflow_run", wf_id)
     config = _loads(wf["config_json"], {})
-    agent_id = wf["developer_agent_id"] if stage in DEV_STAGES else wf["reviewer_agent_id"]
+    if is_definition_run(wf):
+        st = next(x for x in frozen_definition(wf).stages if x.id == stage)
+        agent_id = _loads(wf["bindings_json"], {})[st.role]
+        policy, stage_type = st.permission, st.type
+    else:
+        st, stage_type, policy = None, "agent", POLICY[stage]
+        agent_id = wf["developer_agent_id"] if stage in DEV_STAGES else wf["reviewer_agent_id"]
     agent = tx.get("agent", agent_id)
     n = tx.conn.execute("SELECT COUNT(*) FROM stage_attempts WHERE workflow_run_id = ?", (wf_id,)).fetchone()[0] + 1
     attempt = tx.conn.execute("SELECT COUNT(*) FROM stage_attempts WHERE workflow_run_id = ? AND stage = ?",
                               (wf_id, stage)).fetchone()[0] + 1
+    if prompt is None:
+        prompt = prompts.render(st.prompt, kind=st.kind, task=tx.get("task", wf["task_id"])["goal"],
+                                stage=stage, visit=attempt, **(data or {}))
     sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{stage}")
     prompt_path = os.path.join(sdir, "prompt.txt")
     _write_private(prompt_path, prompt)
     sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": stage,
                                      "attempt": attempt, "agent_id": agent_id, "phase": "assignment",
-                                     "prompt_path": prompt_path})
+                                     "prompt_path": prompt_path, "stage_type": stage_type, "visit": attempt})
     adapter, alias = tasks.adapter_for(agent, ctx)
     request = tasks.build_request(agent, tx.get("task", wf["task_id"])["workspace"],
                                   {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"),
@@ -201,11 +330,11 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: str, ctx: dict, from_assig
     if alias:
         request["fixtureAdapter"] = alias
     asg = tx.create("assignment", {"team_id": wf["team_id"], "task_id": wf["task_id"], "agent_id": agent_id,
-                                   "stage_attempt_id": sa, "attempt": attempt, "policy": POLICY[stage],
+                                   "stage_attempt_id": sa, "attempt": attempt, "policy": policy,
                                    "provider_id": agent["provider_id"], "request_json": request},
                     payload=tasks._request_summary(request))
     tx.update("stage_attempt", sa, {"assignment_id": asg}, "stage_attempt.dispatched",
-              {"assignmentId": asg, "policy": POLICY[stage]})
+              {"assignmentId": asg, "policy": policy})
     tx.update("workflow_run", wf_id, {"current_stage": stage, "current_agent_id": agent_id}, "workflow_run.handoff",
               {"toStage": stage, "toAssignmentId": asg, "agentId": agent_id, "providerId": agent["provider_id"],
                "fromAssignmentId": from_assignment})
@@ -241,6 +370,16 @@ def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
         return False
     cancel = _cancel_requested(tx, wf_id)
     sdir = os.path.dirname(sa["prompt_path"])
+    if sa["phase"] == "assignment" and is_definition_run(wf):
+        a = tx.get("assignment", sa["assignment_id"])
+        if a["status"] in ("queued", "claimed", "running"):
+            return False
+        if a["status"] == "cancelled" or cancel:
+            _end(tx, wf, "cancelled", "cancelled by the operator" if cancel else f"{sa['stage']} assignment cancelled")
+        else:   # P01-S05 adds outcomes and routing; until then a finished first stage waits for the operator
+            _pause(tx, wf, sa, f"{sa['stage']} {a['status']}; routing for definition runs is not available yet",
+                   (_loads(a["result_json"], {}) or {}).get("diagnosticCode") or "ROUTING_NOT_AVAILABLE")
+        return True
     if sa["phase"] == "assignment":
         a = tx.get("assignment", sa["assignment_id"])
         if a["status"] in ("queued", "claimed", "running"):

@@ -1,6 +1,7 @@
 """Request validation and routing shared by one-shot `request`, human CLI commands, and `serve`."""
 from __future__ import annotations
 
+import re
 import json
 import sys
 import traceback
@@ -114,7 +115,43 @@ def _validate_task_direct(args):
 STAGE_NAMES = ("developer", "reviewer", "developer_repair", "reviewer_recheck")
 
 
+STAGE_ID_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+DEFINITION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def _validate_definition_start(args):
+    name = args.get("definition")
+    if not isinstance(name, str) or not DEFINITION_NAME.match(name):
+        raise AsError(BAD_REQUEST, "definition must be a name matching [a-z0-9][a-z0-9-]{0,63}.")
+    if "developerAgentId" in args or "reviewerAgentId" in args:
+        raise AsError(BAD_REQUEST, "developerAgentId / reviewerAgentId belong to the P00 form; use bindings with "
+                                   "definition.")
+    out = {"teamId": validate_uuid(args.get("teamId"), "teamId"), "definition": name,
+           "text": req_text(args, "text", MAX_TASK_BYTES, allow_empty=False)}
+    if not out["text"].strip():
+        raise AsError(BAD_REQUEST, "Task text must not be blank.")
+    bindings = args.get("bindings")
+    if bindings is not None:
+        if not isinstance(bindings, dict) or len(bindings) > 20:
+            raise AsError(BAD_REQUEST, "bindings must be an object {role: agentId} with at most 20 entries.")
+        out["bindings"] = {}
+        for role, agent in bindings.items():
+            if not isinstance(role, str) or not role.strip() or len(role) > 200:
+                raise AsError(BAD_REQUEST, "bindings keys must be role names.")
+            out["bindings"][role] = validate_uuid(agent, f"bindings.{role}")
+    if args.get("allowDirtyTree"):
+        out["allowDirtyTree"] = req_bool(args, "allowDirtyTree")
+    opts = args.get("debugStageOptions")
+    if opts is not None:
+        if not isinstance(opts, dict) or not all(isinstance(k, str) and STAGE_ID_KEY.match(k) for k in opts):
+            raise AsError(BAD_REQUEST, "debugStageOptions keys must be stage ids.")
+        out["debugStageOptions"] = {k: _validate_fake_options(v) for k, v in opts.items()}
+    return out
+
+
 def _validate_workflow_start(args):
+    if "definition" in args:
+        return _validate_definition_start(args)
     out = {"teamId": validate_uuid(args.get("teamId"), "teamId"),
            "developerAgentId": validate_uuid(args.get("developerAgentId"), "developerAgentId"),
            "reviewerAgentId": validate_uuid(args.get("reviewerAgentId"), "reviewerAgentId"),

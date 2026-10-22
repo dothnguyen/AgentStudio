@@ -80,13 +80,14 @@ ENTITIES: Dict[str, Entity] = {
             "succeeded": (), "failed": (), "cancelled": ()}),
         ("team_id", "task_id", "workflow", "current_stage", "retry_count", "retry_budget", "base_commit",
          "transition_reason", "developer_agent_id", "reviewer_agent_id", "current_agent_id", "config_json",
-         "last_finding", "deadline_at"),
+         "last_finding", "deadline_at", "definition_name", "definition_json", "definition_sha256", "bindings_json",
+         "step_count"),
         "workflow_run_id", ("team_id", "task_id")),
     "stage_attempt": Entity(
         "stage_attempt", "stage_attempts", "status", STAGE_ATTEMPT_STATES, frozenset({"active"}),
         _t({"active": ("completed", "abandoned"), "completed": (), "abandoned": ()}),
         ("team_id", "workflow_run_id", "stage", "attempt", "outcome", "artifacts_json", "agent_id", "assignment_id",
-         "phase", "validation_json", "verdict_json", "diff_json", "prompt_path"),
+         "phase", "validation_json", "verdict_json", "diff_json", "prompt_path", "stage_type", "visit"),
         None, ("team_id", "workflow_run_id")),
     "assignment": Entity(
         "assignment", "assignments", "status", ASSIGNMENT_STATES, frozenset({"queued"}),
@@ -255,3 +256,73 @@ MIGRATION_4 = [
 
 # v5: per-agent model and reasoning level (validated by the agent's adapter).
 MIGRATION_5 = ["ALTER TABLE agents ADD COLUMN model TEXT", "ALTER TABLE agents ADD COLUMN reasoning TEXT"]
+
+
+# v6 (P01-S04): workflow_runs and stage_attempts are rebuilt, because SQLite cannot drop the P00 CHECKs on stage names
+# and on retry_count <= retry_budget. Stage ids are then checked by the engine against the frozen definition. Every
+# row is copied unchanged. state.migrate switches foreign keys off around the transaction (the documented
+# SQLite procedure) and this step checks them explicitly before the commit.
+_WF_OLD_COLS = ("id, team_id, task_id, workflow, status, current_stage, retry_count, retry_budget, base_commit, "
+                "transition_reason, created_at, updated_at, developer_agent_id, reviewer_agent_id, current_agent_id, "
+                "config_json, last_finding, deadline_at")
+_SA_OLD_COLS = ("id, team_id, workflow_run_id, stage, attempt, status, outcome, artifacts_json, created_at, "
+                "updated_at, agent_id, assignment_id, phase, validation_json, verdict_json, diff_json, prompt_path")
+
+
+def _rebuild_workflow_tables(conn) -> None:
+    conn.execute(f"""CREATE TABLE workflow_runs_new (
+        id {ID},
+        team_id TEXT NOT NULL REFERENCES teams(id),
+        task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
+        workflow TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN {_in(WORKFLOW_STATES)}),
+        current_stage TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
+        retry_budget INTEGER NOT NULL DEFAULT 1 CHECK (retry_budget >= 0),
+        base_commit TEXT,
+        transition_reason TEXT,
+        {TS},
+        developer_agent_id TEXT REFERENCES agents(id),
+        reviewer_agent_id TEXT REFERENCES agents(id),
+        current_agent_id TEXT,
+        config_json TEXT,
+        last_finding TEXT,
+        deadline_at TEXT,
+        definition_name TEXT,
+        definition_json TEXT,
+        definition_sha256 TEXT,
+        bindings_json TEXT,
+        step_count INTEGER NOT NULL DEFAULT 0 CHECK (step_count >= 0))""")
+    conn.execute(f"INSERT INTO workflow_runs_new ({_WF_OLD_COLS}) SELECT {_WF_OLD_COLS} FROM workflow_runs")
+    conn.execute(f"""CREATE TABLE stage_attempts_new (
+        id {ID},
+        team_id TEXT NOT NULL REFERENCES teams(id),
+        workflow_run_id TEXT NOT NULL REFERENCES workflow_runs(id),
+        stage TEXT NOT NULL,
+        attempt INTEGER NOT NULL CHECK (attempt >= 1),
+        status TEXT NOT NULL CHECK (status IN {_in(STAGE_ATTEMPT_STATES)}),
+        outcome TEXT,
+        artifacts_json TEXT,
+        {TS},
+        agent_id TEXT REFERENCES agents(id),
+        assignment_id TEXT REFERENCES assignments(id),
+        phase TEXT,
+        validation_json TEXT,
+        verdict_json TEXT,
+        diff_json TEXT,
+        prompt_path TEXT,
+        stage_type TEXT,
+        visit INTEGER,
+        UNIQUE (workflow_run_id, stage, attempt))""")
+    conn.execute(f"INSERT INTO stage_attempts_new ({_SA_OLD_COLS}) SELECT {_SA_OLD_COLS} FROM stage_attempts")
+    conn.execute("DROP TABLE stage_attempts")
+    conn.execute("DROP TABLE workflow_runs")
+    conn.execute("ALTER TABLE workflow_runs_new RENAME TO workflow_runs")
+    conn.execute("ALTER TABLE stage_attempts_new RENAME TO stage_attempts")
+    conn.execute("CREATE INDEX workflow_runs_by_status ON workflow_runs (status)")
+    bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad:
+        raise RuntimeError(f"migration 6 broke {len(bad)} foreign key(s): {[tuple(r) for r in bad[:5]]}")
+
+
+MIGRATION_6 = [_rebuild_workflow_tables]
