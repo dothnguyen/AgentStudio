@@ -106,6 +106,16 @@ verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/`.
 
 The story's Status/Evidence update made by the lead in `final` is included in the `team commit`.
 
+## Retry a stuck stage
+
+```bash
+team retry     # rerun the active workflow's current stage with its original prompt
+```
+Use it when a stage is `waiting_input` (permission denied), the engine paused the run (verdict missing, unclear
+restart), or an agent was lost. Same as `agent-studio workflow retry --workflow ID`. It refuses while the stage's
+processes may still be running (cancel first) and when the agent is not alive. To give up instead:
+`agent-studio workflow cancel --workflow ID`.
+
 ## When something goes wrong
 
 | You see | Do |

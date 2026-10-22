@@ -13,7 +13,7 @@ time and refuses with `CAPABILITY_GAP` if any is missing; it never guesses a fla
 | Login check (cheap probe) | `codex login status`: exit 0 = logged in ("Logged in using ChatGPT" / "...an API key"); "Not logged in", exit 1 → `AUTH_REQUIRED` |
 | Authentication probe (`--deep`) | read-only micro-task in a temp dir: "Reply with exactly AGENT_STUDIO_OK"; cached 24 h per path+version in `provider-probes.json` |
 | Common argv | `codex exec --json --color never --ephemeral --skip-git-repo-check --cd <workspace> … -` (prompt on **stdin** from the private `prompt.txt`) |
-| `read_only` | `--sandbox read-only -c approval_policy="never"` |
+| `read_only` | `--sandbox workspace-write -c approval_policy="never" -c sandbox_workspace_write.network_access=false`: Codex's read-only sandbox forbids temp files, which tests need. The runner fingerprints the workspace (git HEAD, tracked diff, untracked files) before and after and fails the report with `READ_ONLY_VIOLATION` if it changed. Nothing is reverted automatically. |
 | `workspace_write` | `--sandbox workspace-write -c approval_policy="never" -c sandbox_workspace_write.network_access=false` |
 | Never used | `--dangerously-bypass-approvals-and-sandbox`, `danger-full-access`, `--full-auto`, `--yolo` (asserted in code and tests) |
 | Model | `--model <name>`; name must match `^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$` (codex validates the model itself at run time) |

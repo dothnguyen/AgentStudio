@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import types
 import unittest
 
 import tests.helpers  # noqa: F401  (puts backend on sys.path)
@@ -80,7 +81,8 @@ class CodexArgv(unittest.TestCase):
         a = p.argv
         self.assertEqual(a[0], os.path.join(self.bin, "codex"))
         self.assertEqual(a[1:3], ["exec", "--json"])
-        self.assertEqual(a[a.index("--sandbox") + 1], "read-only")
+        self.assertEqual(a[a.index("--sandbox") + 1], "workspace-write")   # temp writes; the runner guards the workspace
+        self.assertIn("sandbox_workspace_write.network_access=false", a)
         self.assertIn('approval_policy="never"', a)
         self.assertEqual(a[-1], "-")
         self.assertEqual(p.stdin_path, "/tmp/p.txt")
@@ -333,3 +335,51 @@ class RealCodexBinary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReadOnlyGuard(unittest.TestCase):
+    """Codex read_only stages run in workspace-write; the runner fails them if the workspace changed."""
+
+    def setUp(self):
+        import subprocess, tempfile
+        from agent_studio import runner
+        self.runner = runner
+        self.ws = tempfile.mkdtemp()
+        g = lambda *a: subprocess.run(["git", "-C", self.ws] + list(a), check=True, stdout=subprocess.DEVNULL)
+        g("init", "-q"); g("config", "user.email", "t@e.invalid"); g("config", "user.name", "t")
+        with open(os.path.join(self.ws, "a.txt"), "w") as f:
+            f.write("one\n")
+        with open(os.path.join(self.ws, ".gitignore"), "w") as f:
+            f.write("cache/\n")
+        g("add", "-A"); g("commit", "-qm", "x")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.ws, ignore_errors=True)
+
+    def check(self, change):
+        before = self.runner.workspace_fingerprint(self.ws)
+        change()
+        i = types.SimpleNamespace(workspace=self.ws)
+        return self.runner.guard_violation(None, i, before, {"status": "succeeded", "summary": "ok"})
+
+    def test_unchanged_and_ignored_files_pass(self):
+        def noop():
+            os.makedirs(os.path.join(self.ws, "cache"))
+            with open(os.path.join(self.ws, "cache", "x"), "w") as f:
+                f.write("tmp")
+        self.assertEqual(self.check(noop)["status"], "succeeded")
+
+    def test_edit_new_file_and_untracked_edit_fail(self):
+        def edit():
+            with open(os.path.join(self.ws, "a.txt"), "a") as f:
+                f.write("two\n")
+        r = self.check(edit)
+        self.assertEqual((r["status"], r["diagnosticCode"]), ("failed", "READ_ONLY_VIOLATION"))
+        def new():
+            with open(os.path.join(self.ws, "n.txt"), "w") as f:
+                f.write("x")
+        self.assertEqual(self.check(new)["diagnosticCode"], "READ_ONLY_VIOLATION")
+
+    def test_non_git_workspace_is_not_guarded(self):
+        self.assertIsNone(self.runner.workspace_fingerprint("/nonexistent-dir-xyz"))

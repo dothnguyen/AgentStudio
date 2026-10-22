@@ -85,7 +85,7 @@ class SettingsAndRoles(CodexCase):
         call = self.calls()[-1]
         self.assertEqual(call["model"], "gpt-5.1-codex")
         self.assertIn('model_reasoning_effort="high"', call["config"])
-        self.assertEqual(call["sandbox"], "read-only")
+        self.assertEqual(call["sandbox"], "workspace-write")
         prompt = call["prompt"]
         order = [prompt.index(m) for m in ("DESC-MARKER", "ROLE-MARKER", "SKILL-MARKER", "TASK-MARKER")]
         self.assertEqual(order, sorted(order), prompt)

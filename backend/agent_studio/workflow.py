@@ -586,6 +586,29 @@ def _stop_active(tx: Tx, wf: dict, sa: Optional[dict], ctx: dict) -> None:
             tasks.assignment_cancel(tx, {"assignmentId": a["id"]}, ctx)
 
 
+def _retry_run(tx: Tx, args: dict) -> dict:
+    wf = tx.get("workflow_run", args["workflowRunId"])
+    if not is_definition_run(wf):
+        raise AsError(LEGACY_WORKFLOW_RUN, "This run was started before the upgrade and can only be cancelled.",
+                      remediation=f"agent-studio workflow cancel --workflow {wf['id']}")
+    return wf
+
+
+def retry(tx: Tx, args: dict, ctx: dict) -> dict:
+    """Run the current stage again with its original prompt: the way out for a stage that is waiting_input,
+    reconciling, or ended in a state the engine paused on (same rules as assignment.resolve --action retry)."""
+    from . import resolve
+    wf = _retry_run(tx, args)
+    sa = _current_attempt(tx, wf["id"])
+    if wf["status"] in ("succeeded", "failed", "cancelled") or sa is None or not sa["assignment_id"]:
+        raise AsError(resolve.RESOLVE_NOT_ALLOWED, f"The run is {wf['status']} and has no stage to retry.")
+    a = tx.get("assignment", sa["assignment_id"])
+    r = resolve.resolve(tx, dict({"assignmentId": a["id"], "action": "retry"},
+                                 **({"debugProviderOptions": args["debugProviderOptions"]}
+                                    if args.get("debugProviderOptions") is not None else {})), ctx)
+    return dict(r, workflowRunId=wf["id"])
+
+
 def cancel(tx: Tx, args: dict, ctx: dict) -> dict:
     wf = tx.get("workflow_run", args["workflowRunId"])
     out = {"workflowRunId": wf["id"], "previousStatus": wf["status"]}

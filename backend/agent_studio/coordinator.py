@@ -151,6 +151,7 @@ HANDLERS = {
     "assignment.cancel": lambda args, tx, ctx: tasks.assignment_cancel(tx, args, ctx),
     "workflow.start": lambda args, tx, ctx: workflow.start(tx, args, ctx),
     "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
+    "workflow.retry": lambda args, tx, ctx: workflow.retry(tx, args, ctx),
     "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),
 }
 MONITOR_INTERVAL_S = 2.0

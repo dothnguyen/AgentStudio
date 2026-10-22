@@ -18,6 +18,7 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py check NAME            validate a definition against the saved team (no tokens spent)
     team.py run NAME (PROMPT | --story PATH | --prompt-file PATH) [--bind ROLE=NAME ...] [--no-wait]
                                   run a workflow definition; with --story it also records what `commit` needs
+    team.py retry                 rerun the active workflow's stuck stage (waiting_input / paused by the engine)
     team.py index                 build the ctags symbol index agents search (.agent-studio/cache/tags)
     team.py blocked               agents held by a permission denial / unclear restart, and how to free them
     team.py resolve ROLE --action fail|retry|cancel   free that agent
@@ -487,6 +488,18 @@ def c_index(_):
     print(f"indexed {n} symbols -> .agent-studio/cache/tags (re-run after big changes; agents treat it as a hint)")
 
 
+def c_wf_op(op):
+    def run(_):
+        d = cli("snapshot", "--team", team()["teamId"])
+        runs = [w for w in d.get("workflowRuns", []) if w.get("status") in ("running", "paused")]
+        if not runs:
+            sys.exit("No running or paused workflow for this team.")
+        wf = runs[-1]
+        r = cli("workflow", op, "--workflow", wf["id"])
+        print(f"workflow {wf['id'][:8]}: stage {r.get('stage')} retried (new assignment {str(r.get('newAssignmentId'))[:8]})")
+    return run
+
+
 def c_stop(_):
     cli("team", "stop", "--team", team()["teamId"])
     save("team", None)
@@ -504,6 +517,7 @@ def main():
     rp.add_argument("--action", required=True, choices=["fail", "retry", "cancel"])
     sub.add_parser("workflows")
     sub.add_parser("index")
+    sub.add_parser("retry")
     ck = sub.add_parser("check")
     ck.add_argument("name")
     rn = sub.add_parser("run")
@@ -523,7 +537,7 @@ def main():
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
      "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,
-     "run": c_run, "index": c_index, "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
+     "run": c_run, "index": c_index, "retry": c_wf_op("retry"), "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
 
 
 if __name__ == "__main__":

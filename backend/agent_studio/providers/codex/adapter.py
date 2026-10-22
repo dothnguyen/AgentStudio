@@ -20,7 +20,10 @@ NEVER = ("--dangerously-bypass-approvals-and-sandbox", "--dangerously-bypass-hoo
 REASONING = ("minimal", "low", "medium", "high", "xhigh")
 APPROVAL = ["-c", 'approval_policy="never"']   # headless: never stop to ask; blocked commands simply fail
 POLICY_FLAGS = {
-    "read_only": ["--sandbox", "read-only"] + APPROVAL,
+    # read_only agents may write temp files (tests need them), so Codex's own read-only sandbox is too strict. They
+    # run in workspace-write instead, and the runner verifies afterwards that the workspace did not change
+    # (READ_ONLY_VIOLATION); see runner.guarded_execute.
+    "read_only": ["--sandbox", "workspace-write"] + APPROVAL + ["-c", "sandbox_workspace_write.network_access=false"],
     "workspace_write": ["--sandbox", "workspace-write"] + APPROVAL + ["-c", "sandbox_workspace_write.network_access=false"],
 }
 ENV = BASE_ENV + ("CODEX_HOME", "OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_URL", "OPENAI_ORGANIZATION",
@@ -35,6 +38,7 @@ def _short(text: str, n: int = 300) -> str:
 
 class CodexAdapter(Adapter):
     provider_id = "codex"
+    guard_read_only = True   # the sandbox allows workspace writes for read_only stages; the runner checks for them
 
     # ---- declaration -------------------------------------------------------------------------
     def capabilities(self) -> dict:

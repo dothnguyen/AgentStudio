@@ -47,6 +47,7 @@ USAGE = """agent-studio <command>
                                            the P00 form: same as --definition developer-reviewer
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
+  workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
   debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
@@ -137,7 +138,7 @@ def _human_request(argv) -> dict:
     tk.add_argument("--key")
     tk.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     wf_p = sub.add_parser("workflow", add_help=False)
-    wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate"])
+    wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate", "retry"])
     wf_p.add_argument("--team")
     wf_p.add_argument("--developer")
     wf_p.add_argument("--reviewer")
@@ -263,7 +264,7 @@ def _human_request(argv) -> dict:
             if not ns.workflow:
                 raise AsError(BAD_REQUEST, f"workflow {ns.action} needs --workflow ID")
             req.update(command=f"workflow.{ns.action}", args={"workflowRunId": ns.workflow})
-            if ns.action == "cancel":
+            if ns.action in ("cancel", "retry"):
                 req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":

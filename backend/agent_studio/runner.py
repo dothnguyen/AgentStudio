@@ -91,6 +91,43 @@ def refusal_report(inp: AssignmentInput, code: str, summary: str, oc: dict, stat
                          "truncated": False, "malformedLines": 0, "validation": []}}
 
 
+def workspace_fingerprint(workspace: str):
+    """A hash of everything git can see changing in the workspace (HEAD, tracked diff, untracked file contents), or
+    None when it is not a git checkout. Ignored files (caches, __pycache__) are not part of it."""
+    import hashlib
+    from . import gitws
+    try:
+        h = hashlib.sha256()
+        h.update(gitws.run(workspace, "rev-parse", "HEAD", check=False).stdout)
+        h.update(gitws.run(workspace, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--",
+                           check=False).stdout)
+        for rel in sorted(gitws.untracked(workspace)):
+            path = os.path.join(workspace, rel)
+            h.update(rel.encode("utf-8", "surrogateescape") + b"\0")
+            try:
+                if os.path.isfile(path) and not os.path.islink(path) and os.path.getsize(path) <= 8 * 1024 * 1024:
+                    with open(path, "rb") as f:
+                        h.update(hashlib.sha256(f.read()).digest())
+            except OSError:
+                pass
+        return h.hexdigest()
+    except Exception:
+        return None
+
+
+def guard_violation(adapter, inp, before, final: dict) -> dict:
+    """read_only stages on an adapter whose sandbox is looser than read-only: fail the report when the workspace
+    changed. Nothing is reverted; the operator decides (git status / git diff show what changed)."""
+    if before is None or final.get("status") in ("cancelled",):
+        return final
+    after = workspace_fingerprint(inp.workspace)
+    if after is None or after == before:
+        return final
+    return dict(final, status="failed", diagnosticCode="READ_ONLY_VIOLATION",
+                summary=("A read-only stage changed files in the workspace (check git status / git diff). "
+                         + str(final.get("summary") or ""))[:2000])
+
+
 class _Cancel:
     requested = False
     signame = None
@@ -321,7 +358,11 @@ def run(agent_id: str, assignment_id: str) -> int:
         except AsError as e:
             final = refusal_report(inp, e.code, e.message, oc)
         else:
+            guard = getattr(adapter, "guard_read_only", False) and inp.policy == "read_only"
+            before = workspace_fingerprint(inp.workspace) if guard else None
             final = _execute(adapter, inp, prep, st, oc, report, rd)
+            if guard:
+                final = guard_violation(adapter, inp, before, final)
     expect = {"assignmentId": assignment_id, "agentId": agent_id, "providerId": provider_id, "attempt": attempt,
               "policy": req.get("policy")}
     try:

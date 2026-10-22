@@ -219,6 +219,13 @@ def _workflow_validate(args, req):
             "warnings": json.loads(json.dumps(list(definition.warnings), default=dict))}
 
 
+def _validate_workflow_retry(args):
+    out = _validate_workflow_id(args)
+    if args.get("debugProviderOptions") is not None:
+        out["debugProviderOptions"] = _validate_fake_options(args["debugProviderOptions"])
+    return out
+
+
 def _validate_resolve(args):
     action = args.get("action")
     if action not in ("retry", "fail", "cancel"):
@@ -320,6 +327,7 @@ COMMANDS = {
     "assignment.resolve": _inbox("assignment.resolve", _validate_resolve),
     "workflow.start": _inbox("workflow.start", _validate_workflow_start),
     "workflow.cancel": _inbox("workflow.cancel", _validate_workflow_id),
+    "workflow.retry": _inbox("workflow.retry", _validate_workflow_retry),
     "workflow.show": _workflow_show,
     "workflow.list": _workflow_list,
     "workflow.validate": _workflow_validate,
