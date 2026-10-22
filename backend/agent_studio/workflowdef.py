@@ -18,6 +18,7 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
+from . import prompts as promptlib
 from . import yamlsubset
 from .protocol import AsError
 from .roles import CONFIG_DIR, _inside
@@ -144,8 +145,15 @@ def _file_order(obj: dict, errors: list) -> list:
     return sorted(errors, key=key)
 
 
-def _check_placeholders(c: _Collector, stages: list) -> None:
-    """Hook for P01-S03: unknown placeholders in stage templates are load errors."""
+def _check_placeholders(c: _Collector, stages: list, frozen: bool) -> None:
+    """Unknown {{names}} in a stage template are load errors, reported at the stage's prompt or promptFile."""
+    for s in stages:
+        if s["prompt"] is None:
+            continue
+        key = "promptFile" if not frozen and s["prompt_source"] != "inline" else "prompt"
+        for name in sorted(promptlib.placeholders(s["prompt"]) - promptlib.ALLOWED):
+            c.err(f"stages[{s['i']}].{key}",
+                  f"unknown placeholder {{{{{name}}}}} (allowed: {', '.join(sorted(promptlib.ALLOWED))})")
 
 
 # ---- one stage -------------------------------------------------------------------------------------------------
@@ -412,7 +420,7 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
             infos = [_stage(c, i, s, ctx) for i, s in enumerate(stages_val)]
 
     if not c.errors:
-        _check_placeholders(c, infos)
+        _check_placeholders(c, infos, frozen)
         _graph_errors(c, infos)
     c.errors = _file_order(obj, c.errors)
     c.raise_if_errors()
@@ -463,7 +471,7 @@ def _graph_warnings(c: _Collector, infos: list) -> tuple:
         if s["id"] in after[s["id"]] and s["max_visits"] == 1:
             c.warn(p, f'stage "{s["id"]}" can be re-entered but has maxVisits 1')
         if (s["permission"] == "read_only" and s["id"] in from_writers
-                and DIFF_PLACEHOLDER not in s["prompt"]):
+                and "diff" not in promptlib.placeholders(s["prompt"])):
             c.warn(p, f'read_only stage "{s["id"]}" follows a workspace_write stage but its prompt has no '
                       f'{DIFF_PLACEHOLDER}')
     return tuple(MappingProxyType(w) for w in c.warnings)

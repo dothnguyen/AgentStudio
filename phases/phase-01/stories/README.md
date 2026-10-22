@@ -6,7 +6,7 @@ Read the [phase overview and design contract](../README.md), [PRD.md](../../../P
 |---|---|---|---|
 | [S01](./P01-S01-definition-model-and-json.md) | Definition model, JSON loader, static validation | — | To Do |
 | [S02](./P01-S02-yaml-subset-loader.md) | Strict YAML subset loader | S01 | To Do |
-| [S03](./P01-S03-prompt-templates.md) | Prompt templates and verdict footer | S01 | To Do |
+| [S03](./P01-S03-prompt-templates.md) | Prompt templates and verdict footer | S01 | Done |
 | [S04](./P01-S04-schema-binding-and-start.md) | Schema rebuild, role binding, frozen definition, first-stage dispatch | S01, S03 | To Do |
 | [S05](./P01-S05-routing-and-bounds.md) | Agent-stage routing, bounds, diffs, `routed` events | S04 | To Do |
 | [S06](./P01-S06-validation-stages-and-builtin.md) | Validation stages, `passRequires`, built-in `developer-reviewer`, P00 compatibility | S05 | To Do |

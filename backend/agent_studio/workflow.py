@@ -20,7 +20,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import gitws, procid, tasks, validation
+from . import gitws, procid, prompts, tasks, validation
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -33,7 +33,6 @@ POLICY = {"developer": "workspace_write", "developer_repair": "workspace_write",
           "reviewer": "read_only", "reviewer_recheck": "read_only"}
 ACTIVE = ("queued", "running", "paused")
 SAME_AGENT = "SAME_AGENT"
-PROMPT_LIMITS = {"task": 32 * 1024, "diff": 256 * 1024, "validation": 32 * 1024, "findings": 16 * 1024}
 
 TEMPLATES = {
     "developer": (
@@ -47,8 +46,7 @@ TEMPLATES = {
         "current changes against the starting commit. Finish with a short summary of what you changed.\n"),
     "reviewer": (
         "You are the Reviewer in an Agent Studio workflow. You have read-only access: do not modify files.\n"
-        "Review DIFF against TASK, taking VALIDATION into account. End your reply with exactly one line of\n"
-        "JSON: {\"verdict\": \"pass\" or \"fail\", \"findings\": [\"...\"]}. Use \"fail\" for anything that must change.\n"),
+        "Review DIFF against TASK, taking VALIDATION into account.\n"),
 }
 TEMPLATES["reviewer_recheck"] = TEMPLATES["reviewer"]
 
@@ -59,26 +57,20 @@ def workflow_dir(state_dir: str, wf_id: str) -> str:
     return os.path.join(state_dir, "workflows", wf_id)
 
 
-def _section(name: str, text: str, limit: int) -> str:
-    data = text.encode("utf-8", "replace")
-    note = ""
-    if len(data) > limit:
-        text = data[:limit].decode("utf-8", "ignore")
-        note = f"\n[{name} truncated by Agent Studio at {limit} bytes]"
-    return f"\n===== {name} =====\n{text}{note}\n===== END {name} =====\n"
-
-
 def compose_prompt(stage: str, task: str, diff: Optional[str] = None, validation_text: Optional[str] = None,
                    findings: Optional[list] = None) -> str:
-    """Template + data sections. Everything here is data for the provider; nothing is ever executed."""
-    parts = [TEMPLATES[stage], _section("TASK", task, PROMPT_LIMITS["task"])]
+    """P00 stage prompt: the fixed template, then the data sections, rendered by prompts.render. Review stages end
+    with the verdict footer (P01-S03 moved the JSON sentence from the template to the end of the prompt)."""
+    template = TEMPLATES[stage]
+    template += "{{task}}"
     if diff is not None:
-        parts.append(_section("DIFF", diff or "(no changes)", PROMPT_LIMITS["diff"]))
+        template += "{{diff}}"
     if validation_text is not None:
-        parts.append(_section("VALIDATION", validation_text, PROMPT_LIMITS["validation"]))
+        template += "{{validation}}"
     if findings is not None:
-        parts.append(_section("FINDINGS", "\n".join(f"- {f}" for f in findings) or "(none)", PROMPT_LIMITS["findings"]))
-    return "".join(parts)
+        template += "{{findings}}"
+    return prompts.render(template, kind="verdict" if stage in REVIEW_STAGES else "work", task=task, diff=diff,
+                          validation=validation_text, findings=findings, stage=stage, visit=1)
 
 
 def _read(path: Optional[str], limit: int = 512 * 1024) -> str:

@@ -1,6 +1,6 @@
 # P01-S01 — Definition model, JSON loader, and static validation
 
-Status: Done
+Status: Donem
 Depends on: — (P00 Done)
 Architecture: [P01 design contract](../README.md#a-where-definitions-live-and-how-they-are-named), sections A and B
 
