@@ -37,7 +37,7 @@ AS = (os.environ.get("AGENT_STUDIO") or shutil.which("agent-studio")
 if not os.access(AS, os.X_OK):
     sys.exit(f"agent-studio is not installed ({AS}). Run: bash ~/agent-studio-runtime/backend/install.sh")
 LIMIT = 30 * 1024            # agent-studio accepts task text up to 32 KiB
-DIFF_LIMIT, TEST_LIMIT = 20 * 1024, 5 * 1024
+DIFF_LIMIT, TEST_LIMIT = 16 * 1024, 5 * 1024
 
 
 # ---- plumbing ---------------------------------------------------------------------------------------
@@ -121,6 +121,21 @@ def diff_since(base):
     for f in sh("git", "ls-files", "--others", "--exclude-standard").stdout.split():
         d += sh("git", "diff", "--no-index", "--", "/dev/null", f, check=False).stdout
     return d
+
+
+def changes_section(base):
+    """The diff when it fits; otherwise the list of changed files, which the reviewer reads itself (it has the
+    Read tool). Never a cut-off diff: a reviewer shown half the code reports the other half as missing."""
+    diff = diff_since(base)
+    changed = sh("git", "diff", "--name-status", base, check=False).stdout.strip().splitlines()
+    changed += [f"A\t{f}" for f in sh("git", "ls-files", "--others", "--exclude-standard").stdout.split()]
+    listing = "\n".join(changed) or "(no changes)"
+    if len(diff.encode()) <= DIFF_LIMIT:
+        return f"CHANGED FILES since {base[:12]}:\n{listing}\n\nDIFF:\n{diff or '(no changes)'}"
+    return (f"CHANGED FILES since {base[:12]} (A = new, M = modified, D = deleted):\n{listing}\n\n"
+            f"The full diff is {len(diff.encode()) // 1024} KiB, too large to include here. Read every changed "
+            f"file listed above in full before judging; do not report anything as missing without reading the "
+            f"file where it would be.")
 
 
 def run_tests():
@@ -226,10 +241,11 @@ def c_fix(ns):
     s = load(key, {})
     if not s.get("base"):
         sys.exit("No development recorded for this story. Run: team.py dev STORY")
-    findings = "\n".join(f"- {f}" for f in s.get("findings") or []) or "(see the test output)"
+    blockers = [f for f in s.get("findings") or [] if not str(f).upper().startswith("SUGGESTION")]
+    findings = "\n".join(f"- {f}" for f in blockers) or "(see the test output)"
     ok, cmd, out = run_tests()
     st, summary = direct(team()["agents"]["Developer"], "workspace_write",
-                         f"Fix the QA findings for the story in {ns.story}. Change only what the findings need.\n\n"
+                         f"Fix the QA blockers for the story in {ns.story}. Change only what they need; ignore suggestions.\n\n"
                          f"QA FINDINGS:\n{findings}\n\nCURRENT TEST RUN ({cmd}): {'PASS' if ok else 'FAIL'}\n{out}")
     show(f"developer ({st})", summary)
     print("next: team.py qa " + ns.story)
@@ -241,11 +257,10 @@ def c_qa(ns):
     if not s.get("base"):
         sys.exit("No development recorded for this story. Run: team.py dev STORY")
     ok, cmd, out = run_tests()
-    diff = diff_since(s["base"])
     st, summary = direct(team()["agents"]["QA"], "read_only",
-                         f"QA REVIEW of the story in {ns.story}. Read the story. The DIFF is everything changed since "
-                         f"{s['base'][:12]}; VALIDATION is the unit test run.\n\nVALIDATION ({cmd}): "
-                         f"{'PASS' if ok else 'FAIL'}\n{out}\n\nDIFF:\n{clip(diff, DIFF_LIMIT)}")
+                         f"QA REVIEW of the story in {ns.story}. Read the story. VALIDATION is the unit test run "
+                         f"(it ran in the operator's shell, so you do not need to run it).\n\nVALIDATION ({cmd}): "
+                         f"{'PASS' if ok else 'FAIL'}\n{out}\n\n{changes_section(s['base'])}")
     v = verdict(summary) or {}
     passed = ok and v.get("verdict") == "pass"
     save(key, dict(s, findings=v.get("findings") or ([] if ok else ["unit tests fail - see the test output"]),
@@ -264,7 +279,7 @@ def c_final(ns):
                          f"FINAL REVIEW of the story in {ns.story} after QA passed. Read the story.\n\nVALIDATION "
                          f"({cmd}): {'PASS' if ok else 'FAIL'}\n{out}\n\nQA FINDINGS AT PASS:\n"
                          + ("\n".join(f"- {f}" for f in s.get("findings") or []) or "(none)")
-                         + f"\n\nDIFF since {s['base'][:12]}:\n{clip(diff_since(s['base']), DIFF_LIMIT)}")
+                         + f"\n\n{changes_section(s['base'])}")
     v = verdict(summary) or {}
     m = re.search(r"```commit\s*\n(.*?)```", summary, re.S)
     save(key, dict(s, finalPassed=v.get("verdict") == "pass", commitMessage=m.group(1).strip() if m else None,
