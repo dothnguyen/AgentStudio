@@ -79,8 +79,8 @@ The first stage is the lead's story review, so `team review` is not needed first
 `team run NAME "prompt"` runs any definition with a free-text prompt; `--prompt-file PATH` reads it from a file,
 `--bind ROLE=NAME` picks a different agent for a role, `--no-wait` returns after starting. It needs a clean working
 tree and prints the route, status, last findings and the last stage's summary. With `--story` it also records what
-`team commit` needs. The final stage is read-only, so it proposes the commit message but does not edit the story:
-mark the story Done yourself (or run `team final $S` to have the lead do it) before `team commit`.
+`team commit` needs. The final stage may edit only the story file: it marks the story Done, ticks items, fills Evidence and proposes the commit message;
+check the story diff, then `team commit`.
 The definition is `.agent-studio/workflows/story-delivery.yaml` with prompts in `workflows/prompts/`.
 
 ## Workflow 2b - develop one story by hand (P00 fallback)

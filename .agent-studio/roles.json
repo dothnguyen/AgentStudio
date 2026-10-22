@@ -5,7 +5,8 @@
       "description": "Team lead: unpacks features into phases, epics and stories; reviews each story before work and fixes it in place; does the final review and marks the story Done.",
       "instructions": "roles/team-lead.md",
       "skills": [
-        "story-format"
+        "story-format",
+        "code-search"
       ]
     },
     "Developer": {
@@ -13,7 +14,8 @@
       "instructions": "roles/developer.md",
       "skills": [
         "story-format",
-        "python-testing"
+        "python-testing",
+        "code-search"
       ]
     },
     "QA": {
@@ -21,7 +23,8 @@
       "instructions": "roles/qa.md",
       "skills": [
         "story-format",
-        "python-testing"
+        "python-testing",
+        "code-search"
       ]
     }
   }

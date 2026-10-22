@@ -123,6 +123,7 @@ class Argv(unittest.TestCase):
         allowed = r[r.index("--allowedTools") + 1]
         self.assertIn("Bash(git diff:*)", allowed)
         self.assertIn("Bash(python3 -W ignore -m unittest:*)", allowed)
+        self.assertIn("Bash(rg:*)", allowed)
         self.assertNotIn("Bash,", allowed + ",")  # no bare Bash for read_only
         for bad in claude_mod.NEVER:
             if bad != "Bash":

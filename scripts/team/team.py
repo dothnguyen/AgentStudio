@@ -18,6 +18,7 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py check NAME            validate a definition against the saved team (no tokens spent)
     team.py run NAME (PROMPT | --story PATH | --prompt-file PATH) [--bind ROLE=NAME ...] [--no-wait]
                                   run a workflow definition; with --story it also records what `commit` needs
+    team.py index                 build the ctags symbol index agents search (.agent-studio/cache/tags)
     team.py blocked               agents held by a permission denial / unclear restart, and how to free them
     team.py resolve ROLE --action fail|retry|cancel   free that agent
     team.py stop                  stop the team
@@ -475,6 +476,17 @@ def c_check(ns):
         print(f"  warning: {w.get('message')} ({w.get('path')})")
 
 
+def c_index(_):
+    if not shutil.which("ctags"):
+        sys.exit("ctags is not installed. Run: sudo apt install universal-ctags")
+    out = os.path.join(WS, ".agent-studio", "cache")
+    os.makedirs(out, exist_ok=True)
+    sh("ctags", "-R", "--languages=Python,JavaScript,TypeScript,Markdown", "--fields=+nS", "--exclude=.git",
+       "--exclude=node_modules", "--exclude=__pycache__", "--exclude=_to_delete", "-f", os.path.join(out, "tags"), ".")
+    n = sum(1 for _ in open(os.path.join(out, "tags"), encoding="utf-8", errors="replace") if not _.startswith("!_"))
+    print(f"indexed {n} symbols -> .agent-studio/cache/tags (re-run after big changes; agents treat it as a hint)")
+
+
 def c_stop(_):
     cli("team", "stop", "--team", team()["teamId"])
     save("team", None)
@@ -491,6 +503,7 @@ def main():
     rp.add_argument("role")
     rp.add_argument("--action", required=True, choices=["fail", "retry", "cancel"])
     sub.add_parser("workflows")
+    sub.add_parser("index")
     ck = sub.add_parser("check")
     ck.add_argument("name")
     rn = sub.add_parser("run")
@@ -510,7 +523,7 @@ def main():
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
      "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,
-     "run": c_run, "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
+     "run": c_run, "index": c_index, "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
 
 
 if __name__ == "__main__":

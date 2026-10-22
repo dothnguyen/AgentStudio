@@ -9,6 +9,10 @@ from tests.runner_harness import RunnerHarness
 from agent_studio.runner import CANCEL_MARKER, RESUME_ATTEMPT_DIR, RESUME_ATTEMPT_FILES
 
 UNKNOWN = "fake-0123456789ab"
+GOLDEN_DIRECT = (b"===== AGENT STUDIO ROLE: developer =====\n(no role configuration)\n===== END ROLE =====\n"
+                 b"\n===== TASK =====\nsame goal\n===== END TASK =====\n")
+GOLDEN_WORKFLOW = (b"===== AGENT STUDIO ROLE: developer =====\n(no role configuration)\n===== END ROLE =====\n"
+                   b"\nSTAGE PROMPT\nline two\n")
 FAST = {"durationMs": 50, "progressLines": 1}
 
 
@@ -56,8 +60,18 @@ class RunnerResume(unittest.TestCase):
                 self.assertEqual(res["session"], {"mode": session["mode"], "resumeFrom": None})
         self.assertEqual(prompts[0], prompts[1])
         self.assertEqual(prompts[0], prompts[2])
-        self.assertTrue(prompts[0].endswith(b"===== TASK =====\nsame goal\n===== END TASK =====\n"))
-        self.assertIn(b"===== AGENT STUDIO ROLE: developer", prompts[0])
+        self.assertEqual(prompts[0], GOLDEN_DIRECT)
+
+    def test_workflow_prompt_file_bytes_are_unchanged(self):
+        wdir = os.path.join(self.sb.state_dir, "workflows")
+        os.makedirs(wdir, mode=0o700, exist_ok=True)
+        pf = os.path.join(wdir, "stage-prompt.txt")
+        with open(pf, "wb") as f:
+            f.write(b"STAGE PROMPT\nline two\n")
+        for session in (None, {"key": "k", "mode": "fresh", "resumeFrom": None, "persist": False}):
+            asg, res = self.go(session=session, promptFile=pf)
+            self.assertEqual(res["status"], "succeeded")
+            self.assertEqual(self.prompt(asg), GOLDEN_WORKFLOW)
 
     def test_resume_uses_the_short_prompt_and_reports_the_session(self):
         a1, r1 = self.go(session={"key": "story:S1", "mode": "fresh", "persist": True}, goal="first")

@@ -1,6 +1,6 @@
 version: 1
 description: TeamLead refines the story, Developer implements it and runs the tests, QA reviews, TeamLead signs off; failures go back to the Developer.
-maxSteps: 14
+maxSteps: 20
 stages:
   - id: review
     role: TeamLead
@@ -22,7 +22,7 @@ stages:
     next: { pass: final, fail: develop }
   - id: final
     role: TeamLead
-    permission: read_only
-    maxVisits: 2
+    permission: workspace_write
+    maxVisits: 3
     promptFile: workflows/prompts/final-review.md
     next: { pass: $succeed, fail: develop }

@@ -2,10 +2,12 @@
 import copy
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -16,7 +18,6 @@ from agent_studio.providers import base
 from agent_studio.providers.base import (PROVIDER_SESSION_MISSING, SESSION_UNSUPPORTED, Adapter, AssignmentInput,
                                          ParseState)
 from agent_studio.providers.fake import adapter as fake_mod
-from agent_studio.providers.fake.fake_cli import SCENARIOS  # noqa: F401
 
 FIX = os.path.join(helpers.REPO, "tests", "fixtures")
 FAKE = providers.get("fake", allow_test_only=True)
@@ -166,6 +167,24 @@ class FakeSessions(unittest.TestCase):
         with self.assertRaises(AsError):
             FAKE.prepare(inp(options={"toolUses": {"a b": 1}}), self.env)
 
+    def test_fake_failure_has_no_usage(self):
+        _, ev, rc = self.run_fake(options={"scenario": "provider_failure"})
+        st = ParseState()
+        for e in ev:
+            FAKE.parse_line(json.dumps(e).encode(), st)
+        rep = FAKE.finalize(inp(), st, oc(exitCode=rc))
+        self.assertIsNone(rep["usageNormalized"])
+        self.assertIsNone(rep["toolUses"])
+
+    def test_fake_fresh_run_reports_normalized_usage(self):
+        _, ev, rc = self.run_fake(b"hello", persist=False)
+        self.assertEqual(rc, 0)
+        st = ParseState()
+        for e in ev:
+            FAKE.parse_line(json.dumps(e).encode(), st)
+        rep = FAKE.finalize(inp(), st, oc())
+        self.assertEqual(rep["usageNormalized"], {"inputTokens": 5, "cachedInputTokens": 0, "outputTokens": 42})
+
     def test_state_dir_default_for_session_dir(self):
         with mock.patch.object(fake_mod.paths, "ensure_state_dir", return_value="/x/state"):
             prep = FAKE.prepare(inp(), {})
@@ -196,12 +215,25 @@ class Usage(unittest.TestCase):
         self.assertIsNone(CODEX.normalize_usage(None))
         self.assertIsNone(CODEX.normalize_usage({}))
 
-    def test_fake_failure_has_no_usage_and_base_returns_none(self):
-        st = ParseState()
-        FAKE.parse_line(b'{"type": "result", "status": "error", "summary": "x"}', st)
-        rep = FAKE.finalize(inp(), st, oc(exitCode=1))
-        self.assertIsNone(rep["usageNormalized"])
-        self.assertIsNone(rep["toolUses"])
+    def test_codex_fixture_binary_turn_completed_is_normalized(self):
+        with tempfile.TemporaryDirectory() as cwd, tempfile.TemporaryDirectory() as bindir:
+            exe = os.path.join(bindir, "codex")
+            shutil.copy(os.path.join(FIX, "codex", "bin", "codex"), exe)
+            done = subprocess.run([sys.executable, exe, "exec", "--json", "-"], input="hi", cwd=cwd,
+                                  capture_output=True, text=True, timeout=30, check=True)
+        lines = [ln for ln in done.stdout.splitlines() if ln.strip()]
+        completed = [json.loads(ln) for ln in lines if json.loads(ln)["type"] == "turn.completed"]
+        self.assertEqual(len(completed), 1)
+        cached = json.loads(json.dumps(completed[0]))
+        cached["usage"]["cached_input_tokens"] = 1000
+        for events, want in (([completed[0]], {"inputTokens": 1200, "cachedInputTokens": 0, "outputTokens": 12}),
+                             ([cached], {"inputTokens": 200, "cachedInputTokens": 1000, "outputTokens": 12})):
+            st = ParseState()
+            for e in events:
+                CODEX.parse_line(json.dumps(e).encode(), st)
+            self.assertEqual(CODEX.finalize(inp(provider="codex"), st, oc())["usageNormalized"], want)
+
+    def test_base_adapter_returns_no_usage(self):
         self.assertIsNone(Adapter().normalize_usage({"input_tokens": 1}))
 
     def test_refusal_report_has_null_usage_fields(self):
@@ -279,7 +311,6 @@ class FallbackStep(unittest.TestCase):
         self.first = {"status": "failed", "diagnosticCode": PROVIDER_SESSION_MISSING, "evidence": {}}
 
     def call(self, first=None, started=None):
-        import time
         i = inp(session="fake-0123456789ab", prompt=os.path.join(self.rd, "prompt.txt"))
         with mock.patch.object(runner, "_prepare_and_execute", return_value={"status": "succeeded"}) as m:
             out = runner._resume_fallback(first or self.first, FAKE, i, b"FULL", self.session, self.rd,
@@ -295,7 +326,6 @@ class FallbackStep(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(self.rd, "stdout.jsonl")))
 
     def test_no_time_left_keeps_first_report(self):
-        import time
         out, m = self.call(started=time.monotonic() - 100)
         self.assertIs(out, self.first)
         m.assert_not_called()
