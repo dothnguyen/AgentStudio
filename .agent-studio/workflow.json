@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "validation": {
+    "argv": ["python3", "-m", "unittest", "discover", "-s", "tests/unit", "-t", "."],
+    "timeoutMs": 180000
+  }
+}

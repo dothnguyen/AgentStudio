@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "roles": {
+    "TeamLead": {
+      "description": "Team lead: unpacks features into phases, epics and stories; approves stories before work starts; does the final review.",
+      "instructions": "roles/team-lead.md",
+      "skills": ["story-format"]
+    },
+    "Developer": {
+      "description": "Developer: implements one approved story at a time, with tests.",
+      "instructions": "roles/developer.md",
+      "skills": ["story-format", "python-testing"]
+    },
+    "QA": {
+      "description": "QA: checks a story's implementation against its acceptance criteria and the test results, and reports bugs precisely.",
+      "instructions": "roles/qa.md",
+      "skills": ["story-format", "python-testing"]
+    }
+  }
+}

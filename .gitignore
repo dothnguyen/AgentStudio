@@ -11,3 +11,7 @@ __pycache__/
 *.pyc
 boundary-spike-evidence.json
 lifetime-evidence.json
+
+# Agent Studio local leftovers
+_to_delete/
+scripts/windows/live-gate-windows-evidence*.json
