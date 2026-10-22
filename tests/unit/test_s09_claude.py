@@ -40,6 +40,29 @@ def replay(name, **kw):
     return CLAUDE.finalize(inp(**kw), st, oc()), st, shown
 
 
+class FinalText(unittest.TestCase):
+    def test_full_last_message_is_kept_beyond_the_summary_limit(self):
+        st = ParseState()
+        long = "Review.\n" + ("x" * 5000) + '\n{"verdict": "fail", "findings": ["a"]}'
+        for obj in ({"type": "system", "subtype": "init", "session_id": "s"},
+                    {"type": "result", "subtype": "success", "is_error": False, "result": long,
+                     "permission_denials": []}):
+            CLAUDE.parse_line(json.dumps(obj).encode(), st)
+        r = CLAUDE.finalize(inp(), st, oc())
+        self.assertEqual(len(r["summary"]), 2000)
+        self.assertEqual(r["finalText"], long)
+        self.assertTrue(r["finalText"].endswith('"findings": ["a"]}'))
+
+    def test_huge_or_non_ascii_text_is_bounded_for_the_payload_limit(self):
+        from agent_studio.providers.base import bounded_text, FINAL_TEXT_LIMIT
+        for text in ("y" * 100000, "\u6f22" * 30000, "\U0001F600" * 20000):
+            b = bounded_text(text)
+            self.assertLessEqual(len(json.dumps(b)), FINAL_TEXT_LIMIT)
+            self.assertIn("cut by Agent Studio", b)
+        self.assertIsNone(bounded_text(None))
+        self.assertEqual(bounded_text("short"), "short")
+
+
 class Settings(unittest.TestCase):
     def test_levels_and_models(self):
         self.assertEqual(CLAUDE.reasoning_levels(), ("low", "medium", "high", "xhigh", "max"))

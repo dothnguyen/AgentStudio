@@ -18,7 +18,7 @@ Let operators write definitions in YAML without adding a third-party dependency.
    - `#` comments and blank lines.
    Plain scalars resolve as follows: integers `-?[0-9]+` → int, `true` / `false` → bool, `null` / `~` → None, and anything else → string (so `$succeed`, `on`, `yes`, and `no` stay strings).
 2. Rejected, each with a line number: anchors / aliases / tags (`&`, `*`, `!`), multiple documents (`---` after content, `...`), folded scalars `>`, multi-line flow collections, complex keys (`? `), duplicate keys, inconsistent indentation, and a document whose root is not a mapping.
-3. Register `.yaml` / `.yml` in `workflowdef.load`. Parser errors become `WORKFLOW_DEFINITION_INVALID` errors with `line`. Semantic errors from `parse_obj` carry the line of the offending key where the parser can track it (the parser records a line for each mapping key).
+3. Replace S01's "YAML definitions are supported from P01-S02" error for `.yaml` / `.yml` in `workflowdef.load` (lookup and ambiguity already cover all three extensions since S01) with this parser. Parser errors become `WORKFLOW_DEFINITION_INVALID` errors with `line`. Semantic errors from `parse_obj` carry the line of the offending key where the parser can track it (the parser records a line for each mapping key).
 4. Document the subset in a short `backend/agent_studio/workflows/README.md` section (what is accepted, what is refused, why `next` and not `on`).
 
 ## Done when

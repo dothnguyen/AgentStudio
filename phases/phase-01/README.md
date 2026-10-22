@@ -72,10 +72,11 @@ Every P01 story targets this section as its "Architecture". It extends the [P00 
 
 ### A. Where definitions live and how they are named
 
-- Definitions live in `<workspace>/.agent-studio/workflows/<name>.json`, `<name>.yaml`, or `<name>.yml`. `<name>` matches `[a-z0-9][a-z0-9-]{0,63}`, and the file stem **is** the name. Two files with the same stem → `WORKFLOW_DEFINITION_AMBIGUOUS`.
+- Definitions live in `<workspace>/.agent-studio/workflows/<name>.json`, `<name>.yaml`, or `<name>.yml`. `<name>` matches `[a-z0-9][a-z0-9-]{0,63}`, and the file stem **is** the name. Lookup always checks all three extensions; two files with the same stem → `WORKFLOW_DEFINITION_AMBIGUOUS` (from S01; YAML parsing itself arrives in S02).
 - One built-in definition, `developer-reviewer`, ships as `backend/agent_studio/workflows/developer-reviewer.json`. A workspace file with that name → `WORKFLOW_DEFINITION_INVALID` (the name is reserved).
 - Files are read once at `workflow.start`. The parsed definition is frozen into the run (canonical JSON plus the SHA-256 of the source bytes), so editing a file never changes a run already started. This is the same rule P00 §F applies to roles.
-- Limits: 64 KiB per definition file, 20 stages, 32 KiB per prompt template. Path rules match roles: `promptFile` paths stay inside `.agent-studio` (no `..`, no absolute paths, no symlink escapes).
+- Limits: 64 KiB per definition file, 20 stages, 32 KiB per prompt template. **`promptFile` paths are relative to `<workspace>/.agent-studio/`** (the same base as `roles.json`), so `promptFile: prompts/develop.md` is `.agent-studio/prompts/develop.md`; for a built-in definition the base is the built-in folder (`backend/agent_studio/workflows/`, passed to the loader as `builtin_dir`). Path rules match roles: the file stays inside its base (no `..`, no absolute paths, no symlink escapes).
+- **Frozen form.** What a run stores is not the source file but canonical JSON (sorted keys, defaults filled in): each agent stage's template text inlined as `prompt` with its origin in `promptSource` (`"inline"` or the `promptFile` path; `promptFile` itself never appears), plus top-level `name`, `sourceSha256` (SHA-256 of the definition file's bytes) and `warnings`. The source form and the frozen form have separate readers (`parse_obj` and `from_json`); each rejects the other's extra keys, and the frozen form round-trips byte for byte.
 - Modules: `backend/agent_studio/workflowdef.py` (model, loading, validation), `yamlsubset.py` (YAML), `prompts.py` (rendering). `workflow.py` remains the engine.
 
 ### B. Definition format (version 1)
@@ -124,7 +125,12 @@ The loader (S01) checks all of these rules statically:
 - A target is a stage `id`, `$succeed`, or `$fail`. Every stage must be reachable from the first, and `$succeed` must be reachable.
 - `passRequires` is allowed only on verdict stages and lists validation stage ids.
 - The key is `next`, not `on`, because YAML 1.1 parsers read `on:` as boolean `true`.
-- Unknown keys are errors, not warnings. Each error carries the file, the JSON path (`stages[2].next.fail`) and, for YAML, the line.
+- Unknown keys are errors, not warnings. All errors in a file are reported together as `WORKFLOW_DEFINITION_INVALID` with `data.errors`, each `{file, path, line, message}`:
+  - `file`: the definition file relative to the workspace (or `builtin:<name>.json`);
+  - `path`: the JSON path of the offending value (`stages[2].next.fail`, `stages[0].promptFile`), or `$` for whole-file errors (size limit, invalid UTF-8, syntax error, duplicate key, top level not an object);
+  - `line`: the source line for YAML (S02) and for JSON syntax errors, otherwise `null`;
+  - `message`: the rule broken; for a duplicate key it names the key and its object (`duplicate key "next" in stages[1]`).
+  Warnings use the same shape in `data.warnings`.
 - Warnings (non-fatal): a stage that can be re-entered but has `maxVisits: 1`, and a `read_only` stage whose prompt never mentions `{{diff}}` while some `workspace_write` stage precedes it.
 
 ### C. Prompts

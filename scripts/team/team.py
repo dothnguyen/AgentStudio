@@ -101,7 +101,8 @@ def direct(agent, policy, text):
             "--text-file", "-", "--wait", stdin=text)
     a = d["assignments"][-1]
     res = a.get("result") or {}
-    return a["status"], res.get("summary") or res.get("diagnosticCode") or ""
+    # finalText is the agent's whole last message (summary is cut at 2000 characters)
+    return a["status"], res.get("finalText") or res.get("summary") or res.get("diagnosticCode") or ""
 
 
 def verdict(text):

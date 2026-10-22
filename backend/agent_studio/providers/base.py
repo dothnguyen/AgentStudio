@@ -110,6 +110,27 @@ def extract_verdict(text: Optional[str]):
     return None
 
 
+FINAL_TEXT_LIMIT = 24 * 1024  # bytes of escaped JSON, so the report stays inside the 64 KiB event payload limit
+
+
+def bounded_text(text: Optional[str], limit: int = FINAL_TEXT_LIMIT) -> Optional[str]:
+    """The agent's last message, cut (with a marker) so its ASCII-escaped JSON form fits in `limit` bytes."""
+    if not text:
+        return None
+    if len(json.dumps(text)) <= limit:
+        return text
+    marker = "\n[... cut by Agent Studio; the full text is in the run's output file]"
+    room = limit - len(json.dumps(marker)) + 2  # the two quotes are counted once
+    lo, hi = 0, len(text)
+    while lo < hi:  # longest prefix whose escaped form fits, leaving room for the marker
+        mid = (lo + hi + 1) // 2
+        if len(json.dumps(text[:mid])) <= room:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo] + marker
+
+
 def valid_verdict(v) -> bool:
     return (isinstance(v, dict) and v.get("verdict") in ("pass", "fail") and isinstance(v.get("findings", []), list)
             and all(isinstance(f, str) for f in v.get("findings", [])))
@@ -229,7 +250,8 @@ class Adapter:
         return {
             "protocol": REPORT_PROTOCOL, "assignmentId": inp.assignment_id, "agentId": inp.agent_id,
             "providerId": inp.provider_id, "attempt": inp.attempt, "policy": inp.policy, "status": status,
-            "exitCode": oc.get("exitCode"), "summary": str(summary)[:2000], "artifacts": [], "attention": attention,
+            "exitCode": oc.get("exitCode"), "summary": str(summary)[:2000], "finalText": bounded_text(st.final_text),
+            "artifacts": [], "attention": attention,
             "diagnosticCode": code, "providerSessionId": st.session_id, "usage": st.usage,
             "verdict": verdict if verdict is None or valid_verdict(verdict) else {"malformed": True},
             "evidence": {"outputPath": oc.get("outputPath"), "stderrPath": oc.get("stderrPath"),
