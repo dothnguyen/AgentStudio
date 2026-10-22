@@ -128,7 +128,7 @@ The loader (S01) checks all of these rules statically:
 - Unknown keys are errors, not warnings. All errors in a file are reported together as `WORKFLOW_DEFINITION_INVALID` with `data.errors`, each `{file, path, line, message}`:
   - `file`: the definition file relative to the workspace (or `builtin:<name>.json`);
   - `path`: the JSON path of the offending value (`stages[2].next.fail`, `stages[0].promptFile`), or `$` for whole-file errors (size limit, invalid UTF-8, syntax error, duplicate key, top level not an object);
-  - `line`: the source line for YAML (S02) and for JSON syntax errors, otherwise `null`;
+  - `line`: the 1-based source line for YAML (S02) and for JSON syntax errors, otherwise `null`. For YAML it is the line of the offending key or sequence item, or of the nearest enclosing one that exists when the value is missing (line 1 for a missing top-level key); YAML syntax errors (`path: "$"`) carry the parser's line, and size / UTF-8 errors have `null`;
   - `message`: the rule broken; for a duplicate key it names the key and its object (`duplicate key "next" in stages[1]`).
   Warnings use the same shape in `data.warnings`.
 - Warnings (non-fatal): a stage that can be re-entered but has `maxVisits: 1`, and a `read_only` stage whose prompt never mentions `{{diff}}` while some `workspace_write` stage precedes it.
