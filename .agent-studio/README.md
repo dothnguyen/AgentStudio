@@ -9,8 +9,13 @@ Everything below runs **inside WSL** (Ubuntu-24.04). `team.py` is `scripts/team/
 
 ## What P00 can and cannot do (so the steps make sense)
 
-- Agents never run commands (no git, no tests). The workflow runs the unit tests itself; `team.py` runs them for
-  the later QA rounds and passes the output to QA. **You** commit (with the lead's message).
+- Command access is opt-in per workspace: `.agent-studio/permissions.json` (`{"version":1,"claude":{"commands":true}}`,
+  present in this project). With it, Claude Developers can run any command in the workspace (tests, git), and QA and
+  the lead get read-only commands (git status/diff/log/show/ls-files/rev-parse, ls, cat, the unit tests). Without it
+  agents never run commands, and the built-in workflow's test step and `team.py` run the tests for them. **You**
+  commit (with the lead's message); the story-delivery prompts forbid history-changing git.
+- Turning it on drops Claude's `--restricted` flag, so file tools are no longer confined to the workspace and
+  project settings files are honoured. Only enable it for workspaces you trust. Other providers are unchanged.
 - Each task is one-shot: an agent remembers nothing between tasks. Files (stories, plans) are the memory.
 - The built-in workflow is fixed: dev -> unit tests -> QA -> at most one repair round. Further dev/QA rounds and the
   lead's reviews are direct tasks that `team.py` sends for you.

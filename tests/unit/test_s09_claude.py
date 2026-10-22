@@ -109,6 +109,35 @@ class Argv(unittest.TestCase):
         self.assertEqual(sorted(tools), sorted(["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit"]))
         self.assertNotIn("Bash", tools)
 
+    def test_commands_opt_in_adds_bash_and_drops_restricted(self):
+        import tempfile, json as _j
+        ws = tempfile.mkdtemp()
+        os.makedirs(os.path.join(ws, ".agent-studio"))
+        self.assertNotIn("Bash", self.argv(ws=ws, policy="workspace_write")[self.argv(ws=ws).index("--tools") + 1])
+        with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
+            _j.dump({"version": 1, "claude": {"commands": True}}, f)
+        w = self.argv(ws=ws, policy="workspace_write")
+        self.assertNotIn("--restricted", w)
+        self.assertEqual(w[w.index("--allowedTools") + 1], "Read,Grep,Glob,Bash")
+        r = self.argv(ws=ws)
+        allowed = r[r.index("--allowedTools") + 1]
+        self.assertIn("Bash(git diff:*)", allowed)
+        self.assertNotIn("Bash,", allowed + ",")  # no bare Bash for read_only
+        for bad in claude_mod.NEVER:
+            if bad != "Bash":
+                self.assertNotIn(bad, w + r)
+        shutil.rmtree(ws)
+
+    def test_bad_permissions_file_means_off(self):
+        import tempfile
+        ws = tempfile.mkdtemp()
+        os.makedirs(os.path.join(ws, ".agent-studio"))
+        for text in ("not json", '{"version": 2, "claude": {"commands": true}}', '{"version":1,"claude":{"commands":"yes"}}'):
+            with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
+                f.write(text)
+            self.assertFalse(claude_mod.commands_enabled(ws))
+        shutil.rmtree(ws)
+
     def test_never_bypasses(self):
         for policy in ("read_only", "workspace_write"):
             for bad in claude_mod.NEVER:

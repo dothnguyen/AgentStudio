@@ -33,6 +33,28 @@ POLICY_FLAGS = {
     "workspace_write": ["--permission-mode", "acceptEdits", "--tools", READ_TOOLS + ",Edit,Write,NotebookEdit",
                         "--allowedTools", READ_TOOLS],
 }
+# Opt-in command access (P01-S09b): `.agent-studio/permissions.json` {"version": 1, "claude": {"commands": true}}.
+# Without it nothing changes. With it `--restricted` is dropped (it removes every code-running tool) and Bash is
+# added: any command for workspace_write, a short read-only allowlist for read_only.
+READ_COMMANDS = ["git status", "git diff", "git log", "git show", "git ls-files", "git rev-parse", "ls", "cat",
+                 "python3 -m unittest"]
+COMMAND_FLAGS = {
+    "read_only": ["--permission-mode", "dontAsk", "--tools", READ_TOOLS + ",Bash", "--allowedTools",
+                  ",".join([READ_TOOLS] + [f"Bash({c}:*)" for c in READ_COMMANDS])],
+    "workspace_write": ["--permission-mode", "acceptEdits", "--tools", READ_TOOLS + ",Edit,Write,NotebookEdit,Bash",
+                        "--allowedTools", READ_TOOLS + ",Bash"],
+}
+
+
+def commands_enabled(workspace: str) -> bool:
+    try:
+        with open(os.path.join(workspace, ".agent-studio", "permissions.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("version") == 1 and (cfg.get("claude") or {}).get("commands") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 ENV = BASE_ENV + ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL",
                   "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
                   "AWS_REGION", "AWS_PROFILE", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION",
@@ -132,8 +154,12 @@ class ClaudeAdapter(Adapter):
         if not exe:
             raise AsError("PROVIDER_UNAVAILABLE", "claude was not found on the login PATH.")
         self.validate_settings(inp.model, inp.reasoning)
-        argv = [exe] + COMMON + POLICY_FLAGS[inp.policy]
-        if any(a in NEVER for a in argv):
+        if commands_enabled(inp.workspace):
+            argv = [exe] + [a for a in COMMON if a != "--restricted"] + COMMAND_FLAGS[inp.policy]
+            banned = [a for a in NEVER if a != "Bash"]
+        else:
+            argv, banned = [exe] + COMMON + POLICY_FLAGS[inp.policy], NEVER
+        if any(a in banned for a in argv):
             raise AsError("BAD_ADAPTER", "refusing a permission-bypass flag or a code-running tool")
         if inp.model:
             argv += ["--model", inp.model]

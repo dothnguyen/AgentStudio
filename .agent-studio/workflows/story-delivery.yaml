@@ -1,22 +1,17 @@
 version: 1
-description: Developer implements a story, unit tests run, QA reviews, TeamLead signs off; failures go back to the Developer.
-maxSteps: 16
+description: Developer implements a story and runs the tests, QA reviews, TeamLead signs off; failures go back to the Developer.
+maxSteps: 12
 stages:
   - id: develop
     role: Developer
     permission: workspace_write
     maxVisits: 4
     promptFile: workflows/prompts/develop.md
-    next: { done: tests }
-  - id: tests
-    type: validation
-    maxVisits: 4
-    next: { pass: qa, fail: qa }
+    next: { done: qa }
   - id: qa
     role: QA
     permission: read_only
     maxVisits: 4
-    passRequires: [tests]
     promptFile: workflows/prompts/qa.md
     next: { pass: final, fail: develop }
   - id: final

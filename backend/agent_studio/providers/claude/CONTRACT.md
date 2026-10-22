@@ -32,8 +32,11 @@ What the flags do (observed with the real CLI):
 - `--permission-prompts none`: nothing ever waits for an answer; a would-be prompt is denied.
 - `--strict-mcp-config` with no `--mcp-config`: no MCP servers, so no extra tools.
 
-Consequence: `workspace_write` agents can edit files but cannot run commands (no Bash); validation runs separately
-(S06). Allowing commands needs its own verified mapping later.
+Consequence: by default `workspace_write` agents can edit files but cannot run commands (no Bash); validation runs
+separately (S06). Opt-in: a workspace file `.agent-studio/permissions.json` with `{"version": 1, "claude": {"commands":
+true}}` drops `--restricted` and adds `Bash` (any command for `workspace_write`; `read_only` only the
+`Bash(<cmd>:*)` allowlist `READ_COMMANDS`). `--restricted` also confined file tools and ignored settings files, so
+enabling this widens both; the bypass flags stay forbidden. Verify the allowlist syntax with the installed CLI.
 
 ## Output → normalized report
 
