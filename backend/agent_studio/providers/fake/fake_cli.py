@@ -26,6 +26,7 @@ def main():
     p.add_argument("--duration-ms", type=int, default=1000)
     p.add_argument("--lines", type=int, default=3)
     p.add_argument("--write")
+    p.add_argument("--final-text")
     p.add_argument("--model")
     p.add_argument("--reasoning", choices=("low", "medium", "high"))
     a = p.parse_args()
@@ -74,6 +75,8 @@ def main():
         return 1
     result = {"type": "result", "status": "success", "summary": f"fake {s} done", "promptSha256": sha,
               "usage": {"inputTokens": len(prompt), "outputTokens": 42}}
+    if a.final_text:
+        result["summary"] = a.final_text
     if s == "verdict_pass":
         result["verdict"] = {"verdict": "pass", "findings": []}
     elif s == "verdict_fail":

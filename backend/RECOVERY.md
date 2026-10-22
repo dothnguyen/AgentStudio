@@ -33,3 +33,24 @@ every decision below is also an event in `agent-studio events`.
 Retries create a **new** assignment (new ID, attempt + 1); the old one is closed as
 `failed / SUPERSEDED_BY_RETRY`. A workflow stage keeps its role's policy (developer `workspace_write`, reviewer
 `read_only`); a different policy is refused there.
+
+## Workflow runs started from a definition (P01)
+
+Every workflow run executes a frozen definition. `agent-studio workflow show --workflow <id>` shows the route it took
+(`workflow_run.routed` events: `fromStage → toStage` with the outcome and the assignment that caused it), the stage
+attempts with their `visit`, and `stepCount`. A restart at any moment gives exactly one next assignment and the same
+routed chain as an uninterrupted run: routing and dispatch commit in one transaction, and a validator started by a
+transaction that never committed is stopped (by its recorded identity) before the retried stage starts a new one.
+
+| You see | Meaning | Command |
+|---|---|---|
+| run `paused`, code `MALFORMED_VERDICT` on a QA / lead stage | the stage finished without a valid verdict line | `assignment resolve --assignment <that stage's assignment> --action retry`. The stage runs again with the same prompt and the **same visit**: it uses no `maxVisits` and no `maxSteps` |
+| run `paused`, code `TIMEOUT`, `PERMISSION_DENIED`, `PROVIDER_ERROR` | as for direct tasks | same command; `--action fail` ends the run `failed`, `--action cancel` ends it `cancelled` |
+| run `paused`, code `VALIDATION_ERROR` / `VALIDATION_LOST` | the test command could not run, or its process vanished | `workflow cancel --workflow <id>`, fix `.agent-studio/workflow.json`, start again (validation stages have no assignment to resolve) |
+| run `failed`, reason `qa visit limit 3 reached` / `step limit 16 reached` | a loop used up its bound | read the route and the last finding; fix the cause and start a new run |
+| run `failed`, reason `workflow deadline reached` | `workflowDeadlineMs` passed; the active stage was cancelled | start again with a smaller task or a longer deadline |
+| run `paused`, code `LEGACY_WORKFLOW_RUN` | the run was started by Agent Studio before the upgrade | `workflow cancel --workflow <id>`. Resolve is refused for it |
+| `PROCESS_STILL_RUNNING` from resolve | the stage's runner is still alive | `assignment cancel --assignment <id>`, then resolve |
+
+`workflow cancel` works in every phase: an active agent stage is cancelled, a running validator is killed by its
+verified identity, and a paused run is ended and its agents freed.

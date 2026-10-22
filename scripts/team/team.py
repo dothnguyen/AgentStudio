@@ -14,6 +14,10 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py qa STORY              you run the unit tests here; QA reviews diff + results
     team.py final STORY           team lead final review + proposed commit message
     team.py commit STORY          commit with the lead's message (asks first)
+    team.py workflows             workflow definitions available here (built-in and .agent-studio/workflows)
+    team.py check NAME            validate a definition against the saved team (no tokens spent)
+    team.py run NAME (PROMPT | --story PATH | --prompt-file PATH) [--bind ROLE=NAME ...] [--no-wait]
+                                  run a workflow definition; with --story it also records what `commit` needs
     team.py blocked               agents held by a permission denial / unclear restart, and how to free them
     team.py resolve ROLE --action fail|retry|cancel   free that agent
     team.py stop                  stop the team
@@ -373,6 +377,104 @@ def c_resolve(ns):
         print(f"{ns.role}: assignment {a['id'][:8]} resolved with {ns.action}.")
 
 
+def bindings_for(binds):
+    """--bind ROLE=NAME (agent display name or role) -> {role: agentId} from the saved team."""
+    agents = team()["agents"].values()
+    out = {}
+    for item in binds or []:
+        role, sep, who = item.partition("=")
+        if not sep or not role.strip() or not who.strip():
+            sys.exit(f"--bind expects ROLE=AGENT_NAME, got {item!r}")
+        match = [a for a in agents if who.strip().lower() in (str(a.get("name")).lower(), a["role"].lower())]
+        if len(match) != 1:
+            sys.exit(f"--bind {item}: no single agent named {who!r} in the saved team")
+        out[role.strip()] = match[0]["agentId"]
+    return out
+
+
+def run_prompt(ns):
+    if ns.story:
+        story_key(ns.story)
+        return (f"Implement the story in {ns.story}. Read it first, follow its 'Implement in this order' steps, and "
+                f"make every 'Done when' item true. Add unit tests in tests/unit for the new behaviour. Do not mark "
+                f"the story Done and do not edit its Status line; the team lead does that after review.")
+    if ns.prompt_file:
+        return open(os.path.join(WS, ns.prompt_file) if not os.path.isabs(ns.prompt_file) else ns.prompt_file,
+                    encoding="utf-8").read()
+    if ns.prompt:
+        return ns.prompt
+    sys.exit("run needs a PROMPT, --story PATH or --prompt-file PATH")
+
+
+def run_args(ns, text):
+    t = team()
+    args = ["workflow", "start", "--team", t["teamId"], "--definition", ns.name, "--text-file", "-"]
+    for role, agent in bindings_for(ns.bind).items():
+        args += ["--bind", f"{role}={agent}"]
+    return args + ([] if ns.no_wait else ["--wait"])
+
+
+def summarize(d):
+    """(route, status, last findings, last stage summary, commit message) of a finished workflow detail."""
+    wf = d["workflowRun"]
+    asg = {a["id"]: a for a in d.get("assignments", [])}
+    findings, last, commit = [], "", None
+    for sa in d.get("stageAttempts", []):
+        if sa.get("verdict"):
+            findings = (sa["verdict"] or {}).get("findings") or []
+        a = asg.get(sa.get("assignmentId"))
+        if a:
+            res = a.get("result") or {}
+            last = res.get("finalText") or res.get("summary") or ""
+            m = re.search(r"```commit\s*\n(.*?)```", last, re.S)
+            commit = m.group(1).strip() if m and sa.get("outcome") == "verdict_pass" else None
+    return d.get("route") or "", wf["status"], findings, last, commit
+
+
+def c_run(ns):
+    text = run_prompt(ns)
+    if sh("git", "status", "--porcelain").stdout.strip():
+        sys.exit("The workspace has uncommitted changes; commit or stash them first (the workflow needs a clean start).")
+    base = sh("git", "rev-parse", "HEAD").stdout.strip()
+    print(f"--> workflow {ns.name}", flush=True)
+    d = cli(*run_args(ns, text), stdin=text)
+    if ns.no_wait:
+        print(f"started workflow {d['workflowRunId']}; follow it with: agent-studio workflow show --workflow "
+              f"{d['workflowRunId']} --pretty")
+        return
+    route, status, findings, last, commit = summarize(d)
+    print(f"route: {route}\nstatus: {status}")
+    if findings:
+        show("last findings", "\n".join(f"- {f}" for f in findings))
+    show("last stage summary", last or "(none)")
+    if ns.story:
+        key = story_key(ns.story)
+        save(key, dict(load(key, {}), story=ns.story, base=base, workflow=d["workflowRun"]["id"], findings=findings,
+                       qaPassed=status == "succeeded", finalPassed=status == "succeeded" and bool(commit),
+                       commitMessage=commit))
+        if status == "succeeded" and commit:
+            print("Approved - next: team.py commit " + ns.story)
+        elif status != "succeeded":
+            print("Not finished - fix and run again, or loop by hand with team.py fix / qa / final.")
+
+
+def c_workflows(_):
+    d = cli("workflow", "list", "--team", team()["teamId"])
+    for x in d["definitions"]:
+        mark = "built-in" if x.get("builtin") else "project "
+        bad = f"  INVALID ({len(x['errors'])} error(s))" if x.get("errors") else ""
+        print(f"  {x['name']:24} {mark}  {x.get('description') or ''}{bad}")
+
+
+def c_check(ns):
+    d = cli("workflow", "validate", "--team", team()["teamId"], "--definition", ns.name)
+    print(f"{d['definition']}: OK  stages: {' -> '.join(s['id'] for s in d['stages'])}")
+    for role, a in d["bindings"].items():
+        print(f"  {role:10} -> {a.get('name') or a['agentId']}")
+    for w in d.get("warnings") or []:
+        print(f"  warning: {w.get('message')} ({w.get('path')})")
+
+
 def c_stop(_):
     cli("team", "stop", "--team", team()["teamId"])
     save("team", None)
@@ -388,6 +490,16 @@ def main():
     rp = sub.add_parser("resolve")
     rp.add_argument("role")
     rp.add_argument("--action", required=True, choices=["fail", "retry", "cancel"])
+    sub.add_parser("workflows")
+    ck = sub.add_parser("check")
+    ck.add_argument("name")
+    rn = sub.add_parser("run")
+    rn.add_argument("name")
+    rn.add_argument("prompt", nargs="?")
+    rn.add_argument("--story")
+    rn.add_argument("--prompt-file")
+    rn.add_argument("--bind", action="append", default=[])
+    rn.add_argument("--no-wait", action="store_true")
     u = sub.add_parser("unpack")
     u.add_argument("brief")
     u.add_argument("--out", required=True)
@@ -397,7 +509,8 @@ def main():
         p.add_argument("--force", action="store_true")
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
-     "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit}[ns.cmd](ns)
+     "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,
+     "run": c_run, "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ Read the [phase overview and design contract](../README.md), [PRD.md](../../../P
 | [S04](./P01-S04-schema-binding-and-start.md) | Schema rebuild, role binding, frozen definition, first-stage dispatch | S01, S03 | To Do |
 | [S05](./P01-S05-routing-and-bounds.md) | Agent-stage routing, bounds, diffs, `routed` events | S04 | Done |
 | [S06](./P01-S06-validation-stages-and-builtin.md) | Validation stages, `passRequires`, built-in `developer-reviewer`, P00 compatibility | S05 | Done |
-| [S07](./P01-S07-recovery-resolve-cancel.md) | Restart, resolve, cancel, deadlines for definition runs | S06 | To Do |
-| [S08](./P01-S08-workflow-commands.md) | `workflow list / validate / start --definition / show` over CLI and `serve` | S02, S06 | To Do |
-| [S09](./P01-S09-project-workflow-and-team-run.md) | `story-delivery.yaml` for this project and `team.py run` | S07, S08 | To Do |
+| [S07](./P01-S07-recovery-resolve-cancel.md) | Restart, resolve, cancel, deadlines for definition runs | S06 | Done |
+| [S08](./P01-S08-workflow-commands.md) | `workflow list / validate / start --definition / show` over CLI and `serve` | S02, S06 | Done |
+| [S09](./P01-S09-project-workflow-and-team-run.md) | `story-delivery.yaml` for this project and `team.py run` | S07, S08 | Done |
 | [S10](./P01-S10-live-gate.md) | Real three-role definition run | S01–S09 | To Do |
 | [S11](./P01-S11-adapter-session-contract.md) | Adapter session contract, fake resume, resume prompt and fallback, normalized usage | — | To Do |
 | [S12](./P01-S12-session-store-and-decision.md) | `agent_sessions`, `task.direct` `sessionKey`, decision at assignment creation, pointer advance | S11 | To Do |

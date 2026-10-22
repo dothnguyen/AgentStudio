@@ -8,7 +8,7 @@ import traceback
 
 import copy
 
-from . import PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tmuxctl
+from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tmuxctl
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -76,6 +76,9 @@ def _validate_fake_options(opts):
     write = req_text(opts, "writeFile", 200, required=False)
     if write:
         out["writeFile"] = write
+    final_text = req_text(opts, "finalText", 1500, required=False)
+    if final_text:
+        out["finalText"] = final_text
     return out
 
 
@@ -182,6 +185,40 @@ def _workflow_show(args, req):
         conn.close()
 
 
+def _team_row(conn, team_id):
+    row = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,)).fetchone()
+    if row is None:
+        raise AsError("NOT_FOUND", f"Team {team_id} does not exist.")
+    return dict(row)
+
+
+def _workflow_list(args, req):
+    team_id = validate_uuid(args.get("teamId"), "teamId")
+    conn = _reader()
+    try:
+        ws = _team_row(conn, team_id)["workspace"]
+    finally:
+        conn.close()
+    return {"teamId": team_id, "workspace": ws, "definitions": workflowdef.list_definitions(ws, workflow.BUILTIN_DIR)}
+
+
+def _workflow_validate(args, req):
+    """Load the definition and bind its roles exactly as workflow.start would, writing nothing."""
+    parsed = _validate_definition_start({**args, "text": "x"})
+    conn = _reader()
+    try:
+        team = _team_row(conn, parsed["teamId"])
+        definition = workflowdef.load(team["workspace"], parsed["definition"], workflow.BUILTIN_DIR)
+        bound = workflow.bind_roles(workflow.ReadTx(conn), team, definition, parsed.get("bindings") or {},
+                                    {"debug": False}, check_providers=False)
+    finally:
+        conn.close()
+    return {"ok": True, "definition": definition.name, "definitionSha256": definition.source_sha256,
+            "stages": [{"id": st.id, "role": st.role, "kind": st.kind} for st in definition.stages],
+            "bindings": {role: {"agentId": a["id"], "name": a.get("name")} for role, a in bound.items()},
+            "warnings": json.loads(json.dumps(list(definition.warnings), default=dict))}
+
+
 def _validate_resolve(args):
     action = args.get("action")
     if action not in ("retry", "fail", "cancel"):
@@ -284,6 +321,8 @@ COMMANDS = {
     "workflow.start": _inbox("workflow.start", _validate_workflow_start),
     "workflow.cancel": _inbox("workflow.cancel", _validate_workflow_id),
     "workflow.show": _workflow_show,
+    "workflow.list": _workflow_list,
+    "workflow.validate": _workflow_validate,
 }
 
 

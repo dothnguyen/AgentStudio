@@ -63,6 +63,11 @@ class FakeAdapter(Adapter):
             if not isinstance(write, str) or not SAFE_REL.match(write):
                 raise AsError("BAD_REQUEST", "fake writeFile must be a relative path inside the workspace.")
             argv += ["--write", write]
+        final_text = o.get("finalText")
+        if final_text is not None:
+            if not isinstance(final_text, str) or not 0 < len(final_text) <= 1500:
+                raise AsError("BAD_REQUEST", "fake finalText must be a string of 1..1500 characters.")
+            argv += ["--final-text", final_text]
         return Prepared(argv=argv, env_allowlist=BASE_ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
 
     def parse_line(self, line: bytes, state: ParseState):

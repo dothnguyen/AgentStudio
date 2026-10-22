@@ -1,6 +1,6 @@
 # P01-S09 — This project's `story-delivery` workflow and `team.py run`
 
-Status: To Do
+Status: Done (2026-10-22)
 Depends on: P01-S07, P01-S08
 Architecture: [P01 design contract](../README.md#b-definition-format-version-1), section B; [`.agent-studio/README.md`](../../../.agent-studio/README.md)
 
@@ -17,12 +17,17 @@ Use the feature on this project. Write the workflow that `team.py dev / fix / qa
 
 ## Done when
 
-- [ ] `agent-studio workflow validate --definition story-delivery --team <project team>` reports no errors and binds lead / dev / qa.
-- [ ] A fake-adapter integration test runs `story-delivery.yaml` (copied into a fixture workspace) through qa fail → develop → qa pass → final pass, and the commit block from the final summary is saved.
-- [ ] `team.py run` unit tests (CLI calls stubbed) cover argument building, `--bind` name → ID mapping, a dirty-tree refusal, and commit-message capture.
-- [ ] `.agent-studio/README.md` describes the new flow, and every command in it exists.
-- [ ] Tests: `tests/unit/test_p01_s09_team_run.py` and `tests/integration/test_p01_s09_story_delivery.py`. The full suite stays green. (Real runs belong to S10. Per the P00 rules, no live provider runs against this checkout.)
+- [x] `agent-studio workflow validate --definition story-delivery --team <project team>` reports no errors and binds lead / dev / qa.
+- [x] A fake-adapter integration test runs `story-delivery.yaml` (copied into a fixture workspace) through qa fail → develop → qa pass → final pass, and the commit block from the final summary is saved.
+- [x] `team.py run` unit tests (CLI calls stubbed) cover argument building, `--bind` name → ID mapping, a dirty-tree refusal, and commit-message capture.
+- [x] `.agent-studio/README.md` describes the new flow, and every command in it exists.
+- [x] Tests: `tests/unit/test_p01_s09_team_run.py` and `tests/integration/test_p01_s09_story_delivery.py`. The full suite stays green. (Real runs belong to S10. Per the P00 rules, no live provider runs against this checkout.)
 
 ## Evidence
 
-(filled in when the story is done)
+Implemented 2026-10-22:
+- `.agent-studio/workflows/story-delivery.yaml` + `workflows/prompts/{develop,qa,final-review}.md` (prompt files resolve from `.agent-studio/`, so the YAML says `workflows/prompts/...`); maxSteps 16; loads with no errors or warnings.
+- `scripts/team/team.py`: `run`, `workflows`, `check` (docstring updated). `final` is read-only per the story, so it proposes the commit block; marking the story Done stays with `team final` or the operator (documented in the README).
+- Fake provider gained a debug-only `finalText` option (adapter, fake_cli, dispatch validation) so tests can emit a commit block.
+- Tests: `tests/unit/test_p01_s09_team_run.py` (6), `tests/integration/test_p01_s09_story_delivery.py` (3: validate binds three roles; qa fail -> develop -> qa pass -> final pass route; commit block captured). Unit suite green.
+- Not run: live providers (S10).

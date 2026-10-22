@@ -20,7 +20,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import gitws, procid, prompts, tasks, validation, workflowdef
+from . import crashpoints, gitws, procid, prompts, tasks, validation, workflowdef
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -96,9 +96,25 @@ def frozen_definition(wf: dict) -> "workflowdef.Definition":
     return workflowdef.from_json(json.loads(wf["definition_json"]))
 
 
-def bind_roles(tx: Tx, team: dict, definition: "workflowdef.Definition", overrides: dict, ctx: dict) -> dict:
+class ReadTx:
+    """The two read methods bind_roles needs, over a reader connection (workflow.validate binds without writing)."""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def get(self, entity: str, entity_id: str) -> dict:
+        from . import schema
+        row = self.conn.execute(f"SELECT * FROM {schema.ENTITIES[entity].table} WHERE id = ?", (entity_id,)).fetchone()
+        if row is None:
+            raise AsError(NOT_FOUND, f"{entity} {entity_id} does not exist.")
+        return dict(row)
+
+
+def bind_roles(tx: Tx, team: dict, definition: "workflowdef.Definition", overrides: dict, ctx: dict,
+               check_providers: bool = True) -> dict:
     """One agent per distinct role of the definition: the roster `role` (exactly one match), or an override.
-    Returns {role: agent row}, roles in stage order. Rejects before anything is written."""
+    Returns {role: agent row}, roles in stage order. Rejects before anything is written. workflow.validate passes
+    check_providers=False: the provider mapping is verified by the coordinator when the run starts."""
     roles, perms = [], {}
     for st in definition.stages:
         if st.type != "agent":
@@ -144,6 +160,8 @@ def bind_roles(tx: Tx, team: dict, definition: "workflowdef.Definition", overrid
     for role, a in bound.items():
         if a["availability"] in ("offline", "error") or a["pane_state"] != "alive":
             raise AsError(tasks.AGENT_UNAVAILABLE, f"{role} agent {a['display_name']} is {a['availability']}.")
+        if not check_providers:
+            continue
         adapter, _ = tasks.adapter_for(a, ctx)
         for policy in perms[role]:
             if adapter.describe(dict(os.environ))["policies"].get(policy) in (None, "unsupported"):
@@ -241,6 +259,7 @@ def _enter_validation(tx: Tx, wf_id: str, st: "workflowdef.Stage", ctx: dict, fr
     marker = os.path.join(sdir, "stage.txt")
     _write_private(marker, f"validation stage {st.id}, visit {visit}\n")
     proc = validation.spawn(sdir, wf_workspace(tx, wf), _loads(wf["config_json"], {}))
+    crashpoints.hit("after_validator_spawn")
     sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": st.id,
                                      "attempt": attempt, "phase": "validating", "prompt_path": marker,
                                      "stage_type": "validation", "visit": visit,
@@ -361,6 +380,7 @@ def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
     res = validation.result(sdir)
     if res is None:
         if procid.matches(val_state.get("process") or {}) and not cancel:
+            crashpoints.hit("while_validating")
             return False
         res = validation.result(sdir)
         if res is None:
@@ -437,6 +457,7 @@ def _advance_definition(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
                    "changedFiles": values["diff_json"]["changedFiles"][:20],
                    "untrackedFiles": values["diff_json"]["untrackedFiles"][:20]} if "diff_json" in values else {})})
     tx.transition("stage_attempt", sa["id"], "completed")
+    crashpoints.hit("after_verdict_before_route")
     _route(tx, tx.get("workflow_run", wf["id"]), st, outcome, findings, a["id"], ctx)
     return True
 
@@ -482,6 +503,7 @@ def _route(tx: Tx, wf: dict, st: "workflowdef.Stage", outcome: str, findings: Op
     want = "review" if nxt.kind == "verdict" else "running"
     if task["status"] != want:
         tx.transition("task", task["id"], want)
+    crashpoints.hit("before_route_commit")
     latest = _latest_result(tx, wf["id"])
     data = {"diff": _latest_diff_text(tx, wf["id"]), "findings": findings, "summary": _last_summary(tx, wf["id"]),
             "validation": _validation_text(latest) if latest else None}
@@ -496,8 +518,10 @@ def advance(store: Store, ctx: dict) -> int:
     for r in rows:
         try:
             with store.transaction() as tx:
-                if _advance_one(tx, r["id"], ctx):
-                    n += 1
+                changed = _advance_one(tx, r["id"], ctx)
+            if changed:
+                n += 1
+                crashpoints.hit("after_advance_commit")
         except AsError as e:  # e.g. git failed: pause with the reason instead of retrying forever
             with store.transaction() as tx:
                 wf = tx.get("workflow_run", r["id"])

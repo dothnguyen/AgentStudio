@@ -6,7 +6,9 @@ there. Production coordinators never read the variable.
 """
 import os
 
-POINTS = ("before_command_commit", "after_command_commit", "after_claim_commit", "before_report_apply_commit")
+POINTS = ("before_command_commit", "after_command_commit", "after_claim_commit", "before_report_apply_commit",
+          "before_route_commit", "after_advance_commit", "after_verdict_before_route", "while_validating",
+          "after_validator_spawn")
 _ctx = {"debug": False, "stateDir": None}
 
 

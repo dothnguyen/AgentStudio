@@ -58,7 +58,25 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
    run the same `team unpack` again; the lead revises the files. Repeat until you are happy.
 4. Commit the plan: `git add -A && git commit -m "Plan: feature X"`.
 
-## Workflow 2 - develop one story
+## Workflow 2 - develop one story (configurable workflow, P01)
+
+```bash
+S=phases/phase-02/stories/P02-S01-something.md
+team workflows                      # definitions available (built-in and .agent-studio/workflows)
+team check story-delivery           # validate it against the saved team, no tokens spent
+team review $S                      # 1. lead reviews the story and fixes it in place
+team run story-delivery --story $S  # 2. dev -> unit tests -> QA -> lead final review; QA or lead "fail" goes back to dev
+team commit $S                      # 3. shows the files and the lead's ```commit message, asks, then commits
+```
+
+`team run NAME "prompt"` runs any definition with a free-text prompt; `--prompt-file PATH` reads it from a file,
+`--bind ROLE=NAME` picks a different agent for a role, `--no-wait` returns after starting. It needs a clean working
+tree and prints the route, status, last findings and the last stage's summary. With `--story` it also records what
+`team commit` needs. The final stage is read-only, so it proposes the commit message but does not edit the story:
+mark the story Done yourself (or run `team final $S` to have the lead do it) before `team commit`.
+The definition is `.agent-studio/workflows/story-delivery.yaml` with prompts in `workflows/prompts/`.
+
+## Workflow 2b - develop one story by hand (P00 fallback)
 
 ```bash
 S=phases/phase-02/stories/P02-S01-something.md

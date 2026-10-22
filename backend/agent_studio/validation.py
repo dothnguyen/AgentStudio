@@ -60,6 +60,7 @@ def load_config(workspace: str) -> dict:
 def spawn(stage_dir: str, workspace: str, config: dict) -> dict:
     """Start the detached validator for one stage; returns its process identity."""
     os.makedirs(stage_dir, mode=0o700, exist_ok=True)
+    _stop_orphan(stage_dir)
     request = {"argv": config["validation"]["argv"], "cwd": workspace, "timeoutMs": config["validation"]["timeoutMs"]}
     tmp = os.path.join(stage_dir, "validation.request.json.tmp")
     with open(tmp, "w", encoding="utf-8") as f:
@@ -69,7 +70,30 @@ def spawn(stage_dir: str, workspace: str, config: dict) -> dict:
     p = subprocess.Popen([sys.executable, "-s", launcher, "validate", "--dir", stage_dir], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd="/", start_new_session=True,
                          close_fds=True)
-    return procid.identity(p.pid)
+    ident = procid.identity(p.pid)
+    with open(os.path.join(stage_dir, "validator.pid.json"), "w", encoding="utf-8") as f:
+        json.dump(ident, f)
+    return ident
+
+
+def _stop_orphan(stage_dir: str) -> None:
+    """A coordinator that died between spawning a validator and committing its stage leaves it running in this
+    directory; the retried stage starts a fresh one, so the old one (matched by verified identity) is stopped first."""
+    try:
+        with open(os.path.join(stage_dir, "validator.pid.json"), encoding="utf-8") as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        return
+    if procid.matches(old):
+        try:
+            os.killpg(old["pid"], signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    for name in ("validation.json", "validation.out"):
+        try:
+            os.unlink(os.path.join(stage_dir, name))
+        except OSError:
+            pass
 
 
 def result(stage_dir: str):

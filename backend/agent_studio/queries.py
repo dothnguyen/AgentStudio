@@ -135,7 +135,32 @@ def workflow_detail(conn, wf_id: str) -> dict:
                                    (wf["task_id"],)).fetchall()
         events = conn.execute("SELECT * FROM events WHERE workflow_run_id = ? OR task_id = ? ORDER BY seq LIMIT 2000",
                               (wf_id, wf["task_id"])).fetchall()
-        return {"dbId": db_id(conn), "cursor": head(conn), "workflowRun": row_to_json(wf),
-                "stageAttempts": [row_to_json(r) for r in stages], "task": row_to_json(task),
-                "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
+        out = {"dbId": db_id(conn), "cursor": head(conn), "workflowRun": row_to_json(wf),
+               "stageAttempts": [row_to_json(r) for r in stages], "task": row_to_json(task),
+               "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
+        out["visits"] = visits_per_stage(out["stageAttempts"])
+        out["route"] = route_text(out["events"], out["workflowRun"].get("currentStage"))
+        return out
     return _read(conn, run)
+
+
+def visits_per_stage(attempts: list) -> dict:
+    """{stage: number of visits}, in the order the stages were first entered."""
+    out: dict = {}
+    for a in attempts:
+        out[a["stage"]] = max(out.get(a["stage"], 0), a.get("visit") or 1)
+    return out
+
+
+def route_text(events: list, current: Optional[str] = None) -> str:
+    """The path a run took, e.g. `develop → qa (fail) → develop → qa (pass) → final (pass) → $succeed`. A verdict
+    outcome is shown after the stage that gave it; `done` is not."""
+    routed = [e["data"] for e in events if e["name"] == "workflow_run.routed"]
+    if not routed:
+        return current or ""
+    parts = []
+    for r in routed:
+        label = f" ({r['outcome']})" if r["outcome"] in ("pass", "fail") else ""
+        parts.append(r["fromStage"] + label)
+    parts.append(routed[-1]["toStage"])
+    return " → ".join(parts)

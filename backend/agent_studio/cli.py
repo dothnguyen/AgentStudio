@@ -38,8 +38,13 @@ USAGE = """agent-studio <command>
   assignment cancel --assignment ID        cancel queued or running work (exactly one outcome wins)
   assignment resolve --assignment ID --action retry|fail|cancel [--policy P]
                                            settle waiting_input / reconciling work or a paused workflow stage
+  workflow list --team ID                  workflow definitions available to the team's workspace
+  workflow validate --team ID --definition NAME [--bind ROLE=AGENT ...]
+                                           check a definition and its role bindings; writes nothing
+  workflow start --team ID --definition NAME [--bind ROLE=AGENT ...] (--text TEXT | --text-file PATH|-) [--wait]
+                                           run a definition (built-in: developer-reviewer)
   workflow start --team ID --developer ID --reviewer ID (--text TEXT | --text-file PATH|-) [--wait]
-                                           Developer -> validation -> Reviewer, one bounded repair
+                                           the P00 form: same as --definition developer-reviewer
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
@@ -57,6 +62,18 @@ Options: --pretty (indent JSON for humans)
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
         raise AsError(BAD_REQUEST, message)
+
+
+def _bindings(items):
+    out = {}
+    for item in items:
+        role, sep, agent = item.partition("=")
+        if not sep or not role.strip() or not agent.strip():
+            raise AsError(BAD_REQUEST, f"--bind expects ROLE=AGENT_ID, got {item!r}")
+        if role.strip() in out:
+            raise AsError(BAD_REQUEST, f"--bind names the role {role.strip()!r} twice")
+        out[role.strip()] = agent.strip()
+    return out
 
 
 def _emit(resp: dict, pretty: bool) -> int:
@@ -120,11 +137,13 @@ def _human_request(argv) -> dict:
     tk.add_argument("--key")
     tk.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     wf_p = sub.add_parser("workflow", add_help=False)
-    wf_p.add_argument("action", choices=["start", "show", "cancel"])
+    wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate"])
     wf_p.add_argument("--team")
     wf_p.add_argument("--developer")
     wf_p.add_argument("--reviewer")
     wf_p.add_argument("--workflow")
+    wf_p.add_argument("--definition")
+    wf_p.add_argument("--bind", action="append", default=[])
     wf_p.add_argument("--text")
     wf_p.add_argument("--text-file")
     wf_p.add_argument("--wait", action="store_true")
@@ -207,7 +226,32 @@ def _human_request(argv) -> dict:
             req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
             req["_wait"] = ns.wait
     elif ns.cmd == "workflow":
-        if ns.action == "start":
+        if ns.action in ("list", "validate"):
+            if not ns.team:
+                raise AsError(BAD_REQUEST, f"workflow {ns.action} needs --team ID")
+            args = {"teamId": ns.team}
+            if ns.action == "validate":
+                if not ns.definition:
+                    raise AsError(BAD_REQUEST, "workflow validate needs --definition NAME")
+                args["definition"] = ns.definition
+                if ns.bind:
+                    args["bindings"] = _bindings(ns.bind)
+            req.update(command=f"workflow.{ns.action}", args=args)
+        elif ns.action == "start" and ns.definition:
+            if not ns.team:
+                raise AsError(BAD_REQUEST, "workflow start needs --team")
+            if ns.developer or ns.reviewer:
+                raise AsError(BAD_REQUEST, "--developer / --reviewer belong to the P00 form; use --bind with "
+                                           "--definition")
+            args = {"teamId": ns.team, "definition": ns.definition, "text": _task_text(ns)}
+            if ns.bind:
+                args["bindings"] = _bindings(ns.bind)
+            req.update(command="workflow.start", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
+                       timeoutMs=ns.timeout_ms)
+            req["_wait_workflow"] = ns.wait
+        elif ns.action == "start":
+            if ns.bind:
+                raise AsError(BAD_REQUEST, "--bind needs --definition")
             if not (ns.team and ns.developer and ns.reviewer):
                 raise AsError(BAD_REQUEST, "workflow start needs --team, --developer and --reviewer")
             text = _task_text(ns)
@@ -351,6 +395,8 @@ def main(argv=None) -> int:
         except KeyboardInterrupt:
             sys.stderr.write("stopped watching; the workflow keeps running (see: agent-studio workflow show)\n")
             return 130
+        if detail.get("route"):
+            sys.stderr.write(f"route: {detail['route']}  ({detail['workflowRun']['status']})\n")
         return _emit(envelope(None, True, data=dict(detail, receipt=receipt)), pretty)
     if wait and resp.get("ok"):
         receipt = resp["data"]
@@ -365,4 +411,7 @@ def main(argv=None) -> int:
             and sys.stdin.isatty() and sys.stdout.isatty()):
         argv_ = resp["data"]["argv"]
         os.execv(argv_[0], argv_)  # native tmux takes over this terminal; detach with Ctrl-b d
+    if pretty and req.get("command") == "workflow.show" and resp.get("ok") and resp["data"].get("route"):
+        run = resp["data"]["workflowRun"]
+        sys.stderr.write(f"route: {resp['data']['route']}  ({run['status']}, {run.get('stepCount', 0)} steps)\n")
     return _emit(resp, pretty)

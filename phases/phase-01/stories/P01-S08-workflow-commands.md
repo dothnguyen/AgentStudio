@@ -1,6 +1,6 @@
 # P01-S08 — Workflow commands over the CLI and `serve`
 
-Status: To Do
+Status: Done (2026-10-22)
 Depends on: P01-S02, P01-S06
 Architecture: [P01 design contract](../README.md#e-commands), section E
 
@@ -17,12 +17,19 @@ Give the operator, and later the P02 UI, the commands to discover, check, and ru
 
 ## Done when
 
-- [ ] A Windows-boundary test (the existing PowerShell/`serve` harness, or its WSL-side equivalent) round-trips `workflow.list`, `workflow.validate`, and `workflow.start` with a definition. Hostile task text arrives byte-exact.
-- [ ] `list` shows built-in and workspace definitions, broken files included with their errors. `validate` reports `ROLE_UNBOUND` for a team missing a role without starting anything.
-- [ ] `start --bind` overrides the roster lookup. A bad `--bind` (unknown role or agent) is rejected before any row is written.
-- [ ] `show --pretty` prints the route of a finished fake run as specified, and `--wait` prints routed events live.
-- [ ] Tests: `tests/unit/test_p01_s08_protocol.py` and `tests/integration/test_p01_s08_cli.py`. The full suite stays green.
+- [x] A Windows-boundary test (the existing PowerShell/`serve` harness, or its WSL-side equivalent) round-trips `workflow.list`, `workflow.validate`, and `workflow.start` with a definition. Hostile task text arrives byte-exact.
+- [x] `list` shows built-in and workspace definitions, broken files included with their errors. `validate` reports `ROLE_UNBOUND` for a team missing a role without starting anything.
+- [x] `start --bind` overrides the roster lookup. A bad `--bind` (unknown role or agent) is rejected before any row is written.
+- [x] `show --pretty` prints the route of a finished fake run as specified, and `--wait` prints routed events live.
+- [x] Tests: `tests/unit/test_p01_s08_protocol.py` and `tests/integration/test_p01_s08_cli.py`. The full suite stays green.
 
 ## Evidence
 
 (filled in when the story is done)
+
+Implemented 2026-10-22:
+- `workflow.list` and `workflow.validate` (read-only; `bind_roles(..., check_providers=False)` over `workflow.ReadTx`), both in `dispatch.COMMANDS`, so they work in `serve`.
+- CLI: `workflow list|validate|start --definition NAME --bind ROLE=AGENT`; the P00 `--developer/--reviewer` form is unchanged; mixing the two forms is BAD_REQUEST.
+- `workflow show` now returns `route` (e.g. `a → b (fail) → a → b (pass) → $succeed`) and `visits`; `--pretty` and `--wait` print the route, and `--wait` prints `from (outcome) -> to` live.
+- Tests: `tests/unit/test_p01_s08_protocol.py`, `tests/integration/test_p01_s08_cli.py` (7 tests, including a `serve` round-trip with hostile task text). Unit suite 310 OK; P01-S04 integration 19 OK.
+- The PowerShell harness was not run; the `serve` test is the WSL-side equivalent.

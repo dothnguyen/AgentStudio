@@ -53,7 +53,8 @@ def follow_workflow(wf_id: str, poll_s: float = 0.5) -> dict:
                     if e["name"] == "assignment.progress":
                         continue
                     d = e.get("data") or {}
-                    extra = d.get("reason") or d.get("message") or (f"verdict {d['verdict']}" if "verdict" in d else "") \
+                    extra = (f"{d['fromStage']} ({d['outcome']}) -> {d['toStage']}" if e["name"] == "workflow_run.routed"
+                             and "toStage" in d else "") or d.get("reason") or d.get("message") or (f"verdict {d['verdict']}" if "verdict" in d else "") \
                         or (f"validation {'passed' if d.get('passed') else 'failed'}" if "passed" in d else "") \
                         or (f"-> {d['toStage']}" if "toStage" in d else "")
                     sys.stderr.write(f"{e['at'][11:19]} {e['name']}" + (f" - {one_line(str(extra), 200)}" if extra else "")
