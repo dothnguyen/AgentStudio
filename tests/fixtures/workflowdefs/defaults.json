@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "stages": [
+    {"id": "a", "role": "Dev", "permission": "workspace_write", "prompt": "do {{diff}}", "next": {"done": "b"}},
+    {"id": "b", "type": "validation"},
+    {"id": "c", "role": "QA", "permission": "read_only", "prompt": "check {{diff}}", "next": {"fail": "a"}},
+    {"id": "d", "role": "QA", "permission": "read_only", "prompt": "last {{diff}}", "next": {"fail": "a"}}
+  ]
+}

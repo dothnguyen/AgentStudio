@@ -1,6 +1,6 @@
 # P01-S02 — Strict YAML subset loader
 
-Status: To Do
+Status: Done (2026-10-22)
 Depends on: P01-S01
 Architecture: [P01 design contract](../README.md#b-definition-format-version-1), sections A and B; open question Q1
 
@@ -43,17 +43,34 @@ Let operators write definitions in YAML without adding a third-party dependency.
 
 ## Done when
 
-- [ ] **Same model from both formats:** the §B example as YAML and the same definition as JSON (each with the same prompt files under `.agent-studio/prompts/`, fixtures in `tests/fixtures/workflowdefs/`) load to `Definition` objects that are equal in every field except `source_sha256` (and the `file` of any warning), and whose canonical JSON is equal after removing `sourceSha256` and those `file` values. Also tested for the S01 defaults fixture written as YAML.
-- [ ] **Rejected constructs:** one test per bullet of step 2 (every listed form of the bullet) asserts `YamlSubsetError` with the expected line, and, through `workflowdef.load`, one `WORKFLOW_DEFINITION_INVALID` error with `path: "$"` and that line. The duplicate-key test checks the §B message text.
-- [ ] **Accepted forms:** a test per bullet of step 1: an indentless and an indented sequence give the same value; nested and empty flow collections; both quote styles with every allowed escape; a header comment on `|`; a leading `---`; a CRLF file equals its LF copy; comments after values and on their own lines.
-- [ ] **Scalar typing:** `on`, `yes`, `no`, `off`, `$succeed` → strings; `"123"` and `'123'` → strings; `123`, `0`, `-1` → ints; `true` / `false` → bools; `~`, `null` and an empty value → None; quoted strings containing `: ` and ` #` keep them; an `on:` key reaches `parse_obj` as the unknown key `"on"` with its line.
-- [ ] **Block scalars:** `|` keeps newlines, inner blank lines, deeper relative indentation and `#` lines, and ends with exactly one newline (also when trailing blank lines follow); `|-` has no final newline; a `|` block is identical to the double-quoted string with `\n` escapes.
-- [ ] **Lines on semantic errors:** a YAML file with an unknown top-level key, a stage missing `role`, an unknown target in `stages[2].next.fail`, and a cycle stage with `maxVisits: 1` (warning) reports each error and the warning with the expected line (exact key line, nearest-ancestor line for the missing key). The same definition as JSON still reports `line: null`.
-- [ ] **Loader:** a lone valid `.yaml` and a lone valid `.yml` load; `list_definitions` shows a valid YAML definition with its description, stages and roles, and a YAML syntax error as an entry with that error.
-- [ ] **Fuzz:** a seeded (reproducible) test feeds 1,000 random strings (random bytes decoded with `errors="replace"`, mixed with YAML indicator characters) and every truncated prefix of the §B YAML to `loads`; each call returns a value or raises `YamlSubsetError`, never any other exception (including `RecursionError`). The same inputs as raw bytes through `workflowdef.load` give only `WORKFLOW_DEFINITION_INVALID` or a `Definition`.
-- [ ] **Docs:** `backend/agent_studio/workflows/README.md` has the "YAML subset" section described in step 4, and it lists every rejected construct from step 2.
-- [ ] Tests: `tests/unit/test_p01_s02_yaml.py`; S01's `test_lone_yaml_reports_supported_from_s02` is replaced as in step 3. The full unit suite stays green (`python3 -m unittest discover -s tests/unit -t .`).
+- [x] **Same model from both formats:** the §B example as YAML and the same definition as JSON (each with the same prompt files under `.agent-studio/prompts/`, fixtures in `tests/fixtures/workflowdefs/`) load to `Definition` objects that are equal in every field except `source_sha256` (and the `file` of any warning), and whose canonical JSON is equal after removing `sourceSha256` and those `file` values. Also tested for the S01 defaults fixture written as YAML.
+- [x] **Rejected constructs:** one test per bullet of step 2 (every listed form of the bullet) asserts `YamlSubsetError` with the expected line, and, through `workflowdef.load`, one `WORKFLOW_DEFINITION_INVALID` error with `path: "$"` and that line. The duplicate-key test checks the §B message text.
+- [x] **Accepted forms:** a test per bullet of step 1: an indentless and an indented sequence give the same value; nested and empty flow collections; both quote styles with every allowed escape; a header comment on `|`; a leading `---`; a CRLF file equals its LF copy; comments after values and on their own lines.
+- [x] **Scalar typing:** `on`, `yes`, `no`, `off`, `$succeed` → strings; `"123"` and `'123'` → strings; `123`, `0`, `-1` → ints; `true` / `false` → bools; `~`, `null` and an empty value → None; quoted strings containing `: ` and ` #` keep them; an `on:` key reaches `parse_obj` as the unknown key `"on"` with its line.
+- [x] **Block scalars:** `|` keeps newlines, inner blank lines, deeper relative indentation and `#` lines, and ends with exactly one newline (also when trailing blank lines follow); `|-` has no final newline; a `|` block is identical to the double-quoted string with `\n` escapes.
+- [x] **Lines on semantic errors:** a YAML file with an unknown top-level key, a stage missing `role`, an unknown target in `stages[2].next.fail`, and a cycle stage with `maxVisits: 1` (warning) reports each error and the warning with the expected line (exact key line, nearest-ancestor line for the missing key). The same definition as JSON still reports `line: null`.
+- [x] **Loader:** a lone valid `.yaml` and a lone valid `.yml` load; `list_definitions` shows a valid YAML definition with its description, stages and roles, and a YAML syntax error as an entry with that error.
+- [x] **Fuzz:** a seeded (reproducible) test feeds 1,000 random strings (random bytes decoded with `errors="replace"`, mixed with YAML indicator characters) and every truncated prefix of the §B YAML to `loads`; each call returns a value or raises `YamlSubsetError`, never any other exception (including `RecursionError`). The same inputs as raw bytes through `workflowdef.load` give only `WORKFLOW_DEFINITION_INVALID` or a `Definition`.
+- [x] **Docs:** `backend/agent_studio/workflows/README.md` has the "YAML subset" section described in step 4, and it lists every rejected construct from step 2.
+- [x] Tests: `tests/unit/test_p01_s02_yaml.py`; S01's `test_lone_yaml_reports_supported_from_s02` is replaced as in step 3. The full unit suite stays green (`python3 -m unittest discover -s tests/unit -t .`).
 
 ## Evidence
 
-(filled in when the story is done)
+- Command: `python3 -m unittest discover -s tests/unit -t .` → `Ran 262 tests in 6.443s`, `OK (skipped=3)`. The suite
+  also printed three ResourceWarnings from `tests/unit/test_s06_parts.py`, which is not part of this story.
+- Added: `backend/agent_studio/yamlsubset.py`, `backend/agent_studio/workflows/README.md`,
+  `tests/unit/test_p01_s02_yaml.py`, `tests/fixtures/workflowdefs/{section-b,defaults}.{json,yaml}`.
+- Changed: `backend/agent_studio/workflowdef.py` (YAML branch in `_parse_file`, `_yaml_line` nearest-ancestor
+  lookup, applied to errors and warnings); `tests/unit/test_p01_s01_definitions.py`
+  (`test_lone_yaml_reports_supported_from_s02` replaced by `test_lone_yaml_is_validated_like_json`, which points to
+  the S02 tests).
+- Deviation from step 1: the keys of the `loads_with_lines` line map are segment tuples (`()` for the root,
+  `("stages", 2, "next", "fail")`), not path strings. This means a dotted key such as `a.b` cannot be confused with
+  the nested path `a` → `b` (tested). `workflowdef._yaml_line` converts error paths to these keys. `workflowdef` is the
+  only consumer.
+- Choices made: rejected forms run as one table-driven test (`REJECTED`, one `subTest` per form, grouped by step-2
+  bullet), not one test method per bullet. A plain `2026-10-22` is read as text, not refused as a YAML 1.1 timestamp.
+- QA follow-ups (suggestions, not blocking): the unrelated `scripts/team/team.py` change should be committed
+  separately; `test_p01_s02_yaml.py:289` asserts `list_definitions(...) is not None`, which is always true; the
+  README's Refused list does not mention flow trailing commas (`[a, ]`) or the timestamp choice; the
+  `workflowdef.py` module docstring still mentions only JSON.

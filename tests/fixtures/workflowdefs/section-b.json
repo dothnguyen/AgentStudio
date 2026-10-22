@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "description": "Developer implements, tests run, QA reviews, TeamLead signs off.",
+  "maxSteps": 16,
+  "stages": [
+    {"id": "develop", "role": "Developer", "permission": "workspace_write", "maxVisits": 3,
+     "promptFile": "prompts/develop.md", "next": {"done": "tests"}},
+    {"id": "tests", "type": "validation", "maxVisits": 3, "next": {"pass": "qa", "fail": "qa"}},
+    {"id": "qa", "role": "QA", "permission": "read_only", "maxVisits": 3, "passRequires": ["tests"],
+     "prompt": "Review DIFF against TASK, taking VALIDATION into account.\n{{task}}\n{{diff}}\n{{validation}}\n",
+     "next": {"pass": "final", "fail": "develop"}},
+    {"id": "final", "role": "TeamLead", "permission": "read_only", "maxVisits": 2,
+     "promptFile": "prompts/final-review.md", "next": {"pass": "$succeed", "fail": "develop"}}
+  ]
+}

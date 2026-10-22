@@ -14,10 +14,11 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
+from . import yamlsubset
 from .protocol import AsError
 from .roles import CONFIG_DIR, _inside
 
@@ -117,6 +118,7 @@ def _text_problem(text: str, what: str = "prompt") -> Optional[str]:
     return "prompt is larger than 32 KiB" if what == "prompt" and size > MAX_PROMPT_BYTES else None
 
 
+_INDEX_TAIL = re.compile(r"\[\d+\]\Z")
 _SEG_RE = re.compile(r"^([^.\[]*)(?:\[(\d+)\])?(?:\.(.*))?$", re.S)
 
 
@@ -127,6 +129,8 @@ def _file_order(obj: dict, errors: list) -> list:
 
     def key(e: dict) -> tuple:
         m = _SEG_RE.match(e["path"])
+        if m is None:
+            return (len(obj) + 1, 0, 0)
         top, idx, rest = m.group(1), m.group(2), m.group(3)
         if top == "$" or top not in obj:
             return (len(obj) + 1, 0, 0)
@@ -567,14 +571,23 @@ def _parse_file(path: str, label: str, name: str, prompt_base: str) -> Definitio
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         raise _whole_file_error(label, "the definition file is not valid UTF-8")
-    try:
-        obj = json.loads(text, object_pairs_hook=_hook)
-    except json.JSONDecodeError as e:
-        raise _whole_file_error(label, f"JSON syntax error: {e.msg}", e.lineno)
-    except RecursionError:
-        raise _whole_file_error(label, "JSON is nested too deeply")
-    except ValueError:
-        raise _whole_file_error(label, "JSON contains an integer literal that is too long")
+    lines: Optional[dict] = None
+    if path.endswith((".yaml", ".yml")):
+        try:
+            obj, lines = yamlsubset.loads_with_lines(text)
+        except yamlsubset.YamlSubsetError as e:
+            raise _whole_file_error(label, e.message, e.line)
+        except RecursionError:
+            raise _whole_file_error(label, "YAML is nested too deeply")
+    else:
+        try:
+            obj = json.loads(text, object_pairs_hook=_hook)
+        except json.JSONDecodeError as e:
+            raise _whole_file_error(label, f"JSON syntax error: {e.msg}", e.lineno)
+        except RecursionError:
+            raise _whole_file_error(label, "JSON is nested too deeply")
+        except ValueError:
+            raise _whole_file_error(label, "JSON contains an integer literal that is too long")
     dups: list = []
     _duplicates(obj, "", dups)
     c = _Collector(label)
@@ -595,13 +608,42 @@ def _parse_file(path: str, label: str, name: str, prompt_base: str) -> Definitio
     try:
         d = parse_obj(obj, label, prompts, name=name, source_sha256=hashlib.sha256(raw).hexdigest())
     except AsError as e:
-        if e.code != WORKFLOW_DEFINITION_INVALID or not c.errors:
+        if e.code != WORKFLOW_DEFINITION_INVALID:
+            raise
+        if lines is not None:
+            for item in e.data["errors"] + e.data["warnings"]:
+                item["line"] = _yaml_line(lines, item["path"])
+        if not c.errors:
             raise
         c.errors.extend(e.data["errors"])
         c.warnings.extend(e.data["warnings"])
         c.raise_if_errors()
     c.raise_if_errors()
+    if lines is not None:
+        d = replace(d, warnings=tuple(MappingProxyType({**w, "line": _yaml_line(lines, w["path"])})
+                                      for w in d.warnings))
     return d
+
+
+def _yaml_line(lines: dict, path: str) -> int:
+    """Line of the exact path in the YAML source, else of its nearest ancestor that exists (1 for the root)."""
+    children: dict = {}
+    for seg in lines:
+        if seg:
+            children.setdefault(seg[:-1], []).append(seg[-1])
+    best: list = [0, 0, ()]  # [characters of path consumed, -segments, segments]
+
+    def walk(seg: tuple, pos: int) -> None:
+        if (pos, -len(seg)) > (best[0], best[1]):
+            best[:] = [pos, -len(seg), seg]
+        for k in children.get(seg, ()):
+            token = f"[{k}]" if isinstance(k, int) else (f".{k}" if seg else k)
+            end = pos + len(token)
+            if path.startswith(token, pos) and (end == len(path) or path[end] in ".["):
+                walk(seg + (k,), end)
+
+    walk((), 0 if path != "$" else 1)
+    return lines[best[2]]
 
 
 def _locate(workspace: str, name: str, builtin_dir: Optional[str]) -> tuple:
@@ -627,9 +669,7 @@ def _locate(workspace: str, name: str, builtin_dir: Optional[str]) -> tuple:
 
 
 def load(workspace: str, name: str, builtin_dir: Optional[str] = None) -> Definition:
-    path, label, ext, base, _builtin = _locate(workspace, name, builtin_dir)
-    if ext != ".json":
-        raise _whole_file_error(label, "YAML definitions are supported from P01-S02")
+    path, label, _ext, base, _builtin = _locate(workspace, name, builtin_dir)
     return _parse_file(path, label, name, base)
 
 

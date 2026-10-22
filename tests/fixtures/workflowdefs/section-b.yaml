@@ -1,0 +1,31 @@
+version: 1
+description: Developer implements, tests run, QA reviews, TeamLead signs off.
+maxSteps: 16                    # optional, default 20, max 100
+stages:                         # ordered; the run starts at the first stage
+  - id: develop
+    role: Developer             # roster role that does this stage
+    permission: workspace_write # read_only | workspace_write
+    maxVisits: 3                # optional, default 1, max 10
+    promptFile: prompts/develop.md
+    next: { done: tests }       # work stage: one outcome, "done"
+  - id: tests
+    type: validation            # coordinator runs .agent-studio/workflow.json validation.argv
+    maxVisits: 3
+    next: { pass: qa, fail: qa }
+  - id: qa
+    role: QA
+    permission: read_only
+    maxVisits: 3
+    passRequires: [tests]       # a QA "pass" counts only if the latest "tests" result passed
+    prompt: |
+      Review DIFF against TASK, taking VALIDATION into account.
+      {{task}}
+      {{diff}}
+      {{validation}}
+    next: { pass: final, fail: develop }
+  - id: final
+    role: TeamLead
+    permission: read_only
+    maxVisits: 2
+    promptFile: prompts/final-review.md
+    next: { pass: $succeed, fail: develop }

@@ -354,13 +354,12 @@ class Lookup(Ws):
             self.assertEqual(len(cm.exception.data["files"]), 2)
             self.assertIn(f"{name}{exts[0]}", cm.exception.message)
 
-    def test_lone_yaml_reports_supported_from_s02(self):
+    def test_lone_yaml_is_validated_like_json(self):
+        # YAML parsing and its line numbers are tested in tests/unit/test_p01_s02_yaml.py (P01-S02)
         for ext in (".yaml", ".yml"):
             self.write_def("y" + ext[1:], "version: 1\n", ext)
             errs = self.invalid("y" + ext[1:])
-            self.assertEqual(len(errs), 1)
-            self.assertEqual(errs[0]["path"], "$")
-            self.assertEqual(errs[0]["message"], "YAML definitions are supported from P01-S02")
+            self.assertEqual([e["path"] for e in errs], ["stages"])
 
     def test_invalid_or_missing_name_is_not_found_without_touching_outside_paths(self):
         for name in ("../x", "a/b", "Upper", "", "-x", "a" * 65, None, "..\\x"):
