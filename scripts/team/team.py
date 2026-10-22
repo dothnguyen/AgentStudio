@@ -30,7 +30,12 @@ WS = subprocess.run(["git", "rev-parse", "--show-toplevel"], stdout=subprocess.P
                     text=True).stdout.strip() or os.getcwd()
 STATE = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "agent-studio",
                      "project-team", re.sub(r"[^A-Za-z0-9]+", "_", WS).strip("_"))
-AS = os.environ.get("AGENT_STUDIO", "agent-studio")
+import shutil
+# The installed entry shim, even when ~/.local/bin is not on this terminal's PATH.
+AS = (os.environ.get("AGENT_STUDIO") or shutil.which("agent-studio")
+      or os.path.expanduser("~/.local/bin/agent-studio"))
+if not os.access(AS, os.X_OK):
+    sys.exit(f"agent-studio is not installed ({AS}). Run: bash ~/agent-studio-runtime/backend/install.sh")
 LIMIT = 30 * 1024            # agent-studio accepts task text up to 32 KiB
 DIFF_LIMIT, TEST_LIMIT = 20 * 1024, 5 * 1024
 
