@@ -12,7 +12,7 @@
       "providerId": "codex",
       "role": "Developer",
       "name": "dev",
-      "model": "gpt-5.3-codex",
+      "model": "gpt-5.6-terra",
       "reasoning": "medium"
     },
     {

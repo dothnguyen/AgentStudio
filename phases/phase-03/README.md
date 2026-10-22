@@ -88,7 +88,7 @@ Schema **v7** (`state.MIGRATIONS[7]`, the same migrate helper, `PRAGMA foreign_k
 - `tickets`: `id`, `workspace`, `key` (unique per workspace), `kind` (`feature`|`story`|`bug`), `title`, `story_path` (story; bug after triage), `brief_path` + `out_dir` (feature), `raw_text` (bug intake), `attachments_json`, `severity` (`blocker`|`major`|`minor`|NULL), `duplicate_of`, `parent_ticket_id`, `status`, `return_status` (when `blocked`), `blocked_reason`, `priority` (integer, lower first; default 100), `branch`, `worktree_path`, `base_commit`, `head_commit`, `merged_commit`, `assignee_agent_id`, `lease_until`, `run_id` (current column run), `applied_run_id` (last run whose outcome was applied), `dev_rounds`, `test_rounds`, `review_rounds`, `findings_json` (latest findings for the developer), `questions_json`, `created_at`, `updated_at`.
 - `ticket_deps (ticket_id, blocked_by_ticket_id)`, primary key on both columns, no self-edge, acyclic (checked by the command, `TICKET_DEPENDENCY_CYCLE`).
 - `board_state (workspace PK, status running|paused, reason, config_json, review_streak)` and `board_locks (workspace, name, ticket_id, created_at, PK (workspace, name))`. These are created in v7 and used by S07 and S13.
-- `ticket_events`: append-only. Every ticket write also writes one row to the existing `events` stream (`events.after`), with `ticket.*` / `board.*` names and the ticket ID and key.
+- `ticket_events (id INTEGER PK AUTOINCREMENT, ticket_id → tickets, event_seq → events(seq), at, actor, name, from_status, to_status, payload_json)`: append-only (the `_immutable` triggers). Every ticket write also writes one row to the existing `events` stream (`events.after`), with `ticket.*` / `board.*` names and the ticket ID and key.
 
 Statuses (`backlog` is the entry status when `requirePlanApproval` holds a child; see S10):
 
@@ -100,7 +100,23 @@ Statuses (`backlog` is the entry status when `requirePlanApproval` holds a child
 | loops | `in_test` → `fail_test` → `in_dev`; `in_review` / `ready_merge` → `changes_requested` → `in_dev` |
 | any kind | any non-terminal → `blocked` (stores `return_status`) → back; any non-terminal → `cancelled` |
 
-Terminal: `merged`, `done`, `cancelled`. The allowed transitions are one table in `tickets.py` (from, to, actor = `coordinator` | `operator`). Anything else → `TICKET_TRANSITION_INVALID`. The `in_*` / `*ing` statuses, `ready_merge`, `merged`, `unpacked` and `done` are entered **only** by the coordinator. The operator (`ticket.move`) may move a ticket with no active run to `backlog`, any `ready_*` column, `refine`, `triage`, `ready_unpack`, `fail_test`, `changes_requested` or `blocked`. A ticket with an active run → `TICKET_BUSY` (cancel the run first, or use `ticket.cancel`).
+Terminal: `merged`, `done`, `cancelled`. The allowed transitions are one table, `schema.TICKET_TRANSITIONS` (from, to, actor = `coordinator` | `operator`), next to the other entity tables in `schema.py` (the single source for CHECKs and validation); `tickets.py` uses it as `tickets.TRANSITIONS`. Anything else → `TICKET_TRANSITION_INVALID`. The `in_*` / `*ing` statuses, `ready_merge`, `merged`, `unpacked` and `done` are entered **only** by the coordinator. The operator (`ticket.move`) may move a ticket with no active run to `backlog`, `ready_unpack`, `ready_dev`, `ready_test`, `ready_review`, `refine`, `triage`, `fail_test`, `changes_requested` or `blocked`. A ticket with an active run → `TICKET_BUSY` (cancel the run first, or use `ticket.cancel`).
+
+The table, exactly (S01 builds it from these rules; "working" = `unpacking`, `refining`, `triaging`, `in_dev`, `in_test`, `in_review`; each has the queue it is picked from: `ready_unpack`, `refine`, `triage`, `ready_dev`|`fail_test`|`changes_requested`, `ready_test`, `ready_review`):
+
+| Rows | Actor |
+|---|---|
+| Claim: each queue → its working status (`ready_unpack→unpacking`, `refine→refining`, `triage→triaging`, `ready_dev`/`fail_test`/`changes_requested→in_dev`, `ready_test→in_test`, `ready_review→in_review`) | coordinator |
+| Release: each working status → each queue it can be picked from (the reverse of every claim row) | coordinator |
+| Outcomes: `unpacking→unpacked`, `unpacked→done`, `refining→ready_dev`, `triaging→ready_dev`, `in_dev→ready_test`, `in_test→ready_review`, `in_test→fail_test`, `in_review→ready_merge`, `in_review→changes_requested`, `ready_merge→merged`, `ready_merge→changes_requested` | coordinator |
+| Plan gate: `backlog→refine` (`ticket.approve`, S10) | coordinator |
+| Late outcome: `blocked` → `unpacked`, `ready_dev`, `ready_test`, `fail_test`, `ready_review`, `changes_requested`, `ready_merge` (a paused run that finishes after the ticket was blocked, S06) | coordinator |
+| Move: every non-terminal status except `blocked` → every operator target above (to ≠ from) | operator |
+| Block: every non-terminal status except `blocked` → `blocked` | both |
+| Unblock: `blocked` → its stored `return_status` (a restore, so it is allowed even when that status is coordinator-only) | both |
+| Cancel: every non-terminal status → `cancelled` | both |
+
+A transition is also refused when `from` or `to` is not on the ticket's kind path (`KIND_STATUSES`): feature = `backlog, ready_unpack, unpacking, unpacked, done`; story = `backlog, refine, refining, ready_dev, in_dev, ready_test, in_test, ready_review, in_review, ready_merge, merged, fail_test, changes_requested`; bug = the story set without `backlog, refine, refining`, plus `triage, triaging`; every kind also has `blocked` and `cancelled`. `block` stores `return_status` = the current status, except that a working status stores its `ready_*`/queue column (`in_dev` → `ready_dev`, `refining` → `refine`, …), so `return_status` is never a working status (S06 relies on this).
 
 ### C. Columns, runs and outcomes
 
