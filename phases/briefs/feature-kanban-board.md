@@ -9,12 +9,19 @@ Today the operator drives one story at a time: `team run story-delivery --story 
 where tickets move through columns and idle agents **pull** work by role, in parallel, without the operator in the loop:
 
 ```
- backlog -> refine -> ready_dev -> in_dev -> ready_test -> in_test -> ready_review -> in_review -> merged
+ backlog -> ready_unpack -> unpacking -> (child tickets) refine -> ready_dev -> in_dev -> ready_test -> in_test -> ready_review -> in_review -> merged
                                       ^            |            |
                                       +-- fail_test (QA)         +-- changes_requested (lead)
+ bug:  (operator text) -> triage -> ready_dev -> in_dev -> ... same as stories ... -> merged
  any column -> blocked (waiting on another ticket or on the operator)
 ```
 
+- **ProductOwner (PO)** picks `ready_unpack` tickets (a feature/epic brief: the operator's idea or a larger item),
+  unpacks them into story files, and the coordinator turns each story into a child ticket in `refine`.
+  The parent becomes `unpacked` and is `done` when all its children are `merged`.
+- **Bugs:** the operator describes a bug in plain words; it enters as a `bug` ticket in `triage`. The TeamLead picks it
+  up, investigates, writes the bug file (steps to reproduce, expected vs actual, suspected area, done criteria,
+  severity) and the ticket goes straight to `ready_dev` (no refine). See 3c.
 - TeamLead picks `refine` tickets, fixes the story, moves it to `ready_dev` (or `blocked` with questions).
 - Developer picks `ready_dev` and `fail_test`/`changes_requested` tickets whose dependencies are merged, implements on
   the ticket's **own branch + worktree**, then moves it to `ready_test`.
@@ -55,12 +62,70 @@ worktree lifecycle, dependency/blocked logic, merge handling, and a board view. 
 5. **The coordinator performs git operations, agents do not.** Create/remove worktree, commit the developer's changes
    on the branch, compute diffs, run `git merge`. Agents only read/write files in their worktree and (after S-cmd work,
    already done) run an allowlisted set of commands. This keeps history-changing git out of agent hands.
-6. **Roles stay as is** (TeamLead, Developer, QA); several agents can share a role (2 developers). Binding is by
+6. **Roles: ProductOwner (new), TeamLead, Developer, QA**; several agents can share a role (2 developers). Binding is by
    agent availability at pickup time instead of fixed at run start.
+
+## 3b. Unpacking: the ProductOwner and `ready_unpack` (operator request, 2026-10-22)
+
+- **New role `ProductOwner`** in `team.json` / `roles.json` (`.agent-studio/roles/product-owner.md`, skill `story-format`
+  reused). Today `team unpack` asks the TeamLead to do this; the PO takes that work so the lead is free for refine and
+  review. `team unpack` stays as the manual shortcut and uses the PO when one exists.
+- **Ticket kinds:** `feature` (a brief/epic, enters at `ready_unpack`) and `story` (enters at `refine`). A story ticket
+  has `parent_ticket_id`. `ticket add --brief PATH` creates a feature ticket; `ticket add --story PATH` a story ticket.
+- **Unpack stage** (a workflow definition `unpack`, one `workspace_write` stage for the PO, plus a verdict): the PO reads
+  PRD/ROADMAP/phases and the brief and writes planning files **only** (a phase README and one story file per story, in
+  the output folder named on the ticket, e.g. `phases/phase-02/`), following the story-format skill, **and** a machine-
+  readable manifest `<out>/tickets.json`:
+  `{"stories": [{"path": "...", "title": "...", "dependsOn": ["<path>", ...], "priority": 2}], "questions": []}`.
+- **After the stage (coordinator, not the agent):**
+  1. validate the manifest (paths exist and live under the output folder, each story file has the required sections,
+     dependency graph is acyclic, no unknown paths, limits on count) and the diff touches planning files only;
+  2. commit those files to the base branch (same rule as refine: planning commits go to base so branches start from them);
+  3. create one child ticket per story in `refine`, with the manifest's dependencies (plus any `Depends on:` lines parsed
+     from the files, shown to the operator; override later with `ticket.depend`);
+  4. parent -> `unpacked`; if `questions` is non-empty the parent goes to `blocked` with them instead and creates nothing,
+     so the operator can answer in the brief and run `ticket.move <id> ready_unpack` to unpack again (same loop as
+     `team unpack` today). Re-unpacking an already unpacked parent updates existing children (matched by story path) and
+     never deletes a child that has left `refine`.
+- **Scheduler:** `ready_unpack` is offered to ProductOwner agents only; one unpack runs at a time per repo (it writes to
+  the main checkout, like refine; refine and unpack share that serialization lock). Priority: `ready_review` (lead) >
+  `ready_unpack` (PO) so the pipeline keeps filling while the lead reviews.
+- **Review of the plan:** an optional operator gate `board.require_plan_approval` holds new child tickets in `backlog`
+  until the operator runs `ticket.approve <parent>`; default off (children go straight to `refine`).
+- **Usage limits** (6b) apply to the PO like any agent.
+- **Tests:** fake provider writes a manifest and story files; unit tests for manifest validation (cycles, escaping
+  paths, duplicates); integration: feature ticket -> 3 child tickets with one dependency; questions path; re-unpack is
+  idempotent; PO cannot touch files outside planning docs (diff check).
+
+## 3c. Bugs (operator request, 2026-10-22)
+
+- **Intake:** `team.py bug "description"` (or `--file PATH`, repeatable `--attach PATH` for logs/screenshots paths) calls
+  `ticket.create --kind bug`. The raw text is stored on the ticket (`raw_text`) and the ticket is `triage`. The operator
+  never has to write the structure; they describe the problem the way they would to a colleague.
+- **Triage stage** (definition `triage`, TeamLead, `workspace_write` limited to the bug file, plus a verdict): the lead
+  reads the description, searches the code (code-search skill), tries to reproduce by reading code and, where a test
+  can show it, running existing tests/commands, then writes `bugs/BUG-<key>-<slug>.md` from a bug template:
+  title, severity (`blocker|major|minor`), **steps to reproduce**, **expected vs actual**, environment/version, suspected
+  files/functions, **done criteria** (observable fix + a regression test that fails before and passes after), out of
+  scope, and open questions. Verdict `pass` = ticket is specified; `fail` = the lead cannot proceed (not reproducible,
+  missing info): questions go on the ticket, status `blocked`, operator answers and moves it back to `triage`.
+- **After the stage (coordinator):** validate the bug file has every required section, commit it to the base branch
+  (planning-files rule), set `story_path` to it, severity -> priority, and move the ticket to **`ready_dev`**.
+  Duplicates: the lead may mark `duplicate_of: <key>` and the ticket closes as `cancelled` with a link.
+- **Pipeline from there is the story pipeline:** developer works on `ticket/<key>-<slug>`, **first writes a failing
+  regression test**, then fixes; QA re-runs the repro steps and the regression test and checks nothing else regressed;
+  lead reviews and squash-merges (message references the bug key). Bug-specific prompts for develop/test/review.
+- **Scheduler priority:** for Developer, `blocker` bugs > `fail_test`/`changes_requested` > other bugs by severity >
+  stories; for TeamLead, `ready_review` > `triage` (blockers first) > `refine`. `maxParallelDev` still applies, but one
+  slot is reserved for a `blocker` bug (it may exceed the cap by one).
+- **Tests:** fake lead writes a valid and an invalid bug file; unit tests for the bug-file validator and priority mapping;
+  integration: raw bug -> `ready_dev` with correct fields, not-reproducible -> `blocked`, duplicate -> `cancelled`, a
+  blocker bug jumps the developer queue.
 
 ## 4. Data model
 
-`tickets`: id, team_id, key (`T-001`), title, story_path, status, priority, branch, worktree_path, base_commit,
+`tickets`: id, team_id, key (`T-001`), kind (`feature`|`story`|`bug`), raw_text (bug intake), severity, duplicate_of, parent_ticket_id, title, story_path (story) or
+brief_path + out_dir (feature), status, priority, branch, worktree_path, base_commit,
 head_commit, assignee_agent_id (nullable), lease_until, attempt counters per column (`dev_rounds`, `test_rounds`,
 `review_rounds`), `blocked_reason`, created/updated, `merged_commit`.
 `ticket_deps`: ticket_id, blocked_by_ticket_id. `ticket_events`: append-only journal (moved, claimed, released,
@@ -83,8 +148,9 @@ Runs inside the coordinator tick (same loop that already does reconcile/deadline
 
 | Role | Eligible tickets (priority order) |
 |---|---|
-| TeamLead | `ready_review` first (unblock the pipeline), then `refine` |
-| Developer | `changes_requested`, `fail_test`, then `ready_dev`, only if every dependency is `merged` and the number of tickets `in_dev` < `maxParallelDev` |
+| ProductOwner | `ready_unpack` (oldest first), one unpack at a time |
+| TeamLead | `ready_review` first (unblock the pipeline), then `triage` (blocker bugs first), then `refine` |
+| Developer | blocker bugs, then `changes_requested`, `fail_test`, then `ready_dev` (bugs by severity, then stories), only if every dependency is `merged` and the number of tickets `in_dev` < `maxParallelDev` |
 | QA | `ready_test` |
 
 Claim -> prepare worktree (coordinator) -> start the column workflow in that worktree -> on completion apply the
@@ -121,6 +187,10 @@ priority. Starvation guard: lead alternates review and refine.
   context from the worktree; tests for two parallel writers on two worktrees and for refusal of foreign paths.
 
 **Epic B - Column pipelines**
+- B00 Bug tickets: `bug` kind, `triage` column, `triage` definition and bug-file template/validator, `team.py bug`,
+  bug-specific develop/test/review prompts, severity priority, blocker slot (section 3c).
+- B0 Unpack stage: `ProductOwner` role + files, `unpack` definition, manifest schema/validation, coordinator step that
+  commits planning files and creates child tickets, parent `unpacked`/`done` rules, `team.py ticket add --brief`.
 - B1 Column definitions (`refine`, `develop`, `test`, `review`) as built-in/project definitions and a mapping
   column -> definition + outcome -> next column. Verdict stages already exist.
 - B2 Outcome applier: run completion -> ticket transition + findings storage + counters + limits -> `blocked`.
@@ -141,6 +211,15 @@ priority. Starvation guard: lead alternates review and refine.
 Estimated order of value: A1+A2+A3 (worktrees alone already let two stories run in parallel by hand) -> B -> C -> D.
 
 ## 9. Decisions (operator answers, 2026-10-22)
+
+00. **Bugs:** a `bug` ticket type; the operator describes it, the TeamLead triages it into a structured bug file
+   (repro steps, expected/actual, done criteria incl. a regression test) and the ticket goes to `ready_dev`
+   (section 3c). Open sub-question: should the operator be asked to confirm the lead's bug file before dev starts
+   (a `board.require_bug_approval` gate like the plan gate)? Recommended: off by default, since the lead already
+   validated it and the operator can edit the file or move the ticket back to `triage`.
+0. **Unpack:** a `ready_unpack` status picked up by a ProductOwner agent that unpacks into stories which enter
+   `refine` (section 3b). Open sub-questions: should the PO also be able to split an existing story that refine finds
+   too big (a `needs_split` loop back to `ready_unpack`)? Recommended: yes, later, as a follow-up story.
 
 1. **Merge:** squash and merge. The lead writes the squash commit message (the `commit` block of its review verdict);
    the coordinator runs `git merge --squash <branch>` then `git commit -F` in the main checkout, under the merge lock.

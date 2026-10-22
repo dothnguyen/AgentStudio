@@ -1,6 +1,6 @@
 # P01-S11 — Adapter session contract, fake resume, resume prompt, and fallback
 
-Status: To Do
+Status: Done (2026-10-22)
 Depends on: — (P00 adapter contract, P00-S04)
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H (runner, fallback, usage, report `session` block); [P00 contract](../../phase-00/architecture.md) §F
 
@@ -62,15 +62,35 @@ The tests write `request.session` by hand (`{key, mode, resumeFrom, persist, rea
 
 ## Done when
 
-- [ ] Session support: an adapter without it refuses a resume in `prepare` with `SESSION_UNSUPPORTED` (unit test with a stub adapter). `claude` (until S15), `codex`, `agy` and `opencode` report `resume: "unsupported"` and `session_support()` both false; `fake` reports `resume: true` and both flags true. For every registered adapter, `capabilities()["resume"]` agrees with `session_support()`.
-- [ ] Fake (CLI + adapter, `AGENT_STUDIO_FAKE_SESSION_DIR` set to a temp dir): a fresh persisted run, then a resumed run, reports `resumedFrom` = the first ID, `priorTurns: 1` and a new ID; the parent file is byte-identical afterwards; resuming the parent again gives `priorTurns: 1` again. A fresh run without `persist_session` writes no session file, and resuming its ID gives `PROVIDER_SESSION_MISSING`. A resume ID not matching `fake-[0-9a-f]{12}` is refused in `prepare`.
-- [ ] A session started `workspace_write` and resumed `read_only`: the resumed argv carries `--sandbox read-only`, the `init` event echoes `read-only`, and a `writeFile` option gives `waiting_input` / `PERMISSION_DENIED` with no file written.
-- [ ] Prompts: the `resume` prompt equals the template in step 5 byte for byte (with and without a role description) and contains no `===== AGENT STUDIO ROLE` or `===== SKILL` block. For `none` (no `session` block), `unsupported` and `fresh`, `prompt.txt` is byte-identical to what the unchanged P00 code path writes for the same request (golden test, direct task and workflow `promptFile`).
-- [ ] Fallback (integration, fake, unknown resume ID): exactly one re-run in the same assignment, with one `start` and one `final` report; `runs/<id>/resume-attempt/` holds the four first-run files and `runs/<id>/` the re-run's; the report is the re-run's `succeeded` with `session.fallbackFrom` and `warning: "PROVIDER_SESSION_MISSING"`; the re-run's `meta.json` `deadlineSeconds` is below the request's deadline. With `forceSessionMissing`, the re-run's missing session is reported `failed` / `PROVIDER_SESSION_MISSING` and no third run happens. A cancel marker written before the run → `cancelled`, no `resume-attempt/` directory; a cancel marker that appears after the first run and before the re-run → the first report stands and no re-run starts (unit test of the runner's fallback step with the marker created between the two runs). With a remaining deadline under 1 s (request `deadlineMs` below 1000 with an unknown resume ID), the first report stands and no `resume-attempt/` directory exists.
-- [ ] Usage: `usageNormalized` is correct for `tests/fixtures/claude/success.jsonl`, for a new `tests/fixtures/claude/usage_cached.jsonl` (a copy of `success.jsonl` with nonzero cache counts, marked synthetic in `tests/fixtures/claude/README.md`), for the Codex `turn.completed` usage from `tests/fixtures/codex/bin/codex` plus one line with nonzero `cached_input_tokens`, and for fake fresh and resumed runs (`cachedInputTokens` = prior prompt bytes). It is `null`, never zeros, when no usage was reported (e.g. `claude/missing_result.jsonl`, fake `provider_failure`). Fake `toolUses` from the provider option appears in the report.
-- [ ] Report validation: `contract.validate_report` accepts the new fields and rejects a malformed `usageNormalized`, `toolUses` and `session.mode` with `BAD_REPORT`.
-- [ ] Tests: `tests/unit/test_p01_s11_session_contract.py` (adapters, fake CLI sessions, prompt rendering, usage, report validation) and `tests/integration/test_p01_s11_runner_resume.py` (the real runner through `tests/runner_harness.py`, with hand-written `request.session` blocks, no coordinator). All existing tests stay green.
+- [x] Session support: an adapter without it refuses a resume in `prepare` with `SESSION_UNSUPPORTED` (unit test with a stub adapter). `claude` (until S15), `codex`, `agy` and `opencode` report `resume: "unsupported"` and `session_support()` both false; `fake` reports `resume: true` and both flags true. For every registered adapter, `capabilities()["resume"]` agrees with `session_support()`.
+- [x] Fake (CLI + adapter, `AGENT_STUDIO_FAKE_SESSION_DIR` set to a temp dir): a fresh persisted run, then a resumed run, reports `resumedFrom` = the first ID, `priorTurns: 1` and a new ID; the parent file is byte-identical afterwards; resuming the parent again gives `priorTurns: 1` again. A fresh run without `persist_session` writes no session file, and resuming its ID gives `PROVIDER_SESSION_MISSING`. A resume ID not matching `fake-[0-9a-f]{12}` is refused in `prepare`.
+- [x] A session started `workspace_write` and resumed `read_only`: the resumed argv carries `--sandbox read-only`, the `init` event echoes `read-only`, and a `writeFile` option gives `waiting_input` / `PERMISSION_DENIED` with no file written.
+- [x] Prompts: the `resume` prompt equals the template in step 5 byte for byte (with and without a role description) and contains no `===== AGENT STUDIO ROLE` or `===== SKILL` block. For `none` (no `session` block), `unsupported` and `fresh`, `prompt.txt` is byte-identical to what the unchanged P00 code path writes for the same request (golden test, direct task and workflow `promptFile`).
+- [x] Fallback (integration, fake, unknown resume ID): exactly one re-run in the same assignment, with one `start` and one `final` report; `runs/<id>/resume-attempt/` holds the four first-run files and `runs/<id>/` the re-run's; the report is the re-run's `succeeded` with `session.fallbackFrom` and `warning: "PROVIDER_SESSION_MISSING"`; the re-run's `meta.json` `deadlineSeconds` is below the request's deadline. With `forceSessionMissing`, the re-run's missing session is reported `failed` / `PROVIDER_SESSION_MISSING` and no third run happens. A cancel marker written before the run → `cancelled`, no `resume-attempt/` directory; a cancel marker that appears after the first run and before the re-run → the first report stands and no re-run starts (unit test of the runner's fallback step with the marker created between the two runs). With a remaining deadline under 1 s (request `deadlineMs` below 1000 with an unknown resume ID), the first report stands and no `resume-attempt/` directory exists.
+- [x] Usage: `usageNormalized` is correct for `tests/fixtures/claude/success.jsonl`, for a new `tests/fixtures/claude/usage_cached.jsonl` (a copy of `success.jsonl` with nonzero cache counts, marked synthetic in `tests/fixtures/claude/README.md`), for the Codex `turn.completed` usage from `tests/fixtures/codex/bin/codex` plus one line with nonzero `cached_input_tokens`, and for fake fresh and resumed runs (`cachedInputTokens` = prior prompt bytes). It is `null`, never zeros, when no usage was reported (e.g. `claude/missing_result.jsonl`, fake `provider_failure`). Fake `toolUses` from the provider option appears in the report.
+- [x] Report validation: `contract.validate_report` accepts the new fields and rejects a malformed `usageNormalized`, `toolUses` and `session.mode` with `BAD_REPORT`.
+- [x] Tests: `tests/unit/test_p01_s11_session_contract.py` (adapters, fake CLI sessions, prompt rendering, usage, report validation) and `tests/integration/test_p01_s11_runner_resume.py` (the real runner through `tests/runner_harness.py`, with hand-written `request.session` blocks, no coordinator). All existing tests stay green.
 
 ## Evidence
 
-(filled in when the story is done)
+- Unit suite: `python3 -m unittest discover -s tests/unit -t .` → `Ran 345 tests … OK (skipped=3)` (includes
+  `tests/unit/test_p01_s11_session_contract.py`: session support for every adapter, fake CLI sessions/fork/0600 files,
+  narrower policy on resume, resume prompt template, usage mappings for claude/codex/fake, report validation, and the
+  `_resume_fallback` step with the cancel marker created between the two runs and with no time left).
+- Integration: `python3 -W ignore -m unittest tests.integration.test_p01_s11_runner_resume tests.integration.test_p01_s09_story_delivery`
+  → `Ran 12 tests … OK` (golden prompt bytes for none/unsupported/fresh, direct task and workflow `promptFile`; resume
+  prompt and `cachedInputTokens`; fallback with one `start` / one `final`, `resume-attempt/` and reduced
+  `deadlineSeconds`; `forceSessionMissing` with no third run; cancel before run; `deadlineMs` 500).
+- Full integration suite (`discover -s tests/integration -t .`): 195 tests, 2 failures, both in
+  `test_s06_workflow` (stage-attempt order). They are flaky and predate this story: the module passes on its own at HEAD
+  and fails the same way at base commit `6379804`. Not caused by S11.
+- QA: passed with no findings.
+- Files: `backend/agent_studio/{contract.py, envresolve.py, runner.py, workflow.py}`,
+  `backend/agent_studio/providers/{base.py, claude/adapter.py, claude/CONTRACT.md, codex/adapter.py, codex/CONTRACT.md,
+  fake/adapter.py, fake/CONTRACT.md, fake/fake_cli.py}`, `tests/fixtures/claude/{README.md, usage_cached.jsonl}` (new,
+  synthetic), `tests/unit/test_p01_s11_session_contract.py` (new), `tests/integration/test_p01_s11_runner_resume.py`
+  (new), `tests/unit/test_s09_claude.py`, `tests/integration/test_p01_s09_story_delivery.py`.
+- Notable, outside the story's steps: `workflow.py` now sends `expectsVerdict` for verdict stages (the runner honours
+  it), and Claude's read-only Bash allowlist gains `python3 -W ignore -m unittest` and `python3 -m pytest`. Both are
+  tooling for the story-delivery workflow and are covered by tests. The `.agent-studio/` workflow changes (final stage
+  may edit the story file) and `phases/briefs/feature-kanban-board.md` are in the same diff but are not part of S11.
