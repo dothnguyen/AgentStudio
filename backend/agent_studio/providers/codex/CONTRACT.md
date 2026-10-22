@@ -19,6 +19,7 @@ time and refuses with `CAPABILITY_GAP` if any is missing; it never guesses a fla
 | Model | `--model <name>`; name must match `^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$` (codex validates the model itself at run time) |
 | Reasoning | `-c model_reasoning_effort="<level>"`, level ∈ `minimal low medium high xhigh` (the values codex 0.163.0 accepts; anything else is refused by Agent Studio because codex does not validate it) |
 | Environment allowlist | base set + `CODEX_HOME OPENAI_API_KEY CODEX_API_KEY OPENAI_BASE_URL OPENAI_ORGANIZATION OPENAI_PROJECT` proxy vars, `SSL_CERT_FILE/DIR` |
+| Usage (`usageNormalized`) | `max(0, input_tokens - cached_input_tokens)` (Codex's `input_tokens` includes the cached part) / `cached_input_tokens` / `output_tokens`; `null` when no `turn.completed` usage |
 
 ## Output → normalized report
 

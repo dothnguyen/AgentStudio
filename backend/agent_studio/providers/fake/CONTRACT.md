@@ -13,6 +13,8 @@ coordinator path as the real CLIs. Only debug coordinators (`--enable-debug`) ac
 | Output | JSON lines: `init`, `progress`, `file_written`, `tool_denied`, `input_required`, `result` |
 | Terminal event | `{"type":"result","status":"success"|"error",...}`, optional `verdict` |
 | Narrowing for tests | `AGENT_STUDIO_FAKE_POLICIES=read_only` makes `workspace_write` unsupported |
+| Usage (`usageNormalized`) | `inputTokens` / `cachedInputTokens` / `outputTokens` as the result `usage` reports them (cached = prompt bytes of the parent session's turns); `null` when no usage |
+| Sessions | `--session-dir` (`AGENT_STUDIO_FAKE_SESSION_DIR` or `<state>/fake-sessions/`), `--persist`, `--resume ID --fork`; unknown ID → `session_not_found` → `PROVIDER_SESSION_MISSING`; supports resume and fork |
 
 Scenario → normalized outcome (asserted by `tests/fixtures/contract/*.json`):
 

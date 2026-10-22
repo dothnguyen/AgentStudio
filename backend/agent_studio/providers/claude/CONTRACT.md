@@ -20,6 +20,7 @@ for every flag and refuses with `CAPABILITY_GAP` if one is missing.
 | Model | `--model <alias or full name>` (`opus`, `sonnet`, `fable`, `claude-…`); same name check as other adapters |
 | Reasoning | `--effort <level>`, level ∈ `low medium high xhigh max` (the CLI's own list) |
 | Environment allowlist | base set + `ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_MODEL CLAUDE_CODE_OAUTH_TOKEN CLAUDE_CONFIG_DIR CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX AWS_REGION AWS_PROFILE ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION`, proxies, CA bundles. A parent Claude Code session's variables (`CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, …) are dropped. |
+| Usage (`usageNormalized`) | `input_tokens + cache_creation_input_tokens` / `cache_read_input_tokens` / `output_tokens`; `null` when the result carries no usage |
 
 What the flags do (observed with the real CLI):
 

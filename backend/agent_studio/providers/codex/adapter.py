@@ -33,12 +33,18 @@ def _short(text: str, n: int = 300) -> str:
     return " ".join(str(text).split())[:n]
 
 
+def _ints(raw, *keys):
+    if not isinstance(raw, dict) or not any(k in raw for k in keys):
+        return None
+    return [max(0, raw[k]) if isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool) else 0 for k in keys]
+
+
 class CodexAdapter(Adapter):
     provider_id = "codex"
 
     # ---- declaration -------------------------------------------------------------------------
     def capabilities(self) -> dict:
-        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": UNSUPPORTED,
+        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": self.resume_capability(),
                 "interactiveInput": UNSUPPORTED}
 
     def policy_mapping(self) -> Dict[str, Optional[List[str]]]:
@@ -136,6 +142,12 @@ class CodexAdapter(Adapter):
             argv += ["-c", f'model_reasoning_effort="{inp.reasoning}"']
         argv.append("-")  # the prompt comes from stdin (the private prompt file), never the command line
         return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
+
+    def normalize_usage(self, raw):
+        v = _ints(raw, "input_tokens", "cached_input_tokens", "output_tokens")
+        if v is None:
+            return None
+        return {"inputTokens": max(0, v[0] - v[1]), "cachedInputTokens": v[1], "outputTokens": v[2]}
 
     def parse_line(self, line: bytes, state: ParseState):
         state.events += 1

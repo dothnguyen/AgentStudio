@@ -19,6 +19,23 @@ def emit(obj):
     sys.stdout.flush()
 
 
+def load_session(session_dir, sid):
+    try:
+        with open(os.path.join(session_dir, sid + ".json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("turns"), list) else None
+
+
+def save_session(session_dir, data):
+    os.makedirs(session_dir, mode=0o700, exist_ok=True)
+    path = os.path.join(session_dir, data["id"] + ".json")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--scenario", choices=SCENARIOS, required=True)
@@ -29,11 +46,35 @@ def main():
     p.add_argument("--final-text")
     p.add_argument("--model")
     p.add_argument("--reasoning", choices=("low", "medium", "high"))
+    p.add_argument("--session-dir")
+    p.add_argument("--persist", action="store_true")
+    p.add_argument("--resume")
+    p.add_argument("--fork", action="store_true")
+    p.add_argument("--force-session-missing", action="store_true")
+    p.add_argument("--tool-use", action="append", default=[])
     a = p.parse_args()
     prompt = sys.stdin.buffer.read()
     sha = hashlib.sha256(prompt).hexdigest()
-    emit({"type": "init", "session": "fake-" + uuid.uuid4().hex[:12], "promptSha256": sha, "promptBytes": len(prompt),
-          "sandbox": a.sandbox, "cwd": os.getcwd(), "model": a.model, "reasoning": a.reasoning})
+    parent = None
+    if a.resume or a.force_session_missing:  # the flag also fails a fresh start (the fallback re-run)
+        if not a.force_session_missing and a.session_dir:
+            parent = load_session(a.session_dir, a.resume)
+        if parent is None:
+            emit({"type": "result", "status": "error", "code": "session_not_found",
+                  "summary": "fake provider: no such session"})
+            return 1
+    prior = parent["turns"] if parent else []
+    turn = {"promptSha256": sha, "promptBytes": len(prompt), "sandbox": a.sandbox}
+    if parent and not a.fork:
+        sid = parent["id"]
+    else:
+        sid = "fake-" + uuid.uuid4().hex[:12]
+    emit({"type": "init", "session": sid, "promptSha256": sha, "promptBytes": len(prompt),
+          "sandbox": a.sandbox, "cwd": os.getcwd(), "model": a.model, "reasoning": a.reasoning,
+          "resumedFrom": a.resume if parent else None, "priorTurns": len(prior)})
+    if a.session_dir and (a.persist or parent):
+        save_session(a.session_dir, {"id": sid, "parent": parent["id"] if parent else None,
+                                     "turns": prior + [turn]})
     duration = (60.0 if a.scenario == "slow" and a.duration_ms <= 1000 else a.duration_ms / 1000.0)
     if a.scenario == "timeout":
         time.sleep(3600)
@@ -74,7 +115,14 @@ def main():
         emit({"type": "result", "status": "error", "summary": "fake provider error: model unavailable"})
         return 1
     result = {"type": "result", "status": "success", "summary": f"fake {s} done", "promptSha256": sha,
-              "usage": {"inputTokens": len(prompt), "outputTokens": 42}}
+              "usage": {"inputTokens": len(prompt), "cachedInputTokens": sum(
+                  t.get("promptBytes", 0) for t in prior if isinstance(t, dict)), "outputTokens": 42}}
+    tools = {}
+    for item in a.tool_use:
+        name, _, n = item.partition("=")
+        tools[name] = int(n)
+    if tools:
+        result["toolUses"] = tools
     if a.final_text:
         result["summary"] = a.final_text
     if s == "verdict_pass":
