@@ -554,11 +554,17 @@ class Builtins(Ws):
         self.assertEqual(cm.exception.code, wd.WORKFLOW_DEFINITION_NOT_FOUND)
         self.assertEqual(wd.list_definitions(self.ws), [])
 
-    def test_workspace_file_wins_over_builtin(self):
+    def test_workspace_file_with_a_builtin_name_is_invalid(self):
+        # S06 reserves built-in names (design contract section A); S01 had let the workspace file win.
         self.write_def("dr", definition(stage(role="Mine")))
-        d = wd.load(self.ws, "dr", self.bdir)
-        self.assertEqual(d.stages[0].role, "Mine")
-        self.assertFalse(wd.list_definitions(self.ws, self.bdir)[0]["builtin"])
+        with self.assertRaises(AsError) as cm:
+            wd.load(self.ws, "dr", self.bdir)
+        self.assertEqual(cm.exception.code, wd.WORKFLOW_DEFINITION_INVALID)
+        err = cm.exception.data["errors"][0]
+        self.assertEqual((err["path"], err["file"]), ("$", ".agent-studio/workflows/dr.json"))
+        self.assertIn("reserved", err["message"])
+        entries = wd.list_definitions(self.ws, self.bdir)
+        self.assertEqual([e["name"] for e in entries], ["dr"])
 
 
 class Listing(Ws):

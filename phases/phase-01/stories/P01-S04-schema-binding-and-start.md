@@ -28,7 +28,7 @@ Make the database able to hold runs with arbitrary stage ids, and let `workflow.
 ## Evidence
 
 - Tests: unit suite `python3 -m unittest discover -s tests/unit -t .` → 302 OK (5 skipped), including 9 new in
-  `tests/unit/test_p01_s04_migration.py`. New `tests/integration/test_p01_s04_start.py`: 22 OK. P00 integration:
+  `tests/unit/test_p01_s04_migration.py`. New `tests/integration/test_p01_s04_start.py`: 19 OK. P00 integration:
   `test_s01_coordinator` + `test_s02_state` (29), `test_s04_runner` + `test_s05_direct` (26), `test_s06_workflow` (10)
   OK; `test_s07_recovery` 16 of 17 OK. The one error, `StartupAndStop.test_orphan_sessions_at_startup`
   (`KeyError: 'startupReconciliation'`), passes when its class runs alone and **fails the same way on an unmodified

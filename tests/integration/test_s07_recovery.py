@@ -280,7 +280,7 @@ class ResolveDrills(Drill):
         self.assertEqual(out["data"]["stage"], "developer")
         d = wait_until(lambda: show()["workflowRun"]["status"] in TERMINAL and show(), timeout=40)
         self.assertEqual((d["workflowRun"]["status"], d["task"]["status"]), ("succeeded", "succeeded"))
-        self.assertEqual([s["status"] for s in d["stageAttempts"]], ["abandoned", "completed", "completed"])
+        self.assertEqual([s["status"] for s in d["stageAttempts"]], ["abandoned", "completed", "completed", "completed"])   # S06: the validation stage is an attempt
         self.assertEqual(len([e for e in d["events"] if e["name"] == "workflow_run.resumed"]), 1)
 
     def test_direct_timeout_is_final_and_redone_as_a_new_task(self):

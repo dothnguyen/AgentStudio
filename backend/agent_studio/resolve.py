@@ -59,6 +59,9 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
     action = args["action"]
     task = tx.get("task", a["task_id"])
     wf = _workflow_for(tx, task)
+    if wf and not workflow.is_definition_run(wf):
+        raise AsError(RESOLVE_NOT_ALLOWED, "This workflow run was started before the upgrade and cannot continue; "
+                      "it can only be cancelled.", remediation=f"agent-studio workflow cancel --workflow {wf['id']}")
     current = workflow._current_attempt(tx, wf["id"]) if wf else None
     if wf and current and current["assignment_id"] != a["id"]:
         raise AsError(RESOLVE_NOT_ALLOWED, "Only the workflow's current stage can be resolved.")

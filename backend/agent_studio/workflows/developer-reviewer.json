@@ -1,0 +1,66 @@
+{
+ "version": 1,
+ "description": "P00 workflow: Developer implements, the tests run, a Reviewer judges, one repair round, then a recheck.",
+ "stages": [
+  {
+   "id": "developer",
+   "role": "Developer",
+   "permission": "workspace_write",
+   "prompt": "You are the Developer in an Agent Studio workflow.\nMake the change described in TASK inside the current workspace. Keep the change focused, and do not\ntouch files the task does not need. A deterministic validation command will run after you finish, and\na separate Reviewer will read your diff. Finish with a short summary of what you changed.\n{{task}}",
+   "next": {
+    "done": "validation"
+   }
+  },
+  {
+   "id": "validation",
+   "type": "validation",
+   "next": {
+    "pass": "reviewer",
+    "fail": "reviewer"
+   }
+  },
+  {
+   "id": "reviewer",
+   "role": "Reviewer",
+   "permission": "read_only",
+   "passRequires": [
+    "validation"
+   ],
+   "prompt": "You are the Reviewer in an Agent Studio workflow. You have read-only access: do not modify files.\nReview DIFF against TASK, taking VALIDATION into account.\n{{task}}{{diff}}{{validation}}",
+   "next": {
+    "pass": "$succeed",
+    "fail": "developer_repair"
+   }
+  },
+  {
+   "id": "developer_repair",
+   "role": "Developer",
+   "permission": "workspace_write",
+   "prompt": "You are the Developer in an Agent Studio workflow, repairing your earlier change after review.\nAddress every item in FINDINGS and make VALIDATION pass, without unrelated changes. DIFF shows the\ncurrent changes against the starting commit. Finish with a short summary of what you changed.\n{{task}}{{diff}}{{validation}}{{findings}}",
+   "next": {
+    "done": "validation_recheck"
+   }
+  },
+  {
+   "id": "validation_recheck",
+   "type": "validation",
+   "next": {
+    "pass": "reviewer_recheck",
+    "fail": "reviewer_recheck"
+   }
+  },
+  {
+   "id": "reviewer_recheck",
+   "role": "Reviewer",
+   "permission": "read_only",
+   "passRequires": [
+    "validation_recheck"
+   ],
+   "prompt": "You are the Reviewer in an Agent Studio workflow. You have read-only access: do not modify files.\nReview DIFF against TASK, taking VALIDATION into account.\n{{task}}{{diff}}{{validation}}",
+   "next": {
+    "pass": "$succeed",
+    "fail": "$fail"
+   }
+  }
+ ]
+}

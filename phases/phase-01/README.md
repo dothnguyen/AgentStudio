@@ -178,7 +178,7 @@ CLI: `agent-studio workflow list|validate|start ...`, with `start` taking `--tea
 ### F. State and events
 
 - **Migration (S04).** `workflow_runs` and `stage_attempts` are **rebuilt** (create new table, copy, drop, rename, in one transaction), because SQLite cannot drop the P00 `CHECK (stage IN …)`, `CHECK (current_stage IN …)`, and `CHECK (retry_count <= retry_budget)` constraints. Stage ids are then checked by the engine against the frozen definition. Existing rows are copied unchanged. New columns: `workflow_runs.definition_name`, `definition_json`, `definition_sha256`, `bindings_json`, `step_count`; `stage_attempts.stage_type`, `visit`. `developer_agent_id` / `reviewer_agent_id` stay for old rows, but the definition engine no longer reads them.
-- **Events.** A new event, `workflow_run.routed` `{fromStage, outcome, toStage, reason, sourceAssignmentId}`, is written on every transition, including to `$succeed` / `$fail`. P00 events (`handoff`, `validating`, `validated`, `verdict`, `paused`) keep their names and fields. `repair_requested` is still emitted when routing returns to an already-visited stage, and `retry_count` counts those revisits.
+- **Events.** A new event, `workflow_run.routed` `{fromStage, outcome, toStage, reason, sourceAssignmentId}`, is written on every transition, including to `$succeed` / `$fail`. P00 events (`handoff`, `validating`, `validated`, `verdict`, `paused`) keep their names and fields. `repair_requested` is still emitted, and `retry_count` goes up by one, whenever a verdict stage's `fail` outcome routes to another stage (a repair round). Entering a stage again by `done` or `pass` does not count, so develop → qa fail → develop → qa pass counts 1.
 
 ### G. Upgrade and compatibility
 

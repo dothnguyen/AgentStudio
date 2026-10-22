@@ -667,6 +667,8 @@ def _locate(workspace: str, name: str, builtin_dir: Optional[str]) -> tuple:
         raise AsError(WORKFLOW_DEFINITION_AMBIGUOUS,
                       f"More than one definition file for {name!r}: {', '.join(files)}. Keep one.",
                       data={"files": files})
+    if found and builtin_dir and os.path.isfile(os.path.join(builtin_dir, name + ".json")):
+        raise _whole_file_error(rel(found[0]), f'the name "{name}" is reserved for a built-in definition')
     if found:
         return (os.path.join(folder, name + found[0]), rel(found[0]), found[0],
                 os.path.join(workspace, CONFIG_DIR), False)

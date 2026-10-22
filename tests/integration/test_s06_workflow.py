@@ -77,8 +77,11 @@ class HappyAndBoundedRepair(WorkflowCase):
         w = d["workflowRun"]
         self.assertEqual((w["status"], w["retryCount"], w["baseCommit"]), ("succeeded", 1, base))
         self.assertEqual(d["task"]["status"], "succeeded")
-        self.assertEqual(self.stages(d), [("developer", "validation_failed"), ("reviewer", "verdict_fail"),
-                                          ("developer_repair", "validation_passed"), ("reviewer_recheck", "verdict_pass")])
+        # S06: validation is its own stage attempt, so the six stages of the built-in definition show up
+        self.assertEqual(self.stages(d), [("developer", "done"), ("validation", "validation_failed"),
+                                          ("reviewer", "verdict_fail"), ("developer_repair", "done"),
+                                          ("validation_recheck", "validation_passed"),
+                                          ("reviewer_recheck", "verdict_pass")])
         self.assertEqual(len(d["assignments"]), 4)
         # provider IDs come from agents; policies from stages
         self.assertEqual([(a["providerId"], a["policy"]) for a in d["assignments"]],
@@ -95,10 +98,10 @@ class HappyAndBoundedRepair(WorkflowCase):
         self.assertEqual([(v["data"]["sourceAssignmentId"], v["data"]["passed"]) for v in validated],
                          [(ids[0], False), (ids[2], True)])
         # durable artifacts: diffs, validation output, prompts as data files
-        dev1, rev1, dev2, rev2 = d["stageAttempts"]
+        dev1, val1, rev1, dev2, val2, rev2 = d["stageAttempts"]
         self.assertIn("feature.txt", open(dev1["diff"]["path"]).read())
         self.assertIn("fixed.txt", open(dev2["diff"]["path"]).read())
-        self.assertIn("looking for fixed.txt", open(dev1["validation"]["outputPath"]).read())
+        self.assertIn("looking for fixed.txt", open(val1["validation"]["outputPath"]).read())
         review_prompt = open(rev1["promptPath"]).read()
         for section in ("===== TASK =====", "===== DIFF =====", "===== VALIDATION =====", "feature.txt", "FAILED"):
             self.assertIn(section, review_prompt)
@@ -114,11 +117,11 @@ class HappyAndBoundedRepair(WorkflowCase):
                         "developer_repair": fake("success", "fixed2.txt"), "reviewer_recheck": fake("verdict_fail")})
         d = self.wait(r["data"]["workflowRunId"], FINAL)
         self.assertEqual((d["workflowRun"]["status"], d["task"]["status"]), ("failed", "failed"))
-        self.assertEqual(len(d["stageAttempts"]), 4)
+        self.assertEqual(len(d["stageAttempts"]), 6)   # S06: two of them are validation attempts
         time.sleep(1.5)
         d = self.show(r["data"]["workflowRunId"])
         self.assertEqual(len(d["assignments"]), 4)
-        self.assertIn("repair budget", d["workflowRun"]["transitionReason"])
+        self.assertEqual(d["workflowRun"]["transitionReason"], "reviewer_recheck fail")   # S06: was "repair budget used"
         self.assertIn("test_add fails", d["workflowRun"]["lastFinding"])
 
     def test_completes_after_the_cli_exits(self):
@@ -134,7 +137,7 @@ class HappyAndBoundedRepair(WorkflowCase):
         d = self.wait(wf, FINAL + ("paused",))
         # no debug stage options: the fake's default run gives no verdict, so the reviewer stage pauses -
         # what matters here is that the run advanced through stages with no CLI attached
-        self.assertGreaterEqual(len(d["stageAttempts"]), 2)
+        self.assertGreaterEqual(len(d["stageAttempts"]), 3)   # S06: validation counts
         self.assertEqual(d["workflowRun"]["status"], "paused")
         self.cancel(wf)
 
@@ -148,9 +151,9 @@ class TruthTable(WorkflowCase):
         self.assertTrue(r["ok"], r)
         wf = r["data"]["workflowRunId"]
         if expect_next:
-            d = wait_until(lambda: len(self.show(wf)["stageAttempts"]) >= 3 and self.show(wf), timeout=40,
+            d = wait_until(lambda: len(self.show(wf)["stageAttempts"]) >= 4 and self.show(wf), timeout=40,
                            message="next stage")
-            self.assertEqual(d["stageAttempts"][2]["stage"], expect_next)
+            self.assertEqual(d["stageAttempts"][3]["stage"], expect_next)   # S06: index 3 (validation is attempt 2)
         d = self.wait(wf)
         self.assertEqual(d["workflowRun"]["status"], expect_status, (stages, d["workflowRun"]["transitionReason"]))
         if expect_status == "paused":
@@ -161,7 +164,7 @@ class TruthTable(WorkflowCase):
     def test_rows(self):
         # validation pass + reviewer pass -> succeeded after two stages
         d = self.run_case({"developer": fake("success", "fixed.txt"), "reviewer": fake("verdict_pass")}, "succeeded")
-        self.assertEqual(len(d["stageAttempts"]), 2)
+        self.assertEqual(len(d["stageAttempts"]), 3)   # S06: developer, validation, reviewer
         # validation pass + reviewer fail -> repair
         self.run_case({"developer": fake("success", "fixed.txt"), "reviewer": fake("verdict_fail"),
                        "developer_repair": fake("success", "fixed.txt"), "reviewer_recheck": fake("verdict_pass")},
@@ -171,12 +174,13 @@ class TruthTable(WorkflowCase):
                            "developer_repair": fake("success", "fixed.txt"), "reviewer_recheck": fake("verdict_pass")},
                           "succeeded", expect_next="developer_repair")
         repair = [e for e in d["events"] if e["name"] == "workflow_run.repair_requested"][0]
-        self.assertEqual(repair["data"]["reason"], "validation failed")
+        self.assertEqual(repair["data"]["findings"][0], "validation did not pass")   # S06: was reason "validation failed"
         # validation fail + reviewer fail -> repair; recheck still failing validation -> failed
         d = self.run_case({"developer": fake("success", "feature.txt"), "reviewer": fake("verdict_fail"),
                            "developer_repair": fake("success", "feature2.txt"), "reviewer_recheck": fake("verdict_pass")},
                           "failed", expect_next="developer_repair")
-        self.assertIn("validation failed", d["workflowRun"]["transitionReason"])
+        self.assertEqual(d["workflowRun"]["transitionReason"], "reviewer_recheck fail")   # S06
+        self.assertEqual(d["workflowRun"]["lastFinding"], "validation_recheck did not pass")
 
     def test_pausing_rows(self):
         for dev_scenario, code in (("provider_failure", "PROVIDER_ERROR"), ("no_final", "NO_TERMINAL_EVENT"),

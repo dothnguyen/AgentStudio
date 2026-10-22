@@ -86,12 +86,16 @@ class GitCapture(unittest.TestCase):
 
 class Prompts(unittest.TestCase):
     def test_sections_and_bounds(self):
-        p = workflow.compose_prompt("developer_repair", "task $(x)", diff="d" * (300 * 1024), validation_text="v",
-                                    findings=["f1", "`f2`"])
+        from agent_studio import prompts, workflowdef
+        d = workflowdef.load(tempfile.mkdtemp(), "developer-reviewer", workflow.BUILTIN_DIR)
+        st = next(x for x in d.stages if x.id == "developer_repair")
+        p = prompts.render(st.prompt, kind=st.kind, task="task $(x)", diff="d" * (300 * 1024), validation="v",
+                           findings=["f1", "`f2`"], stage=st.id, visit=1)
         for s in ("===== TASK =====", "task $(x)", "===== DIFF =====", "DIFF truncated", "===== FINDINGS =====",
                   "- `f2`", "===== VALIDATION ====="):
             self.assertIn(s, p)
-        self.assertIn("JSON", workflow.compose_prompt("reviewer", "t"))
+        rv = next(x for x in d.stages if x.id == "reviewer")
+        self.assertIn("JSON", prompts.render(rv.prompt, kind=rv.kind, task="t", stage=rv.id, visit=1))
 
 
 if __name__ == "__main__":

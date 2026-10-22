@@ -1,17 +1,17 @@
-"""Built-in Developer -> Reviewer workflow (P00-S06).
+"""The workflow engine (P00-S06, generalised by P01-S04..S06).
 
-    developer -> [diff + validation] -> reviewer -> (one repair) developer_repair -> [diff + validation]
-              -> reviewer_recheck -> final
+Every run executes a frozen definition (workflowdef.py): an ordered list of agent and validation stages whose outcomes
+route to the next stage. P00's Developer -> Reviewer workflow is the built-in definition `developer-reviewer`.
 
 The coordinator advances runs from durable state only (assignment rows, validation result files); it never reads
-panes and has no provider-specific branches. Decisions follow the PRD section 6 truth table:
+panes, and it has no role names, stage ids, or provider-specific branches. Outcomes (design contract section D):
 
-  Developer failed / inconclusive / waiting          -> paused (operator resolves)
-  validation pass + reviewer pass                    -> succeeded
-  validation pass + reviewer fail                    -> repair if budget remains, else failed
-  validation fail + any valid verdict                -> repair if budget remains, else failed
-  reviewer verdict malformed / missing / not success -> paused
-  any stage cancelled                                -> cancelled
+  agent stage succeeded: work stage -> done; verdict stage -> pass / fail (a pass whose passRequires did not pass
+                         becomes fail); missing or malformed verdict -> paused
+  agent stage failed / inconclusive / waiting / reconciling -> paused with its diagnostic code
+  validation exit 0 / nonzero or timeout -> pass / fail; could not run -> paused; process lost -> paused
+  any cancelled stage, or an operator cancel -> cancelled
+  a run with no frozen definition (started by P00 before the upgrade) -> paused LEGACY_WORKFLOW_RUN, cancel only
 """
 from __future__ import annotations
 
@@ -27,53 +27,21 @@ from .state import utcnow
 from .store import NOT_FOUND, Store, Tx
 from .textsafe import terminal_safe
 
-DEV_STAGES = ("developer", "developer_repair")
-REVIEW_STAGES = ("reviewer", "reviewer_recheck")
-POLICY = {"developer": "workspace_write", "developer_repair": "workspace_write",
-          "reviewer": "read_only", "reviewer_recheck": "read_only"}
 ACTIVE = ("queued", "running", "paused")
 SAME_AGENT = "SAME_AGENT"
 ROLE_UNBOUND = "ROLE_UNBOUND"
 ROLE_AMBIGUOUS = "ROLE_AMBIGUOUS"
+LEGACY_WORKFLOW_RUN = "LEGACY_WORKFLOW_RUN"
 BUILTIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
-
-TEMPLATES = {
-    "developer": (
-        "You are the Developer in an Agent Studio workflow.\n"
-        "Make the change described in TASK inside the current workspace. Keep the change focused, and do not\n"
-        "touch files the task does not need. A deterministic validation command will run after you finish, and\n"
-        "a separate Reviewer will read your diff. Finish with a short summary of what you changed.\n"),
-    "developer_repair": (
-        "You are the Developer in an Agent Studio workflow, repairing your earlier change after review.\n"
-        "Address every item in FINDINGS and make VALIDATION pass, without unrelated changes. DIFF shows the\n"
-        "current changes against the starting commit. Finish with a short summary of what you changed.\n"),
-    "reviewer": (
-        "You are the Reviewer in an Agent Studio workflow. You have read-only access: do not modify files.\n"
-        "Review DIFF against TASK, taking VALIDATION into account.\n"),
-}
-TEMPLATES["reviewer_recheck"] = TEMPLATES["reviewer"]
+# The P00 command form (developerAgentId / reviewerAgentId) maps onto this built-in definition and its two roles.
+# This constant is the only place in the engine that names them; the guard test exempts it.
+P00_FORM = ("developer-reviewer", "Developer", "Reviewer")
 
 
 # ---- helpers ----------------------------------------------------------------------------------------
 
 def workflow_dir(state_dir: str, wf_id: str) -> str:
     return os.path.join(state_dir, "workflows", wf_id)
-
-
-def compose_prompt(stage: str, task: str, diff: Optional[str] = None, validation_text: Optional[str] = None,
-                   findings: Optional[list] = None) -> str:
-    """P00 stage prompt: the fixed template, then the data sections, rendered by prompts.render. Review stages end
-    with the verdict footer (P01-S03 moved the JSON sentence from the template to the end of the prompt)."""
-    template = TEMPLATES[stage]
-    template += "{{task}}"
-    if diff is not None:
-        template += "{{diff}}"
-    if validation_text is not None:
-        template += "{{validation}}"
-    if findings is not None:
-        template += "{{findings}}"
-    return prompts.render(template, kind="verdict" if stage in REVIEW_STAGES else "work", task=task, diff=diff,
-                          validation=validation_text, findings=findings, stage=stage, visit=1)
 
 
 def _read(path: Optional[str], limit: int = 512 * 1024) -> str:
@@ -114,12 +82,6 @@ def _current_attempt(tx: Tx, wf_id: str) -> Optional[dict]:
     row = tx.conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? AND status = 'active' "
                           "ORDER BY created_at DESC, rowid DESC LIMIT 1", (wf_id,)).fetchone()
     return dict(row) if row else None
-
-
-def _last_dev_attempt(tx: Tx, wf_id: str) -> dict:
-    return dict(tx.conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? AND stage IN "
-                                "('developer', 'developer_repair') AND status = 'completed' "
-                                "ORDER BY created_at DESC, rowid DESC LIMIT 1", (wf_id,)).fetchone())
 
 
 # ---- start ------------------------------------------------------------------------------------------
@@ -197,9 +159,6 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
     ws = team["workspace"]
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
     first = definition.stages[0]
-    if first.type != "agent":
-        raise AsError(BAD_REQUEST, f"Definition {definition.name} starts with a validation stage; that is not "
-                                   "supported until P01-S06.")
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)
     base = gitws.require_repo(ws)
     dirty = gitws.dirty_entries(ws)
@@ -231,100 +190,95 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
                             "definition": definition.name, "definitionSha256": definition.source_sha256,
                             "bindings": bindings})
     tx.transition("workflow_run", wf, "running", set_values={"transition_reason": "started"})
-    asg = _dispatch(tx, wf, first.id, None, ctx, from_assignment=None, data={})
+    if first.kind == "verdict":
+        tx.transition("task", task, "review")
+    asg = _enter(tx, wf, first.id, ctx, None, {})
     return {"receipt": "accepted", "workflowRunId": wf, "taskId": task, "baseCommit": base,
             "definition": definition.name, "definitionSha256": definition.source_sha256, "bindings": bindings,
             "assignmentId": asg, "validationArgv": config["validation"]["argv"]}
 
 
+
+
 def start(tx: Tx, args: dict, ctx: dict) -> dict:
+    """workflow.start. The P00 form (developerAgentId / reviewerAgentId) runs the built-in definition with those two
+    agents bound directly, so P00 teams keep working whatever their role names are."""
     if args.get("definition"):
         return _start_definition(tx, args, ctx)
-    team = tx.get("team", args["teamId"])
-    if team["status"] != "running":
-        raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
-    if args["developerAgentId"] == args["reviewerAgentId"]:
-        raise AsError(SAME_AGENT, "The Developer and the Reviewer must be two different agents.")
-    agents = {}
-    for role, key in (("developer", "developerAgentId"), ("reviewer", "reviewerAgentId")):
-        try:
-            a = tx.get("agent", args[key])
-        except AsError:
-            raise AsError(NOT_FOUND, f"{role} agent {args[key]} does not exist.")
-        if a["team_id"] != team["id"]:
-            raise AsError(tasks.AGENT_NOT_IN_TEAM, f"{role} agent {a['id']} is not in team {team['id']}.")
-        if a["availability"] in ("offline", "error") or a["pane_state"] != "alive":
-            raise AsError(tasks.AGENT_UNAVAILABLE, f"{role} agent {a['display_name']} is {a['availability']}.")
-        adapter, _ = tasks.adapter_for(a, ctx)
-        policy = POLICY[role]
-        if adapter.describe(dict(os.environ))["policies"].get(policy) in (None, "unsupported"):
-            raise AsError(tasks.POLICY_UNSUPPORTED, f"{role} agent's provider {a['provider_id']} has no verified "
-                                                    f"mapping for {policy}.")
-        agents[role] = a
-    ws = team["workspace"]
-    base = gitws.require_repo(ws)
-    dirty = gitws.dirty_entries(ws)
-    if dirty and not (ctx["debug"] and args.get("allowDirtyTree")):
-        raise AsError(gitws.WORKSPACE_DIRTY, f"The workspace has {len(dirty)} uncommitted change(s); the workflow "
-                                             "needs a clean starting commit.", data={"entries": dirty[:20]},
-                      remediation="Commit or stash your changes first.")
-    config = validation.load_config(ws)
-    holder = tasks._mutating_in_workspace(tx, ws)
-    if holder:
-        raise AsError(tasks.WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).")
-    if args.get("debugStageOptions"):
-        if not ctx["debug"]:
-            raise AsError(BAD_REQUEST, "debugStageOptions is only accepted by debug coordinators.")
-        config["debugStageOptions"] = args["debugStageOptions"]
-    deadline = (datetime.now(timezone.utc) + timedelta(milliseconds=config["workflowDeadlineMs"])
-                ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    task = tx.create("task", {"team_id": team["id"], "origin": "workflow", "workspace": ws, "goal": args["text"]})
-    tx.transition("task", task, "assigned")
-    tx.transition("task", task, "running")
-    wf = tx.create("workflow_run", {"team_id": team["id"], "task_id": task, "workflow": "developer_reviewer",
-                                    "retry_budget": 1, "retry_count": 0, "base_commit": base,
-                                    "developer_agent_id": agents["developer"]["id"],
-                                    "reviewer_agent_id": agents["reviewer"]["id"], "config_json": config,
-                                    "deadline_at": deadline},
-                   payload={"baseCommit": base, "validationArgv": config["validation"]["argv"]})
-    tx.transition("workflow_run", wf, "running", set_values={"transition_reason": "started"})
-    first = _dispatch(tx, wf, "developer", compose_prompt("developer", args["text"]), ctx, from_assignment=None)
-    return {"receipt": "accepted", "workflowRunId": wf, "taskId": task, "baseCommit": base,
-            "developerAgentId": agents["developer"]["id"], "reviewerAgentId": agents["reviewer"]["id"],
-            "assignmentId": first, "validationArgv": config["validation"]["argv"]}
+    dev, rev = args["developerAgentId"], args["reviewerAgentId"]
+    if dev == rev:
+        raise AsError(SAME_AGENT, "developerAgentId and reviewerAgentId must be two different agents.")
+    name, dev_role, rev_role = P00_FORM
+    out = _start_definition(tx, dict(args, definition=name, bindings={dev_role: dev, rev_role: rev}), ctx)
+    return dict(out, developerAgentId=dev, reviewerAgentId=rev)
 
 
-def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, from_assignment: Optional[str],
-              provider_options: Optional[dict] = None, data: Optional[dict] = None) -> str:
-    """Create the stage attempt and its assignment. P00 runs pass the composed prompt. Definition runs may pass None
-    and `data` (diff, validation, findings, summary), and the frozen template is rendered here."""
-    wf = tx.get("workflow_run", wf_id)
-    config = _loads(wf["config_json"], {})
-    if is_definition_run(wf):
-        st = next(x for x in frozen_definition(wf).stages if x.id == stage)
-        agent_id = _loads(wf["bindings_json"], {})[st.role]
-        policy, stage_type = st.permission, st.type
-    else:
-        st, stage_type, policy = None, "agent", POLICY[stage]
-        agent_id = wf["developer_agent_id"] if stage in DEV_STAGES else wf["reviewer_agent_id"]
-    agent = tx.get("agent", agent_id)
+def _visit(tx: Tx, wf_id: str, stage: str, new_visit: bool) -> tuple:
+    """(attempt, visit, n): the attempt number within the stage, its visit, and its position in the run. A routed entry
+    is a new visit; a resolve-retry of the same stage repeats the visit it was on."""
     n = tx.conn.execute("SELECT COUNT(*) FROM stage_attempts WHERE workflow_run_id = ?", (wf_id,)).fetchone()[0] + 1
     attempt = tx.conn.execute("SELECT COUNT(*) FROM stage_attempts WHERE workflow_run_id = ? AND stage = ?",
                               (wf_id, stage)).fetchone()[0] + 1
+    prior = tx.conn.execute("SELECT COALESCE(MAX(visit), 0) FROM stage_attempts WHERE workflow_run_id = ? AND stage = ?",
+                            (wf_id, stage)).fetchone()[0]
+    return attempt, (prior + 1 if new_visit or prior == 0 else prior), n
+
+
+def _enter(tx: Tx, wf_id: str, stage: str, ctx: dict, from_assignment: Optional[str], data: dict) -> Optional[str]:
+    """Enter a stage by routing: an agent stage gets an assignment (its ID is returned), a validation stage starts
+    the validator."""
+    st = _stage_of(tx.get("workflow_run", wf_id), stage)
+    if st.type == "validation":
+        _enter_validation(tx, wf_id, st, ctx, from_assignment)
+        return None
+    return _dispatch(tx, wf_id, stage, None, ctx, from_assignment, data=data, new_visit=True)
+
+
+def _enter_validation(tx: Tx, wf_id: str, st: "workflowdef.Stage", ctx: dict, from_assignment: Optional[str]) -> None:
+    wf = tx.get("workflow_run", wf_id)
+    attempt, visit, n = _visit(tx, wf_id, st.id, True)
+    sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{st.id}")
+    marker = os.path.join(sdir, "stage.txt")
+    _write_private(marker, f"validation stage {st.id}, visit {visit}\n")
+    proc = validation.spawn(sdir, wf_workspace(tx, wf), _loads(wf["config_json"], {}))
+    sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": st.id,
+                                     "attempt": attempt, "phase": "validating", "prompt_path": marker,
+                                     "stage_type": "validation", "visit": visit,
+                                     "validation_json": {"state": "running", "process": proc}},
+                   event="stage_attempt.validating",
+                   payload={"stage": st.id, "visit": visit, "sourceAssignmentId": from_assignment})
+    tx.update("workflow_run", wf_id, {"current_stage": st.id, "current_agent_id": None}, "workflow_run.stage_entered",
+              {"toStage": st.id, "type": "validation", "stageAttemptId": sa, "fromAssignmentId": from_assignment})
+
+
+def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, from_assignment: Optional[str],
+              provider_options: Optional[dict] = None, data: Optional[dict] = None,
+              new_visit: bool = False) -> str:
+    """Create the stage attempt and its assignment. Routing passes prompt=None and `data` (diff, validation, findings,
+    summary) and the frozen template is rendered here; a resolve-retry passes the earlier prompt text."""
+    wf = tx.get("workflow_run", wf_id)
+    config = _loads(wf["config_json"], {})
+    st = _stage_of(wf, stage)
+    agent_id = _loads(wf["bindings_json"], {})[st.role]
+    policy = st.permission
+    agent = tx.get("agent", agent_id)
+    attempt, visit, n = _visit(tx, wf_id, stage, new_visit)
     if prompt is None:
         prompt = prompts.render(st.prompt, kind=st.kind, task=tx.get("task", wf["task_id"])["goal"],
-                                stage=stage, visit=attempt, **(data or {}))
+                                stage=stage, visit=visit, **(data or {}))
     sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{stage}")
     prompt_path = os.path.join(sdir, "prompt.txt")
     _write_private(prompt_path, prompt)
     sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": stage,
                                      "attempt": attempt, "agent_id": agent_id, "phase": "assignment",
-                                     "prompt_path": prompt_path, "stage_type": stage_type, "visit": attempt})
+                                     "prompt_path": prompt_path, "stage_type": "agent", "visit": visit})
     adapter, alias = tasks.adapter_for(agent, ctx)
     request = tasks.build_request(agent, tx.get("task", wf["task_id"])["workspace"],
                                   {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"),
                                    "workflowRunId": wf_id, "stage": stage})
     stage_opts = provider_options or (config.get("debugStageOptions") or {}).get(stage)
+    if isinstance(stage_opts, list):   # debug only: one option set per visit, the last one repeats
+        stage_opts = stage_opts[min(visit, len(stage_opts)) - 1] if stage_opts else None
     if stage_opts and ctx["debug"] and getattr(adapter, "test_only", False):
         request["providerOptions"] = stage_opts
     if alias:
@@ -343,6 +297,199 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
 
 # ---- advancing --------------------------------------------------------------------------------------
 
+def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
+    wf = tx.get("workflow_run", wf_id)
+    sa = _current_attempt(tx, wf_id)
+    if wf["deadline_at"] and wf["deadline_at"] < utcnow():
+        _stop_active(tx, wf, sa, ctx)
+        _end(tx, wf, "failed", "workflow deadline reached")
+        return True
+    cancel = _cancel_requested(tx, wf_id)
+    if not is_definition_run(wf):
+        return _legacy_run(tx, wf, sa, cancel)
+    if sa is None:
+        return False
+    if sa["phase"] == "validating":
+        return _advance_validation(tx, wf, sa, ctx, cancel)
+    return _advance_definition(tx, wf, sa, ctx, cancel)
+
+
+def _legacy_run(tx: Tx, wf: dict, sa: Optional[dict], cancel: bool) -> bool:
+    """Q8: a run P00 started before the upgrade is never killed or silently failed. Once its current assignment or
+    validator is over it pauses, and then only workflow.cancel is accepted."""
+    if sa is not None and sa["phase"] == "assignment" and sa["assignment_id"]:
+        if tx.get("assignment", sa["assignment_id"])["status"] in ("queued", "claimed", "running"):
+            return False
+    elif sa is not None and sa["phase"] == "validating":
+        val = (_loads(sa["validation_json"], {}) or {}).get("process") or {}
+        if validation.result(os.path.dirname(sa["prompt_path"])) is None and procid.matches(val):
+            return False
+    if cancel:
+        _end(tx, wf, "cancelled", "cancelled by the operator")
+    else:
+        _pause(tx, wf, sa, "this run was started before the upgrade and cannot continue; cancel it",
+               LEGACY_WORKFLOW_RUN)
+    return True
+
+
+def _prev_assignment(tx: Tx, wf_id: str) -> Optional[str]:
+    row = tx.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id "
+                          "IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1", (wf_id,)).fetchone()
+    return row[0] if row else None
+
+
+def _latest_result(tx: Tx, wf_id: str, stage: Optional[str] = None) -> Optional[dict]:
+    """The newest completed validation result of the run (or of one validation stage)."""
+    sql = ("SELECT validation_json FROM stage_attempts WHERE workflow_run_id = ? AND stage_type = 'validation' "
+           "AND status = 'completed'" + (" AND stage = ?" if stage else "") + " ORDER BY created_at DESC, rowid DESC")
+    row = tx.conn.execute(sql, (wf_id, stage) if stage else (wf_id,)).fetchone()
+    return _loads(row[0], None) if row else None
+
+
+def _last_summary(tx: Tx, wf_id: str) -> str:
+    for row in tx.conn.execute("SELECT artifacts_json FROM stage_attempts WHERE workflow_run_id = ? AND artifacts_json "
+                               "IS NOT NULL ORDER BY created_at DESC, rowid DESC", (wf_id,)).fetchall():
+        text = (_loads(row[0], {}) or {}).get("summary")
+        if text:
+            return text
+    return ""
+
+
+def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:
+    sdir = os.path.dirname(sa["prompt_path"])
+    val_state = _loads(sa["validation_json"], {}) or {}
+    res = validation.result(sdir)
+    if res is None:
+        if procid.matches(val_state.get("process") or {}) and not cancel:
+            return False
+        res = validation.result(sdir)
+        if res is None:
+            if cancel:
+                _kill(val_state.get("process"))
+                _end(tx, wf, "cancelled", "cancelled by the operator")
+            else:
+                _pause(tx, wf, sa, "the validation process ended without a result", "VALIDATION_LOST")
+            return True
+    res["outputHead"] = validation.output_head(res.get("outputPath", ""), 2000)
+    source = _prev_assignment(tx, wf["id"])
+    tx.update("stage_attempt", sa["id"], {"phase": "done", "validation_json": dict(res, state="done"),
+                                          "outcome": "validation_" + ("passed" if res["passed"] else "failed")},
+              "stage_attempt.validated", {"stage": sa["stage"], "sourceAssignmentId": source, "passed": res["passed"],
+                                          "exitCode": res.get("exitCode"), "timedOut": res.get("timedOut"),
+                                          "error": res.get("error")})
+    tx.transition("stage_attempt", sa["id"], "completed")
+    if cancel:
+        _end(tx, wf, "cancelled", "cancelled by the operator")
+    elif res.get("error"):
+        _pause(tx, wf, None, f"validation could not run: {res['error']}", "VALIDATION_ERROR")
+    else:
+        _route(tx, tx.get("workflow_run", wf["id"]), _stage_of(wf, sa["stage"]), "pass" if res["passed"] else "fail",
+               None, source, ctx)
+    return True
+
+
+# ---- routing ----------------------------------------------------------------------------------------
+
+def _advance_definition(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:
+    """One finished agent stage of a definition run: outcome, diff, then routing (design contract section D)."""
+    a = tx.get("assignment", sa["assignment_id"])
+    if a["status"] in ("queued", "claimed", "running"):
+        return False
+    result = _loads(a["result_json"], {}) or {}
+    if a["status"] == "cancelled" or cancel:
+        _end(tx, wf, "cancelled", "cancelled by the operator" if cancel else f"{sa['stage']} assignment cancelled")
+        return True
+    st = _stage_of(wf, sa["stage"])
+    verdict = None
+    if st.kind == "verdict" and a["status"] in ("succeeded", "reconciling"):
+        verdict = result.get("verdict") if a["status"] == "succeeded" else None
+        if not valid_verdict(verdict):
+            _pause(tx, wf, sa, f"{sa['stage']} verdict missing or malformed",
+                   result.get("diagnosticCode") or "MALFORMED_VERDICT")
+            return True
+    if a["status"] != "succeeded":
+        _pause(tx, wf, sa, f"{sa['stage']} {a['status']}", result.get("diagnosticCode"))
+        return True
+    findings = None
+    if st.kind == "verdict":
+        outcome = verdict["verdict"]
+        findings = [str(f)[:2000] for f in verdict.get("findings", [])][:50]
+        if outcome == "pass":   # a pass counts only if every validation stage it depends on passed
+            for ref in st.pass_requires:
+                got = _latest_result(tx, wf["id"], ref)
+                if not got or not got.get("passed"):
+                    outcome = "fail"
+                    findings = [f"{ref} did not pass"] + findings
+    else:
+        outcome = "done"
+    values = {"outcome": outcome if verdict else "done", "phase": "done",
+              "artifacts_json": {"summary": str(result.get("finalText") or result.get("summary") or "")[:16 * 1024]}}
+    if st.permission == "workspace_write":
+        diff = gitws.capture_diff(wf_workspace(tx, wf), wf["base_commit"], os.path.dirname(sa["prompt_path"]))
+        values["diff_json"] = diff
+    if verdict:
+        values["verdict_json"] = {"verdict": outcome, "findings": findings, "agentVerdict": verdict["verdict"]}
+        values["outcome"] = f"verdict_{outcome}"
+    tx.update("stage_attempt", sa["id"], values, "stage_attempt.verdict" if verdict else "stage_attempt.completed",
+              {"sourceAssignmentId": a["id"], "stage": sa["stage"], "outcome": outcome,
+               **({"verdict": outcome, "findings": findings[:10]} if verdict else {}),
+               **({"diffPath": values["diff_json"]["path"], "diffBytes": values["diff_json"]["bytes"],
+                   "changedFiles": values["diff_json"]["changedFiles"][:20],
+                   "untrackedFiles": values["diff_json"]["untrackedFiles"][:20]} if "diff_json" in values else {})})
+    tx.transition("stage_attempt", sa["id"], "completed")
+    _route(tx, tx.get("workflow_run", wf["id"]), st, outcome, findings, a["id"], ctx)
+    return True
+
+
+def _route(tx: Tx, wf: dict, st: "workflowdef.Stage", outcome: str, findings: Optional[list],
+           source_asg: Optional[str], ctx: dict) -> None:
+    d = frozen_definition(wf)
+    target = st.next[outcome]
+    finding = (findings[0] if findings else None)
+    base = {"fromStage": st.id, "outcome": outcome, "sourceAssignmentId": source_asg}
+    values = {"step_count": wf["step_count"]}
+    if finding:
+        values["last_finding"] = finding
+    if target in (workflowdef.SUCCEED, workflowdef.FAIL):
+        tx.update("workflow_run", wf["id"], values, "workflow_run.routed",
+                  dict(base, toStage=target, reason=f"{st.id} {outcome}"))
+        _end(tx, tx.get("workflow_run", wf["id"]), "succeeded" if target == workflowdef.SUCCEED else "failed",
+             f"{st.id} {outcome}")
+        return
+    nxt = next(x for x in d.stages if x.id == target)
+    visits = tx.conn.execute("SELECT COALESCE(MAX(visit), 0) FROM stage_attempts WHERE workflow_run_id = ? AND stage = ?",
+                             (wf["id"], target)).fetchone()[0]
+    limit = None
+    if wf["step_count"] + 1 > d.max_steps:
+        limit = f"step limit {d.max_steps} reached"
+    elif visits >= nxt.max_visits:
+        limit = f"{target} visit limit {nxt.max_visits} reached"
+    if limit:
+        tx.update("workflow_run", wf["id"], values, "workflow_run.routed",
+                  dict(base, toStage=workflowdef.FAIL, reason=limit, wouldEnter=target))
+        _end(tx, tx.get("workflow_run", wf["id"]), "failed", limit)
+        return
+    values["step_count"] = wf["step_count"] + 1
+    tx.update("workflow_run", wf["id"], values, "workflow_run.routed",
+              dict(base, toStage=target, reason=f"{st.id} {outcome} -> {target}", step=values["step_count"]))
+    if st.kind == "verdict" and outcome == "fail":   # a failed verdict sends work back: that is a repair round
+        tx.update("workflow_run", wf["id"], {"retry_count": wf["retry_count"] + 1,
+                                             "transition_reason": f"{target} entered after {st.id} {outcome}"},
+                  "workflow_run.repair_requested",
+                  {"reason": f"{st.id} {outcome}", "findings": (findings or [])[:10], "toStage": target,
+                   "sourceAssignmentId": source_asg})
+    task = tx.get("task", wf["task_id"])
+    want = "review" if nxt.kind == "verdict" else "running"
+    if task["status"] != want:
+        tx.transition("task", task["id"], want)
+    latest = _latest_result(tx, wf["id"])
+    data = {"diff": _latest_diff_text(tx, wf["id"]), "findings": findings, "summary": _last_summary(tx, wf["id"]),
+            "validation": _validation_text(latest) if latest else None}
+    _enter(tx, wf["id"], target, ctx, source_asg, data)
+
+
+# ---- run lifecycle ----------------------------------------------------------------------------------
+
 def advance(store: Store, ctx: dict) -> int:
     rows = store.conn.execute("SELECT id FROM workflow_runs WHERE status = 'running'").fetchall()
     n = 0
@@ -359,130 +506,22 @@ def advance(store: Store, ctx: dict) -> int:
     return n
 
 
-def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
-    wf = tx.get("workflow_run", wf_id)
-    sa = _current_attempt(tx, wf_id)
-    if wf["deadline_at"] and wf["deadline_at"] < utcnow():
-        _stop_active(tx, wf, sa, ctx)
-        _end(tx, wf, "failed", "workflow deadline reached")
-        return True
-    if sa is None:
-        return False
-    cancel = _cancel_requested(tx, wf_id)
-    sdir = os.path.dirname(sa["prompt_path"])
-    if sa["phase"] == "assignment" and is_definition_run(wf):
-        a = tx.get("assignment", sa["assignment_id"])
-        if a["status"] in ("queued", "claimed", "running"):
-            return False
-        if a["status"] == "cancelled" or cancel:
-            _end(tx, wf, "cancelled", "cancelled by the operator" if cancel else f"{sa['stage']} assignment cancelled")
-        else:   # P01-S05 adds outcomes and routing; until then a finished first stage waits for the operator
-            _pause(tx, wf, sa, f"{sa['stage']} {a['status']}; routing for definition runs is not available yet",
-                   (_loads(a["result_json"], {}) or {}).get("diagnosticCode") or "ROUTING_NOT_AVAILABLE")
-        return True
-    if sa["phase"] == "assignment":
-        a = tx.get("assignment", sa["assignment_id"])
-        if a["status"] in ("queued", "claimed", "running"):
-            return False
-        result = _loads(a["result_json"], {}) or {}
-        if a["status"] == "cancelled" or cancel:
-            _end(tx, wf, "cancelled", "cancelled by the operator" if cancel else f"{sa['stage']} assignment cancelled")
-            return True
-        if sa["stage"] in DEV_STAGES:
-            if a["status"] != "succeeded":
-                _pause(tx, wf, sa, f"{sa['stage']} {a['status']}", result.get("diagnosticCode"))
-                return True
-            diff = gitws.capture_diff(wf_workspace(tx, wf), wf["base_commit"], sdir)
-            proc = validation.spawn(sdir, wf_workspace(tx, wf), _loads(wf["config_json"], {}))
-            tx.update("stage_attempt", sa["id"], {"phase": "validating", "diff_json": diff,
-                                                  "validation_json": {"state": "running", "process": proc}},
-                      "stage_attempt.validating", {"sourceAssignmentId": a["id"], "diffPath": diff["path"],
-                                                   "diffBytes": diff["bytes"], "changedFiles": diff["changedFiles"][:20],
-                                                   "untrackedFiles": diff["untrackedFiles"][:20]})
-            return True
-        verdict = result.get("verdict") if a["status"] == "succeeded" else None
-        if not valid_verdict(verdict):
-            why = "reviewer verdict missing or malformed" if a["status"] in ("succeeded", "reconciling") \
-                else f"{sa['stage']} {a['status']}"
-            _pause(tx, wf, sa, why, result.get("diagnosticCode") or "MALFORMED_VERDICT")
-            return True
-        findings = [str(f)[:2000] for f in verdict.get("findings", [])][:50]
-        tx.update("stage_attempt", sa["id"], {"verdict_json": {"verdict": verdict["verdict"], "findings": findings},
-                                              "outcome": f"verdict_{verdict['verdict']}", "phase": "done"},
-                  "stage_attempt.verdict",
-                  {"sourceAssignmentId": a["id"], "verdict": verdict["verdict"], "findings": findings[:10]})
-        tx.transition("stage_attempt", sa["id"], "completed")
-        _decide(tx, wf, a["id"], verdict["verdict"], findings, ctx)
-        return True
-    if sa["phase"] == "validating":
-        val_state = _loads(sa["validation_json"], {}) or {}
-        res = validation.result(sdir)
-        if res is None:
-            if procid.matches(val_state.get("process") or {}) and not cancel:
-                return False
-            res = validation.result(sdir)
-            if res is None:
-                if cancel:
-                    _kill(val_state.get("process"))
-                    _end(tx, wf, "cancelled", "cancelled by the operator")
-                else:
-                    _pause(tx, wf, sa, "the validation process ended without a result", "VALIDATION_LOST")
-                return True
-        res["outputHead"] = validation.output_head(res.get("outputPath", ""), 2000)
-        tx.update("stage_attempt", sa["id"], {"phase": "done", "validation_json": dict(res, state="done"),
-                                              "outcome": "validation_" + ("passed" if res["passed"] else "failed")},
-                  "stage_attempt.validated", {"sourceAssignmentId": sa["assignment_id"], "passed": res["passed"],
-                                              "exitCode": res.get("exitCode"), "timedOut": res.get("timedOut"),
-                                              "error": res.get("error")})
-        tx.transition("stage_attempt", sa["id"], "completed")
-        if cancel:
-            _end(tx, wf, "cancelled", "cancelled by the operator")
-            return True
-        if res.get("error"):
-            _pause(tx, wf, None, f"validation could not run: {res['error']}", "VALIDATION_ERROR")
-            return True
-        task = tx.get("task", wf["task_id"])
-        diff = _loads(sa["diff_json"], {}) or {}
-        stage = "reviewer" if sa["stage"] == "developer" else "reviewer_recheck"
-        prompt = compose_prompt(stage, task["goal"], diff=_read(diff.get("path")), validation_text=_validation_text(res))
-        if task["status"] == "running":
-            tx.transition("task", task["id"], "review")
-        _dispatch(tx, wf["id"], stage, prompt, ctx, from_assignment=sa["assignment_id"])
-        return True
-    return False
+def _stage_of(wf: dict, stage_id: str) -> "workflowdef.Stage":
+    return next(x for x in frozen_definition(wf).stages if x.id == stage_id)
+
+
+def _latest_diff_text(tx: Tx, wf_id: str) -> Optional[str]:
+    """The newest captured diff of the run (the workspace_write stage that ran last), or None before any."""
+    for row in tx.conn.execute("SELECT diff_json FROM stage_attempts WHERE workflow_run_id = ? AND diff_json IS NOT NULL "
+                               "ORDER BY created_at DESC, rowid DESC", (wf_id,)).fetchall():
+        diff = _loads(row["diff_json"], {}) or {}
+        if diff.get("path"):
+            return _read(diff["path"])
+    return None
 
 
 def wf_workspace(tx: Tx, wf: dict) -> str:
     return tx.get("task", wf["task_id"])["workspace"]
-
-
-def _decide(tx: Tx, wf: dict, review_assignment: str, verdict: str, findings: list, ctx: dict) -> None:
-    dev = _last_dev_attempt(tx, wf["id"])
-    val = _loads(dev["validation_json"], {}) or {}
-    passed = bool(val.get("passed"))
-    if passed and verdict == "pass":
-        _end(tx, wf, "succeeded", "validation passed and the reviewer approved")
-        return
-    reasons = ([] if passed else ["validation failed"]) + (["reviewer requested changes"] if verdict == "fail" else [])
-    reason = " and ".join(reasons)
-    last_finding = (findings[0] if findings else val.get("outputHead", "")[:500]) or None
-    wf = tx.get("workflow_run", wf["id"])
-    if wf["retry_count"] >= wf["retry_budget"]:
-        tx.update("workflow_run", wf["id"], {"last_finding": last_finding}, "workflow_run.finding",
-                  {"finding": last_finding})
-        _end(tx, wf, "failed", f"{reason}; repair budget ({wf['retry_budget']}) used")
-        return
-    tx.update("workflow_run", wf["id"], {"retry_count": wf["retry_count"] + 1, "last_finding": last_finding,
-                                         "transition_reason": f"repair: {reason}"}, "workflow_run.repair_requested",
-              {"reason": reason, "findings": findings[:10], "validationPassed": passed,
-               "sourceAssignmentId": review_assignment})
-    task = tx.get("task", wf["task_id"])
-    if task["status"] == "review":
-        tx.transition("task", task["id"], "running")
-    diff = _loads(dev["diff_json"], {}) or {}
-    prompt = compose_prompt("developer_repair", task["goal"], diff=_read(diff.get("path")),
-                            validation_text=_validation_text(val), findings=findings)
-    _dispatch(tx, wf["id"], "developer_repair", prompt, ctx, from_assignment=review_assignment)
 
 
 def _pause(tx: Tx, wf: dict, sa: Optional[dict], reason: str, code: Optional[str]) -> None:
@@ -522,8 +561,6 @@ def _stop_active(tx: Tx, wf: dict, sa: Optional[dict], ctx: dict) -> None:
             tasks.assignment_cancel(tx, {"assignmentId": a["id"]}, ctx)
 
 
-# ---- cancel ---------------------------------------------------------------------------------------
-
 def cancel(tx: Tx, args: dict, ctx: dict) -> dict:
     wf = tx.get("workflow_run", args["workflowRunId"])
     out = {"workflowRunId": wf["id"], "previousStatus": wf["status"]}
@@ -544,3 +581,5 @@ def cancel(tx: Tx, args: dict, ctx: dict) -> dict:
             tasks.assignment_cancel(tx, {"assignmentId": a["id"]}, ctx)
     _end(tx, tx.get("workflow_run", wf["id"]), "cancelled", "cancelled by the operator")
     return dict(out, outcome="cancelled", status="cancelled")
+
+

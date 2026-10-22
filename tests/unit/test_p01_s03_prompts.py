@@ -148,33 +148,48 @@ class HostileData(unittest.TestCase):
         self.assertTrue(out.endswith("===== DIFF =====\nreal\n===== END DIFF =====\n"))
 
 
+def builtin_prompt(stage_id, **data):
+    """The built-in definition's template for a stage, rendered the way the engine does."""
+    import tempfile
+    d = wd.load(tempfile.mkdtemp(), "developer-reviewer", workflow.BUILTIN_DIR)
+    st = next(x for x in d.stages if x.id == stage_id)
+    return st, prompts.render(st.prompt, kind=st.kind, task=data.pop("task", "t"), stage=stage_id, visit=1, **data)
+
+
 class P00Compatibility(unittest.TestCase):
+    DEV = ("You are the Developer in an Agent Studio workflow.\n"
+           "Make the change described in TASK inside the current workspace. Keep the change focused, and do not\n"
+           "touch files the task does not need. A deterministic validation command will run after you finish, and\n"
+           "a separate Reviewer will read your diff. Finish with a short summary of what you changed.\n")
+
     def test_developer_prompt_is_byte_identical_to_p00(self):
-        out = workflow.compose_prompt("developer", "task $(x)")
-        self.assertEqual(out, workflow.TEMPLATES["developer"] + "\n===== TASK =====\ntask $(x)\n===== END TASK =====\n")
+        st, out = builtin_prompt("developer", task="task $(x)")
+        self.assertEqual(out, self.DEV + "\n===== TASK =====\ntask $(x)\n===== END TASK =====\n")
 
     def test_repair_prompt_is_byte_identical_to_p00(self):
-        out = workflow.compose_prompt("developer_repair", "t", diff="", validation_text="v", findings=["f", "g"])
-        want = (workflow.TEMPLATES["developer_repair"]
-                + "\n===== TASK =====\nt\n===== END TASK =====\n"
-                + "\n===== DIFF =====\n(no changes)\n===== END DIFF =====\n"
-                + "\n===== VALIDATION =====\nv\n===== END VALIDATION =====\n"
-                + "\n===== FINDINGS =====\n- f\n- g\n===== END FINDINGS =====\n")
-        self.assertEqual(out, want)
+        st, out = builtin_prompt("developer_repair", diff="", validation="v", findings=["f", "g"])
+        self.assertTrue(out.startswith("You are the Developer in an Agent Studio workflow, repairing your earlier"))
+        self.assertTrue(out.endswith(
+            "\n===== TASK =====\nt\n===== END TASK =====\n"
+            "\n===== DIFF =====\n(no changes)\n===== END DIFF =====\n"
+            "\n===== VALIDATION =====\nv\n===== END VALIDATION =====\n"
+            "\n===== FINDINGS =====\n- f\n- g\n===== END FINDINGS =====\n"))
 
     def test_reviewer_prompt_has_p00_content_and_the_footer_last(self):
-        # Recorded change: P00 put the JSON sentence in the template, before the data. The footer now comes last.
-        for st in ("reviewer", "reviewer_recheck"):
-            out = workflow.compose_prompt(st, "t", diff="d", validation_text="v")
-            self.assertTrue(out.startswith(workflow.TEMPLATES[st]))
+        # Recorded change (S03): P00 put the JSON sentence in the template, before the data. The footer now comes last.
+        for sid in ("reviewer", "reviewer_recheck"):
+            st, out = builtin_prompt(sid, diff="d", validation="v")
+            self.assertEqual(st.kind, "verdict")
+            self.assertTrue(out.startswith("You are the Reviewer in an Agent Studio workflow. You have read-only"))
             self.assertTrue(out.endswith(prompts.VERDICT_FOOTER))
-            for s in ("===== TASK =====", "===== DIFF =====", "===== VALIDATION ====="):
-                self.assertIn(s, out)
-            self.assertNotIn("JSON", workflow.TEMPLATES[st])
+            for x in ("===== TASK =====", "===== DIFF =====", "===== VALIDATION ====="):
+                self.assertIn(x, out)
+            self.assertNotIn("JSON", st.prompt)
 
     def test_prompt_limits_live_in_prompts_only(self):
         self.assertFalse(hasattr(workflow, "PROMPT_LIMITS"))
         self.assertFalse(hasattr(workflow, "_section"))
+        self.assertFalse(hasattr(workflow, "compose_prompt"))
 
 
 class LoaderHook(Ws):

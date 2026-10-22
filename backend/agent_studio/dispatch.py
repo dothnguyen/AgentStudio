@@ -145,7 +145,8 @@ def _validate_definition_start(args):
     if opts is not None:
         if not isinstance(opts, dict) or not all(isinstance(k, str) and STAGE_ID_KEY.match(k) for k in opts):
             raise AsError(BAD_REQUEST, "debugStageOptions keys must be stage ids.")
-        out["debugStageOptions"] = {k: _validate_fake_options(v) for k, v in opts.items()}
+        out["debugStageOptions"] = {k: ([_validate_fake_options(x) for x in v[:10]] if isinstance(v, list) and v
+                                        else _validate_fake_options(v)) for k, v in opts.items()}
     return out
 
 

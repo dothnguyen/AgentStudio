@@ -163,14 +163,14 @@ class Freezing(StartCase):
                          (self.agent("QA"), "read_only", "claude"))
         self.cancel(r["workflowRunId"])
 
-    def test_after_the_first_stage_the_run_waits_for_the_operator_until_s05(self):
-        r = self.start(debugStageOptions={"develop": fake("success", "feature.txt")})["data"]
-        d = self.wait(r["workflowRunId"], ("paused",))
-        self.assertEqual(d["workflowRun"]["status"], "paused")
-        paused = [e for e in d["events"] if e["name"] == "workflow_run.paused"]
-        self.assertEqual(paused[-1]["data"]["diagnosticCode"], "ROUTING_NOT_AVAILABLE")
+    def test_after_the_first_stage_the_run_routes_to_the_next_stage(self):
+        r = self.start(debugStageOptions={"develop": fake("success", "feature.txt"), "qa": fake("success", duration=20000)})["data"]
+        d = wait_until(lambda: len(self.show(r["workflowRunId"])["assignments"]) >= 2 and self.show(r["workflowRunId"]),
+                       timeout=40, message="qa dispatched")
+        self.assertEqual([s["stage"] for s in d["stageAttempts"]], ["develop", "qa"])
+        self.assertEqual(d["workflowRun"]["currentStage"], "qa")
         self.cancel(r["workflowRunId"])
-        self.assertEqual(self.show(r["workflowRunId"])["workflowRun"]["status"], "cancelled")
+        self.assertIn(self.wait(r["workflowRunId"], FINAL)["workflowRun"]["status"], FINAL)
 
 
 class BindingErrors(StartCase):

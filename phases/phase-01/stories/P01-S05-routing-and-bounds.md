@@ -1,6 +1,6 @@
 # P01-S05 — Agent-stage outcomes, routing, and bounds
 
-Status: To Do
+Status: Done (2026-10-22)
 Depends on: P01-S04
 Architecture: [P01 design contract](../README.md#d-engine-semantics), sections D (Outcomes, Routing, Diffs, Task status) and F (Events)
 
@@ -19,14 +19,41 @@ Drive a definition run from stage to stage. Each finished agent stage is turned 
 
 ## Done when
 
-- [ ] Fake, three roles: develop → qa fail → develop → qa pass → final pass → `succeeded`. Exactly five assignments, `retry_count` 1, and the routed events chain `fromStage → toStage` with source assignment IDs.
-- [ ] Fake: final fail → develop → qa pass → final pass, so the TeamLead's findings reach the Developer prompt's FINDINGS section.
-- [ ] Fake: qa always fails, so the run ends `failed` at the `maxVisits` limit with no extra assignment. A separate definition hits `maxSteps` first.
-- [ ] Malformed verdict, provider error, and `waiting_input` each pause the run with the right code. A cancelled stage cancels the run.
-- [ ] Prompts on disk show the latest diff and the previous summary. Hostile findings text appears literally and never runs.
-- [ ] Task status is `running` / `review` according to the stage kind, and the final task status equals the run's.
-- [ ] Tests: `tests/integration/test_p01_s05_routing.py` and the guard test. All P00 tests stay green.
+- [x] Fake, three roles: develop → qa fail → develop → qa pass → final pass → `succeeded`. Exactly five assignments, `retry_count` 1, and the routed events chain `fromStage → toStage` with source assignment IDs.
+- [x] Fake: final fail → develop → qa pass → final pass, so the TeamLead's findings reach the Developer prompt's FINDINGS section.
+- [x] Fake: qa always fails, so the run ends `failed` at the `maxVisits` limit with no extra assignment. A separate definition hits `maxSteps` first.
+- [x] Malformed verdict, provider error, and `waiting_input` each pause the run with the right code. A cancelled stage cancels the run.
+- [x] Prompts on disk show the latest diff and the previous summary. Hostile findings text appears literally and never runs.
+- [x] Task status is `running` / `review` according to the stage kind, and the final task status equals the run's.
+- [x] Tests: `tests/integration/test_p01_s05_routing.py` and the guard test. All P00 tests stay green.
 
 ## Evidence
 
-(filled in when the story is done)
+- Tests: unit suite → 305 OK (5 skipped), including the guard `tests/unit/test_p01_s05_guard.py` (3). New
+  `tests/integration/test_p01_s05_routing.py`: 16 OK after S06 removed one obsolete test (Loops 5, Bounds 4, Pauses 6, Cancel 1). Re-run
+  `test_p01_s04_start` (19) and P00 `test_s06_workflow` (10): OK. `test_s07_recovery` 16 of 17: the same
+  pre-existing `test_orphan_sessions_at_startup` flake recorded in S04, unchanged.
+- Engine (`workflow.py`): `_advance_definition` (outcome, diff capture, artifacts `summary`) and `_route` (target,
+  `$succeed` / `$fail`, `maxSteps`, `maxVisits`, task status by stage kind, `routed` and `repair_requested` events,
+  next-stage dispatch with `data = {diff, findings, summary}`; validation is `(not run yet)`). The S04 pause guard is
+  gone. `_dispatch` computes `visit`: a routed entry is a new visit, a resolve-retry repeats the current one.
+- Events: every transition writes `workflow_run.routed {fromStage, outcome, toStage, reason, sourceAssignmentId}`,
+  terminal ones included (`toStage` `$succeed` / `$fail`). A limit failure writes `toStage: "$fail"`, the reason
+  (`qa visit limit 2 reached` / `step limit 4 reached`) and `wouldEnter`. The routed event carries the `step_count` and
+  `last_finding` update, so no extra event is written.
+- **Decision on `retry_count`** (revised in S06): step 4 said "increment when the target was visited before", but the
+  Done-when says develop → qa fail → develop → qa pass → final gives `retry_count` 1, and counting every revisit
+  gives 2. S05 first counted loop-back edges; the unrolled built-in definition of S06 has none (reviewer →
+  developer_repair is forward), so the rule is now: a verdict stage's `fail` outcome that routes to another stage is a
+  repair round (`repair_requested`, `retry_count` + 1). §F of the design contract says so.
+- Summary for the next stage is the finished stage's `finalText`, else `summary` (the prompt cuts it at 16 KiB).
+  A read-only stage captures no diff, so `{{diff}}` keeps showing the last `workspace_write` stage's diff.
+- Test hook: in debug coordinators `debugStageOptions` values for a definition run may be a list of fake options, one per
+  visit (the last repeats), which is how a stage can fail first and pass later. P00 runs still take one object.
+- Changed: a definition with any validation stage is refused at start (`BAD_REQUEST`) until S06, as the story says;
+  the S04 first-stage-only check is replaced by this. A first stage of verdict kind now starts the task in `review`.
+- Guard test scans the definition-run functions of `workflow.py` plus all of `workflowdef.py` and `prompts.py` for role
+  names, example stage ids and provider IDs. `_dispatch` and the P00 functions are the legacy block (S06 splits and
+  deletes them), so they are not scanned.
+- Not done here (by design): validation stages and `passRequires` (S06), resolve/restart/deadline handling for
+  definition runs (S07), CLI (S08).
