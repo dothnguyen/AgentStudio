@@ -1,6 +1,6 @@
 # P01-S16 — `team.py`: story session keys, reset, end on commit, and usage
 
-Status: To Do
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed.
 Depends on: P01-S13, P01-S14 (P01-S15 for real Claude resumes; the script works without it, with `unsupported` warnings)
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H; `scripts/team/team.py`
 

@@ -1,6 +1,6 @@
 # P01-S14 — Session keys for workflow runs
 
-Status: To Do
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed.
 Depends on: P01-S12
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H (session key, state); [P00 contract](../../phase-00/architecture.md) §G
 

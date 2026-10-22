@@ -14,14 +14,14 @@ Read the [phase overview and design contract](../README.md), [PRD.md](../../../P
 | [S08](./P01-S08-workflow-commands.md) | `workflow list / validate / start --definition / show` over CLI and `serve` | S02, S06 | Done |
 | [S09](./P01-S09-project-workflow-and-team-run.md) | `story-delivery.yaml` for this project and `team.py run` | S07, S08 | Done |
 | [S10](./P01-S10-live-gate.md) | Real three-role definition run | S01–S09 | To Do |
-| [S11](./P01-S11-adapter-session-contract.md) | Adapter session contract, fake resume, resume prompt and fallback, normalized usage | — | To Do |
-| [S12](./P01-S12-session-store-and-decision.md) | `agent_sessions`, `task.direct` `sessionKey`, decision at assignment creation, pointer advance | S11 | To Do |
-| [S13](./P01-S13-session-end-and-visibility.md) | `session.end` / `session.list`, `team.stop` ends sessions, snapshot / task show | S12 | To Do |
-| [S14](./P01-S14-workflow-session-keys.md) | `workflow.start` `sessionKey`, run ID default, repair resumes | S12 | To Do |
-| [S15](./P01-S15-claude-session-resume.md) | Claude Code resume, verified on the real CLI | S11 | To Do |
-| [S16](./P01-S16-team-py-sessions-and-usage.md) | `team.py` story keys, `reset`, end on `commit`, `usage` | S13, S14 | To Do |
-| [S17](./P01-S17-session-live-evidence.md) | Real story cycle with resumed sessions (E4 gate) | S15, S16 | To Do |
-| [S18](./P01-S18-codex-session-resume.md) | Codex resume mapping (follow-up, outside the phase exit) | S11 | To Do |
+| [S11](./P01-S11-adapter-session-contract.md) | Adapter session contract, fake resume, resume prompt and fallback, normalized usage | — | Dropped |
+| [S12](./P01-S12-session-store-and-decision.md) | `agent_sessions`, `task.direct` `sessionKey`, decision at assignment creation, pointer advance | S11 | Dropped |
+| [S13](./P01-S13-session-end-and-visibility.md) | `session.end` / `session.list`, `team.stop` ends sessions, snapshot / task show | S12 | Dropped |
+| [S14](./P01-S14-workflow-session-keys.md) | `workflow.start` `sessionKey`, run ID default, repair resumes | S12 | Dropped |
+| [S15](./P01-S15-claude-session-resume.md) | Claude Code resume, verified on the real CLI | S11 | Dropped |
+| [S16](./P01-S16-team-py-sessions-and-usage.md) | `team.py` story keys, `reset`, end on `commit`, `usage` | S13, S14 | Dropped |
+| [S17](./P01-S17-session-live-evidence.md) | Real story cycle with resumed sessions (E4 gate) | S15, S16 | Dropped |
+| [S18](./P01-S18-codex-session-resume.md) | Codex resume mapping (follow-up, outside the phase exit) | S11 | Dropped |
 
 S02 and S03 can proceed in parallel after S01, and S07 and S08 can proceed in parallel after S06. E4 (S11–S18) does not depend on S01–S10. S13, S14 and S15 can proceed in parallel after S12 (S15 needs only S11). See [§H of the design contract](../README.md#h-session-continuity-e4).
 

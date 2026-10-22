@@ -22,8 +22,6 @@ STATUSES = ("succeeded", "failed", "cancelled", "waiting_input", "inconclusive")
 UNSUPPORTED = "unsupported"
 REPORT_PROTOCOL = "agent-studio/assignment/v1"
 POLICY_UNSUPPORTED = "POLICY_UNSUPPORTED"
-SESSION_UNSUPPORTED = "SESSION_UNSUPPORTED"
-PROVIDER_SESSION_MISSING = "PROVIDER_SESSION_MISSING"
 PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
 SETTING_UNSUPPORTED = "SETTING_UNSUPPORTED"
 MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$")
@@ -50,8 +48,7 @@ class AssignmentInput:
     output_budget_bytes: int
     model: Optional[str] = None
     reasoning: Optional[str] = None
-    provider_session_id: Optional[str] = None    # the provider session to resume (None: start a fresh one)
-    persist_session: bool = False                # keep this run's session so a later task can resume it
+    provider_session_id: Optional[str] = None
     options: dict = field(default_factory=dict)  # provider-specific, validated by the adapter
     expects_verdict: bool = False                # reviewer stages: read a verdict from the final message
 
@@ -91,14 +88,9 @@ class ParseState:
     malformed: int = 0
     verdict: object = MISSING
     usage: Optional[dict] = None
-    tool_uses: Dict[str, int] = field(default_factory=dict)  # tool name -> calls, for adapters that see them
     events: int = 0
     final_text: Optional[str] = None          # the provider's last message, when it has one
     extra: dict = field(default_factory=dict)  # adapter-private parsing state
-
-
-def nonneg_int(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
 
 
 def extract_verdict(text: Optional[str]):
@@ -150,19 +142,7 @@ class Adapter:
 
     # ---- capability + policy declaration -------------------------------------------------------
     def capabilities(self) -> dict:
-        return dict({f: UNSUPPORTED for f in CAPABILITY_FIELDS}, resume=self.resume_capability())
-
-    def session_support(self) -> dict:
-        """Whether a provider session can be resumed, and whether a resume forks a new session ID."""
-        return {"resume": False, "forkOnResume": False}
-
-    def resume_capability(self):
-        return True if self.session_support().get("resume") else UNSUPPORTED
-
-    def normalize_usage(self, raw: Optional[dict]) -> Optional[dict]:
-        """{inputTokens (uncached), cachedInputTokens, outputTokens} as non-negative ints, or None when the
-        provider reported no usage. Never invents zeros."""
-        return None
+        return {f: UNSUPPORTED for f in CAPABILITY_FIELDS}
 
     def policy_mapping(self) -> Dict[str, Optional[List[str]]]:
         """policy -> the exact provider flags used, or None when unsupported (then the policy is refused)."""
@@ -211,8 +191,6 @@ class Adapter:
         if self.policy_mapping().get(inp.policy) is None:
             raise AsError(POLICY_UNSUPPORTED, f"{self.provider_id} has no verified mapping for policy "
                                               f"{inp.policy!r}; refusing rather than guessing or broadening.")
-        if inp.provider_session_id is not None and not self.session_support().get("resume"):
-            raise AsError(SESSION_UNSUPPORTED, f"{self.provider_id} cannot resume a session.")
         return self._prepare(inp, env)
 
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
@@ -275,7 +253,6 @@ class Adapter:
             "exitCode": oc.get("exitCode"), "summary": str(summary)[:2000], "finalText": bounded_text(st.final_text),
             "artifacts": [], "attention": attention,
             "diagnosticCode": code, "providerSessionId": st.session_id, "usage": st.usage,
-            "usageNormalized": self._usage_normalized(st), "toolUses": dict(st.tool_uses) if st.tool_uses else None,
             "verdict": verdict if verdict is None or valid_verdict(verdict) else {"malformed": True},
             "evidence": {"outputPath": oc.get("outputPath"), "stderrPath": oc.get("stderrPath"),
                          "providerTerminalEvent": term is not None, "terminalOk": bool(term and term.get("ok")),
@@ -283,18 +260,6 @@ class Adapter:
                          "cancelRequested": bool(oc.get("cancelRequested")), "truncated": bool(oc.get("truncated")),
                          "malformedLines": st.malformed, "validation": []},
         }
-
-    def _usage_normalized(self, st: ParseState) -> Optional[dict]:
-        if not st.usage:
-            return None
-        try:
-            out = self.normalize_usage(st.usage)
-        except (TypeError, ValueError, KeyError):
-            return None
-        keys = ("inputTokens", "cachedInputTokens", "outputTokens")
-        if out is None or set(out) != set(keys) or not all(nonneg_int(out[k]) for k in keys):
-            return None
-        return out
 
     # ---- control -------------------------------------------------------------------------------
     def cancel(self, ident: dict, sig: int = signal.SIGTERM) -> bool:

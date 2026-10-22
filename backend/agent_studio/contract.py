@@ -15,13 +15,6 @@ EVIDENCE_REQUIRED = {"providerTerminalEvent": bool, "timedOut": bool, "cancelReq
                      "validation": list}
 
 
-SESSION_MODES = ("none", "unsupported", "fresh", "resume")
-
-
-def _nonneg(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
-
-
 def validate_report(r: dict, expect: dict) -> dict:
     if not isinstance(r, dict):
         raise AsError(BAD_REPORT, "Report must be an object.")
@@ -46,16 +39,6 @@ def validate_report(r: dict, expect: dict) -> dict:
     exit_code = r.get("exitCode")
     if exit_code is not None and (not isinstance(exit_code, int) or isinstance(exit_code, bool)):
         raise AsError(BAD_REPORT, "exitCode must be an integer or null.")
-    un = r.get("usageNormalized")
-    if un is not None and not (isinstance(un, dict) and set(un) == {"inputTokens", "cachedInputTokens", "outputTokens"}
-                               and all(_nonneg(v) for v in un.values())):
-        raise AsError(BAD_REPORT, "usageNormalized must be null or three non-negative integers.")
-    tu = r.get("toolUses")
-    if tu is not None and not (isinstance(tu, dict) and len(tu) <= 100 and all(
-            isinstance(k, str) and len(k) <= 100 and _nonneg(v) for k, v in tu.items())):
-        raise AsError(BAD_REPORT, "toolUses must be null or at most 100 tool names mapped to non-negative integers.")
-    if "session" in r and not (isinstance(r["session"], dict) and r["session"].get("mode") in SESSION_MODES):
-        raise AsError(BAD_REPORT, f"session.mode must be one of {', '.join(SESSION_MODES)}.")
     if r["status"] == "succeeded":
         problems = []
         if not ev["providerTerminalEvent"] or not ev.get("terminalOk"):

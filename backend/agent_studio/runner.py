@@ -14,7 +14,6 @@ terminated and the report says `cancelled`. If the runner itself is killed, the 
 from __future__ import annotations
 
 import ctypes
-import dataclasses
 import json
 import os
 import select
@@ -26,7 +25,7 @@ import time
 
 from . import contract, paths, procid, providers, reports, state
 from .protocol import AsError
-from .providers.base import PROVIDER_SESSION_MISSING, REPORT_PROTOCOL, AssignmentInput, ParseState
+from .providers.base import REPORT_PROTOCOL, AssignmentInput, ParseState
 from .store import validate_uuid
 from .textsafe import one_line
 
@@ -86,92 +85,10 @@ def refusal_report(inp: AssignmentInput, code: str, summary: str, oc: dict, stat
     return {"protocol": REPORT_PROTOCOL, "assignmentId": inp.assignment_id, "agentId": inp.agent_id,
             "providerId": inp.provider_id, "attempt": inp.attempt, "policy": inp.policy, "status": status,
             "exitCode": None, "summary": summary[:2000], "artifacts": [], "attention": None, "diagnosticCode": code,
-            "providerSessionId": None, "usage": None, "usageNormalized": None, "toolUses": None,
-            "verdict": None,
+            "providerSessionId": None, "usage": None, "verdict": None,
             "evidence": {"outputPath": None, "stderrPath": None, "providerTerminalEvent": False, "terminalOk": False,
                          "signal": None, "timedOut": False, "cancelRequested": status == "cancelled",
                          "truncated": False, "malformedLines": 0, "validation": []}}
-
-
-SESSION_MODES = ("none", "unsupported", "fresh", "resume")
-RESUME_ATTEMPT_DIR = "resume-attempt"
-RESUME_ATTEMPT_FILES = ("prompt.txt", "stdout.jsonl", "stderr.log", "meta.json")
-MIN_RERUN_S = 1.0
-
-
-def session_block(r: dict) -> dict:
-    """The frozen request.session block, normalized; an absent or malformed block means mode none."""
-    s = r.get("session")
-    if not isinstance(s, dict) or s.get("mode") not in SESSION_MODES:
-        return {"mode": "none", "key": None, "resumeFrom": None, "persist": False, "present": False}
-    mode = s["mode"]
-    resume_from = s.get("resumeFrom") if mode == "resume" and isinstance(s.get("resumeFrom"), str) else None
-    if mode == "resume" and resume_from is None:
-        mode = "fresh"
-    return {"mode": mode, "key": s.get("key"), "resumeFrom": resume_from,
-            "persist": mode in ("fresh", "resume") and s.get("persist") is True, "present": True}
-
-
-def resume_prompt(session: dict, role: str, policy: str, role_text: str, stage_prompt: bytes) -> bytes:
-    """Short prompt for a resumed provider session: a session note and a role line, no role context or skills."""
-    desc = ""
-    for line in role_text.splitlines():
-        if line.startswith("Description: "):
-            desc = line[len("Description: "):][:200]
-            if desc.endswith("."):
-                desc = desc[:-1]
-            break
-    if not role:
-        who = "You are the assigned agent."
-    elif desc:
-        who = f"You are {role}: {desc}."
-    else:
-        who = f"You are {role}."
-    head = ("===== AGENT STUDIO SESSION =====\n"
-            f"You are continuing your earlier session for {session['key']}.\n"
-            "Files may have changed since you last read them; re-read anything you rely on.\n"
-            f"Your permission for this task is {policy}.\n"
-            "===== END SESSION =====\n"
-            f"{who}\n\n")
-    return head.encode("utf-8") + stage_prompt
-
-
-def _prepare_and_execute(adapter, inp, st, oc, report, rd, desc) -> dict:
-    if adapter is None:
-        return refusal_report(inp, "PROVIDER_UNAVAILABLE", desc.get("error", "Provider unavailable."), oc)
-    try:
-        prep = adapter.prepare(inp, os.environ)
-    except AsError as e:
-        return refusal_report(inp, e.code, e.message, oc)
-    return _execute(adapter, inp, prep, st, oc, report, rd)
-
-
-def _resume_fallback(first: dict, adapter, inp: AssignmentInput, full_prompt: bytes, session: dict, rd: str,
-                     started: float, report, desc: dict) -> dict:
-    """If a resume found no provider session, run once more fresh in this same assignment and return that
-    report; otherwise (or when cancelled or out of time) return `first` untouched."""
-    if (session["mode"] != "resume" or first.get("diagnosticCode") != PROVIDER_SESSION_MISSING
-            or first.get("status") == "cancelled" or (first.get("evidence") or {}).get("cancelRequested")):
-        return first
-    if os.path.exists(os.path.join(rd, CANCEL_MARKER)):
-        return first
-    remaining = inp.deadline_s - (time.monotonic() - started)
-    if remaining < MIN_RERUN_S:
-        return first
-    old = os.path.join(rd, RESUME_ATTEMPT_DIR)
-    os.makedirs(old, mode=0o700, exist_ok=True)
-    for name in RESUME_ATTEMPT_FILES:
-        if os.path.exists(os.path.join(rd, name)):
-            os.replace(os.path.join(rd, name), os.path.join(old, name))
-    _say("the provider no longer has that session; starting a fresh one")
-    _write_private(inp.prompt_path, full_prompt)
-    inp2 = dataclasses.replace(inp, provider_session_id=None, persist_session=True, deadline_s=remaining)
-    oc = {"outputPath": os.path.join(rd, "stdout.jsonl"), "stderrPath": os.path.join(rd, "stderr.log"),
-          "exitCode": None, "signal": None, "timedOut": False, "cancelRequested": False, "truncated": False}
-    final = _prepare_and_execute(adapter, inp2, ParseState(), oc, report, rd, desc)
-    final["session"] = {"mode": "fresh", "resumeFrom": None, "fallbackFrom": session["resumeFrom"],
-                        "warning": PROVIDER_SESSION_MISSING}
-    return final
 
 
 class _Cancel:
@@ -381,13 +298,7 @@ def run(agent_id: str, assignment_id: str) -> int:
     role_text = ((r.get("roleContext") or {}).get("text") or "")
     if not role_text and role:
         role_text = f"===== AGENT STUDIO ROLE: {role} =====\n(no role configuration)\n===== END ROLE =====\n"
-    full_prompt = role_text.encode("utf-8") + (b"\n" if role_text else b"") + prompt
-    session = session_block(r)
-    first_prompt = full_prompt
-    if session["mode"] == "resume":
-        first_prompt = resume_prompt(session, role, str(req.get("policy")), (r.get("roleContext") or {}).get("text") or "",
-                                     prompt)
-    _write_private(prompt_path, first_prompt)
+    _write_private(prompt_path, role_text.encode("utf-8") + (b"\n" if role_text else b"") + prompt)
     inp = AssignmentInput(
         assignment_id=assignment_id, agent_id=agent_id, provider_id=str(provider_id), attempt=attempt,
         workspace=str(req.get("workspace")), prompt_path=prompt_path, role_instructions=role,
@@ -395,7 +306,6 @@ def run(agent_id: str, assignment_id: str) -> int:
                                                           MAX_DEADLINE_MS) / 1000.0,
         output_budget_bytes=_clamp(r.get("outputBudgetBytes"), DEFAULT_BUDGET, 1024, MAX_BUDGET),
         model=r.get("model"), reasoning=r.get("reasoning"), options=r.get("providerOptions") or {},
-        provider_session_id=session["resumeFrom"], persist_session=session["persist"],
         expects_verdict=bool(r.get("expectsVerdict")) or r.get("stage") in ("reviewer", "reviewer_recheck"))
     oc = {"outputPath": os.path.join(rd, "stdout.jsonl"), "stderrPath": os.path.join(rd, "stderr.log"),
           "exitCode": None, "signal": None, "timedOut": False, "cancelRequested": False, "truncated": False}
@@ -403,12 +313,15 @@ def run(agent_id: str, assignment_id: str) -> int:
 
     if os.path.exists(os.path.join(rd, CANCEL_MARKER)):
         final = refusal_report(inp, "CANCELLED", "Cancelled before the provider was started.", oc, status="cancelled")
+    elif adapter is None:
+        final = refusal_report(inp, "PROVIDER_UNAVAILABLE", desc.get("error", "Provider unavailable."), oc)
     else:
-        started = time.monotonic()
-        final = _prepare_and_execute(adapter, inp, st, oc, report, rd, desc)
-        final = _resume_fallback(final, adapter, inp, full_prompt, session, rd, started, report, desc)
-    if session["present"] and "session" not in final:
-        final["session"] = {"mode": session["mode"], "resumeFrom": session["resumeFrom"]}
+        try:
+            prep = adapter.prepare(inp, os.environ)
+        except AsError as e:
+            final = refusal_report(inp, e.code, e.message, oc)
+        else:
+            final = _execute(adapter, inp, prep, st, oc, report, rd)
     expect = {"assignmentId": assignment_id, "agentId": agent_id, "providerId": provider_id, "attempt": attempt,
               "policy": req.get("policy")}
     try:

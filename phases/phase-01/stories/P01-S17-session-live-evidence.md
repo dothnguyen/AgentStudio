@@ -1,6 +1,6 @@
 # P01-S17 — Live evidence: a real story cycle with resumed sessions (E4 gate)
 
-Status: To Do
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed.
 Depends on: P01-S15 (Done, not Blocked), P01-S16
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H; brief [success measures](../../briefs/feature-workflow-session-context.md)
 

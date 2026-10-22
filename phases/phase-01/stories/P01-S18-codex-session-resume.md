@@ -1,6 +1,6 @@
 # P01-S18 — Codex session resume: verify the permission mapping (follow-up)
 
-Status: To Do
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed.
 Depends on: P01-S11 (P01-S12 for the end-to-end check)
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H; `backend/agent_studio/providers/codex/CONTRACT.md`
 

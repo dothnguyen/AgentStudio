@@ -8,16 +8,11 @@ import sys
 from typing import Dict, List, Optional
 
 from ...protocol import AsError
-from ... import paths
-from ..base import (BASE_ENV, POLICIES, PROVIDER_SESSION_MISSING, UNSUPPORTED, Adapter, AssignmentInput, ParseState,
-                    Prepared, nonneg_int)
+from ..base import BASE_ENV, POLICIES, UNSUPPORTED, Adapter, AssignmentInput, ParseState, Prepared
 from .fake_cli import SCENARIOS
 
 FAKE_CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_cli.py")
 SANDBOX = {"read_only": "read-only", "workspace_write": "workspace-write"}
-SESSION_ID = re.compile(r"^fake-[0-9a-f]{12}$")
-SESSION_DIR_ENV = "AGENT_STUDIO_FAKE_SESSION_DIR"
-TOOL_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 SAFE_REL = re.compile(r"^(?!/)(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$")
 
 
@@ -26,18 +21,8 @@ class FakeAdapter(Adapter):
     test_only = True
 
     def capabilities(self) -> dict:
-        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": self.resume_capability(),
+        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": UNSUPPORTED,
                 "interactiveInput": UNSUPPORTED}
-
-    def session_support(self) -> dict:
-        return {"resume": True, "forkOnResume": True}
-
-    def normalize_usage(self, raw):
-        if not isinstance(raw, dict) or not any(k in raw for k in ("inputTokens", "cachedInputTokens", "outputTokens")):
-            return None
-        g = lambda k: raw[k] if nonneg_int(raw.get(k)) else 0
-        return {"inputTokens": g("inputTokens"), "cachedInputTokens": g("cachedInputTokens"),
-                "outputTokens": g("outputTokens")}
 
     def policy_mapping(self) -> Dict[str, Optional[List[str]]]:
         # Tests can narrow the supported set to exercise refusal: AGENT_STUDIO_FAKE_POLICIES=read_only
@@ -73,24 +58,6 @@ class FakeAdapter(Adapter):
             argv += ["--model", inp.model]
         if inp.reasoning:
             argv += ["--reasoning", inp.reasoning]
-        session_dir = (env or {}).get(SESSION_DIR_ENV) or os.path.join(paths.ensure_state_dir(), "fake-sessions")
-        argv += ["--session-dir", session_dir]
-        if inp.persist_session:
-            argv.append("--persist")
-        if inp.provider_session_id is not None:
-            if not isinstance(inp.provider_session_id, str) or not SESSION_ID.match(inp.provider_session_id):
-                raise AsError("BAD_REQUEST", "fake session ID must look like fake-<12 hex>.")
-            argv += ["--resume", inp.provider_session_id, "--fork"]
-        tools = o.get("toolUses")
-        if tools is not None:
-            if not isinstance(tools, dict) or len(tools) > 20 or not all(
-                    isinstance(k, str) and TOOL_NAME.match(k) and nonneg_int(v) and v <= 100000
-                    for k, v in tools.items()):
-                raise AsError("BAD_REQUEST", "fake toolUses must map tool names to non-negative integers.")
-            for name, n in tools.items():
-                argv += ["--tool-use", f"{name}={n}"]
-        if o.get("forceSessionMissing") is True:
-            argv.append("--force-session-missing")
         write = o.get("writeFile")
         if write is not None:
             if not isinstance(write, str) or not SAFE_REL.match(write):
@@ -129,13 +96,8 @@ class FakeAdapter(Adapter):
             return [("attention", f"provider asks: {ev.get('question')}")]
         if t == "result":
             ok = ev.get("status") == "success"
-            code = None if ok else "PROVIDER_ERROR"
-            if (not ok and ev.get("code") == "session_not_found" and state.session_id is None
-                    and not state.tool_uses and state.events == 1):
-                code = PROVIDER_SESSION_MISSING  # refused before any turn: no init, progress or text came first
-            state.terminal = {"ok": ok, "summary": str(ev.get("summary", ""))[:2000], "code": code}
-            if isinstance(ev.get("toolUses"), dict):
-                state.tool_uses = {str(k)[:100]: v for k, v in list(ev["toolUses"].items())[:100] if nonneg_int(v)}
+            state.terminal = {"ok": ok, "summary": str(ev.get("summary", ""))[:2000],
+                              "code": None if ok else "PROVIDER_ERROR"}
             if "verdict" in ev:
                 state.verdict = ev["verdict"]
             if isinstance(ev.get("usage"), dict):

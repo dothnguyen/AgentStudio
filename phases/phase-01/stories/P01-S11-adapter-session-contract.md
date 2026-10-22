@@ -1,6 +1,6 @@
 # P01-S11 — Adapter session contract, fake resume, resume prompt, and fallback
 
-Status: Done (2026-10-22)
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed. The S11 code was reverted.
 Depends on: — (P00 adapter contract, P00-S04)
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H (runner, fallback, usage, report `session` block); [P00 contract](../../phase-00/architecture.md) §F
 

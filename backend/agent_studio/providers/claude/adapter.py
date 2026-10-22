@@ -65,18 +65,12 @@ AUTH_RE = re.compile(r"not logged in|/login|invalid api key|authentication_error
 _inspect_cache: Dict[tuple, dict] = {}
 
 
-def _ints(raw, *keys):
-    if not isinstance(raw, dict) or not any(k in raw for k in keys):
-        return None
-    return [max(0, raw[k]) if isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool) else 0 for k in keys]
-
-
 class ClaudeAdapter(Adapter):
     provider_id = "claude"
 
     # ---- declaration -------------------------------------------------------------------------
     def capabilities(self) -> dict:
-        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": self.resume_capability(),
+        return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": UNSUPPORTED,
                 "interactiveInput": UNSUPPORTED}
 
     def policy_mapping(self) -> Dict[str, Optional[List[str]]]:
@@ -174,12 +168,6 @@ class ClaudeAdapter(Adapter):
             argv += ["--effort", inp.reasoning]
         # The prompt arrives on stdin (the private prompt file); the workspace is the working directory.
         return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
-
-    def normalize_usage(self, raw):
-        v = _ints(raw, "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
-        if v is None:
-            return None
-        return {"inputTokens": v[0] + v[1], "cachedInputTokens": v[2], "outputTokens": v[3]}
 
     def parse_line(self, line: bytes, state: ParseState):
         state.events += 1

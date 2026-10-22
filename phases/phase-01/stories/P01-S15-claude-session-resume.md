@@ -1,6 +1,6 @@
 # P01-S15 — Claude Code session resume, verified on the real CLI
 
-Status: To Do
+Status: Dropped (2026-10-22): the kanban board (phases/briefs/feature-kanban-board.md) makes agents stateless per ticket, so session continuity is not needed.
 Depends on: P01-S11
 Architecture: [P01 design contract](../README.md#h-session-continuity-e4), section H; [P00 contract](../../phase-00/architecture.md) §F; `backend/agent_studio/providers/claude/CONTRACT.md`
 
