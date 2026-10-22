@@ -9,17 +9,17 @@
       "reasoning": "medium"
     },
     {
-      "providerId": "claude",
+      "providerId": "codex",
       "role": "Developer",
       "name": "dev",
-      "model": "claude-sonnet-5-5",
+      "model": "gpt-5.3-codex",
       "reasoning": "medium"
     },
     {
-      "providerId": "claude",
+      "providerId": "codex",
       "role": "QA",
       "name": "qa",
-      "model": "claude-haiku-5-5"
+      "model": "gpt-6-luna"
     }
   ]
 }
