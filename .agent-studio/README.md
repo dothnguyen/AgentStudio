@@ -62,13 +62,15 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
 
 ```bash
 S=phases/phase-02/stories/P02-S01-something.md
-team review $S      # 1. lead reviews the story            -> APPROVED, or findings to fix in the story
+team review $S      # 1. lead reviews the story and fixes it in place (offers to commit its edits)
+                    #    -> APPROVED, or questions only you can answer
 team dev $S         # 2. dev implements -> unit tests -> QA -> (one repair round)
                     #    succeeded -> go to 4;  failed -> 3
 team fix $S         # 3. dev fixes QA's findings (and the failing tests)
 team qa $S          #    you run the tests here, QA reviews the diff + results
                     #    repeat fix / qa until "QA passed"
-team final $S       # 4. lead final review + proposed commit message
+team final $S       # 4. lead final review; if complete it marks the story Done (ticks, Evidence)
+                    #    and proposes the commit message
                     #    changes requested -> team fix / team qa again, then team final
 team commit $S      # 5. shows the files and message, asks, then commits
 ```
@@ -77,7 +79,7 @@ Rules the helper enforces: `dev` needs the lead's approval (or `--force`) and a 
 first); `final` needs QA passed; `commit` needs the lead's final approval. Per-story state (base commit, findings,
 verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/`.
 
-After committing, update the story's Status and Evidence (or ask the lead with a direct task) and commit that.
+The story's Status/Evidence update made by the lead in `final` is included in the `team commit`.
 
 ## When something goes wrong
 

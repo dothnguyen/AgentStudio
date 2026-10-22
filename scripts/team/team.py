@@ -191,15 +191,37 @@ def c_unpack(ns):
           "Commit the plan before developing stories: git add -A && git commit -m 'Plan: ...'")
 
 
+def changed_paths():
+    out = sh("git", "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
+    return [l[3:].split(" -> ")[-1].strip('"') for l in out if l.strip()]
+
+
 def c_review(ns):
     key = story_key(ns.story)
-    st, out = direct(team()["agents"]["TeamLead"], "read_only",
-                     f"REVIEW A STORY BEFORE WORK. Story file: {ns.story}. Read it and the documents it links.")
+    before = set(changed_paths())
+    st, out = direct(team()["agents"]["TeamLead"], "workspace_write",
+                     f"REVIEW A STORY BEFORE WORK. Story file: {ns.story}. Read it and the documents it links. "
+                     f"Fix what you can in the story (and, if a shared contract changes, the phase README and "
+                     f"dependent stories), as your role instructions say.")
     v = verdict(out)
-    save(key, dict(load(key, {}), story=ns.story, approved=bool(v and v.get("verdict") == "pass"), review=out))
+    approved = bool(v and v.get("verdict") == "pass")
+    edited = sorted(set(changed_paths()) - before)
+    save(key, dict(load(key, {}), story=ns.story, approved=approved, review=out))
     show(f"team lead review ({st})", out)
-    print("APPROVED - next: team.py dev " + ns.story if v and v.get("verdict") == "pass" else
-          "NOT approved - edit the story (or ask the lead to: team.py unpack), then review again.")
+    if edited:
+        planning = [p for p in edited if p.startswith(("phases/", "PRD.md", "ROADMAP.md"))]
+        other = [p for p in edited if p not in planning]
+        print("Files the team lead changed:\n  " + "\n  ".join(edited))
+        if other:
+            print("WARNING: changes outside the planning documents - check them before committing:\n  "
+                  + "\n  ".join(other))
+        if planning and input("Commit the planning changes now? [Y/n] ").strip().lower() in ("", "y", "yes"):
+            sh("git", "add", "--", *planning)
+            sh("git", "commit", "-q", "-m", f"Review {os.path.basename(ns.story)}: story updated by the team lead",
+               "--", *planning)
+            print("Committed.")
+    print("APPROVED - next: team.py dev " + ns.story if approved else
+          "NOT approved - answer the lead's questions (edit the story, or add them to the task), then review again.")
 
 
 def c_dev(ns):
@@ -275,8 +297,10 @@ def c_final(ns):
     if not s.get("qaPassed") and not ns.force:
         sys.exit("QA has not passed this story yet (team.py qa STORY), or pass --force.")
     ok, cmd, out = run_tests()
-    st, summary = direct(team()["agents"]["TeamLead"], "read_only",
-                         f"FINAL REVIEW of the story in {ns.story} after QA passed. Read the story.\n\nVALIDATION "
+    st, summary = direct(team()["agents"]["TeamLead"], "workspace_write",
+                         f"FINAL REVIEW of the story in {ns.story} after QA passed. Read the story. If the work is "
+                         f"complete, update the story file (Status Done with today's date, ticked items, Evidence) as "
+                         f"your role instructions say; change nothing else.\n\nVALIDATION "
                          f"({cmd}): {'PASS' if ok else 'FAIL'}\n{out}\n\nQA FINDINGS AT PASS:\n"
                          + ("\n".join(f"- {f}" for f in s.get("findings") or []) or "(none)")
                          + f"\n\n{changes_section(s['base'])}")
@@ -306,7 +330,7 @@ def c_commit(ns):
     p = subprocess.run(["git", "commit", "-F", "-"], cwd=WS, input=msg + "\n", text=True)
     if p.returncode == 0:
         save(key, dict(s, committed=sh("git", "rev-parse", "HEAD").stdout.strip()))
-        print("Committed. Update the story's Status/Evidence if the lead did not, and commit that too.")
+        print("Committed (including the story's Done status and Evidence from the final review).")
 
 
 def c_stop(_):
