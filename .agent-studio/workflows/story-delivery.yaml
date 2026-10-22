@@ -1,7 +1,13 @@
 version: 1
-description: Developer implements a story and runs the tests, QA reviews, TeamLead signs off; failures go back to the Developer.
-maxSteps: 12
+description: TeamLead refines the story, Developer implements it and runs the tests, QA reviews, TeamLead signs off; failures go back to the Developer.
+maxSteps: 14
 stages:
+  - id: review
+    role: TeamLead
+    permission: workspace_write
+    maxVisits: 1
+    promptFile: workflows/prompts/story-review.md
+    next: { pass: develop, fail: $fail }
   - id: develop
     role: Developer
     permission: workspace_write

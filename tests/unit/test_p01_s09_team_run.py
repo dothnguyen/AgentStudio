@@ -54,7 +54,7 @@ class Run(unittest.TestCase):
 
     def test_prompt_sources(self):
         self.assertEqual(team.run_prompt(ns(prompt="hi")), "hi")
-        self.assertIn("Implement the story in S.md", team.run_prompt(ns(story="S.md")))
+        self.assertIn("The story to deliver is in S.md", team.run_prompt(ns(story="S.md")))
         with self.assertRaises(SystemExit):
             team.run_prompt(ns())
 

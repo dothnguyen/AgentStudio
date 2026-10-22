@@ -31,15 +31,21 @@ class StoryDelivery(StartCase):
     def test_qa_fail_then_pass_then_final_commit_block(self):
         final = fake("verdict_pass")
         final["finalText"] = "Looks complete.\n```commit\n" + COMMIT + "\n```"
-        opts = {"develop": fake("success", "fixed.txt"), "qa": [fake("verdict_fail"), fake("verdict_pass")],
+        opts = {"review": fake("verdict_pass"), "develop": fake("success", "fixed.txt"), "qa": [fake("verdict_fail"), fake("verdict_pass")],
                 "final": final}
         r = self.start("story-delivery", debugStageOptions=opts)["data"]
         d = self.wait(r["workflowRunId"], FINAL + ("paused",), 90)
         self.assertEqual(d["workflowRun"]["status"], "succeeded", d["route"])
-        self.assertEqual(d["route"], "develop → qa (fail) → develop → qa (pass) → final (pass) → $succeed")
+        self.assertEqual(d["route"], "review (pass) → develop → qa (fail) → develop → qa (pass) → final (pass) → $succeed")
         a = {x["id"]: x for x in d["assignments"]}
         last = a[d["stageAttempts"][-1]["assignmentId"]]["result"]
         self.assertIn("```commit", last.get("finalText") or last.get("summary"))
+
+    def test_review_fail_stops_before_develop(self):
+        r = self.start("story-delivery", debugStageOptions={"review": fake("verdict_fail")})["data"]
+        d = self.wait(r["workflowRunId"], FINAL + ("paused",), 60)
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        self.assertEqual([x["stage"] for x in d["stageAttempts"]], ["review"])
 
     def test_team_py_summarize_captures_commit(self):
         os.environ["AGENT_STUDIO"] = "/bin/true"
@@ -50,7 +56,7 @@ class StoryDelivery(StartCase):
         spec.loader.exec_module(team)
         final = fake("verdict_pass")
         final["finalText"] = "ok\n```commit\n" + COMMIT + "\n```"
-        r = self.start("story-delivery", debugStageOptions={"develop": fake("success", "fixed.txt"),
+        r = self.start("story-delivery", debugStageOptions={"review": fake("verdict_pass"), "develop": fake("success", "fixed.txt"),
                                                             "qa": fake("verdict_pass"), "final": final})["data"]
         d = self.wait(r["workflowRunId"], FINAL + ("paused",), 90)
         route, status, findings, last, commit = team.summarize(d)

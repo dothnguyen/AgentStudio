@@ -395,9 +395,9 @@ def bindings_for(binds):
 def run_prompt(ns):
     if ns.story:
         story_key(ns.story)
-        return (f"Implement the story in {ns.story}. Read it first, follow its 'Implement in this order' steps, and "
-                f"make every 'Done when' item true. Add unit tests in tests/unit for the new behaviour. Do not mark "
-                f"the story Done and do not edit its Status line; the team lead does that after review.")
+        return (f"The story to deliver is in {ns.story}. Read it first. The implementer follows its 'Implement in "
+                f"this order' steps and makes every 'Done when' item true, with unit tests in tests/unit; nobody "
+                f"marks the story Done or edits its Status line until the team lead's final review.")
     if ns.prompt_file:
         return open(os.path.join(WS, ns.prompt_file) if not os.path.isabs(ns.prompt_file) else ns.prompt_file,
                     encoding="utf-8").read()

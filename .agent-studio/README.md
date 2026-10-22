@@ -69,10 +69,12 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
 S=phases/phase-02/stories/P02-S01-something.md
 team workflows                      # definitions available (built-in and .agent-studio/workflows)
 team check story-delivery           # validate it against the saved team, no tokens spent
-team review $S                      # 1. lead reviews the story and fixes it in place
-team run story-delivery --story $S  # 2. dev -> unit tests -> QA -> lead final review; QA or lead "fail" goes back to dev
-team commit $S                      # 3. shows the files and the lead's ```commit message, asks, then commits
+team run story-delivery --story $S  # 1. lead reviews/fixes the story -> dev (runs tests) -> QA -> lead final review
+                                    #    a review "fail" stops with the lead's questions; QA/final "fail" goes back to dev
+team commit $S                      # 2. shows the files and the lead's ```commit message, asks, then commits
 ```
+
+The first stage is the lead's story review, so `team review` is not needed first.
 
 `team run NAME "prompt"` runs any definition with a free-text prompt; `--prompt-file PATH` reads it from a file,
 `--bind ROLE=NAME` picks a different agent for a role, `--no-wait` returns after starting. It needs a clean working
