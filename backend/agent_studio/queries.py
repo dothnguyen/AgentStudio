@@ -5,7 +5,7 @@ import json
 from typing import Optional
 
 from . import schema
-from .protocol import AsError
+from .protocol import AsError, TICKET_NOT_FOUND
 from .state import SCHEMA_VERSION, db_id, utcnow
 
 CURSOR_INVALID = "CURSOR_INVALID"
@@ -141,6 +141,38 @@ def workflow_detail(conn, wf_id: str) -> dict:
         out["visits"] = visits_per_stage(out["stageAttempts"])
         out["route"] = route_text(out["events"], out["workflowRun"].get("currentStage"))
         return out
+    return _read(conn, run)
+
+
+def ticket_detail(conn, workspace: str, key: str) -> dict:
+    def run():
+        ticket = conn.execute("SELECT * FROM tickets WHERE workspace = ? AND key = ?", (workspace, key)).fetchone()
+        if ticket is None:
+            raise AsError(TICKET_NOT_FOUND, "Ticket does not exist.", data={"key": key})
+        deps = conn.execute("SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+                            "WHERE d.ticket_id = ? ORDER BY t.key", (ticket["id"],)).fetchall()
+        dependents = conn.execute("SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.ticket_id "
+                                  "WHERE d.blocked_by_ticket_id = ? ORDER BY t.key", (ticket["id"],)).fetchall()
+        events = conn.execute("SELECT * FROM (SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT 50) "
+                              "ORDER BY id", (ticket["id"],)).fetchall()
+        return {"dbId": db_id(conn), "cursor": head(conn), "ticket": row_to_json(ticket),
+                "dependsOn": [r[0] for r in deps], "dependents": [r[0] for r in dependents],
+                "events": [row_to_json(r) for r in events]}
+    return _read(conn, run)
+
+
+def ticket_list(conn, workspace: str, status=None, kind=None) -> dict:
+    def run():
+        clauses, params = ["workspace = ?"], [workspace]
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if kind is not None:
+            clauses.append("kind = ?")
+            params.append(kind)
+        rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
+                            " ORDER BY priority, created_at, key", params).fetchall()
+        return {"dbId": db_id(conn), "cursor": head(conn), "tickets": [row_to_json(r) for r in rows]}
     return _read(conn, run)
 
 

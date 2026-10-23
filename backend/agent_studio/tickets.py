@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 
 from . import schema
 from .protocol import (AsError, INTERNAL, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE,
                        TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID)
+from .protocol import STORY_PATH_INVALID
 from .state import utcnow
 
 TRANSITIONS = schema.TICKET_TRANSITIONS
@@ -16,6 +19,57 @@ TICKET_TERMINAL = schema.TICKET_TERMINAL
 TICKET_WORKING = schema.TICKET_WORKING
 TICKET_OPERATOR_TARGETS = schema.TICKET_OPERATOR_TARGETS
 KIND_STATUSES = schema.KIND_STATUSES
+
+
+def check_workspace_path(workspace, rel):
+    """Return a safe, normalized story path relative to *workspace*."""
+    def invalid(reason):
+        raise AsError(STORY_PATH_INVALID, "Story path is invalid.", data={"path": rel, "reason": reason})
+    if not isinstance(rel, str) or not rel or os.path.isabs(rel) or "\\" in rel:
+        invalid("path must be a relative POSIX path")
+    if ".." in rel.split("/"):
+        invalid("path must not contain '..'")
+    root = os.path.realpath(workspace)
+    target = os.path.realpath(os.path.join(root, rel))
+    try:
+        if os.path.commonpath((root, target)) != root:
+            invalid("path escapes the workspace")
+    except ValueError:
+        invalid("path escapes the workspace")
+    if not os.path.isfile(target):
+        invalid("path must name an existing regular file")
+    if not target.endswith(".md"):
+        invalid("path must end in .md")
+    return os.path.relpath(target, root).replace(os.sep, "/")
+
+
+def parse_depends(text):
+    for line in text.splitlines():
+        if line.startswith("Depends on:"):
+            return list(dict.fromkeys(re.findall(r"P\d{2}-S\d{2}", line)))
+    return []
+
+
+def resolve_depends(tx, workspace, ids):
+    resolved, unresolved = [], []
+    for story_id in ids:
+        rows = [row for row in tx.conn.execute(
+            "SELECT key, story_path FROM tickets WHERE workspace = ? AND kind = 'story' "
+            "AND status != 'cancelled' AND story_path IS NOT NULL", (workspace,)).fetchall()
+                if os.path.splitext(os.path.basename(row["story_path"]))[0] == story_id
+                or os.path.splitext(os.path.basename(row["story_path"]))[0].startswith(story_id + "-")]
+        if len(rows) == 1:
+            resolved.append(rows[0][0])
+        else:
+            unresolved.append(story_id)
+    return {"resolved": resolved, "unresolved": unresolved}
+
+
+def story_title(text, stem):
+    for line in text.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()[:200]
+    return stem
 
 
 def _error(code, message, data=None):

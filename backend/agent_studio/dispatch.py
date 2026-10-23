@@ -8,7 +8,7 @@ import traceback
 
 import copy
 
-from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tmuxctl
+from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tickets, tmuxctl
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -120,6 +120,105 @@ STAGE_NAMES = ("developer", "reviewer", "developer_repair", "reviewer_recheck")
 
 STAGE_ID_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 DEFINITION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+TICKET_KEY = re.compile(r"^T-\d{3,}$")
+
+
+def _ticket_workspace(args):
+    return ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False))
+
+
+def _ticket_key(value, name="key"):
+    if not isinstance(value, str) or not TICKET_KEY.match(value):
+        raise AsError(BAD_REQUEST, f"Argument '{name}' must match T- followed by at least three digits.")
+    return value
+
+
+def _ticket_keys(args, name):
+    value = args.get(name, [])
+    if not isinstance(value, list):
+        raise AsError(BAD_REQUEST, f"Argument '{name}' must be a list.")
+    return [_ticket_key(item, name) for item in value]
+
+
+def _validate_ticket_create(args):
+    kind = args.get("kind", "story")
+    if kind != "story":
+        raise AsError(BAD_REQUEST, "kind must be story.")
+    depends_supplied = "dependsOn" in args
+    depends = _ticket_keys(args, "dependsOn")
+    no_deps = req_bool(args, "noDeps")
+    if depends_supplied and no_deps:
+        raise AsError(BAD_REQUEST, "dependsOn and noDeps cannot be used together.")
+    out = {"workspace": _ticket_workspace(args), "kind": kind,
+           "storyPath": req_text(args, "storyPath", 4096, allow_empty=False),
+           "noDeps": no_deps, "priority": req_int(args, "priority", 0, 1000, 100)}
+    if depends_supplied:
+        # Presence is meaningful: an explicit [] overrides parsed story dependencies.
+        out["dependsOn"] = depends
+    title = req_text(args, "title", 200, required=False)
+    if title is not None:
+        out["title"] = title
+    return out
+
+
+def _validate_ticket_move(args):
+    to = args.get("to")
+    if to not in tickets.TICKET_STATES:
+        raise AsError(BAD_REQUEST, "to must be a ticket state.")
+    out = {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key")), "to": to}
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
+def _validate_ticket_block(args):
+    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key")),
+            "reason": req_text(args, "reason", 500, allow_empty=False)}
+
+
+def _validate_ticket_key(args):
+    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key"))}
+
+
+def _validate_ticket_cancel(args):
+    out = _validate_ticket_key(args)
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
+def _validate_ticket_depend(args):
+    out = _validate_ticket_key(args)
+    out["on"] = _ticket_keys(args, "on")
+    out["remove"] = _ticket_keys(args, "remove")
+    if not out["on"] and not out["remove"]:
+        raise AsError(BAD_REQUEST, "ticket.depend needs on or remove.")
+    return out
+
+
+def _ticket_show(args, req):
+    clean = _validate_ticket_key(args)
+    conn = _reader()
+    try:
+        return queries.ticket_detail(conn, clean["workspace"], clean["key"])
+    finally:
+        conn.close()
+
+
+def _ticket_list(args, req):
+    workspace = _ticket_workspace(args)
+    status, kind = args.get("status"), args.get("kind")
+    if status is not None and status not in tickets.TICKET_STATES:
+        raise AsError(BAD_REQUEST, "status must be a ticket state.")
+    if kind is not None and kind not in tickets.TICKET_KINDS:
+        raise AsError(BAD_REQUEST, "kind must be a ticket kind.")
+    conn = _reader()
+    try:
+        return queries.ticket_list(conn, workspace, status, kind)
+    finally:
+        conn.close()
 
 
 def _validate_definition_start(args):
@@ -331,6 +430,14 @@ COMMANDS = {
     "workflow.show": _workflow_show,
     "workflow.list": _workflow_list,
     "workflow.validate": _workflow_validate,
+    "ticket.create": _inbox("ticket.create", _validate_ticket_create),
+    "ticket.move": _inbox("ticket.move", _validate_ticket_move),
+    "ticket.block": _inbox("ticket.block", _validate_ticket_block),
+    "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key),
+    "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
+    "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
+    "ticket.show": _ticket_show,
+    "ticket.list": _ticket_list,
 }
 
 

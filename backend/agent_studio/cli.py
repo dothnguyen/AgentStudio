@@ -48,6 +48,8 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
+  ticket create --workspace PATH --story PATH [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
+  ticket show|list|move|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
   debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
@@ -150,6 +152,23 @@ def _human_request(argv) -> dict:
     wf_p.add_argument("--wait", action="store_true")
     wf_p.add_argument("--key")
     wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
+    ticket_p = sub.add_parser("ticket", add_help=False)
+    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "block", "unblock", "cancel", "depend"])
+    ticket_p.add_argument("ticket_key", nargs="?")
+    ticket_p.add_argument("--workspace", required=True)
+    ticket_p.add_argument("--story")
+    ticket_p.add_argument("--title")
+    ticket_p.add_argument("--depends", action="append", default=[])
+    ticket_p.add_argument("--no-deps", action="store_true")
+    ticket_p.add_argument("--priority", type=int)
+    ticket_p.add_argument("--to")
+    ticket_p.add_argument("--reason")
+    ticket_p.add_argument("--status")
+    ticket_p.add_argument("--kind")
+    ticket_p.add_argument("--on", action="append", default=[])
+    ticket_p.add_argument("--remove", action="append", default=[])
+    ticket_p.add_argument("--key")
+    ticket_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     asg_p = sub.add_parser("assignment", add_help=False)
     asg_p.add_argument("action", choices=["cancel", "resolve"])
     asg_p.add_argument("--action", dest="resolve_action", choices=["retry", "fail", "cancel"])
@@ -266,6 +285,47 @@ def _human_request(argv) -> dict:
             req.update(command=f"workflow.{ns.action}", args={"workflowRunId": ns.workflow})
             if ns.action in ("cancel", "retry"):
                 req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+    elif ns.cmd == "ticket":
+        args = {"workspace": ns.workspace}
+        if ns.action == "create":
+            if not ns.story:
+                raise AsError(BAD_REQUEST, "ticket create needs --story PATH")
+            args["storyPath"] = ns.story
+            if ns.title is not None:
+                args["title"] = ns.title
+            if ns.depends:
+                args["dependsOn"] = ns.depends
+            if ns.no_deps:
+                args["noDeps"] = True
+            if ns.priority is not None:
+                args["priority"] = ns.priority
+        elif ns.action == "list":
+            if ns.status is not None:
+                args["status"] = ns.status
+            if ns.kind is not None:
+                args["kind"] = ns.kind
+        else:
+            if not ns.ticket_key:
+                raise AsError(BAD_REQUEST, f"ticket {ns.action} needs a ticket KEY")
+            args["key"] = ns.ticket_key
+            if ns.action == "move":
+                if ns.to is None:
+                    raise AsError(BAD_REQUEST, "ticket move needs --to STATE")
+                args["to"] = ns.to
+            if ns.action == "block":
+                if ns.reason is None:
+                    raise AsError(BAD_REQUEST, "ticket block needs --reason TEXT")
+                args["reason"] = ns.reason
+            elif ns.action == "cancel" and ns.reason is not None:
+                args["reason"] = ns.reason
+            elif ns.action == "depend":
+                if ns.on:
+                    args["on"] = ns.on
+                if ns.remove:
+                    args["remove"] = ns.remove
+        req.update(command=f"ticket.{ns.action}", args=args)
+        if ns.action not in ("show", "list"):
+            req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":
             if not ns.resolve_action:

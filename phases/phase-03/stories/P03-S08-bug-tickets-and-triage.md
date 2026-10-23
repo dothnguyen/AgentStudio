@@ -10,7 +10,7 @@ The operator describes a bug in plain words (`team.py bug "…"`). It becomes a 
 
 ## Implement in this order
 
-1. `ticket.create` with `kind: bug`: `text` is required, plus `attachments?` and `title?` (default: the first line of the text, ≤ 80 chars). Entry status `triage`.
+1. `ticket.create` with `kind: bug` (S02 refuses it with `BAD_REQUEST` until now): `text` is required (≤ 32 KiB), plus `attachments?` and `title?` (default: the first line of the text, ≤ 80 chars). Each attachment passes `tickets.check_workspace_path` from S02 except the `.md` rule (existence checked, contents never read). Entry status `triage`.
 2. Bug template `.agent-studio/templates/bug.md` and `bugfile.py` validator. Required sections:
    - `# BUG-<key> — title`;
    - `Severity: blocker|major|minor`;

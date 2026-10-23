@@ -217,7 +217,7 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 | `board.show` | `workspace` | read-only |
 | `board.run` / `board.pause` / `board.resume` | `workspace`, `reason?` / `agentId?`, `all?` | mutating |
 
-Mutating commands need an idempotency key (P00 rule), and the CLI and `serve` return identical JSON. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`.
+Mutating commands need an idempotency key (P00 rule) and go through the command inbox; `ticket.show`, `ticket.list` and `board.show` read the database directly, like `workflow.show`. The CLI and `serve` return identical JSON. `ticket.create` checks every path with `tickets.check_workspace_path` (relative, inside the workspace after `realpath`, an existing `.md` file; else `STORY_PATH_INVALID`); omitted `dependsOn` uses parsed story dependencies, while a supplied list (including `[]`) overrides them. Its receipt is `{ticket, dependsOn, parsed {ids, resolved, unresolved}, warnings [{code: "DEPENDS_UNRESOLVED", id}]}` (S02); S08 adds `kind: bug` and S10 `kind: feature`. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`.
 
 ### J. Events
 

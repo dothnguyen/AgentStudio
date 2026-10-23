@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, report_rules, reports, \
-    resolve, state, tasks, teams, tmuxctl, workflow
+    resolve, state, tasks, teams, tickets, tmuxctl, workflow
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
@@ -141,6 +141,71 @@ def _handle_debug_assign(args: dict, tx, ctx: dict) -> dict:
     return teams.debug_assign(tx, args, ctx)
 
 
+def _ticket_deps(tx, ticket):
+    return [row[0] for row in tx.conn.execute(
+        "SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+        "WHERE d.ticket_id = ? ORDER BY t.key", (ticket["id"],))]
+
+
+def _handle_ticket_create(args, tx, ctx):
+    story_path = tickets.check_workspace_path(args["workspace"], args["storyPath"])
+    with open(os.path.join(args["workspace"], story_path), "r", encoding="utf-8") as f:
+        text = f.read()
+    stem = os.path.splitext(os.path.basename(story_path))[0]
+    parsed_ids = tickets.parse_depends(text)
+    parsed = tickets.resolve_depends(tx, args["workspace"], parsed_ids)
+    ticket = tickets.create(tx, args["workspace"], "story", {
+        "title": args.get("title", tickets.story_title(text, stem)), "story_path": story_path,
+        "priority": args["priority"]})
+    if args["noDeps"]:
+        deps = []
+    elif "dependsOn" in args:
+        deps = args["dependsOn"]
+    else:
+        deps = parsed["resolved"]
+    if deps:
+        tickets.add_deps(tx, ticket, deps)
+    ticket = tickets.get(tx, args["workspace"], ticket["key"])
+    return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket),
+            "parsed": {"ids": parsed_ids, **parsed},
+            "warnings": [{"code": "DEPENDS_UNRESOLVED", "id": ident} for ident in parsed["unresolved"]]}
+
+
+def _handle_ticket_move(args, tx, ctx):
+    ticket = tickets.move(tx, tickets.get(tx, args["workspace"], args["key"]), args["to"], "operator",
+                          args.get("reason"))
+    return {"ticket": ticket}
+
+
+def _handle_ticket_block(args, tx, ctx):
+    return {"ticket": tickets.block(tx, tickets.get(tx, args["workspace"], args["key"]), "operator", args["reason"])}
+
+
+def _handle_ticket_unblock(args, tx, ctx):
+    return {"ticket": tickets.unblock(tx, tickets.get(tx, args["workspace"], args["key"]), "operator")}
+
+
+def _handle_ticket_cancel(args, tx, ctx):
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    run = None
+    if ticket["run_id"]:
+        row = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (ticket["run_id"],)).fetchone()
+        if row is not None and row["status"] in ("queued", "running", "paused"):
+            run = workflow.cancel(tx, {"workflowRunId": ticket["run_id"]}, ctx)
+    ticket = tickets.cancel(tx, ticket, "operator", args.get("reason"))
+    return {"ticket": ticket, "run": run}
+
+
+def _handle_ticket_depend(args, tx, ctx):
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    if args["on"]:
+        tickets.add_deps(tx, ticket, args["on"])
+    if args["remove"]:
+        tickets.remove_deps(tx, ticket, args["remove"])
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket)}
+
+
 HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
@@ -153,6 +218,12 @@ HANDLERS = {
     "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
     "workflow.retry": lambda args, tx, ctx: workflow.retry(tx, args, ctx),
     "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),
+    "ticket.create": _handle_ticket_create,
+    "ticket.move": _handle_ticket_move,
+    "ticket.block": _handle_ticket_block,
+    "ticket.unblock": _handle_ticket_unblock,
+    "ticket.cancel": _handle_ticket_cancel,
+    "ticket.depend": _handle_ticket_depend,
 }
 MONITOR_INTERVAL_S = 2.0
 

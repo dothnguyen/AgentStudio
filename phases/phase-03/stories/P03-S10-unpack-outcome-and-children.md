@@ -10,7 +10,7 @@ A feature ticket (`ticket add --brief`) is unpacked by the ProductOwner. The coo
 
 ## Implement in this order
 
-1. `ticket.create` with `kind: feature`: `briefPath` + `outDir` → `ready_unpack`.
+1. `ticket.create` with `kind: feature` (S02 refuses it with `BAD_REQUEST` until now): `briefPath` + `outDir` → `ready_unpack`. `briefPath` passes `tickets.check_workspace_path` from S02 (`STORY_PATH_INVALID`); `outDir` is relative and stays inside `phases/` (`STORY_PATH_INVALID` otherwise; it need not exist yet).
 2. Outcome hook (S06) for unpack:
    - read `<out>/tickets.json`;
    - check the planning paths (§F unpack glob);
