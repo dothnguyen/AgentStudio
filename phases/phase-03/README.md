@@ -157,7 +157,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 
 "Over the limit" means the counter would exceed `roundLimits.<column>` (default 3).
 
-- The rows are data, `schema.BOARD_OUTCOMES` (per column: `kind` work|verdict, `pass`/`fail` targets, `counter`, `limit` key, `commit` branch|planning|none, planning `globs`), next to `BOARD_COLUMNS`, so board code names no column (S06; S08/S10 add `triage`/`unpack`). Block reasons: `RUN_PAUSED:<code>` (the `diagnosticCode` of the run's latest `workflow_run.paused` event, else `UNKNOWN`), `ROUND_LIMIT:<column>`, `VERDICT_FAIL:<column>`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `UNPACK_QUESTIONS`, `RUN_FAILED:<column>`, `OUTCOME_UNSUPPORTED:<column>`, or the code of an error raised while applying.
+- The rows are data, `schema.BOARD_OUTCOMES` (per column: `kind` work|verdict, `pass`/`fail` targets, `counter`, `limit` key, `commit` branch|planning|none, planning `globs`), next to `BOARD_COLUMNS`, so board code names no column (S06; S08/S10 add `triage`/`unpack`). Block reasons: `RUN_PAUSED:<code>` (the `diagnosticCode` of the run's latest `workflow_run.paused` event, else `UNKNOWN`), `ROUND_LIMIT:<column>`, `VERDICT_FAIL:<column>`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `UNPACK_QUESTIONS`, `RUN_FAILED:<column>`, `OUTCOME_UNSUPPORTED:<column>`, `WORKTREE_MISSING` (S12), or the code of an error raised while applying.
 - **Applying** (`board.apply_outcomes`, after `workflow.advance` in the loop): a terminal run with `run_id ≠ applied_run_id` is applied once, in one transaction that sets `applied_run_id`, clears assignee and lease, and writes `ticket.outcome_applied`. A paused run blocks the ticket only while it is still in its working status and does **not** set `applied_run_id`, so the run is applied again when it ends (late-outcome rows when the ticket is still `blocked`). Git commits happen before that transaction; a crash in between is recovered by reusing HEAD when its subject is the expected message and no `ticket.committed` event records it.
 
 ### D. Locks
@@ -178,7 +178,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
   - A conflict or an interrupted squash is undone with `git reset --merge`, never `git merge --abort`: a squash leaves no `MERGE_HEAD`.
   - At startup, a leftover lock row whose HEAD already carries the trailer is completed without a second commit.
   - The develop start after a conflict merges `baseBranch` into the worktree, committing the markers if it conflicts. It is recorded as `ticket.committed {baseMerge: true}`, which develop-round numbering does not count.
-- Removal after `merged` or `cancelled`: `git worktree remove --force <path>`, after the ticket's run is terminal. Startup reconcile removes worktrees under the root that have no live ticket (`board.worktree_orphan_removed` event) and re-creates nothing.
+- Removal after `merged` or `cancelled`: `git worktree remove --force <path>`, after the ticket's run is terminal. Startup reconcile removes worktrees under the root that have no live ticket (`board.worktree_orphan_removed` event) and re-creates nothing (S12): a git-listed worktree not owned by a non-terminal ticket, and whose matched ticket has no active run, is removed with its branch kept, except a `ticket/<key>-…` branch of a ticket whose `branch` was never recorded, which is discarded with its worktree. Directories git does not list are left alone. A non-terminal, non-blocked ticket with no active run whose `worktree_path` is gone → `blocked` / `WORKTREE_MISSING`.
 
 ### F. Planning commits
 
@@ -203,7 +203,8 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 | test | `ready_test` |
 
 - Priority across roles is irrelevant (each agent has one role). Inside the lead's role, `ready_review` beats `ready_unpack` when the same agent is bound to both columns.
-- **Claim** = one transaction: status `ready_x` → `in_x`, `assignee_agent_id`, `lease_until = now + leaseSeconds`, `ticket.claimed`. Then the coordinator prepares the worktree and starts the run, which sets `run_id`. While the run is active it owns the ticket; the lease only covers the gap between claim and run start.
+- **Claim** = one transaction: status `ready_x` → `in_x`, `assignee_agent_id`, `lease_until = now + leaseSeconds`, `ticket.claimed`. Then the coordinator prepares the worktree and starts the run, which sets `run_id`. While the run is active it owns the ticket; the lease only covers the gap between claim and run start. The scheduler uses `board.claim_and_start` (S12): transaction 1 = `board.claim` (claim, lease, and the develop worktree, recorded on the ticket), transaction 2 = `board.start_claimed` (run start); a start error releases the claim (`start_failed`) and keeps the recorded worktree for reuse. `ticket.start` runs both halves in its single command transaction, so it never leaves a pending claim.
+- **Pending claim** = a working-status ticket with no `ticket.run_started` after its latest `ticket.claimed` (not `run_id IS NULL`: a re-claimed ticket still carries its previous run). `board.reconcile` (startup and each monitor tick) releases a pending claim whose lease has passed (`ticket.released {reason: "lease_expired"}`), and `ticket.retry` releases one at any time (`operator_retry`); a started run → `TICKET_BUSY`, a non-working status → `TICKET_TRANSITION_INVALID`.
 - **Severity → priority:** blocker 10, major 40, minor 70 (`schema.BUG_SEVERITY_PRIORITY`; set by the triage outcome, overriding a create-time `priority`). Stories default to 100, or the manifest priority × 10 + 50 (manifest priority 1–5).
 
 ### H. Usage limits
@@ -225,7 +226,7 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 | `ticket.depend` | `workspace`, `key`, `on` [keys], `remove?` [keys] | mutating |
 | `ticket.approve` | `workspace`, `key` (feature parent; releases held children) | mutating |
 | `ticket.start` | `workspace`, `key`, `agentId` (manual claim + run, no scheduler) | mutating |
-| `ticket.retry` | `workspace`, `key` (releases a lease with no active run) | mutating |
+| `ticket.retry` | `workspace`, `key` (releases a pending claim; receipt `{ticket}`) | mutating |
 | `board.show` | `workspace` | read-only |
 | `board.run` / `board.pause` / `board.resume` | `workspace`, `reason?` / `agentId?`, `all?` | mutating |
 
@@ -233,7 +234,7 @@ Mutating commands need an idempotency key (P00 rule) and go through the command 
 
 ### J. Events
 
-`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId, baseMerge?}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys, updated, kept, removed, unresolved}` (on the parent; `keys` are the new children), `ticket.plan_approved {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}` (for `merge`, a ticket event of the waiting ticket; reasons `MAIN_CHECKOUT_BUSY|DIRTY|WRONG_BRANCH`), `board.limit_reached {agentId, resetAt}`, `board.resumed {agentIds}`, `board.worktree_orphan_removed {path}`.
+`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, `lease_expired`, `operator_retry`, `start_failed`), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId, baseMerge?}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys, updated, kept, removed, unresolved}` (on the parent; `keys` are the new children), `ticket.plan_approved {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}` (for `merge`, a ticket event of the waiting ticket; reasons `MAIN_CHECKOUT_BUSY|DIRTY|WRONG_BRANCH`), `board.limit_reached {agentId, resetAt}`, `board.resumed {agentIds}`, `board.worktree_orphan_removed {path}`.
 
 ## Requirements (this phase)
 

@@ -239,6 +239,10 @@ def _validate_ticket_start(args):
     return out
 
 
+def _validate_ticket_retry(args):
+    return _validate_ticket_key(args)
+
+
 def _validate_board_resume(args):
     agent = args.get("agentId")
     all_agents = args.get("all") is True
@@ -510,6 +514,7 @@ COMMANDS = {
     "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.start": _inbox("ticket.start", _validate_ticket_start),
+    "ticket.retry": _inbox("ticket.retry", _validate_ticket_retry),
     "board.resume": _inbox("board.resume", _validate_board_resume),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,

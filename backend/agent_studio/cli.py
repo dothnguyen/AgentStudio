@@ -167,7 +167,7 @@ def _human_request(argv) -> dict:
     wf_p.add_argument("--key")
     wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     ticket_p = sub.add_parser("ticket", add_help=False)
-    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "block", "unblock", "cancel", "depend", "approve"])
+    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "retry", "block", "unblock", "cancel", "depend", "approve"])
     ticket_p.add_argument("ticket_key", nargs="?")
     ticket_p.add_argument("--workspace", required=True)
     ticket_p.add_argument("--story")

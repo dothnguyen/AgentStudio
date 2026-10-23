@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import board_config, bugfile, crashpoints, gitws, manifest, schema, tasks, tickets, workflow, workflowdef, worktrees
 from .protocol import (AsError, BOARD_CONFIG_INVALID, TICKET_DEPS_NOT_MERGED,
-                       TICKET_ROLE_MISMATCH, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
+                       TICKET_BUSY, TICKET_ROLE_MISMATCH, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
 
 
 def decide(entry, run_status, verdict, counters, limits):
@@ -266,10 +266,8 @@ def _apply(tx, ticket, run, ctx):
             # return the ticket to precisely the queue it came from, once.
             workflow.cancel(tx, {"workflowRunId": run["id"]}, ctx)
             run = tx.get("workflow_run", run["id"])
-            ticket = tickets.move(tx, ticket, _queue(tx, ticket), "coordinator", "usage_limit")
-            ticket = _note(tx, ticket, "ticket.released", {"reason": "usage_limit"})
-            tx.update("ticket", ticket["id"], {"assignee_agent_id": None, "lease_until": None,
-                                                 "applied_run_id": run["id"]}, "ticket.outcome_marked", {})
+            ticket = release(tx, ticket, "usage_limit")
+            tx.update("ticket", ticket["id"], {"applied_run_id": run["id"]}, "ticket.outcome_marked", {})
             return _finish(tx, tx.get("ticket", ticket["id"]), run, column, None, "release", "usage_limit")
         ticket = tickets.block(tx, ticket, "coordinator", "RUN_PAUSED:" + _paused_code(tx, run), _queue(tx, ticket))
         tx.update("ticket", ticket["id"], {"lease_until": None}, "ticket.outcome_marked", {})
@@ -672,7 +670,16 @@ def _blocked_by(tx, ticket):
                                            "WHERE d.ticket_id = ? AND t.status != 'merged' ORDER BY t.key", (ticket["id"],))]
 
 
-def start_column(tx, ticket, agent, config, ctx):
+def release(tx, ticket, reason):
+    """Return a working ticket to the queue from which it was claimed."""
+    ticket = tickets.move(tx, ticket, _queue(tx, ticket), "coordinator", reason)
+    ticket = _note(tx, ticket, "ticket.released", {"reason": reason})
+    tx.update("ticket", ticket["id"], {"assignee_agent_id": None, "lease_until": None},
+              "ticket.release_marked", {})
+    return tx.get("ticket", ticket["id"])
+
+
+def claim(tx, ticket, agent, config, ctx):
     name, item = _column(ticket["status"])
     column = config["columns"][name]
     if agent["role"] != column["role"]:
@@ -686,58 +693,165 @@ def start_column(tx, ticket, agent, config, ctx):
                     "ticket.claimed", {"agentId": agent["id"]})
     ticket = tx.get("ticket", ticket["id"])
     tickets._ticket_event(tx, ticket, seq, "ticket.claimed", "coordinator", ticket["status"], ticket["status"], {"agentId": agent["id"]})
-    created = None
+    if item["workspace"] == "worktree" and not ticket["worktree_path"]:
+        if item["seed"] != "findings":
+            raise AsError(WORKTREE_NOT_REGISTERED, "Ticket does not have a registered worktree.")
+        created = worktrees.create(ticket["workspace"], ticket["key"], worktrees.slug(ticket["title"]), config["baseBranch"], state_dir=ctx["stateDir"])
+        ticket = tickets.record_worktree(tx, ticket, created)
+    return ticket
+
+
+def start_claimed(tx, ticket, agent, config, ctx):
+    name = next((key for key, value in schema.BOARD_COLUMNS.items() if value["working"] == ticket["status"]), None)
+    if name is None:
+        raise AsError(TICKET_TRANSITION_INVALID, "Ticket is not a claimed board ticket.")
+    item = schema.BOARD_COLUMNS[name]
+    column = config["columns"][name]
+    workspace = ticket["worktree_path"] if item["workspace"] == "worktree" else ticket["workspace"]
+    if item["workspace"] == "worktree":
+        if item["seed"] == "findings" and any(value.startswith("MERGE_CONFLICT: ")
+                                                 for value in json.loads(ticket.get("findings_json") or "[]")):
+            merge_message = f"{ticket['key']}: merge {config['baseBranch']}"
+            merged = gitws.run(workspace, "merge", "--no-edit", "-m", merge_message, config["baseBranch"], check=False)
+            if merged.returncode != 0:
+                # Keep the conflict worktree available to the developer even if Git cannot
+                # stage or commit its marker snapshot (for example, a transient index
+                # failure).  The base-merge event still records that this develop round
+                # starts from the attempted merge, and the developer receives the markers.
+                gitws.run(workspace, "add", "-A", check=False)
+                gitws.run(workspace, "commit", "-m", merge_message + " (conflicts)", check=False)
+            commit = _head(workspace)
+            ticket = _record_commit(tx, ticket, {"branch": ticket["branch"], "commit": commit,
+                                                  "baseMerge": True, "runId": None}, head=commit)
+    definition_name = column.get("bugDefinition") if ticket["kind"] == "bug" and column.get("bugDefinition") else column["definition"]
+    definition = workflowdef.load(workspace, definition_name, workflow.BUILTIN_DIR)
+    roles = _roles(definition)
+    if len(roles) != 1:
+        raise AsError(BOARD_CONFIG_INVALID, "Board definition must use exactly one agent role.",
+                      data={"errors": [{"path": "columns." + name + ".definition", "message": "definition must use exactly one agent role"}]})
+    seed = {}
+    if item["seed"] == "findings" and ticket["findings_json"] is not None:
+        seed["findings"] = json.loads(ticket["findings_json"])
+    elif item["seed"] == "diff":
+        out = worktrees.branch_diff(ticket["workspace"], config["baseBranch"], ticket["branch"],
+                                    os.path.join(ctx["stateDir"], "board", ticket["id"], "seed"))
+        with open(out["path"], "rb") as f:
+            seed["diff"] = f.read().decode("utf-8", "replace")
+    started = workflow.start(tx, {"teamId": agent["team_id"], "definition": definition_name, "text": _task(ticket),
+                                  "workspace": workspace, "bindings": {next(iter(roles)): agent["id"]}, "seed": seed}, ctx)
+    seq = tx.update("ticket", ticket["id"], {"run_id": started["workflowRunId"]}, "ticket.run_started",
+                    {"runId": started["workflowRunId"], "definition": definition_name})
+    ticket = tx.get("ticket", ticket["id"])
+    tickets._ticket_event(tx, ticket, seq, "ticket.run_started", "coordinator", ticket["status"], ticket["status"],
+                          {"runId": started["workflowRunId"], "definition": definition_name})
+    return {"ticket": ticket, "column": name, "workflowRunId": started["workflowRunId"],
+            "definition": definition_name, "workspace": workspace}
+
+
+def start_column(tx, ticket, agent, config, ctx):
+    """The atomic command start: both halves share its transaction."""
+    before = ticket.get("worktree_path")
+    claimed = claim(tx, ticket, agent, config, ctx)
     try:
-        workspace = ticket["workspace"]
-        if item["workspace"] == "worktree":
-            workspace = ticket["worktree_path"]
-            if not workspace:
-                if item["seed"] != "findings":
-                    raise AsError(WORKTREE_NOT_REGISTERED, "Ticket does not have a registered worktree.")
-                created = worktrees.create(ticket["workspace"], ticket["key"], worktrees.slug(ticket["title"]), config["baseBranch"], state_dir=ctx["stateDir"])
-                ticket = tickets.record_worktree(tx, ticket, created)
-                workspace = created["path"]
-            if item["seed"] == "findings" and any(value.startswith("MERGE_CONFLICT: ")
-                                           for value in json.loads(ticket.get("findings_json") or "[]")):
-                merge_message = f"{ticket['key']}: merge {config['baseBranch']}"
-                merged = gitws.run(workspace, "merge", "--no-edit", "-m", merge_message, config["baseBranch"], check=False)
-                if merged.returncode != 0:
-                    # Keep the conflict worktree available to the developer even if Git cannot
-                    # stage or commit its marker snapshot (for example, a transient index
-                    # failure).  The base-merge event still records that this develop round
-                    # starts from the attempted merge, and the developer receives the markers.
-                    gitws.run(workspace, "add", "-A", check=False)
-                    gitws.run(workspace, "commit", "-m", merge_message + " (conflicts)", check=False)
-                commit = _head(workspace)
-                ticket = _record_commit(tx, ticket, {"branch": ticket["branch"], "commit": commit,
-                                                      "baseMerge": True, "runId": None}, head=commit)
-        definition_name = column.get("bugDefinition") if ticket["kind"] == "bug" and column.get("bugDefinition") else column["definition"]
-        definition = workflowdef.load(workspace, definition_name, workflow.BUILTIN_DIR)
-        roles = _roles(definition)
-        if len(roles) != 1:
-            raise AsError(BOARD_CONFIG_INVALID, "Board definition must use exactly one agent role.",
-                          data={"errors": [{"path": "columns." + name + ".definition", "message": "definition must use exactly one agent role"}]})
-        seed = {}
-        if item["seed"] == "findings" and ticket["findings_json"] is not None:
-            seed["findings"] = json.loads(ticket["findings_json"])
-        elif item["seed"] == "diff":
-            out = worktrees.branch_diff(ticket["workspace"], config["baseBranch"], ticket["branch"],
-                                        os.path.join(ctx["stateDir"], "board", ticket["id"], "seed"))
-            with open(out["path"], "rb") as f:
-                seed["diff"] = f.read().decode("utf-8", "replace")
-        started = workflow.start(tx, {"teamId": agent["team_id"], "definition": definition_name, "text": _task(ticket),
-                                      "workspace": workspace, "bindings": {next(iter(roles)): agent["id"]}, "seed": seed}, ctx)
-        seq = tx.update("ticket", ticket["id"], {"run_id": started["workflowRunId"]}, "ticket.run_started",
-                        {"runId": started["workflowRunId"], "definition": definition_name})
-        ticket = tx.get("ticket", ticket["id"])
-        tickets._ticket_event(tx, ticket, seq, "ticket.run_started", "coordinator", ticket["status"], ticket["status"],
-                              {"runId": started["workflowRunId"], "definition": definition_name})
-        return {"ticket": ticket, "column": name, "workflowRunId": started["workflowRunId"],
-                "definition": definition_name, "workspace": workspace}
+        return start_claimed(tx, claimed, agent, config, ctx)
     except Exception:
-        if created:
+        if not before and claimed.get("worktree_path"):
             try:
-                worktrees.discard(ticket["workspace"], created, state_dir=ctx["stateDir"])
+                worktrees.discard(claimed["workspace"], {"path": claimed["worktree_path"], "branch": claimed["branch"]}, state_dir=ctx["stateDir"])
             except Exception:
                 pass
         raise
+
+
+def claim_and_start(store, workspace, key, agent_id, ctx):
+    with store.transaction() as tx:
+        ticket = tickets.get(tx, workspace, key)
+        agent = tx.get("agent", agent_id)
+        roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (agent["team_id"],))}
+        config = board_config.current(tx, workspace, roles)
+        claim(tx, ticket, agent, config, ctx)
+    crashpoints.hit("after_ticket_claim_commit")
+    try:
+        with store.transaction() as tx:
+            ticket = tickets.get(tx, workspace, key)
+            agent = tx.get("agent", agent_id)
+            roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (agent["team_id"],))}
+            return start_claimed(tx, ticket, agent, board_config.current(tx, workspace, roles), ctx)
+    except AsError:
+        with store.transaction() as tx:
+            ticket = tickets.get(tx, workspace, key)
+            if ticket["status"] in schema.TICKET_WORKING:
+                release(tx, ticket, "start_failed")
+        raise
+
+
+def _pending(tx, ticket):
+    claimed = tx.conn.execute("SELECT MAX(id) FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.claimed'", (ticket["id"],)).fetchone()[0]
+    started = tx.conn.execute("SELECT MAX(id) FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.run_started'", (ticket["id"],)).fetchone()[0]
+    return claimed is not None and (started is None or started < claimed)
+
+
+def reconcile(store, ctx, *, startup=False, now=None):
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    released = []
+    for row in store.conn.execute("SELECT id FROM tickets WHERE status IN ({})".format(",".join("?" * len(schema.TICKET_WORKING))), tuple(schema.TICKET_WORKING)):
+        with store.transaction() as tx:
+            ticket = tx.get("ticket", row["id"])
+            lease = ticket.get("lease_until")
+            if lease and _pending(tx, ticket) and datetime.fromisoformat(lease.replace("Z", "+00:00")) < now:
+                release(tx, ticket, "lease_expired")
+                released.append(ticket["key"])
+    applied = apply_outcomes(store, ctx)
+    result = {"released": released, "applied": applied, "orphansRemoved": [], "worktreesMissing": [], "unregisteredPaths": []}
+    if not startup:
+        return result
+    workspaces = [r[0] for r in store.conn.execute("SELECT DISTINCT workspace FROM tickets")]
+    for workspace in workspaces:
+        if not os.path.isdir(workspace):
+            continue   # a deleted or unmounted workspace must not stop reconciliation of the others
+        registered = worktrees.list_registered(workspace, state_dir=ctx["stateDir"])
+        paths = {entry["path"] for entry in registered}
+        rows = [dict(r) for r in store.conn.execute("SELECT * FROM tickets WHERE workspace = ?", (workspace,))]
+        live = {r["worktree_path"] for r in rows if r["status"] not in schema.TICKET_TERMINAL and r["worktree_path"]}
+        for entry in registered:
+            if entry["path"] in live:
+                continue
+            match = next((r for r in rows if r["worktree_path"] == entry["path"]), None)
+            if match and match.get("run_id"):
+                run = store.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (match["run_id"],)).fetchone()
+                if run and run[0] in ("queued", "running", "paused"):
+                    continue
+            discard = next((r for r in rows if entry.get("branch", "").startswith("ticket/" + r["key"] + "-") and not r["branch"]), None)
+            if discard:
+                worktrees.discard(workspace, {"path": entry["path"], "branch": entry["branch"]}, state_dir=ctx["stateDir"])
+            else:
+                worktrees.remove(workspace, entry["path"], state_dir=ctx["stateDir"])
+            with store.transaction() as tx:
+                team = tx.conn.execute("SELECT id FROM teams WHERE workspace = ? ORDER BY created_at DESC LIMIT 1", (workspace,)).fetchone()
+                if team:
+                    tx.note("team", team[0], "board.worktree_orphan_removed", {"path": entry["path"]})
+                if match:
+                    _note(tx, tx.get("ticket", match["id"]), "board.worktree_orphan_removed", {"path": entry["path"]})
+            result["orphansRemoved"].append(entry["path"])
+        for ticket in rows:
+            if ticket["status"] in schema.TICKET_TERMINAL or ticket["status"] == "blocked" or not ticket["worktree_path"]:
+                continue
+            active = ticket["run_id"] and store.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (ticket["run_id"],)).fetchone()
+            if active and active[0] in ("queued", "running"):
+                continue
+            if not os.path.isdir(ticket["worktree_path"]) or ticket["worktree_path"] not in paths:
+                with store.transaction() as tx:
+                    current = tx.get("ticket", ticket["id"])
+                    # A missing tree can be discovered in the claim/start gap.  A
+                    # working status is not a valid blocked return status; preserve
+                    # the queue from which that claim was taken instead.
+                    return_status = schema.TICKET_WORKING.get(current["status"], (current["status"],))[0]
+                    current = tickets.block(tx, current, "coordinator", "WORKTREE_MISSING", return_status)
+                    tx.update("ticket", current["id"], {"assignee_agent_id": None, "lease_until": None}, "ticket.worktree_missing", {})
+                result["worktreesMissing"].append(ticket["key"])
+        root = worktrees.root_for(workspace, state_dir=ctx["stateDir"])
+        if os.path.isdir(root):
+            result["unregisteredPaths"].extend(os.path.join(root, name) for name in os.listdir(root) if os.path.join(root, name) not in paths)
+    return result

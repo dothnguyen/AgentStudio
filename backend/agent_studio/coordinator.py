@@ -14,10 +14,10 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, board, board_config, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, \
+from . import PROTOCOL, VERSION, board, board_config, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, schema, \
     resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
 from .store import Store
-from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, TICKET_TRANSITION_INVALID, UNKNOWN_COMMAND
+from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, TICKET_BUSY, TICKET_TRANSITION_INVALID, UNKNOWN_COMMAND
 
 LOCK_FILE = "coordinator.lock"
 PID_FILE = "coordinator.json"
@@ -263,6 +263,15 @@ def _handle_ticket_start(args, tx, ctx):
     return board.start_column(tx, ticket, agent, board_config.current(tx, args["workspace"], roles), ctx)
 
 
+def _handle_ticket_retry(args, tx, ctx):
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    if ticket["status"] not in schema.TICKET_WORKING:
+        raise AsError(TICKET_TRANSITION_INVALID, "Ticket is not a pending claim.")
+    if not board._pending(tx, ticket):
+        raise AsError(TICKET_BUSY, "Ticket already has a started run.")
+    return {"ticket": board.release(tx, ticket, "operator_retry")}
+
+
 def _handle_board_resume(args, tx, ctx):
     teams = [dict(row) for row in tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running'",
                                                    (args["workspace"],)).fetchall()]
@@ -307,6 +316,7 @@ HANDLERS = {
     "ticket.cancel": _handle_ticket_cancel,
     "ticket.depend": _handle_ticket_depend,
     "ticket.start": _handle_ticket_start,
+    "ticket.retry": _handle_ticket_retry,
     "board.resume": _handle_board_resume,
 }
 MONITOR_INTERVAL_S = 2.0
@@ -414,6 +424,7 @@ def run(enable_debug: bool = False) -> int:
                        ("panes", lambda: teams.monitor(store, tmux)),
                        ("assignments", lambda: reconcile.tick(store, ctx)),
                        ("merge", lambda: board.recover_merge(store, ctx)),
+                       ("board", lambda: board.reconcile(store, ctx, startup=True)),
                        ("orphanSessions", lambda: reconcile.orphan_sessions(store, tmux))):
         try:
             startup[name] = step()
@@ -437,6 +448,7 @@ def run(enable_debug: bool = False) -> int:
                 _reap_children()
                 teams.monitor(store, tmux)
                 reconcile.tick(store, ctx)
+                board.reconcile(store, ctx)
                 next_monitor = time.monotonic() + MONITOR_INTERVAL_S
         except Exception:
             _log(f"loop error:\n{traceback.format_exc()}")

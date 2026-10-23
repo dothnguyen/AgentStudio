@@ -17,7 +17,7 @@ The board runs on its own. Once the operator runs `board.run`, each coordinator 
    - develop: `deps_merged`, the `in_dev` count, a blocker bug may exceed the cap by one;
    - main-checkout columns: none when the lock is held, the merge row is set or the tree is dirty, writing `board.held`;
    - starvation guard: after two consecutive reviews by this agent, a waiting triage/refine ticket goes first (count kept in `board_state.review_streak`, per agent as a JSON map).
-3. `board.tick(store, ctx)` in the coordinator loop after `apply_outcomes` and `merge_ready`. When running, for each `idle` agent of the team on that workspace, in agent order: `pick` → `start_column`. A start error releases the claim, writes `board.held` with the code, and the tick moves on (no retry in the same tick).
+3. `board.tick(store, ctx)` in the coordinator loop after `apply_outcomes` and `merge_ready`. When running, for each `idle` agent of the team on that workspace, in agent order: `pick` → `board.claim_and_start` (S12; claim and run start in two transactions). A start error is already released by `claim_and_start` (`start_failed`); the tick writes `board.held` with the code and moves on (no retry in the same tick).
 4. CLI `agent-studio board run|pause`.
 
 ## Done when
