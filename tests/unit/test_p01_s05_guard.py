@@ -55,6 +55,9 @@ class NoNamesInTheEngine(unittest.TestCase):
     def test_tickets_is_clean(self):
         self.assertEqual(hits(tree("tickets.py")), [])
 
+    def test_worktrees_is_clean(self):
+        self.assertEqual(hits(tree("worktrees.py")), [])
+
     def test_the_guard_catches_a_violation(self):
         bad = ast.parse("def f(x):\n    return x.role == 'QA' or x.stage == 'develop'\n")
         self.assertEqual(hits(bad), ["QA", "develop"])
