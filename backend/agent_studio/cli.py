@@ -54,6 +54,8 @@ USAGE = """agent-studio <command>
   ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
   board run|pause [--reason TEXT] --workspace PATH
   board resume --workspace PATH (--agent ID | --all)
+  board show --workspace PATH              every column with its tickets, the agents, limits and holds (read-only)
+  board list                               one summary per workspace that has a board (read-only)
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
   debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
@@ -190,8 +192,8 @@ def _human_request(argv) -> dict:
     ticket_p.add_argument("--agent")
     ticket_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     board_p = sub.add_parser("board", add_help=False)
-    board_p.add_argument("action", choices=["run", "pause", "resume"])
-    board_p.add_argument("--workspace", required=True)
+    board_p.add_argument("action", choices=["run", "pause", "resume", "show", "list"])
+    board_p.add_argument("--workspace")
     board_p.add_argument("--agent")
     board_p.add_argument("--all", action="store_true")
     board_p.add_argument("--reason")
@@ -375,15 +377,22 @@ def _human_request(argv) -> dict:
         req.update(command=f"ticket.{ns.action}", args=args)
         if ns.action not in ("show", "list"):
             req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+    elif ns.cmd == "board" and ns.action == "list":
+        req.update(command="board.list", args={})
     elif ns.cmd == "board":
+        if not ns.workspace:
+            raise AsError(BAD_REQUEST, f"board {ns.action} needs --workspace PATH")
         args = {"workspace": ns.workspace}
-        if ns.action == "resume":
+        if ns.action == "show":
+            req.update(command="board.show", args=args)
+        elif ns.action == "resume":
             args["all"] = ns.all
             if ns.agent:
                 args["agentId"] = ns.agent
-        elif ns.action == "pause" and ns.reason is not None:
+        if ns.action == "pause" and ns.reason is not None:
             args["reason"] = ns.reason
-        req.update(command="board." + ns.action, args=args, idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+        if ns.action != "show":
+            req.update(command="board." + ns.action, args=args, idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":
             if not ns.resolve_action:

@@ -18,11 +18,11 @@ Before starting any story, read the [phase overview and design contract](../READ
 | [S12](./P03-S12-leases-and-recovery.md) | Leases, release, restart recovery, `ticket.retry` | S06 | To Do |
 | [S13](./P03-S13-scheduler-picker.md) | Scheduler tick, priorities, `board.run/pause` | S07, S08, S10, S11, S12 | To Do |
 | [S14](./P03-S14-multi-agent-rosters.md) | Several agents per role | S13 | To Do |
-| [S15](./P03-S15-board-show-and-team-py.md) | `board.show`, `team.py board` / `ticket` | S11, S12 | To Do |
+| [S15](./P03-S15-board-show-and-team-py.md) | `board.show`, `team.py board` / `ticket` | S11, S12, S13, S14 | To Do |
 | [S16](./P03-S16-recovery-doc-and-drills.md) | Recovery doc and failure drills | S13, S14, S15 | To Do |
 | [S17](./P03-S17-live-gate.md) | Live gate with real providers | S01–S16 | To Do |
 
-S03 can run in parallel with S01–S02. S07, S08 and S09 can run in parallel after S06 (S09 needs only S05). S11 and S12 can run in parallel. S15 can start once S11 and S12 are done.
+S03 can run in parallel with S01–S02. S07, S08 and S09 can run in parallel after S06 (S09 needs only S05). S11 and S12 can run in parallel. S15 needs S13 (`holds`) and S14 (agent names).
 
 ## Phase exit
 

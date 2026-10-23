@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
+from types import SimpleNamespace
 from typing import Optional
 
-from . import schema
-from .protocol import AsError, TICKET_NOT_FOUND
+from . import board, board_config, board_scheduler, schema
+from .protocol import AsError, BOARD_CONFIG_INVALID, TICKET_NOT_FOUND
 from .state import SCHEMA_VERSION, db_id, utcnow
 
 CURSOR_INVALID = "CURSOR_INVALID"
@@ -173,6 +175,113 @@ def ticket_list(conn, workspace: str, status=None, kind=None) -> dict:
         rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
                             " ORDER BY priority, created_at, key", params).fetchall()
         return {"dbId": db_id(conn), "cursor": head(conn), "tickets": [row_to_json(r) for r in rows]}
+    return _read(conn, run)
+
+
+TERMINAL_SHOWN = 10
+
+
+def _board_row(conn, workspace):
+    row = conn.execute("SELECT status, reason FROM board_state WHERE workspace = ?", (workspace,)).fetchone()
+    return {"status": row["status"], "reason": row["reason"]} if row else {"status": "stopped", "reason": None}
+
+
+def _board_team(conn, workspace):
+    return conn.execute("SELECT * FROM teams WHERE workspace = ? AND status NOT IN ('stopped', 'error') "
+                        "ORDER BY created_at, id LIMIT 1", (workspace,)).fetchone()
+
+
+def _board_agents(conn, team):
+    if team is None:
+        return []
+    rows = conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team["id"],)).fetchall()
+    return [{"agentId": r["id"], "name": r["display_name"], "role": r["role"], "availability": r["availability"],
+             "limitResetAt": r["limit_reset_at"]} for r in rows]
+
+
+def _board_held(conn, workspace):
+    """Live holds for the workspace; [] when the directory, board.json or git cannot be read."""
+    if not os.path.isdir(workspace):
+        return []
+    tx = SimpleNamespace(conn=conn)
+    try:
+        row = conn.execute("SELECT config_json FROM board_state WHERE workspace = ?", (workspace,)).fetchone()
+        config = json.loads(row[0]) if row and row[0] else board_config.current(tx, workspace, None)
+        held = list(board_scheduler.holds(tx, workspace, config))
+        if conn.execute("SELECT 1 FROM tickets WHERE workspace = ? AND status = 'ready_merge' LIMIT 1",
+                        (workspace,)).fetchone():
+            reason = board.merge_hold(tx, workspace, config)
+            if reason:
+                held.append({"column": "merge", "reason": reason})
+        return held
+    except AsError as error:
+        if error.code == BOARD_CONFIG_INVALID:
+            return []
+        raise
+    except Exception:
+        return []
+
+
+def _board_ticket(conn, r, names):
+    open_deps = [x[0] for x in conn.execute(
+        "SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+        "WHERE d.ticket_id = ? AND t.status != 'merged' ORDER BY t.key", (r["id"],))]
+    return {"key": r["key"], "kind": r["kind"], "title": r["title"], "priority": r["priority"], "severity": r["severity"],
+            "assignee": names.get(r["assignee_agent_id"]), "runId": r["run_id"],
+            "rounds": {"dev": r["dev_rounds"], "test": r["test_rounds"], "review": r["review_rounds"]},
+            "blockedReason": r["blocked_reason"], "depsOpen": open_deps}
+
+
+def _board_columns(conn, workspace):
+    names = {r["id"]: r["display_name"] for r in conn.execute("SELECT id, display_name FROM agents")}
+    columns = []
+    for status in schema.TICKET_STATES:
+        count = conn.execute("SELECT COUNT(*) FROM tickets WHERE workspace = ? AND status = ?",
+                             (workspace, status)).fetchone()[0]
+        if status in schema.TICKET_TERMINAL:
+            order, limit = "updated_at DESC, key", f" LIMIT {TERMINAL_SHOWN}"
+        else:
+            order, limit = "priority, created_at, key", ""
+        rows = conn.execute(f"SELECT * FROM tickets WHERE workspace = ? AND status = ? ORDER BY {order}{limit}",
+                            (workspace, status)).fetchall()
+        columns.append({"status": status, "count": count, "tickets": [_board_ticket(conn, r, names) for r in rows]})
+    return columns
+
+
+def board_show(conn, workspace: str) -> dict:
+    def run():
+        team = _board_team(conn, workspace)
+        return {"dbId": db_id(conn), "cursor": head(conn), "workspace": workspace, "board": _board_row(conn, workspace),
+                "columns": _board_columns(conn, workspace), "agents": _board_agents(conn, team),
+                "held": _board_held(conn, workspace)}
+    return _read(conn, run)
+
+
+def board_list(conn) -> dict:
+    def run():
+        paths = sorted({r[0] for r in conn.execute("SELECT workspace FROM tickets UNION SELECT workspace FROM board_state")})
+        boards = []
+        for workspace in paths:
+            exists = os.path.isdir(workspace)
+            state = _board_row(conn, workspace)
+            if not exists:
+                state = {"status": "unavailable", "reason": None}
+            team = _board_team(conn, workspace)
+            agents = _board_agents(conn, team)
+            counts = {r[0]: r[1] for r in conn.execute(
+                "SELECT status, COUNT(*) FROM tickets WHERE workspace = ? GROUP BY status", (workspace,))}
+            boards.append({
+                "workspace": workspace, "name": os.path.basename(workspace.rstrip("/")) or workspace,
+                "status": state["status"], "reason": state["reason"],
+                "team": {"teamId": team["id"], "status": team["status"]} if team else None,
+                "counts": {s: counts[s] for s in schema.TICKET_STATES if s in counts},
+                "agents": {"total": len(agents), **{key: sum(1 for a in agents if a["availability"] == value)
+                                                    for key, value in (("idle", "idle"), ("busy", "busy"),
+                                                                       ("limitReached", "limit_reached"))}},
+                "limits": [{"agent": a["name"], "role": a["role"], "resetAt": a["limitResetAt"]}
+                           for a in agents if a["availability"] == "limit_reached"],
+                "held": _board_held(conn, workspace) if exists else []})
+        return {"dbId": db_id(conn), "cursor": head(conn), "boards": boards}
     return _read(conn, run)
 
 

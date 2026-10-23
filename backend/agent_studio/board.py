@@ -566,6 +566,15 @@ def _merge_conflict(tx, ticket, files, config):
     tx.conn.execute("DELETE FROM board_locks WHERE workspace = ? AND name = 'merge'", (ticket["workspace"],))
 
 
+def merge_hold(tx, workspace, config):
+    """Why a waiting ready_merge ticket cannot merge now (read-only), or None."""
+    busy = tasks._mutating_in_workspace(tx, workspace) or tx.conn.execute(
+        "SELECT 1 FROM board_locks WHERE workspace = ? AND name = 'merge'", (workspace,)).fetchone()
+    branch = gitws.run(workspace, "symbolic-ref", "--short", "HEAD", check=False)
+    return ("MAIN_CHECKOUT_BUSY" if busy else "MAIN_CHECKOUT_DIRTY" if not worktrees.is_clean(workspace)
+            else "MAIN_CHECKOUT_WRONG_BRANCH" if branch.returncode != 0 or branch.stdout.decode().strip() != config["baseBranch"] else None)
+
+
 def merge_ready(store, ctx):
     """Merge at most one oldest ready ticket in each workspace."""
     workspaces = [r[0] for r in store.conn.execute("SELECT DISTINCT workspace FROM tickets WHERE status = 'ready_merge'")]
@@ -578,11 +587,7 @@ def merge_ready(store, ctx):
                 continue
             ticket = dict(ticket)
             config = board_config.current(tx, workspace, None)
-            busy = tasks._mutating_in_workspace(tx, workspace) or tx.conn.execute(
-                "SELECT 1 FROM board_locks WHERE workspace = ? AND name = 'merge'", (workspace,)).fetchone()
-            branch = gitws.run(workspace, "symbolic-ref", "--short", "HEAD", check=False)
-            reason = ("MAIN_CHECKOUT_BUSY" if busy else "MAIN_CHECKOUT_DIRTY" if not worktrees.is_clean(workspace)
-                      else "MAIN_CHECKOUT_WRONG_BRANCH" if branch.returncode != 0 or branch.stdout.decode().strip() != config["baseBranch"] else None)
+            reason = merge_hold(tx, workspace, config)
             if reason:
                 _held(tx, ticket, reason)
                 continue

@@ -1,0 +1,39 @@
+{
+  "dbId": "DB",
+  "cursor": 0,
+  "boards": [
+    {
+      "workspace": "/work/api",
+      "name": "api",
+      "status": "running",
+      "reason": null,
+      "team": {"teamId": "TEAM", "status": "running"},
+      "counts": {"ready_dev": 2, "in_dev": 1, "blocked": 1, "merged": 4},
+      "agents": {"total": 3, "idle": 1, "busy": 1, "limitReached": 1},
+      "limits": [{"agent": "qa-1", "role": "QA", "resetAt": "2026-05-01T14:05:00Z"}],
+      "held": []
+    },
+    {
+      "workspace": "/work/web",
+      "name": "web",
+      "status": "paused",
+      "reason": "operator",
+      "team": null,
+      "counts": {"refine": 1},
+      "agents": {"total": 0, "idle": 0, "busy": 0, "limitReached": 0},
+      "limits": [],
+      "held": [{"column": "refine", "reason": "MAIN_CHECKOUT_DIRTY"}]
+    },
+    {
+      "workspace": "/work/old",
+      "name": "old",
+      "status": "unavailable",
+      "reason": null,
+      "team": null,
+      "counts": {"merged": 1},
+      "agents": {"total": 0, "idle": 0, "busy": 0, "limitReached": 0},
+      "limits": [],
+      "held": []
+    }
+  ]
+}

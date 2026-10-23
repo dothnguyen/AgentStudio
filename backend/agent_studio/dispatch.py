@@ -290,6 +290,23 @@ def _ticket_show(args, req):
         conn.close()
 
 
+def _board_show(args, req):
+    workspace = _ticket_workspace(args)
+    conn = _reader()
+    try:
+        return queries.board_show(conn, workspace)
+    finally:
+        conn.close()
+
+
+def _board_list(args, req):
+    conn = _reader()
+    try:
+        return queries.board_list(conn)
+    finally:
+        conn.close()
+
+
 def _ticket_list(args, req):
     workspace = _ticket_workspace(args)
     status, kind = args.get("status"), args.get("kind")
@@ -530,6 +547,8 @@ COMMANDS = {
     "board.resume": _inbox("board.resume", _validate_board_resume),
     "board.run": _inbox("board.run", _validate_board_run),
     "board.pause": _inbox("board.pause", _validate_board_pause),
+    "board.show": _board_show,
+    "board.list": _board_list,
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
 }

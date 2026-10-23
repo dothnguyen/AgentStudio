@@ -26,6 +26,15 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py index                 build the ctags symbol index agents search (.agent-studio/cache/tags)
     team.py blocked               agents held by a permission denial / unclear restart, and how to free them
     team.py resolve ROLE --action fail|retry|cancel   free that agent
+    team.py board [run | pause [--reason TEXT] | resume (--agent NAME | --all)] [--workspace PATH]
+                                  the kanban board (text), or start / pause / resume it
+    team.py boards                one line per workspace board (several workspaces may run in parallel)
+    team.py ticket add STORY [--depends T-001 ...] [--no-deps] [--priority N]
+    team.py ticket add --brief PATH --out DIR
+                                  create a ticket and show the dependencies that were parsed
+    team.py ticket move KEY STATUS [--reason TEXT]
+    team.py ticket show KEY       status, dependencies and the last events
+    team.py ticket depend KEY --on T-001 [--on ...]
     team.py stop                  stop the team
 
 STORY is a path like phases/phase-01/stories/P01-S02-something.md (relative to the workspace).
@@ -200,6 +209,9 @@ def c_status(_):
     for a in d.get("agents", []):
         if a["availability"] == "limit_reached":
             print(f"LIMIT: {a.get('displayName') or a['role']} ({a['providerId']}) until {a.get('limitResetAt') or 'unknown'}")
+    for b in cli("board", "list").get("boards", []):
+        if os.path.realpath(b["workspace"]) == os.path.realpath(WS) and b["status"] in ("running", "paused"):
+            print("board: " + render_boards({"boards": [b]}, False).splitlines()[0])
     for w in d.get("workflowRuns", [])[-3:]:
         print(f"  workflow {w['id'][:8]} {w['status']}")
     for a in d.get("assignments", [])[-6:]:
@@ -555,6 +567,144 @@ def c_bug(ns):
     print(result["ticket"]["key"])
 
 
+# ---- board and tickets --------------------------------------------------------------------------------
+RED, RESET = "\033[31m", "\033[0m"
+
+
+def _until(reset_at):
+    return reset_at[11:16] + "Z" if reset_at else "unknown"
+
+
+def _red(text, color):
+    return RED + text + RESET if color else text
+
+
+def render_board(data, color):
+    """Text kanban for a board.show result (pure)."""
+    state = data["board"]
+    lines = [f"board {os.path.basename(data['workspace'].rstrip('/'))}: {state['status']}"
+             + (f" ({state['reason']})" if state.get("reason") else "")]
+    for col in data["columns"]:
+        if not col["count"]:
+            continue
+        lines.append(f"== {col['status']} ({col['count']}) ==")
+        for t in col["tickets"]:
+            r = t["rounds"]
+            line = f"  {t['key']} [dev:{r['dev']} test:{r['test']} review:{r['review']}] {t['assignee'] or '-'}"
+            if t["depsOpen"]:
+                line += " \u2190 " + ", ".join(t["depsOpen"])
+            if t["blockedReason"]:
+                line += f"  !{t['blockedReason']}"
+            lines.append(line + "  " + t["title"][:50])
+    for a in data["agents"]:
+        if a["availability"] == "limit_reached":
+            lines.append(_red(f"LIMIT: {a['name']} ({a['role']}) until {_until(a['limitResetAt'])}", color))
+    lines.extend(f"HELD: {h['column']} {h['reason']}" for h in data["held"])
+    return "\n".join(lines)
+
+
+def render_boards(data, color):
+    """One line per board for a board.list result (pure)."""
+    lines = []
+    for b in data["boards"]:
+        line = f"{b['name']}  {b['status']}  " + " ".join(f"{k}:{v}" for k, v in b["counts"].items())
+        lines.append(line.rstrip())
+        for lim in b["limits"]:
+            lines.append(_red(f"  LIMIT: {lim['agent']} until {_until(lim['resetAt'])}", color))
+        lines.extend(f"  HELD: {h['column']} {h['reason']}" for h in b["held"])
+    return "\n".join(lines)
+
+
+def c_board(ns):
+    action = getattr(ns, "board_action", None)
+    ws = ns.workspace
+    if action is None:
+        print(render_board(cli("board", "show", "--workspace", ws), sys.stdout.isatty()))
+    elif action == "run":
+        cli("board", "run", "--workspace", ws)
+        print("board running")
+    elif action == "pause":
+        argv = ["board", "pause", "--workspace", ws] + (["--reason", ns.reason] if ns.reason else [])
+        cli(*argv)
+        print("board paused" + (f" ({ns.reason})" if ns.reason else ""))
+    else:
+        argv = ["board", "resume", "--workspace", ws]
+        shown = cli("board", "show", "--workspace", ws)["agents"]
+        if ns.all:
+            argv.append("--all")
+        else:
+            match = next((a for a in shown if a["name"].lower() == ns.agent.lower()), None)
+            if match is None:
+                sys.exit(f"Unknown agent {ns.agent}. Agents: {', '.join(a['name'] for a in shown)}")
+            argv += ["--agent", match["agentId"]]
+        by_id = {a["agentId"]: a["name"] for a in shown}
+        names = [by_id.get(i, i) for i in cli(*argv).get("resumed") or []]
+        print("resumed: " + (", ".join(names) if names else "none"))
+
+
+def c_boards(_):
+    print(render_boards(cli("board", "list"), sys.stdout.isatty()))
+
+
+def _keys(keys):
+    return ", ".join(keys) if keys else "none"
+
+
+def c_ticket(ns):
+    ws, action = ns.workspace, ns.ticket_action
+    if action == "add":
+        if (ns.story is None) == (ns.brief is None) or (ns.brief is not None) != (ns.out is not None):
+            print("Give exactly one of STORY or --brief PATH --out DIR.", file=sys.stderr)
+            raise SystemExit(2)
+        argv = ["ticket", "create", "--workspace", ws]
+        if ns.story is not None:
+            argv += ["--story", ns.story]
+        else:
+            argv += ["--kind", "feature", "--brief", ns.brief, "--out", ns.out]
+        for key in ns.depends:
+            argv += ["--depends", key]
+        if ns.no_deps:
+            argv.append("--no-deps")
+        if ns.priority is not None:
+            argv += ["--priority", str(ns.priority)]
+        r = cli(*argv)
+        print(r["ticket"]["key"])
+        overridden = ns.no_deps or bool(ns.depends)
+        print("depends on: " + _keys(r.get("dependsOn") if not ns.no_deps else []))
+        if ns.story is not None:
+            parsed = r.get("parsed") or {}
+            print("dependencies overridden" if overridden else "parsed: " + _keys(parsed.get("resolved")))
+            if parsed.get("unresolved"):
+                print("unresolved: " + ", ".join(parsed["unresolved"]))
+    elif action == "move":
+        before = cli("ticket", "show", ns.key, "--workspace", ws)["ticket"]["status"]
+        argv = ["ticket", "move", ns.key, "--workspace", ws, "--to", ns.status]
+        if ns.reason:
+            argv += ["--reason", ns.reason]
+        r = cli(*argv)
+        print(f"{ns.key}: {before} -> {r['ticket']['status']}")
+    elif action == "show":
+        d = cli("ticket", "show", ns.key, "--workspace", ws)
+        t = d["ticket"]
+        print(f"{t['key']} {t['kind']} {t['status']}  {t['title']}")
+        path = t.get("storyPath") or t.get("briefPath")
+        if path:
+            print(path)
+        print("depends on: " + _keys(d["dependsOn"]))
+        print("dependents: " + _keys(d["dependents"]))
+        if t["status"] == "blocked":
+            print(f"blocked: {t.get('blockedReason')}")
+        for e in d["events"][-5:]:
+            print(f"{e['at']} {e['name']} {e.get('fromStatus')}->{e.get('toStatus')}")
+    else:
+        argv = ["ticket", "depend", ns.key, "--workspace", ws]
+        for key in ns.on:
+            argv += ["--on", key]
+        cli(*argv)
+        d = cli("ticket", "show", ns.key, "--workspace", ws)
+        print("depends on: " + _keys(d["dependsOn"]))
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -565,7 +715,41 @@ def main():
     rp.add_argument("role")
     rp.add_argument("--action", required=True, choices=["fail", "retry", "cancel"])
     sub.add_parser("workflows")
+    sub.add_parser("boards")
     sub.add_parser("index")
+    bp = sub.add_parser("board")
+    bp.add_argument("--workspace", default=WS)
+    bsub = bp.add_subparsers(dest="board_action")
+    bsub.add_parser("run")
+    bpause = bsub.add_parser("pause")
+    bpause.add_argument("--reason")
+    bres = bsub.add_parser("resume")
+    bgroup = bres.add_mutually_exclusive_group(required=True)
+    bgroup.add_argument("--agent")
+    bgroup.add_argument("--all", action="store_true")
+    for sp in (bsub.choices["run"], bpause, bres):
+        sp.add_argument("--workspace", default=argparse.SUPPRESS)
+    tp = sub.add_parser("ticket")
+    tp.add_argument("--workspace", default=WS)
+    tsub = tp.add_subparsers(dest="ticket_action", required=True)
+    tadd = tsub.add_parser("add")
+    tadd.add_argument("story", nargs="?")
+    tadd.add_argument("--brief")
+    tadd.add_argument("--out")
+    tadd.add_argument("--depends", action="append", default=[])
+    tadd.add_argument("--no-deps", action="store_true")
+    tadd.add_argument("--priority", type=int)
+    tmove = tsub.add_parser("move")
+    tmove.add_argument("key")
+    tmove.add_argument("status")
+    tmove.add_argument("--reason")
+    tshow = tsub.add_parser("show")
+    tshow.add_argument("key")
+    tdep = tsub.add_parser("depend")
+    tdep.add_argument("key")
+    tdep.add_argument("--on", action="append", required=True)
+    for sp in tsub.choices.values():
+        sp.add_argument("--workspace", default=argparse.SUPPRESS)
     sub.add_parser("retry")
     ck = sub.add_parser("check")
     ck.add_argument("name")
@@ -596,7 +780,7 @@ def main():
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
      "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,
      "run": c_run, "index": c_index, "retry": c_wf_op("retry"), "workflows": c_workflows, "check": c_check,
-     "bug": c_bug}[ns.cmd](ns)
+     "bug": c_bug, "board": c_board, "boards": c_boards, "ticket": c_ticket}[ns.cmd](ns)
 
 
 if __name__ == "__main__":
