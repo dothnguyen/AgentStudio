@@ -351,6 +351,7 @@ def run(enable_debug: bool = False) -> int:
     for name, step in (("reports", lambda: reports.apply_pending(store, report_rules.apply)),
                        ("panes", lambda: teams.monitor(store, tmux)),
                        ("assignments", lambda: reconcile.tick(store, ctx)),
+                       ("merge", lambda: board.recover_merge(store, ctx)),
                        ("orphanSessions", lambda: reconcile.orphan_sessions(store, tmux))):
         try:
             startup[name] = step()
@@ -367,6 +368,7 @@ def run(enable_debug: bool = False) -> int:
             process_pending(store, ctx)
             workflow.advance(store, ctx)
             board.apply_outcomes(store, ctx)
+            board.merge_ready(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:

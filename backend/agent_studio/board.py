@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import board_config, crashpoints, gitws, schema, tickets, workflow, workflowdef, worktrees
+from . import board_config, crashpoints, gitws, schema, tasks, tickets, workflow, workflowdef, worktrees
 from .protocol import (AsError, BOARD_CONFIG_INVALID, TICKET_DEPS_NOT_MERGED,
                        TICKET_ROLE_MISMATCH, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
 
@@ -46,6 +46,44 @@ def _bounded(items):
         else:
             values[0] = values[0][:-1]
     return values
+
+
+def commit_message(text, ticket):
+    """Extract the lead's first exact commit block and add the ticket trailer."""
+    lines = (text or "").splitlines()
+    message = None
+    for index, line in enumerate(lines):
+        if line != "```commit":
+            continue
+        for end in range(index + 1, len(lines)):
+            if lines[end] == "```":
+                candidate = "\n".join(lines[index + 1:end]).strip()
+                if candidate:
+                    message = candidate
+                break
+        break
+    defaulted = message is None
+    if defaulted:
+        message = f"{ticket['key']}: {ticket['title']}"
+    trailer = f"Ticket: {ticket['key']}"
+    if not message.endswith(trailer):
+        message += "\n\n" + trailer
+    return message, defaulted
+
+
+def rewrite_story_status(path):
+    """Mark just the first Status line done; return whether the file changed."""
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if line.startswith("Status:"):
+            ending = "\n" if line.endswith("\n") else ""
+            lines[index] = "Status: Done (" + datetime.now(timezone.utc).date().isoformat() + ")" + ending
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write("".join(lines))
+            return True
+    return False
 
 
 def _queue(tx, ticket):
@@ -162,8 +200,24 @@ def _apply(tx, ticket, run, ctx):
                                                   "paths": result["paths"], "runId": run["id"]})
     if entry.get("commit") == "branch" and run["status"] == "succeeded":
         count = tx.conn.execute("SELECT COUNT(*) FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.committed' "
-                                "AND payload_json LIKE '%\"branch\"%'", (ticket["id"],)).fetchone()[0]
+                                "AND payload_json LIKE '%\"branch\"%' AND payload_json NOT LIKE '%\"baseMerge\":true%'",
+                                (ticket["id"],)).fetchone()[0]
         message = f"{ticket['key']}: {column} round {count + 1}"
+        conflict_paths = [value[len("MERGE_CONFLICT: "):] for value in json.loads(ticket.get("findings_json") or "[]")
+                          if value.startswith("MERGE_CONFLICT: ")]
+        left = []
+        for rel in conflict_paths:
+            try:
+                with open(os.path.join(ticket["worktree_path"], rel), "r", encoding="utf-8", errors="replace") as f:
+                    if any(line.startswith("<<<<<<< ") for line in f):
+                        left.append(rel)
+            except OSError:
+                continue
+        if left:
+            outcome = decide(entry, "failed", None,
+                             {k: ticket[k] for k in ("dev_rounds", "test_rounds", "review_rounds")}, config["roundLimits"])
+            findings = ["MERGE_MARKERS_LEFT: " + path for path in left]
+            return _write_outcome(tx, ticket, run, column, outcome, findings)
         head = _head(ticket["worktree_path"])
         commit = head if head and _subject(ticket["worktree_path"]) == message and not _recorded(tx, ticket, head) else None
         if not commit:
@@ -195,9 +249,15 @@ def _finish(tx, ticket, run, column, verdict, to, reason, applied=True, extra=No
                "to": to, "reason": reason}
     if extra:
         payload.update(extra)
+    defaulted = False
+    if column == "review" and to == "ready_merge":
+        payload["commitMessage"], defaulted = commit_message(workflow._last_summary(tx, run["id"]), ticket)
     if applied:
         tx.update("ticket", ticket["id"], {"applied_run_id": run["id"]}, "ticket.outcome_marked", payload)
-    return _note(tx, tx.get("ticket", ticket["id"]), "ticket.outcome_applied", payload)
+    ticket = _note(tx, tx.get("ticket", ticket["id"]), "ticket.outcome_applied", payload)
+    if defaulted:
+        ticket = _note(tx, ticket, "ticket.merge_message_defaulted", {})
+    return ticket
 
 
 def _write_outcome(tx, ticket, run, column, outcome, findings):
@@ -295,6 +355,141 @@ def apply_outcomes(store, ctx):
     return total
 
 
+def _merge_message(tx, ticket):
+    row = tx.conn.execute("SELECT payload_json FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.outcome_applied' "
+                          "AND to_status = 'ready_merge' ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
+    if row:
+        message = json.loads(row[0]).get("commitMessage")
+        if message:
+            return message
+    return commit_message("", ticket)[0]
+
+
+def _held(tx, ticket, reason):
+    row = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT 1",
+                          (ticket["id"],)).fetchone()
+    if row and row["name"] == "board.held" and json.loads(row["payload_json"]) == {"column": "merge", "reason": reason}:
+        return
+    _note(tx, ticket, "board.held", {"column": "merge", "reason": reason})
+
+
+def _remove_worktree(ticket, ctx):
+    if ticket.get("worktree_path"):
+        try:
+            worktrees.remove(ticket["workspace"], ticket["worktree_path"], state_dir=ctx["stateDir"])
+        except Exception:
+            pass  # startup reconciliation will remove a registered orphan
+
+
+def _parent_done(tx, ticket):
+    parent_id = ticket.get("parent_ticket_id")
+    if not parent_id:
+        return
+    parent = tx.get("ticket", parent_id)
+    rows = tx.conn.execute("SELECT status FROM tickets WHERE parent_ticket_id = ?", (parent_id,)).fetchall()
+    statuses = [row[0] for row in rows]
+    if parent["status"] == "unpacked" and statuses and any(s == "merged" for s in statuses) and all(
+            s in ("merged", "cancelled") for s in statuses):
+        tickets.move(tx, parent, "done", "coordinator")
+
+
+def _complete_merge(tx, ticket, commit):
+    head = _head(ticket["worktree_path"]) if ticket.get("worktree_path") else None
+    tx.update("ticket", ticket["id"], {"merged_commit": commit, "head_commit": head}, "ticket.merge_recorded", {"commit": commit})
+    ticket = tickets.move(tx, tx.get("ticket", ticket["id"]), "merged", "coordinator")
+    ticket = _note(tx, ticket, "ticket.merged", {"commit": commit})
+    _parent_done(tx, ticket)
+    tx.conn.execute("DELETE FROM board_locks WHERE workspace = ? AND name = 'merge'", (ticket["workspace"],))
+    return ticket
+
+
+def _merge_conflict(tx, ticket, files, config):
+    findings = ["MERGE_CONFLICT: " + path for path in files]
+    rounds = ticket["review_rounds"] + 1
+    values = {"review_rounds": rounds, "findings_json": json.dumps(_bounded(findings), ensure_ascii=True),
+              "assignee_agent_id": None, "lease_until": None}
+    if rounds > int(config["roundLimits"]["review"]):
+        ticket = tickets.block(tx, ticket, "coordinator", "ROUND_LIMIT:review", "changes_requested")
+    else:
+        ticket = tickets.move(tx, ticket, "changes_requested", "coordinator")
+    tx.update("ticket", ticket["id"], values, "ticket.outcome_marked", {})
+    ticket = tx.get("ticket", ticket["id"])
+    _note(tx, ticket, "ticket.findings", {"column": "merge", "count": len(findings)})
+    _note(tx, ticket, "ticket.merge_conflict", {"files": files})
+    tx.conn.execute("DELETE FROM board_locks WHERE workspace = ? AND name = 'merge'", (ticket["workspace"],))
+
+
+def merge_ready(store, ctx):
+    """Merge at most one oldest ready ticket in each workspace."""
+    workspaces = [r[0] for r in store.conn.execute("SELECT DISTINCT workspace FROM tickets WHERE status = 'ready_merge'")]
+    total = 0
+    for workspace in workspaces:
+        with store.transaction() as tx:
+            ticket = tx.conn.execute("SELECT * FROM tickets WHERE workspace = ? AND status = 'ready_merge' "
+                                     "ORDER BY priority, created_at LIMIT 1", (workspace,)).fetchone()
+            if not ticket:
+                continue
+            ticket = dict(ticket)
+            config = board_config.current(tx, workspace, None)
+            busy = tasks._mutating_in_workspace(tx, workspace) or tx.conn.execute(
+                "SELECT 1 FROM board_locks WHERE workspace = ? AND name = 'merge'", (workspace,)).fetchone()
+            branch = gitws.run(workspace, "symbolic-ref", "--short", "HEAD", check=False)
+            reason = ("MAIN_CHECKOUT_BUSY" if busy else "MAIN_CHECKOUT_DIRTY" if not worktrees.is_clean(workspace)
+                      else "MAIN_CHECKOUT_WRONG_BRANCH" if branch.returncode != 0 or branch.stdout.decode().strip() != config["baseBranch"] else None)
+            if reason:
+                _held(tx, ticket, reason)
+                continue
+            tx.conn.execute("INSERT INTO board_locks (workspace, name, ticket_id, created_at) VALUES (?, 'merge', ?, ?)",
+                            (workspace, ticket["id"], datetime.now(timezone.utc).isoformat()))
+        result = gitws.run(workspace, "merge", "--squash", ticket["branch"], check=False)
+        if result.returncode != 0:
+            raw = gitws.run(workspace, "diff", "--name-only", "--diff-filter=U", check=False).stdout
+            files = [line for line in raw.decode("utf-8", "replace").splitlines() if line]
+            gitws.run(workspace, "reset", "--merge")
+            with store.transaction() as tx:
+                current = tx.get("ticket", ticket["id"])
+                _merge_conflict(tx, current, files, board_config.current(tx, workspace, None))
+            continue
+        crashpoints.hit("after_merge_squash")
+        if ticket.get("story_path"):
+            story = os.path.join(workspace, ticket["story_path"])
+            if os.path.isfile(story) and rewrite_story_status(story):
+                gitws.run(workspace, "add", "--", ticket["story_path"])
+        message = None
+        with store.transaction() as tx:
+            message = _merge_message(tx, tx.get("ticket", ticket["id"]))
+        message_path = os.path.join(ctx["stateDir"], "board", ticket["id"], "commit-message.txt")
+        os.makedirs(os.path.dirname(message_path), mode=0o700, exist_ok=True)
+        with open(message_path, "w", encoding="utf-8") as f:
+            f.write(message)
+        gitws.run(workspace, "commit", "--allow-empty", "-F", message_path)
+        crashpoints.hit("after_merge_git_commit")
+        commit = _head(workspace)
+        with store.transaction() as tx:
+            current = tx.get("ticket", ticket["id"])
+            _complete_merge(tx, current, commit)
+        _remove_worktree(ticket, ctx)
+        total += 1
+    return total
+
+
+def recover_merge(store, ctx):
+    rows = store.conn.execute("SELECT workspace, ticket_id FROM board_locks WHERE name = 'merge'").fetchall()
+    for row in rows:
+        with store.transaction() as tx:
+            ticket = tx.get("ticket", row["ticket_id"])
+            message = gitws.run(row["workspace"], "log", "-1", "--format=%B", check=False).stdout.decode("utf-8", "replace")
+            if ticket["status"] == "ready_merge" and message.rstrip("\n").endswith("Ticket: " + ticket["key"]):
+                _complete_merge(tx, ticket, _head(row["workspace"]))
+                remove = ticket
+            else:
+                gitws.run(row["workspace"], "reset", "--merge", check=False)
+                tx.conn.execute("DELETE FROM board_locks WHERE workspace = ? AND name = 'merge'", (row["workspace"],))
+                remove = None
+        if remove:
+            _remove_worktree(remove, ctx)
+
+
 def _column(status):
     for name, item in schema.BOARD_COLUMNS.items():
         if status in item["queues"]:
@@ -347,6 +542,20 @@ def start_column(tx, ticket, agent, config, ctx):
                 created = worktrees.create(ticket["workspace"], ticket["key"], worktrees.slug(ticket["title"]), config["baseBranch"], state_dir=ctx["stateDir"])
                 ticket = tickets.record_worktree(tx, ticket, created)
                 workspace = created["path"]
+            if item["seed"] == "findings" and any(value.startswith("MERGE_CONFLICT: ")
+                                           for value in json.loads(ticket.get("findings_json") or "[]")):
+                merge_message = f"{ticket['key']}: merge {config['baseBranch']}"
+                merged = gitws.run(workspace, "merge", "--no-edit", "-m", merge_message, config["baseBranch"], check=False)
+                if merged.returncode != 0:
+                    # Keep the conflict worktree available to the developer even if Git cannot
+                    # stage or commit its marker snapshot (for example, a transient index
+                    # failure).  The base-merge event still records that this develop round
+                    # starts from the attempted merge, and the developer receives the markers.
+                    gitws.run(workspace, "add", "-A", check=False)
+                    gitws.run(workspace, "commit", "-m", merge_message + " (conflicts)", check=False)
+                commit = _head(workspace)
+                ticket = _record_commit(tx, ticket, {"branch": ticket["branch"], "commit": commit,
+                                                      "baseMerge": True, "runId": None}, head=commit)
         definition = workflowdef.load(workspace, column["definition"], workflow.BUILTIN_DIR)
         roles = _roles(definition)
         if len(roles) != 1:

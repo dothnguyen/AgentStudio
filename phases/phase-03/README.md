@@ -150,9 +150,9 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 | develop | `failed` (bounds) | `dev_rounds` + 1; over the limit → `blocked`, else `ready_dev` with the validation output as findings |
 | test | `pass` | `ready_review` |
 | test | `fail` | `test_rounds` + 1, findings stored; over the limit → `blocked`, else `fail_test` |
-| review | `pass` | `ready_merge` with the commit message (S07) |
+| review | `pass` | `ready_merge`; the ```` ```commit ```` message goes into the `ticket.outcome_applied` payload as `commitMessage` (S07) |
 | review | `fail` | `review_rounds` + 1, findings stored; over the limit → `blocked`, else `changes_requested` |
-| merge | conflict | `changes_requested`, conflict files as findings (counts as a review round) |
+| merge | conflict | `changes_requested`, findings `MERGE_CONFLICT: <path>` (counts as a review round; over the limit → `blocked`) |
 
 "Over the limit" means the counter would exceed `roundLimits.<column>` (default 3).
 
@@ -172,6 +172,11 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 - After a succeeded develop run: `git add -A` + `git commit -m "<key>: develop round <n>"` in the worktree, then record `head_commit`. Nothing to commit → findings `NO_CHANGES`, counted like a failed dev round.
 - Registered worktree = a `tickets` row with that `worktree_path` (compared after `realpath`), status not terminal, **and** listed in `git worktree list --porcelain` of the main checkout under the worktree root (`worktrees.list_registered`). Anything else → `WORKTREE_NOT_REGISTERED`, including paths that do not exist. `workflow.start` / `task.direct` take an optional `workspace`: omitted or equal to the team's workspace means the main checkout; anything else must be a registered worktree (`tickets.registered_worktree`, S04). The run's task row stores the chosen path, and every later step reads it from there.
 - Recording a created worktree on its ticket is `tickets.record_worktree` (sets `branch`, `worktree_path`, `base_commit`; event `ticket.worktree_created`), used by S05 and by the debug-only test fixture `debug.ticket_worktree` (S04).
+- Merge (S07), in the main checkout under the merge lock:
+  - `git merge --squash <branch>`, then the `Status:` line rewrite, then `git commit --allow-empty -F <file>`, with the message ending in the trailer `Ticket: <key>`.
+  - A conflict or an interrupted squash is undone with `git reset --merge`, never `git merge --abort`: a squash leaves no `MERGE_HEAD`.
+  - At startup, a leftover lock row whose HEAD already carries the trailer is completed without a second commit.
+  - The develop start after a conflict merges `baseBranch` into the worktree, committing the markers if it conflicts. It is recorded as `ticket.committed {baseMerge: true}`, which develop-round numbering does not count.
 - Removal after `merged` or `cancelled`: `git worktree remove --force <path>`, after the ticket's run is terminal. Startup reconcile removes worktrees under the root that have no live ticket (`board.worktree_orphan_removed` event) and re-creates nothing.
 
 ### F. Planning commits
@@ -225,7 +230,7 @@ Mutating commands need an idempotency key (P00 rule) and go through the command 
 
 ### J. Events
 
-`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}`, `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
+`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId, baseMerge?}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}` (for `merge`, a ticket event of the waiting ticket; reasons `MAIN_CHECKOUT_BUSY|DIRTY|WRONG_BRANCH`), `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
 
 ## Requirements (this phase)
 
