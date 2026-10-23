@@ -71,7 +71,8 @@ team workflows                      # definitions available (built-in and .agent
 team check story-delivery           # validate it against the saved team, no tokens spent
 team run story-delivery --story $S  # 1. lead reviews/fixes the story -> dev -> unit tests (run by the coordinator, outside any agent sandbox) -> QA -> lead final review
                                     #    a review "fail" stops with the lead's questions; QA/final "fail" goes back to dev
-team commit $S                      # 2. shows the files and the lead's ```commit message, asks, then commits
+team commit $S                      # 2. runs the integration tests the change touched (parallel), shows the files and the
+                                    #    lead's ```commit message, asks, then commits
 ```
 
 The first stage is the lead's story review, so `team review` is not needed first.
@@ -105,6 +106,16 @@ first); `final` needs QA passed; `commit` needs the lead's final approval. Per-s
 verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/`.
 
 The story's Status/Evidence update made by the lead in `final` is included in the `team commit`.
+
+## Two test tiers
+
+- **In the loop (fast):** the workflow's `tests` stage runs only the unit suite (`scripts/validate.py --unit`, seconds), so
+  dev / QA / repair rounds stay quick.
+- **At commit (slow):** `team commit` runs `scripts/validate.py --touched`: the unit suite, then the integration modules
+  your change added or modified, in parallel (`VALIDATE_WORKERS`, default 4). It refuses to commit when they fail; use
+  `team commit STORY --skip-integration` to commit anyway.
+- **Occasionally:** `python3 scripts/validate.py --all` runs every integration module (end of an epic, before a release).
+Integration tests need tmux and sockets, which sandboxed agents (Codex) cannot use, so agents do not run them.
 
 ## Retry a stuck stage
 

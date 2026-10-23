@@ -13,7 +13,9 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py fix STORY             dev fixes the latest QA findings (after a failed workflow or QA round)
     team.py qa STORY              you run the unit tests here; QA reviews diff + results
     team.py final STORY           team lead final review + proposed commit message
-    team.py commit STORY          commit with the lead's message (asks first)
+    team.py commit STORY [--skip-integration]
+                                  run the integration tests the change touched (parallel), then commit with the
+                                  lead's message (asks first)
     team.py workflows             workflow definitions available here (built-in and .agent-studio/workflows)
     team.py check NAME            validate a definition against the saved team (no tokens spent)
     team.py run NAME (PROMPT | --story PATH | --prompt-file PATH) [--bind ROLE=NAME ...] [--no-wait]
@@ -327,11 +329,23 @@ def c_final(ns):
         print("Changes requested - next: team.py fix " + ns.story + "  (the lead's findings are passed to the dev)")
 
 
+def integration_gate(skip):
+    """The slow tier: the unit suite plus the integration modules this change touched, in parallel, before commit."""
+    if skip:
+        print("Integration tests skipped (--skip-integration).")
+        return
+    print("--> integration gate: python3 scripts/validate.py --touched (can take a few minutes)", flush=True)
+    p = subprocess.run(["python3", os.path.join(WS, "scripts", "validate.py"), "--touched"], cwd=WS)
+    if p.returncode != 0:
+        sys.exit("Tests failed. Fix them (team.py fix STORY, then qa / final) or commit anyway with --skip-integration.")
+
+
 def c_commit(ns):
     key = story_key(ns.story)
     s = load(key, {})
     if not s.get("finalPassed"):
         sys.exit("The team lead has not approved the final result (team.py final STORY).")
+    integration_gate(ns.skip_integration)
     msg = s.get("commitMessage") or f"Implement {os.path.basename(ns.story)}"
     print(sh("git", "status", "--short").stdout)
     show("commit message", msg)
@@ -534,6 +548,8 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("story")
         p.add_argument("--force", action="store_true")
+        if name == "commit":
+            p.add_argument("--skip-integration", action="store_true")
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
      "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,

@@ -3,8 +3,9 @@
   "validation": {
     "argv": [
       "python3",
-      "scripts/validate.py"
+      "scripts/validate.py",
+      "--unit"
     ],
-    "timeoutMs": 1800000
+    "timeoutMs": 600000
   }
 }
