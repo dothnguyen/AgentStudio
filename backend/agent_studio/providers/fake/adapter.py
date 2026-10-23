@@ -97,7 +97,9 @@ class FakeAdapter(Adapter):
         if t == "result":
             ok = ev.get("status") == "success"
             state.terminal = {"ok": ok, "summary": str(ev.get("summary", ""))[:2000],
-                              "code": None if ok else "PROVIDER_ERROR"}
+                              "code": None if ok else ("USAGE_LIMIT" if ev.get("code") == "usage_limit" else "PROVIDER_ERROR")}
+            if not ok and ev.get("code") == "usage_limit" and isinstance(ev.get("resetAt"), str):
+                state.terminal["limitResetAt"] = ev["resetAt"]
             if "verdict" in ev:
                 state.verdict = ev["verdict"]
             if isinstance(ev.get("usage"), dict):

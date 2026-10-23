@@ -92,7 +92,7 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
 
     # retry
     agent = tx.get("agent", a["agent_id"])
-    if agent["pane_state"] != "alive" or agent["availability"] in ("offline", "error", "starting"):
+    if agent["pane_state"] != "alive" or agent["availability"] in ("offline", "error", "starting", "limit_reached"):
         raise AsError(tasks.AGENT_UNAVAILABLE, f"Agent {agent['display_name']} is {agent['availability']} "
                       f"(pane {agent['pane_state']}); a retry needs a live agent.",
                       remediation=f"Resolve with --action fail or cancel instead.")

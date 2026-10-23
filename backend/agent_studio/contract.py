@@ -2,12 +2,15 @@
 and by the coordinator before applying, so a bad or forged report can never finish an assignment."""
 from __future__ import annotations
 
+import re
+
 from .protocol import AsError
 from .providers.base import POLICIES, REPORT_PROTOCOL, STATUSES
 
 BAD_REPORT = "BAD_REPORT"
 REPORT_MISMATCH = "REPORT_MISMATCH"
 CONTRADICTORY = "CONTRADICTORY_EVIDENCE"
+LIMIT_RESET_AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 REQUIRED = {"protocol": str, "assignmentId": str, "agentId": str, "providerId": str, "attempt": int,
             "policy": str, "status": str, "summary": str, "artifacts": list, "evidence": dict}
@@ -39,6 +42,9 @@ def validate_report(r: dict, expect: dict) -> dict:
     exit_code = r.get("exitCode")
     if exit_code is not None and (not isinstance(exit_code, int) or isinstance(exit_code, bool)):
         raise AsError(BAD_REPORT, "exitCode must be an integer or null.")
+    reset = r.get("limitResetAt")
+    if reset is not None and (not isinstance(reset, str) or not LIMIT_RESET_AT_RE.fullmatch(reset)):
+        raise AsError(BAD_REPORT, "limitResetAt must be a UTC timestamp (YYYY-MM-DDTHH:MM:SSZ) or null.")
     if r["status"] == "succeeded":
         problems = []
         if not ev["providerTerminalEvent"] or not ev.get("terminalOk"):

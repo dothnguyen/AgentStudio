@@ -239,6 +239,15 @@ def _validate_ticket_start(args):
     return out
 
 
+def _validate_board_resume(args):
+    agent = args.get("agentId")
+    all_agents = args.get("all") is True
+    if (agent is None) != all_agents:
+        raise AsError(BAD_REQUEST, "board.resume needs exactly one of agentId or all: true.")
+    workspace = _ticket_workspace(args)
+    return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
+
+
 def _validate_ticket_cancel(args):
     out = _validate_ticket_key(args)
     reason = req_text(args, "reason", 500, required=False)
@@ -501,6 +510,7 @@ COMMANDS = {
     "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.start": _inbox("ticket.start", _validate_ticket_start),
+    "board.resume": _inbox("board.resume", _validate_board_resume),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
 }

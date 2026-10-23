@@ -47,11 +47,16 @@ enabling this widens both; the bypass flags stay forbidden. Verify the allowlist
 | `system/permission_denied` | attention; kept as a denial if no final `result` arrives |
 | `assistant` | text → progress and last message; `tool_use` → "tool Write <path>" |
 | `user` `tool_result` with `is_error` | attention |
-| `result` | **terminal**. Success = `subtype: success` and `is_error: false`; `result` text is the summary; `permission_denials` (authoritative) → `waiting_input / PERMISSION_DENIED`; usage and cost recorded. `is_error: true` (e.g. `terminal_reason: api_error`, exit 1) → `failed / PROVIDER_ERROR`, or `AUTH_REQUIRED` for "Not logged in · Please run /login" |
+| `result` | **terminal**. Success = `subtype: success` and `is_error: false`; `result` text is the summary; `permission_denials` (authoritative) → `waiting_input / PERMISSION_DENIED`; usage and cost recorded. `is_error: true` (e.g. `terminal_reason: api_error`, exit 1) → `failed / PROVIDER_ERROR`, `AUTH_REQUIRED` for "Not logged in · Please run /login", or `USAGE_LIMIT` when its text reports a rate/usage limit. A reset epoch or zoned clock hint is normalized to `limitResetAt` UTC.
 | others (`active_goal`, `autocompact_state`, `system/status`, …) | ignored |
 
 A denied permission therefore never becomes `succeeded`, whatever the exit code. No `result` line → `inconclusive`.
 Reviewer verdicts come from the last JSON line of the `result` text.
+
+Usage-limit fixtures (`tests/fixtures/claude/usage_limit*.jsonl`) are hand-written, **not captured**: they model the
+documented rate-limit wording (https://docs.anthropic.com/en/api/rate-limits) in the `api_error.jsonl` stream shape.
+The real CLI's rendering of a limit result has not been observed, so the classifier pattern is unverified until they
+are replaced by real captures (see `tests/fixtures/claude/README.md`).
 
 ## On-machine evidence
 

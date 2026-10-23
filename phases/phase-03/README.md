@@ -138,7 +138,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 |---|---|---|
 | any | paused (agent failure, malformed verdict, validation error) | `blocked`, `RUN_PAUSED:<code>` (Q4) |
 | any | cancelled | back to the column it was picked from, lease released |
-| any | assignment `failed` with `USAGE_LIMIT` | run cancelled, back to the column it was picked from, no round counted (§H) |
+| any | paused with code `USAGE_LIMIT` (its assignment `failed`/`USAGE_LIMIT`) | run cancelled by the applier, back to the column it was picked from, `ticket.released {reason: "usage_limit"}`, no round counted, applied once (§H) |
 | unpack | `succeeded`, valid manifest, empty `questions` | planning commit; children created (S10); parent `unpacked` |
 | unpack | `succeeded` with `questions` (`UNPACK_QUESTIONS`), an invalid or missing manifest (`MANIFEST_INVALID`), or verdict `fail` | `blocked` with the questions / errors in `questions_json`, `return_status` `ready_unpack` (re-unpack with `ticket.unblock`, or `ticket.move … ready_unpack` from `unpacked`); nothing committed except a valid planning diff; no children |
 | triage | verdict `pass`, valid bug file | planning commit; `story_path`, `severity`, priority (§G); `ready_dev` |
@@ -208,9 +208,10 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 
 ### H. Usage limits
 
-- Adapters classify a provider result that means "usage/rate limit reached" as diagnostic `USAGE_LIMIT`, with `limitResetAt` when the provider reports one. The text and exit codes are verified on the real CLI (Claude first). Unrecognised failures stay `PROVIDER_ERROR`.
-- Effect: the run is cancelled by the board (not paused), the ticket goes back to the column it was picked from (`ticket.released {reason: "usage_limit"}`), and no round is counted. The agent's availability becomes `limit_reached` (+ `limit_reset_at`), which needs schema **v8** (rebuild `agents` for the CHECK, the same rebuild pattern as P01 §F). A `board.limit_reached` event is written.
-- Only `board.resume {workspace, agentId? | all: true}` clears it. There is no automatic retry. `board.pause {reason: "usage_limit"}` is the team-wide hold.
+- Adapters classify a provider result that means "usage/rate limit reached" as diagnostic `USAGE_LIMIT` (status `failed`), with the optional report key `limitResetAt` (UTC `YYYY-MM-DDTHH:MM:SSZ`) when the provider reports one. The text and exit codes are verified on the real CLI (Claude first; fixtures in `tests/fixtures/claude/usage_limit*.jsonl`, sources recorded). Codex has no captured sample yet, so it has no classifier. Unrecognised failures stay `PROVIDER_ERROR`.
+- Agent effect (P00 report application, every task kind): the final report moves the agent to `limit_reached` instead of `idle`, sets `limit_reset_at`, and writes `board.limit_reached {agentId, resetAt}`. This needs schema **v8** (rebuild `agents` for the CHECK, the same rebuild pattern as P01 §F; transitions `busy|waiting_input → limit_reached → idle|offline|error`). Reconcile leaves the flag alone. Dispatch, the `workflow.start` binding and the `assignment.resolve` retry refuse a `limit_reached` agent with `AGENT_UNAVAILABLE`.
+- Ticket effect: the P01 engine pauses the run with that code; the applier cancels the run (not blocked), the ticket goes back to the column it was picked from (`ticket.released {reason: "usage_limit"}`), and no round is counted.
+- Only `board.resume {workspace, agentId | all: true}` clears it (exactly one of the two; agents not `limit_reached` are skipped; receipt `{resumed: [agentIds]}`). There is no automatic retry. `board.pause {reason: "usage_limit"}` is the team-wide hold.
 
 ### I. Commands and errors
 
@@ -232,7 +233,7 @@ Mutating commands need an idempotency key (P00 rule) and go through the command 
 
 ### J. Events
 
-`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId, baseMerge?}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys, updated, kept, removed, unresolved}` (on the parent; `keys` are the new children), `ticket.plan_approved {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}` (for `merge`, a ticket event of the waiting ticket; reasons `MAIN_CHECKOUT_BUSY|DIRTY|WRONG_BRANCH`), `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
+`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId, baseMerge?}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys, updated, kept, removed, unresolved}` (on the parent; `keys` are the new children), `ticket.plan_approved {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}` (for `merge`, a ticket event of the waiting ticket; reasons `MAIN_CHECKOUT_BUSY|DIRTY|WRONG_BRANCH`), `board.limit_reached {agentId, resetAt}`, `board.resumed {agentIds}`, `board.worktree_orphan_removed {path}`.
 
 ## Requirements (this phase)
 

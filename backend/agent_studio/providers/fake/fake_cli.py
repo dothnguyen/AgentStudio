@@ -11,7 +11,7 @@ import uuid
 
 SCENARIOS = ("success", "provider_failure", "permission_denied", "malformed_final", "no_final", "crash",
              "waiting_input", "timeout", "slow", "flood", "nonzero_success", "verdict_pass", "verdict_fail",
-             "verdict_malformed")
+             "verdict_malformed", "usage_limit", "usage_limit_no_reset")
 
 
 def emit(obj):
@@ -72,6 +72,12 @@ def main():
         return 0
     if s == "provider_failure":
         emit({"type": "result", "status": "error", "summary": "fake provider error: model unavailable"})
+        return 1
+    if s in ("usage_limit", "usage_limit_no_reset"):
+        result = {"type": "result", "status": "error", "code": "usage_limit", "summary": "fake usage limit reached"}
+        if s == "usage_limit":
+            result["resetAt"] = "2030-01-01T15:00:00Z"
+        emit(result)
         return 1
     result = {"type": "result", "status": "success", "summary": f"fake {s} done", "promptSha256": sha,
               "usage": {"inputTokens": len(prompt), "outputTokens": 42}}

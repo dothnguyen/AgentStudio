@@ -38,6 +38,8 @@ Reviewer stages read the verdict from the last JSON line of the final message (`
 
 Without network, codex 0.163.0 keeps reconnecting and never exits on its own (captured in
 `tests/fixtures/codex/captured-0.163.0-network-unreachable.jsonl`); the assignment deadline ends it → `failed / TIMEOUT`.
+There is no captured Codex usage- or rate-limit sample yet, so no usage-limit classifier is implemented: unrecognised
+Codex failures remain `PROVIDER_ERROR` rather than being guessed.
 
 ## Cancel / reconcile
 

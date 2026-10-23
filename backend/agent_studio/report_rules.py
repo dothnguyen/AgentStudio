@@ -74,6 +74,8 @@ def apply(tx: Tx, report: dict):
             status, code = "inconclusive", contract.CONTRADICTORY  # claimed success without the evidence
             data["contradiction"] = e.message
         a_state, t_state, g_state = FINAL_MAP[status]
+        if status == "failed" and code == "USAGE_LIMIT":
+            g_state = "limit_reached"
         data.update(status=status, diagnosticCode=code)
         seq = tx.transition("assignment", asg["id"], a_state, expect=["running", "waiting_input", "reconciling"],
                             payload=data,
@@ -85,7 +87,11 @@ def apply(tx: Tx, report: dict):
             tx.transition("task", task["id"], t_state)
         agent = tx.get("agent", asg["agent_id"])
         if agent["availability"] in ("busy", "waiting_input") and agent["availability"] != g_state:
-            tx.transition("agent", agent["id"], g_state)
+            values = {"limit_reset_at": report_body.get("limitResetAt")} if g_state == "limit_reached" else None
+            tx.transition("agent", agent["id"], g_state, set_values=values)
+            if g_state == "limit_reached":
+                tx.note("agent", agent["id"], "board.limit_reached",
+                        {"agentId": agent["id"], "resetAt": report_body.get("limitResetAt")})
         return "finished", seq
 
     raise AsError(REPORT_MISMATCH, f"Unknown report kind {kind!r}.")

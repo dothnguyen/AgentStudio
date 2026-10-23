@@ -12,7 +12,7 @@ class TicketMigration(unittest.TestCase):
         path = os.path.join(tempfile.mkdtemp(), "state.db")
         conn = v5_database(path)
         preserved = {table: dump(conn, table, cols) for table, cols in {
-            "teams": "*", "agents": "*", "tasks": "*", "workflow_runs": schema._WF_OLD_COLS,
+            "teams": "*", "agents": schema._AGENT_OLD_COLS, "tasks": "*", "workflow_runs": schema._WF_OLD_COLS,
             "stage_attempts": schema._SA_OLD_COLS, "assignments": "*",
         }.items()}
         # Reproduce the v6 release state without advancing through the current v7 migration.
@@ -23,11 +23,12 @@ class TicketMigration(unittest.TestCase):
         conn.execute("INSERT INTO schema_migrations VALUES (6, 'now')")
         conn.execute("COMMIT")
         conn.execute("PRAGMA foreign_keys = ON")
-        self.assertEqual(state.migrate(conn, path), 7)
+        self.assertEqual(state.migrate(conn, path), 8)
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         self.assertTrue({"tickets", "ticket_deps", "ticket_events", "board_state", "board_locks"} <= names)
         for table, rows in preserved.items():
-            columns = {"workflow_runs": schema._WF_OLD_COLS, "stage_attempts": schema._SA_OLD_COLS}.get(table, "*")
+            columns = {"agents": schema._AGENT_OLD_COLS, "workflow_runs": schema._WF_OLD_COLS,
+                       "stage_attempts": schema._SA_OLD_COLS}.get(table, "*")
             self.assertEqual(dump(conn, table, columns), rows, table)
         good = ("00000000-0000-4000-8000-000000000000", "/w", "T-001", "story", "x", "refine", "n", "n")
         conn.execute("INSERT INTO tickets (id, workspace, key, kind, title, status, created_at, updated_at) "

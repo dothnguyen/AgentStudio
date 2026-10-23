@@ -158,7 +158,7 @@ def bind_roles(tx: Tx, team: dict, definition: "workflowdef.Definition", overrid
                           data={"roles": [seen[a["id"]], role], "agentId": a["id"]})
         seen[a["id"]] = role
     for role, a in bound.items():
-        if a["availability"] in ("offline", "error") or a["pane_state"] != "alive":
+        if a["availability"] in ("offline", "error", "limit_reached") or a["pane_state"] != "alive":
             raise AsError(tasks.AGENT_UNAVAILABLE, f"{role} agent {a['display_name']} is {a['availability']}.")
         if not check_providers:
             continue

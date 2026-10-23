@@ -20,6 +20,8 @@ Scenario → normalized outcome (asserted by `tests/fixtures/contract/*.json`):
 |---|---|---|
 | success, slow, flood, verdict_pass, verdict_fail | succeeded | — |
 | provider_failure | failed | PROVIDER_ERROR |
+| usage_limit | failed | USAGE_LIMIT (`limitResetAt` `2030-01-01T15:00:00Z`) |
+| usage_limit_no_reset | failed | USAGE_LIMIT (no reset time) |
 | permission_denied (exit 0, result "success") | waiting_input | PERMISSION_DENIED |
 | malformed_final | inconclusive | MALFORMED_OUTPUT |
 | no_final (exit 0) | inconclusive | NO_TERMINAL_EVENT |

@@ -263,6 +263,29 @@ def _handle_ticket_start(args, tx, ctx):
     return board.start_column(tx, ticket, agent, board_config.current(tx, args["workspace"], roles), ctx)
 
 
+def _handle_board_resume(args, tx, ctx):
+    teams = [dict(row) for row in tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running'",
+                                                   (args["workspace"],)).fetchall()]
+    if not teams:
+        raise AsError(tasks.TEAM_NOT_RUNNING, "No team is running on this workspace.")
+    team = teams[0]
+    if args["all"]:
+        agents = [dict(row) for row in tx.conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team["id"],))]
+    else:
+        agent = tx.get("agent", args["agentId"])
+        if agent["team_id"] != team["id"]:
+            raise AsError(tasks.AGENT_NOT_IN_TEAM, "Agent is not in the running workspace team.")
+        agents = [agent]
+    resumed = []
+    for agent in agents:
+        if agent["availability"] == "limit_reached":
+            tx.transition("agent", agent["id"], "idle", set_values={"limit_reset_at": None})
+            resumed.append(agent["id"])
+    if resumed:
+        tx.note("team", team["id"], "board.resumed", {"agentIds": resumed})
+    return {"resumed": resumed}
+
+
 HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
@@ -284,6 +307,7 @@ HANDLERS = {
     "ticket.cancel": _handle_ticket_cancel,
     "ticket.depend": _handle_ticket_depend,
     "ticket.start": _handle_ticket_start,
+    "board.resume": _handle_board_resume,
 }
 MONITOR_INTERVAL_S = 2.0
 

@@ -33,7 +33,7 @@ class Entity:
         return frozenset(s for s in self.states if not self.transitions.get(s))
 
 
-AGENT_STATES = ("starting", "idle", "busy", "waiting_input", "offline", "error")
+AGENT_STATES = ("starting", "idle", "busy", "waiting_input", "limit_reached", "offline", "error")
 ASSIGNMENT_STATES = ("queued", "claimed", "running", "waiting_input", "reconciling", "succeeded", "failed", "cancelled")
 TASK_STATES = ("queued", "assigned", "running", "waiting_input", "review", "succeeded", "failed", "cancelled")
 WORKFLOW_STATES = ("queued", "running", "paused", "succeeded", "failed", "cancelled")
@@ -129,12 +129,13 @@ ENTITIES: Dict[str, Entity] = {
         # Agents have no terminal state: an offline/error agent can be restarted.
         _t({"starting": ("idle", "offline", "error"),
             "idle": ("busy", "offline", "error"),
-            "busy": ("idle", "waiting_input", "offline", "error"),
-            "waiting_input": ("busy", "idle", "offline", "error"),
+            "busy": ("idle", "waiting_input", "limit_reached", "offline", "error"),
+            "waiting_input": ("busy", "idle", "limit_reached", "offline", "error"),
+            "limit_reached": ("idle", "offline", "error"),
             "offline": ("starting", "idle", "error"),
             "error": ("starting", "offline")}),
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
-         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning"),
+         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -434,3 +435,36 @@ MIGRATION_7 = [
     """CREATE TABLE board_locks (workspace TEXT NOT NULL, name TEXT NOT NULL, ticket_id TEXT REFERENCES tickets(id),
         created_at TEXT NOT NULL, PRIMARY KEY (workspace, name))""",
 ] + _immutable("ticket_events") + [_check_ticket_foreign_keys]
+
+
+# v8 (P03-S11): SQLite cannot alter the agents availability CHECK, so rebuild it
+# with the new limited state and preserve every pre-existing column verbatim.
+_AGENT_OLD_COLS = ("id, team_id, ordinal, provider_id, role, display_name, availability, pane_state, pane_id, "
+                   "pane_pid, pane_start_time, pane_boot_id, capabilities_json, created_at, updated_at, model, reasoning")
+
+
+def _rebuild_agents_for_usage_limits(conn) -> None:
+    conn.execute(f"""CREATE TABLE agents_new (
+        id {ID},
+        team_id TEXT NOT NULL REFERENCES teams(id),
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+        provider_id TEXT NOT NULL CHECK (provider_id IN {_in(PROVIDERS)}),
+        role TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        availability TEXT NOT NULL CHECK (availability IN {_in(AGENT_STATES)}),
+        pane_state TEXT NOT NULL DEFAULT 'unknown' CHECK (pane_state IN ('unknown', 'alive', 'dead')),
+        pane_id TEXT, pane_pid INTEGER, pane_start_time INTEGER, pane_boot_id TEXT,
+        capabilities_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, model TEXT, reasoning TEXT,
+        limit_reset_at TEXT,
+        UNIQUE (team_id, ordinal),
+        CHECK ((pane_pid IS NULL) = (pane_start_time IS NULL) AND (pane_pid IS NULL) = (pane_boot_id IS NULL)))""")
+    conn.execute(f"INSERT INTO agents_new ({_AGENT_OLD_COLS}) SELECT {_AGENT_OLD_COLS} FROM agents")
+    conn.execute("DROP TABLE agents")
+    conn.execute("ALTER TABLE agents_new RENAME TO agents")
+    conn.execute("CREATE INDEX agents_by_team ON agents (team_id, ordinal)")
+    bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad:
+        raise RuntimeError(f"migration 8 broke {len(bad)} foreign key(s): {[tuple(r) for r in bad[:5]]}")
+
+
+MIGRATION_8 = [_rebuild_agents_for_usage_limits]

@@ -261,6 +261,16 @@ def _apply(tx, ticket, run, ctx):
     entry = dict(entry, name=column)
     config = board_config.current(tx, ticket["workspace"], _roles_for(tx, run))
     if run["status"] == "paused" and ticket["status"] == schema.BOARD_COLUMNS[column]["working"]:
+        if _paused_code(tx, run) == "USAGE_LIMIT":
+            # A provider limit is not a ticket failure.  Close this paused run and
+            # return the ticket to precisely the queue it came from, once.
+            workflow.cancel(tx, {"workflowRunId": run["id"]}, ctx)
+            run = tx.get("workflow_run", run["id"])
+            ticket = tickets.move(tx, ticket, _queue(tx, ticket), "coordinator", "usage_limit")
+            ticket = _note(tx, ticket, "ticket.released", {"reason": "usage_limit"})
+            tx.update("ticket", ticket["id"], {"assignee_agent_id": None, "lease_until": None,
+                                                 "applied_run_id": run["id"]}, "ticket.outcome_marked", {})
+            return _finish(tx, tx.get("ticket", ticket["id"]), run, column, None, "release", "usage_limit")
         ticket = tickets.block(tx, ticket, "coordinator", "RUN_PAUSED:" + _paused_code(tx, run), _queue(tx, ticket))
         tx.update("ticket", ticket["id"], {"lease_until": None}, "ticket.outcome_marked", {})
         ticket = tx.get("ticket", ticket["id"])

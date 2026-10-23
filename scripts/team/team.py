@@ -189,6 +189,9 @@ def c_status(_):
     d = cli("snapshot", "--team", team()["teamId"])
     for a in d.get("agents", []):
         print(f"  {a['role']:9} {a['availability']:14} {a.get('model') or ''}")
+    for a in d.get("agents", []):
+        if a["availability"] == "limit_reached":
+            print(f"LIMIT: {a.get('displayName') or a['role']} ({a['providerId']}) until {a.get('limitResetAt') or 'unknown'}")
     for w in d.get("workflowRuns", [])[-3:]:
         print(f"  workflow {w['id'][:8]} {w['status']}")
     for a in d.get("assignments", [])[-6:]:

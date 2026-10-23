@@ -82,7 +82,7 @@ MISSING = object()
 @dataclass
 class ParseState:
     session_id: Optional[str] = None
-    terminal: Optional[dict] = None          # {"ok": bool, "summary": str, "code": optional}
+    terminal: Optional[dict] = None          # {"ok": bool, "summary": str, "code"/"limitResetAt": optional}
     denials: List[str] = field(default_factory=list)
     input_requests: List[str] = field(default_factory=list)
     malformed: int = 0
@@ -247,7 +247,7 @@ class Adapter:
             "MALFORMED_OUTPUT": "The provider output could not be parsed.",
             "INPUT_REQUIRED": "The provider asked for input, which headless mode cannot give.",
         }.get(code, code or "")
-        return {
+        report = {
             "protocol": REPORT_PROTOCOL, "assignmentId": inp.assignment_id, "agentId": inp.agent_id,
             "providerId": inp.provider_id, "attempt": inp.attempt, "policy": inp.policy, "status": status,
             "exitCode": oc.get("exitCode"), "summary": str(summary)[:2000], "finalText": bounded_text(st.final_text),
@@ -260,6 +260,9 @@ class Adapter:
                          "cancelRequested": bool(oc.get("cancelRequested")), "truncated": bool(oc.get("truncated")),
                          "malformedLines": st.malformed, "validation": []},
         }
+        if term is not None and "limitResetAt" in term:
+            report["limitResetAt"] = term["limitResetAt"]
+        return report
 
     # ---- control -------------------------------------------------------------------------------
     def cancel(self, ident: dict, sig: int = signal.SIGTERM) -> bool:
