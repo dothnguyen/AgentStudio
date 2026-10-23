@@ -56,6 +56,16 @@ BOARD_COLUMNS = {
     "test": {"queues": ("ready_test",), "working": "in_test", "workspace": "worktree", "seed": "diff"},
     "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
 }
+BOARD_OUTCOMES = {
+    "refine": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
+               "limit": None, "commit": "planning", "globs": ("{story}", "{phase}/*")},
+    "develop": {"kind": "work", "pass": "ready_test", "fail": "ready_dev", "counter": "dev_rounds",
+                "limit": "dev", "commit": "branch"},
+    "test": {"kind": "verdict", "pass": "ready_review", "fail": "fail_test", "counter": "test_rounds",
+             "limit": "test", "commit": None},
+    "review": {"kind": "verdict", "pass": "ready_merge", "fail": "changes_requested", "counter": "review_rounds",
+               "limit": "review", "commit": None},
+}
 TICKET_OPERATOR_TARGETS = ("backlog", "ready_unpack", "ready_dev", "ready_test", "ready_review", "refine",
                            "triage", "fail_test", "changes_requested", "blocked")
 KIND_STATUSES = {

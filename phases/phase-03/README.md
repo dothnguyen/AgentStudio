@@ -116,7 +116,7 @@ The table, exactly (S01 builds it from these rules; "working" = `unpacking`, `re
 | Unblock: `blocked` → its stored `return_status` (a restore, so it is allowed even when that status is coordinator-only) | both |
 | Cancel: every non-terminal status → `cancelled` | both |
 
-A transition is also refused when `from` or `to` is not on the ticket's kind path (`KIND_STATUSES`): feature = `backlog, ready_unpack, unpacking, unpacked, done`; story = `backlog, refine, refining, ready_dev, in_dev, ready_test, in_test, ready_review, in_review, ready_merge, merged, fail_test, changes_requested`; bug = the story set without `backlog, refine, refining`, plus `triage, triaging`; every kind also has `blocked` and `cancelled`. `block` stores `return_status` = the current status, except that a working status stores its `ready_*`/queue column (`in_dev` → `ready_dev`, `refining` → `refine`, …), so `return_status` is never a working status (S06 relies on this). Leaving `blocked` by any path (unblock, late outcome, cancel) clears `return_status` and `blocked_reason`. The `TICKET_BUSY` rule applies to operator move, block and unblock, never to cancel.
+A transition is also refused when `from` or `to` is not on the ticket's kind path (`KIND_STATUSES`): feature = `backlog, ready_unpack, unpacking, unpacked, done`; story = `backlog, refine, refining, ready_dev, in_dev, ready_test, in_test, ready_review, in_review, ready_merge, merged, fail_test, changes_requested`; bug = the story set without `backlog, refine, refining`, plus `triage, triaging`; every kind also has `blocked` and `cancelled`. `block` stores `return_status` = the current status, except that a working status stores its `ready_*`/queue column (`in_dev` → `ready_dev`, `refining` → `refine`, …), so `return_status` is never a working status (S06 relies on this). The coordinator may pass an explicit `return_status` (a non-working, non-terminal status on the kind path); an outcome that blocks stores the status it would have entered, e.g. `ROUND_LIMIT:test` → `fail_test` (S06). Leaving `blocked` by any path (unblock, late outcome, cancel) clears `return_status` and `blocked_reason`. The `TICKET_BUSY` rule applies to operator move, block and unblock, never to cancel.
 
 ### C. Columns, runs and outcomes
 
@@ -155,6 +155,9 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 | merge | conflict | `changes_requested`, conflict files as findings (counts as a review round) |
 
 "Over the limit" means the counter would exceed `roundLimits.<column>` (default 3).
+
+- The rows are data, `schema.BOARD_OUTCOMES` (per column: `kind` work|verdict, `pass`/`fail` targets, `counter`, `limit` key, `commit` branch|planning|none, planning `globs`), next to `BOARD_COLUMNS`, so board code names no column (S06; S08/S10 add `triage`/`unpack`). Block reasons: `RUN_PAUSED:<code>` (the `diagnosticCode` of the run's latest `workflow_run.paused` event, else `UNKNOWN`), `ROUND_LIMIT:<column>`, `VERDICT_FAIL:<column>`, `PLANNING_DIFF_INVALID`, `RUN_FAILED:<column>`, `OUTCOME_UNSUPPORTED:<column>`, or the code of an error raised while applying.
+- **Applying** (`board.apply_outcomes`, after `workflow.advance` in the loop): a terminal run with `run_id ≠ applied_run_id` is applied once, in one transaction that sets `applied_run_id`, clears assignee and lease, and writes `ticket.outcome_applied`. A paused run blocks the ticket only while it is still in its working status and does **not** set `applied_run_id`, so the run is applied again when it ends (late-outcome rows when the ticket is still `blocked`). Git commits happen before that transaction; a crash in between is recovered by reusing HEAD when its subject is the expected message and no `ticket.committed` event records it.
 
 ### D. Locks
 
@@ -222,7 +225,7 @@ Mutating commands need an idempotency key (P00 rule) and go through the command 
 
 ### J. Events
 
-`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}`, `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}`, `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
+`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}` (`run_cancelled`, `usage_limit`, …), `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?, runId}`, `ticket.outcome_applied {runId, column, runStatus, verdict, to, reason}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}`, `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
 
 ## Requirements (this phase)
 

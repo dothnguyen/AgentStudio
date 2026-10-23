@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "providerId": "claude",
+      "role": "TeamLead",
+      "name": "lead",
+      "model": "claude-opus-5-5",
+      "reasoning": "medium"
+    },
+    {
+      "providerId": "codex",
+      "role": "Developer",
+      "name": "dev",
+      "model": "gpt-5.3-codex",
+      "reasoning": "medium"
+    },
+    {
+      "providerId": "codex",
+      "role": "QA",
+      "name": "qa",
+      "model": "gpt-6-luna"
+    }
+  ]
+}

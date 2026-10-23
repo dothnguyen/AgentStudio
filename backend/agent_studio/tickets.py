@@ -185,13 +185,16 @@ def move(tx, ticket, to, actor, reason=None):
     return _transition(tx, ticket, to, actor, reason, values)
 
 
-def block(tx, ticket, actor, reason):
+def block(tx, ticket, actor, reason, return_status=None):
     _actor(actor)
     ticket = get(tx, ticket["workspace"], ticket["key"])
     if ticket["status"] in TICKET_TERMINAL or ticket["status"] == "blocked":
         _invalid(ticket, "blocked", actor)
     _busy(tx, ticket, actor)
-    restore = TICKET_WORKING.get(ticket["status"], (ticket["status"],))[0]
+    restore = TICKET_WORKING.get(ticket["status"], (ticket["status"],))[0] if return_status is None else return_status
+    if (restore == "blocked" or restore in TICKET_WORKING or restore in TICKET_TERMINAL
+            or restore not in KIND_STATUSES[ticket["kind"]]):
+        _invalid(ticket, "blocked", actor)
     return _transition(tx, ticket, "blocked", actor, reason,
                        {"return_status": restore, "blocked_reason": reason})
 

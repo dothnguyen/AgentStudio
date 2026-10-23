@@ -366,6 +366,7 @@ def run(enable_debug: bool = False) -> int:
             reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
+            board.apply_outcomes(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:
