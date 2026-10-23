@@ -41,6 +41,7 @@ TEAM_STATES = ("starting", "running", "stopping", "stopped", "error")
 STAGE_ATTEMPT_STATES = ("active", "completed", "abandoned")
 TICKET_KINDS = ("feature", "story", "bug")
 TICKET_SEVERITIES = ("blocker", "major", "minor")
+BUG_SEVERITY_PRIORITY = {"blocker": 10, "major": 40, "minor": 70}
 TICKET_STATES = ("backlog", "ready_unpack", "unpacking", "unpacked", "done", "refine", "refining",
                  "ready_dev", "in_dev", "ready_test", "in_test", "fail_test", "ready_review", "in_review",
                  "ready_merge", "merged", "changes_requested", "triage", "triaging", "blocked", "cancelled")
@@ -57,6 +58,9 @@ BOARD_COLUMNS = {
     "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
 }
 BOARD_OUTCOMES = {
+    "triage": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
+               "limit": None, "commit": "planning", "globs": ("bugs/BUG-{key}-*.md",), "single": True,
+               "check": "bugfile"},
     "refine": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
                "limit": None, "commit": "planning", "globs": ("{story}", "{phase}/*")},
     "develop": {"kind": "work", "pass": "ready_test", "fail": "ready_dev", "counter": "dev_rounds",

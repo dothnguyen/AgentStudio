@@ -49,7 +49,7 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
-  ticket create --workspace PATH --story PATH [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
+  ticket create --workspace PATH (--story PATH | --kind bug --text TEXT [--attach PATH ...]) [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
   ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
@@ -160,6 +160,8 @@ def _human_request(argv) -> dict:
     ticket_p.add_argument("ticket_key", nargs="?")
     ticket_p.add_argument("--workspace", required=True)
     ticket_p.add_argument("--story")
+    ticket_p.add_argument("--text")
+    ticket_p.add_argument("--attach", action="append", default=[])
     ticket_p.add_argument("--title")
     ticket_p.add_argument("--depends", action="append", default=[])
     ticket_p.add_argument("--no-deps", action="store_true")
@@ -298,9 +300,16 @@ def _human_request(argv) -> dict:
     elif ns.cmd == "ticket":
         args = {"workspace": ns.workspace}
         if ns.action == "create":
-            if not ns.story:
-                raise AsError(BAD_REQUEST, "ticket create needs --story PATH")
-            args["storyPath"] = ns.story
+            if ns.kind == "bug":
+                if ns.text is None:
+                    raise AsError(BAD_REQUEST, "ticket create --kind bug needs --text TEXT")
+                args.update(kind="bug", text=ns.text)
+                if ns.attach:
+                    args["attachments"] = ns.attach
+            else:
+                if not ns.story:
+                    raise AsError(BAD_REQUEST, "ticket create needs --story PATH")
+                args["storyPath"] = ns.story
             if ns.title is not None:
                 args["title"] = ns.title
             if ns.depends:

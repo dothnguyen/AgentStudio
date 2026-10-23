@@ -141,9 +141,10 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 | any | assignment `failed` with `USAGE_LIMIT` | run cancelled, back to the column it was picked from, no round counted (§H) |
 | unpack | `succeeded`, valid manifest, empty `questions` | planning commit; children created (S10); parent `unpacked` |
 | unpack | `succeeded` with `questions`, or verdict `fail` | `blocked` with the questions; nothing committed except a valid planning diff |
-| triage | `succeeded`, valid bug file | planning commit; `ready_dev` |
-| triage | bug file names `duplicate_of` | planning commit; `cancelled` with a link |
-| triage | verdict `fail` | `blocked` with the findings as questions |
+| triage | verdict `pass`, valid bug file | planning commit; `story_path`, `severity`, priority (§G); `ready_dev` |
+| triage | verdict `pass`, bug file names `Duplicate of: T-NNN` | planning commit; `cancelled` with `duplicate_of` |
+| triage | verdict `pass`, missing or invalid bug file | planning commit if the path is allowed; `blocked` / `BUG_FILE_INVALID`, the `{section, message}` errors as questions |
+| triage | verdict `fail` | `blocked` with the findings as questions (bug file still committed if its path is allowed) |
 | refine | verdict `pass`, valid planning diff | planning commit; `ready_dev` |
 | refine | verdict `fail` | `blocked` with the findings as questions (planning diff still committed if valid) |
 | develop | `succeeded` | commit on branch; `ready_test` |
@@ -185,7 +186,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 - Allowed paths:
   - refine: the story file, the files in its phase folder (`phases/phase-NN/**`, for the README contract and dependent stories);
   - unpack: everything under `out_dir`;
-  - triage: exactly one new or changed `bugs/BUG-<key>-<slug>.md`.
+  - triage: at most one new or changed path, which must fully match `bugs/BUG-<key>-[a-z0-9-]{1,40}\.md` (`<key>` is the ticket key verbatim, e.g. `bugs/BUG-T-004-login-crash.md`); its commit message names that path, and it becomes the ticket's `story_path` (S08).
 - All paths allowed → `git add -- <paths>`, then `git commit -m "<key>: <column> <path>" -- <paths>` on `baseBranch` in the main checkout (HEAD must be `baseBranch`, else `MAIN_CHECKOUT_WRONG_BRANCH` and the ticket is `blocked`).
 - Any path outside → `PLANNING_DIFF_INVALID`, ticket `blocked` with the offending paths, **nothing committed and nothing reverted** (the coordinator cannot tell agent edits from operator edits). Main-checkout columns then stay held until the operator cleans the tree (§D).
 
@@ -202,7 +203,7 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 
 - Priority across roles is irrelevant (each agent has one role). Inside the lead's role, `ready_review` beats `ready_unpack` when the same agent is bound to both columns.
 - **Claim** = one transaction: status `ready_x` → `in_x`, `assignee_agent_id`, `lease_until = now + leaseSeconds`, `ticket.claimed`. Then the coordinator prepares the worktree and starts the run, which sets `run_id`. While the run is active it owns the ticket; the lease only covers the gap between claim and run start.
-- **Severity → priority:** blocker 10, major 40, minor 70. Stories default to 100, or the manifest priority × 10 + 50 (manifest priority 1–5).
+- **Severity → priority:** blocker 10, major 40, minor 70 (`schema.BUG_SEVERITY_PRIORITY`; set by the triage outcome, overriding a create-time `priority`). Stories default to 100, or the manifest priority × 10 + 50 (manifest priority 1–5).
 
 ### H. Usage limits
 
@@ -226,7 +227,7 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 | `board.show` | `workspace` | read-only |
 | `board.run` / `board.pause` / `board.resume` | `workspace`, `reason?` / `agentId?`, `all?` | mutating |
 
-Mutating commands need an idempotency key (P00 rule) and go through the command inbox; `ticket.show`, `ticket.list` and `board.show` read the database directly, like `workflow.show`. The CLI and `serve` return identical JSON. `ticket.create` checks every path with `tickets.check_workspace_path` (relative, inside the workspace after `realpath`, an existing `.md` file; else `STORY_PATH_INVALID`); omitted `dependsOn` uses parsed story dependencies, while a supplied list (including `[]`) overrides them. Its receipt is `{ticket, dependsOn, parsed {ids, resolved, unresolved}, warnings [{code: "DEPENDS_UNRESOLVED", id}]}` (S02); S08 adds `kind: bug` and S10 `kind: feature`. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `WORKTREE_EXISTS` (S03 `create` on an existing branch or path), `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`, `TICKET_ROLE_MISMATCH` (`ticket.start` agent role ≠ column role), `TICKET_DEPS_NOT_MERGED` (`{blockedBy}`, develop start with an unmerged dependency). `ticket.start` returns `{ticket, column, workflowRunId, definition, workspace}`; any start error rolls back the claim and removes a worktree created by that call (S05).
+Mutating commands need an idempotency key (P00 rule) and go through the command inbox; `ticket.show`, `ticket.list` and `board.show` read the database directly, like `workflow.show`. The CLI and `serve` return identical JSON. `ticket.create` checks every path with `tickets.check_workspace_path` (relative, inside the workspace after `realpath`, an existing `.md` file; else `STORY_PATH_INVALID`); omitted `dependsOn` uses parsed story dependencies, while a supplied list (including `[]`) overrides them. Its receipt is `{ticket, dependsOn, parsed {ids, resolved, unresolved}, warnings [{code: "DEPENDS_UNRESOLVED", id}]}` (S02); S08 adds `kind: bug` (`text` required ≤ 32 KiB, `attachments?` ≤ 20 existing workspace paths of any type, `title?` ≤ 80 chars defaulting to the first line of the text, no `storyPath`, no parsed dependencies) and S10 `kind: feature`. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `WORKTREE_EXISTS` (S03 `create` on an existing branch or path), `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`, `TICKET_ROLE_MISMATCH` (`ticket.start` agent role ≠ column role), `TICKET_DEPS_NOT_MERGED` (`{blockedBy}`, develop start with an unmerged dependency). `ticket.start` returns `{ticket, column, workflowRunId, definition, workspace}`; any start error rolls back the claim and removes a worktree created by that call (S05).
 
 ### J. Events
 

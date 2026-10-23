@@ -158,6 +158,21 @@ def _ticket_deps(tx, ticket):
 
 
 def _handle_ticket_create(args, tx, ctx):
+    if args.get("kind", "story") == "bug":
+        text = args["text"]
+        title = args.get("title")
+        if title is None:
+            title = next((line.strip() for line in text.splitlines() if line.strip()), "")[:80]
+        ticket = tickets.create(tx, args["workspace"], "bug", {
+            "title": title, "raw_text": text,
+            "attachments_json": json.dumps(args.get("attachments", []), ensure_ascii=True),
+            "priority": args["priority"]})
+        deps = [] if args["noDeps"] else args.get("dependsOn", [])
+        if deps:
+            tickets.add_deps(tx, ticket, deps)
+        ticket = tickets.get(tx, args["workspace"], ticket["key"])
+        return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket),
+                "parsed": {"ids": [], "resolved": [], "unresolved": []}, "warnings": []}
     story_path = tickets.check_workspace_path(args["workspace"], args["storyPath"])
     with open(os.path.join(args["workspace"], story_path), "r", encoding="utf-8") as f:
         text = f.read()

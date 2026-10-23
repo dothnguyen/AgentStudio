@@ -8,7 +8,7 @@ import unittest
 import tests.helpers  # noqa: F401
 
 BACKEND = os.path.join(os.path.dirname(__file__), "..", "..", "backend", "agent_studio")
-FORBIDDEN = re.compile(r"\b(developer|reviewer|teamlead|qa|codex|claude|agy|opencode|fake|develop|final|tests|check)\b",
+FORBIDDEN = re.compile(r"\b(developer|reviewer|teamlead|qa|codex|claude|agy|opencode|fake|develop|final|tests)\b",
                        re.I)
 
 

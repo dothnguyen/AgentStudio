@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import board_config, crashpoints, gitws, schema, tasks, tickets, workflow, workflowdef, worktrees
+from . import board_config, bugfile, crashpoints, gitws, schema, tasks, tickets, workflow, workflowdef, worktrees
 from .protocol import (AsError, BOARD_CONFIG_INVALID, TICKET_DEPS_NOT_MERGED,
                        TICKET_ROLE_MISMATCH, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
 
@@ -128,14 +128,19 @@ def _globs(ticket, values):
     for value in values:
         if value == "{phase}/*" and not phase:
             continue
-        result.append(value.replace("{story}", ticket.get("story_path") or "").replace("{phase}", phase or ""))
+        result.append(value.replace("{story}", ticket.get("story_path") or "").replace("{phase}", phase or "").replace("{key}", ticket["key"]))
     return tuple(result)
 
 
 def commit_planning(tx, ticket, column, globs, config, run_id):
-    message = f"{ticket['key']}: {column} {ticket['story_path']}"
     paths = worktrees.changed_paths(ticket["workspace"])
     allowed, offending = worktrees.check_paths(paths, _globs(ticket, globs))
+    if allowed and schema.BOARD_OUTCOMES.get(column, {}).get("single"):
+        pattern = re.compile(r"bugs/BUG-" + re.escape(ticket["key"]) + r"-[a-z0-9-]{1,40}\.md\Z")
+        if len(paths) > 1 or any(not pattern.fullmatch(path) for path in paths):
+            allowed, offending = False, paths
+    changed = paths[0] if schema.BOARD_OUTCOMES.get(column, {}).get("single") and len(paths) == 1 else ticket["story_path"]
+    message = f"{ticket['key']}: {column} {changed}"
     if not allowed:
         return {"ok": False, "commit": None, "paths": paths, "offending": offending}
     commit = None
@@ -190,14 +195,20 @@ def _apply(tx, ticket, run, ctx):
     if outcome["findingsFrom"] == "validation":
         latest = workflow._latest_result(tx, run["id"])
         findings = _bounded([workflow._validation_text(latest)]) if latest else []
+    committed_path = None
     if entry.get("commit") == "planning":
         result = commit_planning(tx, ticket, column, entry["globs"], config, run["id"])
         if not result["ok"]:
             outcome = {"to": "blocked", "reason": "PLANNING_DIFF_INVALID", "counter": None,
                        "findingsFrom": None, "offending": result["offending"]}
         elif result["commit"]:
+            if entry.get("single") and result["paths"]:
+                committed_path = result["paths"][0]
             ticket = _record_commit(tx, ticket, {"baseBranch": config["baseBranch"], "commit": result["commit"],
                                                   "paths": result["paths"], "runId": run["id"]})
+    if committed_path:
+        tx.update("ticket", ticket["id"], {"story_path": committed_path}, "ticket.bug_file_recorded", {})
+        ticket = tx.get("ticket", ticket["id"])
     if entry.get("commit") == "branch" and run["status"] == "succeeded":
         count = tx.conn.execute("SELECT COUNT(*) FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.committed' "
                                 "AND payload_json LIKE '%\"branch\"%' AND payload_json NOT LIKE '%\"baseMerge\":true%'",
@@ -234,6 +245,26 @@ def _apply(tx, ticket, run, ctx):
         outcome = decide(entry, "failed", None,
                          {k: ticket[k] for k in ("dev_rounds", "test_rounds", "review_rounds")}, config["roundLimits"])
         findings = ["NO_CHANGES"]
+    if entry.get("check") == "bugfile" and outcome["to"] == "ready_dev":
+        path = committed_path or ticket.get("story_path")
+        if not path:
+            checked = {"errors": [{"section": "file", "message": "no bug file written"}]}
+        else:
+            try:
+                with open(os.path.join(ticket["workspace"], path), encoding="utf-8") as f:
+                    checked = bugfile.check(f.read(), ticket["key"], [r[0] for r in tx.conn.execute("SELECT key FROM tickets WHERE workspace = ?", (ticket["workspace"],))])
+            except OSError:
+                checked = {"errors": [{"section": "file", "message": "no bug file written"}]}
+        if checked["errors"]:
+            outcome = {"to": "blocked", "reason": "BUG_FILE_INVALID", "counter": None, "findingsFrom": "verdict"}
+            findings = _bounded([f"{e['section']}: {e['message']}" for e in checked["errors"]])
+        elif checked.get("duplicateOf"):
+            outcome = {"to": "cancelled", "reason": "duplicate_of:" + checked["duplicateOf"], "counter": None, "findingsFrom": None}
+            tx.update("ticket", ticket["id"], {"duplicate_of": checked["duplicateOf"], "severity": checked["severity"]}, "ticket.bug_triaged", {})
+            ticket = tx.get("ticket", ticket["id"])
+        else:
+            tx.update("ticket", ticket["id"], {"severity": checked["severity"], "priority": schema.BUG_SEVERITY_PRIORITY[checked["severity"]]}, "ticket.bug_triaged", {})
+            ticket = tx.get("ticket", ticket["id"])
     return _write_outcome(tx, ticket, run, column, outcome, findings)
 
 
@@ -271,7 +302,7 @@ def _write_outcome(tx, ticket, run, column, outcome, findings):
     if outcome["counter"]:
         values.update(outcome["counter"])
     if outcome["findingsFrom"]:
-        values["questions_json" if outcome["reason"] == "VERDICT_FAIL:" + column else "findings_json"] = findings
+        values["questions_json" if outcome["reason"] in ("VERDICT_FAIL:" + column, "BUG_FILE_INVALID") else "findings_json"] = findings
     if outcome["to"] == "release" and ticket["status"] == "blocked":
         ticket = tx.get("ticket", ticket["id"])
         tx.update("ticket", ticket["id"], values, "ticket.outcome_marked", {})
@@ -506,6 +537,10 @@ def _task(ticket):
               f"Story: {ticket['story_path'] or ''}"]
     if ticket["kind"] == "bug" and ticket.get("raw_text"):
         fields.append(ticket["raw_text"])
+    if ticket["kind"] == "bug" and ticket.get("attachments_json"):
+        attachments = json.loads(ticket["attachments_json"])
+        if attachments:
+            fields.append("Attachments: " + ", ".join(attachments))
     text = "\n".join(fields)
     if len(text.encode("utf-8")) > 32 * 1024:
         raise AsError(BOARD_CONFIG_INVALID, "Board task text exceeds 32 KiB.")
@@ -556,7 +591,8 @@ def start_column(tx, ticket, agent, config, ctx):
                 commit = _head(workspace)
                 ticket = _record_commit(tx, ticket, {"branch": ticket["branch"], "commit": commit,
                                                       "baseMerge": True, "runId": None}, head=commit)
-        definition = workflowdef.load(workspace, column["definition"], workflow.BUILTIN_DIR)
+        definition_name = column.get("bugDefinition") if ticket["kind"] == "bug" and column.get("bugDefinition") else column["definition"]
+        definition = workflowdef.load(workspace, definition_name, workflow.BUILTIN_DIR)
         roles = _roles(definition)
         if len(roles) != 1:
             raise AsError(BOARD_CONFIG_INVALID, "Board definition must use exactly one agent role.",
@@ -569,15 +605,15 @@ def start_column(tx, ticket, agent, config, ctx):
                                         os.path.join(ctx["stateDir"], "board", ticket["id"], "seed"))
             with open(out["path"], "rb") as f:
                 seed["diff"] = f.read().decode("utf-8", "replace")
-        started = workflow.start(tx, {"teamId": agent["team_id"], "definition": column["definition"], "text": _task(ticket),
+        started = workflow.start(tx, {"teamId": agent["team_id"], "definition": definition_name, "text": _task(ticket),
                                       "workspace": workspace, "bindings": {next(iter(roles)): agent["id"]}, "seed": seed}, ctx)
         seq = tx.update("ticket", ticket["id"], {"run_id": started["workflowRunId"]}, "ticket.run_started",
-                        {"runId": started["workflowRunId"], "definition": column["definition"]})
+                        {"runId": started["workflowRunId"], "definition": definition_name})
         ticket = tx.get("ticket", ticket["id"])
         tickets._ticket_event(tx, ticket, seq, "ticket.run_started", "coordinator", ticket["status"], ticket["status"],
-                              {"runId": started["workflowRunId"], "definition": column["definition"]})
+                              {"runId": started["workflowRunId"], "definition": definition_name})
         return {"ticket": ticket, "column": name, "workflowRunId": started["workflowRunId"],
-                "definition": column["definition"], "workspace": workspace}
+                "definition": definition_name, "workspace": workspace}
     except Exception:
         if created:
             try:

@@ -21,11 +21,11 @@ TICKET_OPERATOR_TARGETS = schema.TICKET_OPERATOR_TARGETS
 KIND_STATUSES = schema.KIND_STATUSES
 
 
-def check_workspace_path(workspace, rel):
+def check_workspace_path(workspace, rel, *, require_md=True):
     """Return a safe, normalized story path relative to *workspace*."""
     def invalid(reason):
         raise AsError(STORY_PATH_INVALID, "Story path is invalid.", data={"path": rel, "reason": reason})
-    if not isinstance(rel, str) or not rel or os.path.isabs(rel) or "\\" in rel:
+    if not isinstance(rel, str) or not rel or "\0" in rel or os.path.isabs(rel) or "\\" in rel:
         invalid("path must be a relative POSIX path")
     if ".." in rel.split("/"):
         invalid("path must not contain '..'")
@@ -38,7 +38,7 @@ def check_workspace_path(workspace, rel):
         invalid("path escapes the workspace")
     if not os.path.isfile(target):
         invalid("path must name an existing regular file")
-    if not target.endswith(".md"):
+    if require_md and not target.endswith(".md"):
         invalid("path must end in .md")
     return os.path.relpath(target, root).replace(os.sep, "/")
 

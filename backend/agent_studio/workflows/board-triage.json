@@ -1,0 +1,1 @@
+{"version":1,"description":"Triage a board bug.","stages":[{"id":"verdict","role":"TeamLead","permission":"workspace_write","promptFile":"prompts/board-triage.md","next":{"pass":"$succeed","fail":"$fail"}}]}

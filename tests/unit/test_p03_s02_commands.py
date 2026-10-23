@@ -69,7 +69,7 @@ class TicketCommands(unittest.TestCase):
             dispatch._validate_ticket_create(args)
         self.assertEqual(cm.exception.code, BAD_REQUEST)
         with self.assertRaises(AsError) as cm:
-            dispatch._validate_ticket_create(dict(args, dependsOn=[], noDeps=False, kind="bug"))
+            dispatch._validate_ticket_create(dict(args, dependsOn=[], noDeps=False, kind="feature"))
         self.assertEqual(cm.exception.code, BAD_REQUEST)
 
     def test_every_ticket_command_rejects_relative_or_missing_workspace_at_dispatch(self):

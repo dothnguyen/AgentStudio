@@ -162,20 +162,38 @@ def _ticket_keys(args, name):
 
 def _validate_ticket_create(args):
     kind = args.get("kind", "story")
-    if kind != "story":
-        raise AsError(BAD_REQUEST, "kind must be story.")
+    if kind not in ("story", "bug"):
+        raise AsError(BAD_REQUEST, "kind must be story or bug.")
     depends_supplied = "dependsOn" in args
     depends = _ticket_keys(args, "dependsOn")
     no_deps = req_bool(args, "noDeps")
     if depends_supplied and no_deps:
         raise AsError(BAD_REQUEST, "dependsOn and noDeps cannot be used together.")
     out = {"workspace": _ticket_workspace(args), "kind": kind,
-           "storyPath": req_text(args, "storyPath", 4096, allow_empty=False),
            "noDeps": no_deps, "priority": req_int(args, "priority", 0, 1000, 100)}
+    if kind == "story":
+        out["storyPath"] = req_text(args, "storyPath", 4096, allow_empty=False)
+    else:
+        if "storyPath" in args:
+            raise AsError(BAD_REQUEST, "storyPath is not valid for a bug ticket.")
+        text = req_text(args, "text", 32 * 1024, allow_empty=False)
+        if not text.strip():
+            raise AsError(BAD_REQUEST, "Bug text must not be blank.")
+        out["text"] = text
+        attachments = args.get("attachments", [])
+        if not isinstance(attachments, list) or len(attachments) > 20:
+            raise AsError(BAD_REQUEST, "attachments must be a list of at most 20 paths.")
+        clean = []
+        for rel in attachments:
+            if not isinstance(rel, str) or len(rel) > 4096:
+                raise AsError(BAD_REQUEST, "each attachment must be a string no longer than 4096 characters.")
+            clean.append(tickets.check_workspace_path(out["workspace"], rel, require_md=False))
+        if clean:
+            out["attachments"] = clean
     if depends_supplied:
         # Presence is meaningful: an explicit [] overrides parsed story dependencies.
         out["dependsOn"] = depends
-    title = req_text(args, "title", 200, required=False)
+    title = req_text(args, "title", 80 if kind == "bug" else 200, required=False)
     if title is not None:
         out["title"] = title
     return out

@@ -8,6 +8,8 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py attach                watch the three panes (Ctrl-b d to detach)
     team.py status                agents and recent work
     team.py unpack BRIEF --out DIR    team lead turns a feature brief into phases/epics/stories files
+    team.py bug [TEXT] [--file PATH] [--attach PATH ...]
+                                  create a triage bug ticket from text or a UTF-8 file
     team.py review STORY          team lead reviews a story before work (verdict pass = approved)
     team.py dev STORY             workflow: dev implements -> unit tests -> QA review -> one repair round
     team.py fix STORY             dev fixes the latest QA findings (after a failed workflow or QA round)
@@ -520,6 +522,25 @@ def c_stop(_):
     print("Team stopped.")
 
 
+def c_bug(ns):
+    if (ns.text is None) == (ns.file is None):
+        print("Give exactly one of TEXT or --file PATH.", file=sys.stderr)
+        raise SystemExit(2)
+    if ns.file is not None:
+        try:
+            with open(ns.file, "r", encoding="utf-8") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError) as e:
+            sys.exit(f"Cannot read bug text: {e}")
+    else:
+        text = ns.text
+    args = ["ticket", "create", "--workspace", WS, "--kind", "bug", "--text", text]
+    for path in ns.attach:
+        args.extend(("--attach", path))
+    result = cli(*args)
+    print(result["ticket"]["key"])
+
+
 def main():
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -544,6 +565,10 @@ def main():
     u = sub.add_parser("unpack")
     u.add_argument("brief")
     u.add_argument("--out", required=True)
+    bug = sub.add_parser("bug")
+    bug.add_argument("text", nargs="?")
+    bug.add_argument("--file")
+    bug.add_argument("--attach", action="append", default=[])
     for name in ("review", "dev", "fix", "qa", "final", "commit"):
         p = sub.add_parser(name)
         p.add_argument("story")
@@ -553,7 +578,8 @@ def main():
     ns = ap.parse_args()
     {"start": c_start, "attach": c_attach, "status": c_status, "stop": c_stop, "unpack": c_unpack,
      "review": c_review, "blocked": c_blocked, "resolve": c_resolve, "dev": c_dev, "fix": c_fix, "qa": c_qa, "final": c_final, "commit": c_commit,
-     "run": c_run, "index": c_index, "retry": c_wf_op("retry"), "workflows": c_workflows, "check": c_check}[ns.cmd](ns)
+     "run": c_run, "index": c_index, "retry": c_wf_op("retry"), "workflows": c_workflows, "check": c_check,
+     "bug": c_bug}[ns.cmd](ns)
 
 
 if __name__ == "__main__":
