@@ -7,7 +7,7 @@ run commands), and remembers per-story state. Every agent action goes through th
     team.py start                 start the team from .agent-studio/team.json and remember its IDs
     team.py attach                watch the three panes (Ctrl-b d to detach)
     team.py status                agents and recent work
-    team.py unpack BRIEF --out DIR    team lead turns a feature brief into phases/epics/stories files
+    team.py unpack BRIEF --out DIR    product owner turns a feature brief into phases/epics/stories files
     team.py bug [TEXT] [--file PATH] [--attach PATH ...]
                                   create a triage bug ticket from text or a UTF-8 file
     team.py review STORY          team lead reviews a story before work (verdict pass = approved)
@@ -197,12 +197,15 @@ def c_status(_):
 
 def c_unpack(ns):
     brief = open(os.path.join(WS, ns.brief), encoding="utf-8").read()
-    st, out = direct(team()["agents"]["TeamLead"], "workspace_write",
+    agents = team()["agents"]
+    role = "ProductOwner" if "ProductOwner" in agents else "TeamLead"
+    manifest = " Include tickets.json with the manifest schema from your role file." if role == "ProductOwner" else ""
+    st, out = direct(agents[role], "workspace_write",
                      f"UNPACK this feature into phases -> epics -> stories. Write the plan into {ns.out}/ "
-                     f"(a README.md overview plus one story file per story, following the story-format skill). "
+                     f"(a README.md overview plus one story file per story, following the story-format skill).{manifest} "
                      f"Read PRD.md, ROADMAP.md and the existing phases/ first.\n\nFEATURE BRIEF ({ns.brief}):\n{brief}")
-    show(f"team lead ({st})", out)
-    print("Review the files, answer the lead's open questions in the brief, and run unpack again to revise.\n"
+    show(f"{role} ({st})", out)
+    print(f"Review the files, answer the {role}'s open questions in the brief, and run unpack again to revise.\n"
           "Commit the plan before developing stories: git add -A && git commit -m 'Plan: ...'")
 
 

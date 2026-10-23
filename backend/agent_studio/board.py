@@ -535,6 +535,8 @@ def _roles(definition):
 def _task(ticket):
     fields = [f"Ticket: {ticket['key']} ({ticket['kind']})", f"Title: {ticket['title']}",
               f"Story: {ticket['story_path'] or ''}"]
+    if ticket["kind"] == "feature":
+        fields.extend((f"Brief: {ticket.get('brief_path') or ''}", f"Out: {ticket.get('out_dir') or ''}"))
     if ticket["kind"] == "bug" and ticket.get("raw_text"):
         fields.append(ticket["raw_text"])
     if ticket["kind"] == "bug" and ticket.get("attachments_json"):

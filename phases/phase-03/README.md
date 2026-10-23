@@ -187,6 +187,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
   - refine: the story file, the files in its phase folder (`phases/phase-NN/**`, for the README contract and dependent stories);
   - unpack: everything under `out_dir`;
   - triage: at most one new or changed path, which must fully match `bugs/BUG-<key>-[a-z0-9-]{1,40}\.md` (`<key>` is the ticket key verbatim, e.g. `bugs/BUG-T-004-login-crash.md`); its commit message names that path, and it becomes the ticket's `story_path` (S08).
+- Unpack manifest `<out_dir>/tickets.json` (S09, `manifest.validate`): `{"stories": [{"path", "title", "dependsOn"?: [path], "priority"?: 1..5}], "questions"?: [str]}`, no other keys; 1–30 stories (0 allowed with non-empty `questions`); every `path` is **workspace-relative**, under `out_dir/`, an existing `.md` story file with the story-format sections; `dependsOn` names manifest paths only, acyclic. Failure → `MANIFEST_INVALID` with `{path, message}` errors. The feature's `{{task}}` carries `Brief:` and `Out:` lines.
 - All paths allowed → `git add -- <paths>`, then `git commit -m "<key>: <column> <path>" -- <paths>` on `baseBranch` in the main checkout (HEAD must be `baseBranch`, else `MAIN_CHECKOUT_WRONG_BRANCH` and the ticket is `blocked`).
 - Any path outside → `PLANNING_DIFF_INVALID`, ticket `blocked` with the offending paths, **nothing committed and nothing reverted** (the coordinator cannot tell agent edits from operator edits). Main-checkout columns then stay held until the operator cleans the tree (§D).
 

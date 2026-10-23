@@ -1,7 +1,7 @@
 # Running this project with an Agent Studio team
 
-Team (from `team.json`): **lead** = TeamLead on Claude Opus 5.5 (reasoning high), **dev** = Developer on Claude
-Sonnet 5.5 (medium), **qa** = QA on Claude Haiku 5.5. Roles: `roles.json`, `roles/*.md`; shared skills: `skills/`.
+Team (from `team.json`): **lead** = TeamLead, **dev** = Developer, **qa** = QA, and **po** = ProductOwner. Roles:
+`roles.json`, `roles/*.md`; shared skills: `skills/`.
 The workflow's automatic test step: `workflow.json` (unit tests).
 
 Everything below runs **inside WSL** (Ubuntu-24.04). `team.py` is `scripts/team/team.py`; it only glues the normal
@@ -53,14 +53,15 @@ team status         # who is busy, recent results
 
 From Windows Terminal, `agent-studio team attach --team <id> --print` gives a ready `wt.exe ...` command.
 
-## Workflow 1 - unpack a feature with the team lead
+## Workflow 1 - unpack a feature with the product owner
 
 1. Write a brief, e.g. `phases/briefs/feature-x.md`: the goal, users, constraints, what is out of scope.
 2. `team unpack phases/briefs/feature-x.md --out phases/phase-02`
-   The lead reads PRD/ROADMAP/phases, writes `phases/phase-02/README.md` plus one story file per story, and ends with
-   open questions and decisions for you.
+   The product owner reads PRD/ROADMAP/phases, writes `phases/phase-02/README.md`, one story file per story, and
+   `phases/phase-02/tickets.json`, then ends with open questions and decisions for you. The lead remains the fallback
+   if a saved team has no ProductOwner.
 3. Read the files. Answer the questions **in the brief** (add an "Answers" section) or edit the plan directly, then
-   run the same `team unpack` again; the lead revises the files. Repeat until you are happy.
+   run the same `team unpack` again; the product owner revises the files. Repeat until you are happy.
 4. Commit the plan: `git add -A && git commit -m "Plan: feature X"`.
 
 ## Workflow 2 - develop one story (configurable workflow, P01)

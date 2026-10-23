@@ -20,6 +20,13 @@
       "role": "QA",
       "name": "qa",
       "model": "gpt-6-luna"
+    },
+    {
+      "providerId": "claude",
+      "role": "ProductOwner",
+      "name": "po",
+      "model": "claude-sonnet-5-5",
+      "reasoning": "medium"
     }
   ]
 }

@@ -26,6 +26,14 @@
         "python-testing",
         "code-search"
       ]
+    },
+    "ProductOwner": {
+      "description": "Product owner: unpacks features into planning files and a ticket manifest.",
+      "instructions": "roles/product-owner.md",
+      "skills": [
+        "story-format",
+        "code-search"
+      ]
     }
   }
 }
