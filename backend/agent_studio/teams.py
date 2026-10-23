@@ -15,6 +15,7 @@ from .textsafe import one_line
 
 CLEANUP_INCOMPLETE = "CLEANUP_INCOMPLETE"
 TEAM_START_FAILED = "TEAM_START_FAILED"
+TEAM_CONFIG_INVALID = "TEAM_CONFIG_INVALID"
 MAX_ROSTER = 8
 ACTIVE = ("queued", "claimed", "running", "waiting_input", "reconciling")
 
@@ -65,7 +66,7 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
     if len(roster) > MAX_ROSTER:
         raise AsError(BAD_REQUEST, f"A P00 team has at most {MAX_ROSTER} agents (got {len(roster)}).")
     allowed = set(providers.PEERS) | (set(providers.TEST_ONLY) if allow_fake else set())
-    seen, clean = set(), []
+    seen, clean, names = set(), [], {}
     for i, m in enumerate(roster):
         if not isinstance(m, dict):
             raise AsError(BAD_REQUEST, f"roster[{i}] must be an object.")
@@ -82,9 +83,15 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
         role = m.get("role")
         if not isinstance(role, str) or not role.strip() or len(role) > 64:
             raise AsError(BAD_REQUEST, f"roster[{i}].role must be a non-empty string of at most 64 characters.")
-        name = m.get("displayName") or f"{role.strip()}-{i + 1}"
+        name = m.get("displayName") or m.get("name") or f"{role.strip()}-{i + 1}"
         if not isinstance(name, str) or len(name) > 64:
             raise AsError(BAD_REQUEST, f"roster[{i}].displayName must be at most 64 characters.")
+        key = one_line(name.strip(), 64).casefold()
+        if key in names:
+            raise AsError(TEAM_CONFIG_INVALID, f"roster[{names[key]}] and roster[{i}] have the same agent name "
+                          f"{name.strip()!r}; names must be unique in a team.",
+                          data={"name": name.strip(), "indexes": [names[key], i]})
+        names[key] = i
         member = {"agentId": aid, "providerId": pid, "role": one_line(role.strip(), 64),
                   "displayName": one_line(name.strip(), 64)}
         for key in ("model", "reasoning"):
