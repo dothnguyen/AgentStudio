@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, \
+from . import PROTOCOL, VERSION, board, board_config, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, \
     resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
@@ -216,6 +216,16 @@ def _handle_ticket_depend(args, tx, ctx):
     return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket)}
 
 
+def _handle_ticket_start(args, tx, ctx):
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    agent = tx.get("agent", args["agentId"])
+    team = tx.get("team", agent["team_id"])
+    if team["status"] != "running" or team["workspace"] != args["workspace"]:
+        raise AsError(tasks.TEAM_NOT_RUNNING, "Agent team is not running on this workspace.")
+    roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (team["id"],))}
+    return board.start_column(tx, ticket, agent, board_config.current(tx, args["workspace"], roles), ctx)
+
+
 HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
@@ -235,6 +245,7 @@ HANDLERS = {
     "ticket.unblock": _handle_ticket_unblock,
     "ticket.cancel": _handle_ticket_cancel,
     "ticket.depend": _handle_ticket_depend,
+    "ticket.start": _handle_ticket_start,
 }
 MONITOR_INTERVAL_S = 2.0
 

@@ -1,41 +1,64 @@
 # P03-S05 — Board config, column definitions, run seeds and manual `ticket.start`
 
-Status: To Do
+Status: Done (2026-10-23)
 Depends on: P03-S02, P03-S04
-Architecture: [P03 design contract](../README.md#design-contract), §A (`board.json`), §C (columns, seeds), §G (claim)
+Architecture: [P03 design contract](../README.md#design-contract), §A (`board.json`), §C (columns, seeds), §G (claim), §I (errors)
 
 ## Goal
 
-A ticket can be pushed into its next column by hand. `ticket.start {key, agentId}` claims it (`ready_x` → `in_x`), prepares the workspace (a worktree on the first develop), and starts the column's P01 definition bound to that agent with the board-composed task text and seeds. This story only *starts* runs. Applying their results is S06, so here a finished run leaves the ticket in its `in_*` column.
+A ticket can be pushed into its next column by hand. `ticket.start {workspace, key, agentId}` claims it (`ready_x` → `in_x`), prepares the workspace (a worktree on the first develop), and starts the column's P01 definition bound to that agent with the board-composed task text and seed. This story only *starts* runs. Applying their results is S06, so here a finished run leaves the ticket in its working status (`refining`, `in_dev`, `in_test`, `in_review`).
+
+What exists today (read before starting): `workflow._start_definition` and `workflow.bind_roles` (`backend/agent_studio/workflow.py`), `prompts.render`, `workflowdef.load` / `_locate` (a built-in name is reserved automatically once its `.json` file exists), `tickets.get` / `deps_merged` / `record_worktree` / `TRANSITIONS`, `worktrees.create` / `slug` / `remove` / `branch_diff`, and the debug fixture `debug.ticket_worktree` (S04).
 
 ## Implement in this order
 
-1. `board_config.py`: loads and validates `.agent-studio/board.json` with the §A defaults (`BOARD_CONFIG_INVALID` with `{path, message}` errors; unknown keys are errors). It checks that each column's `role` exists in the team roster when a team is given.
-2. Built-in definitions in `backend/agent_studio/workflows/`, JSON, with prompts beside them:
-   - `board-refine`: one TeamLead verdict stage, `workspace_write`;
-   - `board-develop`: `develop` work stage `workspace_write`, then `tests` validation, where `fail` → `develop` and `maxVisits` is 3;
-   - `board-test`: QA verdict stage, `read_only`, with `{{diff}}`;
-   - `board-review`: TeamLead verdict stage, `read_only`, with `{{diff}}` and the instruction to give a ```` ```commit ```` block on `pass`.
-   The develop prompt tells the developer to fill the story's Evidence and tick the items it proves (Q3), never to run history-changing git, and to treat `{{findings}}` as the list to fix. Built-in names are reserved (P01 §A).
-3. `workflow.start` gets the internal `seed {findings?, diff?}` (P01 `prompts.py` uses a seed until the run produces its own). It is accepted only from coordinator-internal callers, never from the command inbox.
-4. `board.start_column(tx, ticket, agent, config, ctx)`:
-   - checks that the ticket is in a pickable column for the agent's role (§C) and, for develop, that `deps_merged` holds;
-   - claims it (the §G transaction);
-   - on the first develop, calls `worktrees.create` and records branch, path and base commit with `tickets.record_worktree` (S04);
-   - composes `{{task}}` and the seed;
-   - calls `workflow.start` with `workspace`, `bindings {role: agentId}`, `definition` and `seed`, then records `run_id` and writes `ticket.run_started`.
-   A start error (for example `WORKSPACE_DIRTY`) rolls the claim back and is returned.
-5. `ticket.start` command + CLI `agent-studio ticket start KEY --agent ID`.
+1. **Column table and defaults (data, not code).** Board code must pass the P01 name guard (§A), so:
+   - `schema.BOARD_COLUMNS`, next to `TICKET_TRANSITIONS`: per column name → `queues` (statuses it picks from), `working` (the claim target), `workspace` (`main` | `worktree`), `seed` (`none` | `findings` | `diff`). Values from §B/§C: unpack `ready_unpack→unpacking` main none; triage `triage→triaging` main none; refine `refine→refining` main none; develop `ready_dev|fail_test|changes_requested→in_dev` worktree findings; test `ready_test→in_test` worktree diff; review `ready_review→in_review` worktree diff.
+   - `backend/agent_studio/board_defaults.json`: the §A default document, verbatim.
+2. **`board_config.py`.**
+   - `load(workspace, roles=None) -> dict` reads `<workspace>/.agent-studio/board.json`. A missing file means the defaults. A present file is merged over the defaults key by key (a column object given in the file is merged over that column's default).
+   - Validation, all errors reported together as `BOARD_CONFIG_INVALID` with `data.errors` = `[{path, message}]` (`path` like P01 §B: `maxParallelDev`, `roundLimits.test`, `columns.develop.role`, `$` for invalid JSON, a non-object root or a file over 64 KiB). Rules: `version` = 1; `baseBranch` a string of 1–200 chars matching `[A-Za-z0-9._/-]+` without `..`; `maxParallelDev` int 1–16; `roundLimits` only `dev`/`test`/`review`, each int 1–20; `leaseSeconds` int 30–3600; `requirePlanApproval` bool; `columns` only the six `BOARD_COLUMNS` names, each with only `role` (string 1–64), `definition` and optional `bugDefinition` (P01 name `[a-z0-9][a-z0-9-]{0,63}`). Unknown keys at any level are errors. A boolean is not an int.
+   - Roster check, when `roles` (the set of agent roles in the team) is given: a column **written in the file** whose role is not in `roles` → error at `columns.<name>.role`. Default columns whose role nobody has are not errors; `load` lists them in the result as `unstaffed: [column]` (a team without a ProductOwner can still use the story columns).
+   - Definitions are **not** resolved here (the `board-unpack`, `board-triage` and `*-bug` built-ins arrive in S08/S09); a missing definition surfaces at start as `WORKFLOW_DEFINITION_NOT_FOUND`.
+   - `current(tx, workspace, roles) -> dict`: the frozen `board_state.config_json` when a row with a config exists (written by `board.run`, S13), else `load(workspace, roles)`. `ticket.start` and S06 use `current`.
+3. **Built-in definitions** in `backend/agent_studio/workflows/<name>.json`, prompts in `backend/agent_studio/workflows/prompts/<name>.md` (`promptFile: prompts/<name>.md`, relative to the built-in folder, P01 §A). Each uses exactly one agent role:
+   - `board-refine`: one verdict stage, role `TeamLead`, `workspace_write`, `{{task}}`; `pass`/`fail` → `$succeed`/`$fail`. The prompt says to refine only the story file and files in its phase folder.
+   - `board-develop`: work stage `develop` (role `Developer`, `workspace_write`, `maxVisits` 3, `{{task}}{{findings}}{{validation}}`) → validation stage `tests`; `tests` `pass` → `$succeed`, `fail` → `develop`. The prompt tells the developer to fill the story's Evidence section and tick the "Done when" items it proves (Q3), never to run history-changing git (commit, merge, rebase, reset, checkout of another branch, push), and to treat FINDINGS as the list to fix.
+   - `board-test`: verdict stage, role `QA`, `read_only`, `{{task}}{{diff}}`.
+   - `board-review`: verdict stage, role `TeamLead`, `read_only`, `{{task}}{{diff}}`, with the instruction to put a ```` ```commit ```` block (subject + body) in the reply on `pass`.
+4. **Seed on `workflow.start`.**
+   - `_start_definition` accepts `args["seed"]` = `{findings?: [str], diff?: str}` and passes its present keys as the `data` of the run's **first** stage entry (`_enter(..., data)`). Later stages get what the run produced, as today. The seed is not stored on the run (a resolve-retry reuses the rendered prompt).
+   - Coordinator-internal only: `dispatch` validators for `workflow.start` (definition and P00 forms) reject any `seed` key with `BAD_REQUEST`, so neither the CLI, the inbox nor `serve` can pass one. `board.start_column` calls `workflow.start(tx, args, ctx)` directly.
+5. **`board.py`: `start_column(tx, ticket, agent, config, ctx) -> dict`**, in this order, all in the caller's transaction:
+   1. Column = the `BOARD_COLUMNS` entry whose `queues` contain `ticket.status`; none → `TICKET_TRANSITION_INVALID` (covers `in_*`, `refining`, terminal, `blocked`, `backlog`).
+   2. `agent.role` ≠ `config.columns[column].role` → `TICKET_ROLE_MISMATCH` `{column, role, agentRole}`.
+   3. Develop only: not `tickets.deps_merged` → `TICKET_DEPS_NOT_MERGED` `{blockedBy: [keys not merged]}`.
+   4. Claim (§G): transition to `working` with actor `coordinator`, set `assignee_agent_id`, `lease_until = now + leaseSeconds`, write `ticket.claimed {agentId}`.
+   5. Workspace: `main` → the ticket's workspace. `worktree` → the ticket's `worktree_path`; if it is empty and the column is develop, `worktrees.create(workspace, key, worktrees.slug(title), config.baseBranch)` then `tickets.record_worktree`; if it is empty for test/review → `WORKTREE_NOT_REGISTERED`.
+   6. Task text (`{{task}}`, ≤ 32 KiB): lines `Ticket: <key> (<kind>)`, `Title: <title>`, `Story: <story_path>` (and for bugs the raw text; S08 fills that in).
+   7. Seed: `findings` → the ticket's `findings_json` list (omitted when NULL); `diff` → `worktrees.branch_diff(workspace, baseBranch, branch, <stateDir>/board/<ticket id>/seed)` and the text of its `diff.patch` (UTF-8, replacement on errors); `none` → no seed.
+   8. `workflow.start` with `teamId` = the agent's team, `definition` = `config.columns[column].definition`, `text`, `workspace`, `bindings {<the definition's single agent role>: agent.id}`, `seed`. A definition with other than one agent role → `BOARD_CONFIG_INVALID` at `columns.<column>.definition`.
+   9. Set `run_id` and write `ticket.run_started {runId, definition}`. Return `{ticket, column, workflowRunId, definition, workspace}`.
+   Any error raised in steps 4–9 rolls back the whole transaction (claim included). If step 5 created a worktree in this call, `start_column` first removes it and deletes the branch it just created (`worktrees.discard(workspace, created)`: `worktree remove --force`, `worktree prune`, `branch -D`, only for that branch), so a retry starts clean.
+6. **`ticket.start` command** (`dispatch` validator + coordinator handler, mutating, idempotency key): args `workspace` (canonicalised as in S02), `key` (`^T-\d{3,}$`), `agentId`. The handler loads the ticket and agent (`NOT_FOUND`), requires the agent's team to be `running` on that workspace (`TEAM_NOT_RUNNING` / `AGENT_NOT_IN_TEAM`), gets `board_config.current(tx, workspace, <roles of that team>)`, and calls `start_column`. CLI: `agent-studio ticket start KEY --workspace PATH --agent ID` (add `start` to the `ticket` action choices and the usage line), identical JSON over `serve`.
+7. Guard: extend `tests/unit/test_p01_s05_guard.py` to `board.py` and `board_config.py`.
 
 ## Done when
 
-- [ ] Missing `board.json` → defaults. A bad value, an unknown key, and a column role not in the roster → `BOARD_CONFIG_INVALID` with the path. Test: `tests/unit/test_p03_s05_board_config.py`.
-- [ ] All four built-ins load with `workflow.validate` and no errors, and `read_only` / `workspace_write` match §C.
-- [ ] Fake team: `ticket start T-001 --agent <lead>` on a `refine` ticket gives `refining` and a run on the main checkout with the board definition. On a `ready_dev` ticket with the developer, it gives `in_dev`, a worktree on `ticket/T-001-<slug>`, and a run in it whose prompt contains the ticket's findings seed. On a `ready_test` ticket, the QA prompt contains the branch diff seed.
-- [ ] Refused: a wrong role for the column, a ticket whose dependency is not `merged` (developer), a ticket already `in_*`, and a seed passed through the command inbox (`BAD_REQUEST`). The ticket stays unchanged after each.
-- [ ] A run start failure (dirty main checkout for refine) leaves the ticket in `refine` with no `run_id` and returns `WORKSPACE_DIRTY`.
-- [ ] Tests: `tests/integration/test_p03_s05_ticket_start.py`. All existing tests stay green.
+- [x] Config: missing `board.json` → exactly the defaults; a partial file (only `maxParallelDev`, only `columns.test.role`) merges over them; each of a wrong type (`maxParallelDev: "2"`, `true`), an out-of-range value, an unknown top-level key, an unknown column key and an unknown column name → `BOARD_CONFIG_INVALID` with the right `path`; two errors in one file are both reported; invalid JSON → path `$`. With `roles` given, a column in the file whose role is not in the roster → error at `columns.<name>.role`, while a default column with no agent appears in `unstaffed`. `current` returns the frozen `board_state.config_json` when set. Test: `tests/unit/test_p03_s05_board_config.py`.
+- [x] Built-ins: `workflowdef.load` of each of the four names gives no errors, one agent role each, the permissions of §C (`refine`/`develop` `workspace_write`, `test`/`review` `read_only`), `develop` `maxVisits` 3 and `tests.fail` → `develop`; a workspace file named `board-test.json` → `WORKFLOW_DEFINITION_INVALID` (reserved); the develop prompt text mentions Evidence, history-changing git and FINDINGS, and the review prompt mentions the `commit` block. Test: `tests/unit/test_p03_s05_builtins.py`.
+- [x] Seed: `workflow.start` with a `seed` through `dispatch` (both forms) → `BAD_REQUEST`; a direct call with `seed {findings: ["x1"], diff: "d1"}` renders `x1` and `d1` into the first stage's prompt. Test: `tests/unit/test_p03_s05_builtins.py` (dispatch) and the integration file below (rendering through `ticket.start`).
+- [x] Guard: `board.py` and `board_config.py` pass the P01 name guard. Test: `tests/unit/test_p01_s05_guard.py`.
+- [x] Fake team (TeamLead, Developer, QA agents), story ticket T-001 in `refine`: `ticket start T-001 --agent <lead>` → status `refining`, `assignee_agent_id` and `lease_until` set, `run_id` set, `ticket.claimed` and `ticket.run_started` events, a run of `board-refine` on the main checkout whose first prompt contains `T-001` and the story path.
+- [x] A second story ticket T-002 moved to `ready_dev` with `ticket.move`, its `findings_json` set to `["fix-me-123"]` by the test with a direct DB update (fixture, as in `test_p01_s07_recovery.py`): start with the developer → `in_dev`, a branch `ticket/T-002-<slug>` and a worktree recorded on the ticket (`ticket.worktree_created`), a `board-develop` run whose task workspace is that worktree and whose first prompt contains `fix-me-123`.
+- [x] A third ticket in `ready_test` with a worktree from `debug.ticket_worktree` and one commit on its branch adding `seeded.txt`: start with QA → `in_test`, and the `board-test` prompt contains `seeded.txt` from the branch diff seed.
+- [x] Refused, each leaving the ticket row unchanged (status, assignee, lease, run_id, worktree fields) and creating no run: the QA agent on a `refine` ticket (`TICKET_ROLE_MISMATCH`); the developer on a `ready_dev` ticket whose dependency is not `merged` (`TICKET_DEPS_NOT_MERGED`); a ticket already `in_dev` (`TICKET_TRANSITION_INVALID`); a `ready_test` ticket with no worktree (`WORKTREE_NOT_REGISTERED`).
+- [x] A run start failure rolls back: a dirty main checkout for refine leaves the ticket in `refine` with no `run_id` and returns `WORKSPACE_DIRTY`; a `board.json` whose develop `definition` names a missing definition returns `WORKFLOW_DEFINITION_NOT_FOUND` and leaves the ticket in `ready_dev` with no `worktree_path`, no `ticket/T-…` branch and no entry in `git worktree list`.
+- [x] Tests: `tests/integration/test_p03_s05_ticket_start.py` (the five integration items above). The whole unit suite and the touched integration modules stay green (`python3 scripts/validate.py`).
 
 ## Evidence
 
-(filled in when the story is done)
+- Validation (`scripts/validate.py`), 2026-10-23: unit suite `python3 -W ignore -m unittest discover -s tests/unit -t .` → `Ran 377 tests … OK (skipped=3)`; integration `python3 -W ignore -m unittest tests.integration.test_p03_s05_ticket_start` → `Ran 5 tests … OK`. QA verdict: pass, no findings.
+- Added: `backend/agent_studio/board.py` (`start_column`), `backend/agent_studio/board_config.py` (`load`, `current`), `backend/agent_studio/board_defaults.json`, built-ins `backend/agent_studio/workflows/board-{refine,develop,test,review}.json` with `workflows/prompts/board-*.md`, tests `tests/unit/test_p03_s05_board_config.py`, `tests/unit/test_p03_s05_builtins.py`, `tests/integration/test_p03_s05_ticket_start.py`.
+- Changed: `schema.py` (`BOARD_COLUMNS`), `protocol.py` (`BOARD_CONFIG_INVALID`, `TICKET_ROLE_MISMATCH`, `TICKET_DEPS_NOT_MERGED`), `workflow.py` (first-stage `seed`), `dispatch.py` (`ticket.start` validator; `seed` rejected on `workflow.start`), `coordinator.py` (`ticket.start` handler), `cli.py` (`ticket start --agent`), `worktrees.py` (`discard`), `tests/unit/test_p01_s05_guard.py` (board modules).
+- Notes: the `board-develop` work stage's id is `work` (its `tests.fail` → `work`); board code names no stage ids, so nothing depends on it. Develop is recognised from the column table (worktree + findings seed), not by name, to pass the guard. Like the other ticket commands, the `ticket.start` receipt returns the ticket row with snake_case fields.

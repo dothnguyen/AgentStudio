@@ -212,7 +212,8 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
     tx.transition("workflow_run", wf, "running", set_values={"transition_reason": "started"})
     if first.kind == "verdict":
         tx.transition("task", task, "review")
-    asg = _enter(tx, wf, first.id, ctx, None, {})
+    seed = args.get("seed", {})
+    asg = _enter(tx, wf, first.id, ctx, None, seed)
     return {"receipt": "accepted", "workflowRunId": wf, "taskId": task, "baseCommit": base,
             "definition": definition.name, "definitionSha256": definition.source_sha256, "bindings": bindings,
             "assignmentId": asg, "validationArgv": config["validation"]["argv"]}

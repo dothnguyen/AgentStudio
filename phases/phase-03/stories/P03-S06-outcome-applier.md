@@ -12,7 +12,7 @@ When a ticket's column run ends, the coordinator applies the §C outcome exactly
 
 1. `board.apply_outcomes(store, ctx)` is called in the coordinator loop after `workflow.advance`. It looks for tickets whose `run_id` run is terminal (or paused) and `run_id != applied_run_id`, and applies the §C row in one transaction that also sets `applied_run_id`, clears the assignee and lease, and writes events.
 2. Verdict and findings: read from the run's last verdict stage (P01 stores it). Findings are written to `findings_json` (bounded at 16 KiB) and `ticket.findings`. Develop `failed` (bounds) stores the last validation output as findings.
-3. Counters: `dev_rounds`, `test_rounds`, `review_rounds`. The limits come from the frozen `board.json`, and a counter over its limit → `blocked` with `ROUND_LIMIT:<column>`.
+3. Counters: `dev_rounds`, `test_rounds`, `review_rounds`. The limits come from `board_config.current` (S05: the frozen config after `board.run`, else `board.json` as read now), and a counter over its limit → `blocked` with `ROUND_LIMIT:<column>`.
 4. Develop `succeeded`: `worktrees.commit_round(path, "<key>: develop round <n>")`, records `head_commit` and writes `ticket.committed`. No changes → handled like a failed dev round with findings `NO_CHANGES`.
 5. Refine:
    - `worktrees.changed_paths` + `check_paths` against the §F refine globs;

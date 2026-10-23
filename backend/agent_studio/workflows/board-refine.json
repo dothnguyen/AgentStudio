@@ -1,0 +1,1 @@
+{"version":1,"description":"Refine a board story.","stages":[{"id":"verdict","role":"TeamLead","permission":"workspace_write","promptFile":"prompts/board-refine.md","next":{"pass":"$succeed","fail":"$fail"}}]}

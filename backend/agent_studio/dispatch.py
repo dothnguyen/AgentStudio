@@ -201,6 +201,12 @@ def _validate_ticket_key(args):
     return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key"))}
 
 
+def _validate_ticket_start(args):
+    out = _validate_ticket_key(args)
+    out["agentId"] = validate_uuid(args.get("agentId"), "agentId")
+    return out
+
+
 def _validate_ticket_cancel(args):
     out = _validate_ticket_key(args)
     reason = req_text(args, "reason", 500, required=False)
@@ -274,6 +280,8 @@ def _validate_definition_start(args):
 
 
 def _validate_workflow_start(args):
+    if "seed" in args:
+        raise AsError(BAD_REQUEST, "seed is reserved for coordinator board starts.")
     if "definition" in args:
         return _validate_definition_start(args)
     out = {"teamId": validate_uuid(args.get("teamId"), "teamId"),
@@ -459,6 +467,7 @@ COMMANDS = {
     "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key),
     "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
+    "ticket.start": _inbox("ticket.start", _validate_ticket_start),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
 }

@@ -48,6 +48,14 @@ TICKET_TERMINAL = ("merged", "done", "cancelled")
 TICKET_WORKING = {"unpacking": ("ready_unpack",), "refining": ("refine",), "triaging": ("triage",),
                   "in_dev": ("ready_dev", "fail_test", "changes_requested"), "in_test": ("ready_test",),
                   "in_review": ("ready_review",)}
+BOARD_COLUMNS = {
+    "unpack": {"queues": ("ready_unpack",), "working": "unpacking", "workspace": "main", "seed": "none"},
+    "triage": {"queues": ("triage",), "working": "triaging", "workspace": "main", "seed": "none"},
+    "refine": {"queues": ("refine",), "working": "refining", "workspace": "main", "seed": "none"},
+    "develop": {"queues": ("ready_dev", "fail_test", "changes_requested"), "working": "in_dev", "workspace": "worktree", "seed": "findings"},
+    "test": {"queues": ("ready_test",), "working": "in_test", "workspace": "worktree", "seed": "diff"},
+    "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
+}
 TICKET_OPERATOR_TARGETS = ("backlog", "ready_unpack", "ready_dev", "ready_test", "ready_review", "refine",
                            "triage", "fail_test", "changes_requested", "blocked")
 KIND_STATUSES = {

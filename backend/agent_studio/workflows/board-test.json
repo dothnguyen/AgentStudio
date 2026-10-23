@@ -1,0 +1,1 @@
+{"version":1,"description":"Test a board ticket.","stages":[{"id":"verdict","role":"QA","permission":"read_only","promptFile":"prompts/board-test.md","next":{"pass":"$succeed","fail":"$fail"}}]}

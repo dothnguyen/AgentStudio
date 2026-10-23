@@ -58,7 +58,7 @@ Every P03 story targets this section as its "Architecture". It extends the P00 a
 ### A. Board scope and configuration
 
 - One board per **workspace** (the canonical main-checkout path from `ops.canonical_workspace`), see Q2. Ticket keys are `T-001`, `T-002`, … per workspace, one sequence for every kind.
-- Configuration: `<workspace>/.agent-studio/board.json` (optional; every key has a default), read and validated at `board.run` and frozen until the next `board.run` (`BOARD_CONFIG_INVALID` with `{path, message}` errors, the same shape as P01 §B). The keys:
+- Configuration: `<workspace>/.agent-studio/board.json` (optional; every key has a default), read and validated at `board.run` and frozen until the next `board.run` (`BOARD_CONFIG_INVALID` with `{path, message}` errors, the same shape as P01 §B). Until a `board.run` has frozen one, `ticket.start` and the outcome applier read the file each time (`board_config.current`, S05). A present file is merged over the defaults key by key; unknown keys are errors. With a team given, a column **written in the file** whose role no agent has is an error; a default column nobody staffs is only listed as `unstaffed`. The defaults ship as `backend/agent_studio/board_defaults.json`, and the column table (queues, working status, workspace, seed kind per column) is `schema.BOARD_COLUMNS`, so board code itself names no role or column. The keys:
 
 ```json
 {
@@ -79,7 +79,7 @@ Every P03 story targets this section as its "Architecture". It extends the P00 a
 }
 ```
 
-- `definition` names a P01 definition: a built-in (`backend/agent_studio/workflows/<name>.json`; the built-in loader reads `.json` only) or a workspace file. Roles come **only** from this file. Board code never names a role, a stage id or a provider (the P01 guard test is extended to `board*.py`, `tickets.py`, `worktrees.py`).
+- `definition` names a P01 definition: a built-in (`backend/agent_studio/workflows/<name>.json`; the built-in loader reads `.json` only) or a workspace file. Each column definition uses exactly one agent role, which `ticket.start` binds to the claiming agent. Roles come **only** from this file. Board code never names a role, a stage id or a provider (the P01 guard test is extended to `board*.py`, `tickets.py`, `worktrees.py`).
 
 ### B. Tickets: data and statuses
 
@@ -131,7 +131,7 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 | test | `ready_test` | ticket worktree | `read_only` |
 | review | `ready_review` | ticket worktree | `read_only` |
 
-- **Run seeds.** `workflow.start` gets an internal (coordinator-only, not on the CLI) `seed {findings?, diff?}`. It fills `{{findings}}` / `{{diff}}` until a stage of the run produces its own. For develop the seed is the ticket's `findings_json`. For test and review the seed is the branch diff `git diff <merge-base(baseBranch, branch)> <branch>`. The run's `{{task}}` is composed by the board: key, kind, title, story/bug path, and for bugs the raw text.
+- **Run seeds.** `workflow.start` gets an internal (coordinator-only, not on the CLI) `seed {findings?, diff?}`. It fills `{{findings}}` / `{{diff}}` of the run's **first** stage; later stages get what the run produced, and the seed is not stored on the run. The `dispatch` validators reject a `seed` key (`BAD_REQUEST`). For develop the seed is the ticket's `findings_json`. For test and review the seed is the branch diff `git diff <merge-base(baseBranch, branch)> <branch>`. The run's `{{task}}` is composed by the board: key, kind, title, story/bug path, and for bugs the raw text.
 - **Outcomes** (applied once per run, idempotent through `applied_run_id`):
 
 | Column | Run end | Ticket |
@@ -218,7 +218,7 @@ Runs in the coordinator loop after `workflow.advance` (`board.tick(store, ctx)`)
 | `board.show` | `workspace` | read-only |
 | `board.run` / `board.pause` / `board.resume` | `workspace`, `reason?` / `agentId?`, `all?` | mutating |
 
-Mutating commands need an idempotency key (P00 rule) and go through the command inbox; `ticket.show`, `ticket.list` and `board.show` read the database directly, like `workflow.show`. The CLI and `serve` return identical JSON. `ticket.create` checks every path with `tickets.check_workspace_path` (relative, inside the workspace after `realpath`, an existing `.md` file; else `STORY_PATH_INVALID`); omitted `dependsOn` uses parsed story dependencies, while a supplied list (including `[]`) overrides them. Its receipt is `{ticket, dependsOn, parsed {ids, resolved, unresolved}, warnings [{code: "DEPENDS_UNRESOLVED", id}]}` (S02); S08 adds `kind: bug` and S10 `kind: feature`. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `WORKTREE_EXISTS` (S03 `create` on an existing branch or path), `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`.
+Mutating commands need an idempotency key (P00 rule) and go through the command inbox; `ticket.show`, `ticket.list` and `board.show` read the database directly, like `workflow.show`. The CLI and `serve` return identical JSON. `ticket.create` checks every path with `tickets.check_workspace_path` (relative, inside the workspace after `realpath`, an existing `.md` file; else `STORY_PATH_INVALID`); omitted `dependsOn` uses parsed story dependencies, while a supplied list (including `[]`) overrides them. Its receipt is `{ticket, dependsOn, parsed {ids, resolved, unresolved}, warnings [{code: "DEPENDS_UNRESOLVED", id}]}` (S02); S08 adds `kind: bug` and S10 `kind: feature`. New error codes: `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `WORKTREE_EXISTS` (S03 `create` on an existing branch or path), `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`, `TICKET_ROLE_MISMATCH` (`ticket.start` agent role ≠ column role), `TICKET_DEPS_NOT_MERGED` (`{blockedBy}`, develop start with an unmerged dependency). `ticket.start` returns `{ticket, column, workflowRunId, definition, workspace}`; any start error rolls back the claim and removes a worktree created by that call (S05).
 
 ### J. Events
 

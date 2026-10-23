@@ -50,7 +50,7 @@ USAGE = """agent-studio <command>
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
   ticket create --workspace PATH --story PATH [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
-  ticket show|list|move|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
+  ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
   debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
@@ -156,7 +156,7 @@ def _human_request(argv) -> dict:
     wf_p.add_argument("--key")
     wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     ticket_p = sub.add_parser("ticket", add_help=False)
-    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "block", "unblock", "cancel", "depend"])
+    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "block", "unblock", "cancel", "depend"])
     ticket_p.add_argument("ticket_key", nargs="?")
     ticket_p.add_argument("--workspace", required=True)
     ticket_p.add_argument("--story")
@@ -171,6 +171,7 @@ def _human_request(argv) -> dict:
     ticket_p.add_argument("--on", action="append", default=[])
     ticket_p.add_argument("--remove", action="append", default=[])
     ticket_p.add_argument("--key")
+    ticket_p.add_argument("--agent")
     ticket_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     asg_p = sub.add_parser("assignment", add_help=False)
     asg_p.add_argument("action", choices=["cancel", "resolve"])
@@ -321,6 +322,10 @@ def _human_request(argv) -> dict:
                 if ns.to is None:
                     raise AsError(BAD_REQUEST, "ticket move needs --to STATE")
                 args["to"] = ns.to
+            if ns.action == "start":
+                if ns.agent is None:
+                    raise AsError(BAD_REQUEST, "ticket start needs --agent ID")
+                args["agentId"] = ns.agent
             if ns.action == "block":
                 if ns.reason is None:
                     raise AsError(BAD_REQUEST, "ticket block needs --reason TEXT")
