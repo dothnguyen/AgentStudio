@@ -12,7 +12,7 @@ A team can have two (or more) agents with the same role, for example two develop
 
 1. Check that `team.start` accepts duplicate roles with distinct `name`s (refusing duplicate names with `TEAM_CONFIG_INVALID`). Fix it if not.
 2. `board.start_column` always passes explicit `bindings`. Add a test that the P01 path without bindings still returns `ROLE_AMBIGUOUS` for a duplicated role.
-3. Scheduler: an agent with any active assignment (any task, not only board runs) is not idle. `pick` is called per agent in a stable order, and a ticket claimed in this tick is never offered to a second agent (it has already left `ready_*` in the same transaction).
+3. Scheduler: S13's "free agent" rule (no active assignment of any task kind, no working ticket assigned) already applies; prove it with two agents of one role. `pick` is called per agent in a stable order, and a ticket claimed in this tick is never offered to a second agent (it has already left `ready_*` in the same transaction).
 4. Example `team.json` with `dev-1` and `dev-2` in `phases/phase-03/examples/team-two-devs.json` (fixture for S16/S17).
 
 ## Done when

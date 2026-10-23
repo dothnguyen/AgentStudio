@@ -153,9 +153,17 @@ def changes_section(base):
             f"file where it would be.")
 
 
-def run_tests():
+def validation_argv(argv, integration=False):
+    """The manual loop commands (fix / qa / final) run only the fast unit tier unless asked; the workflow's tests stage
+    and the commit gate are where integration modules run."""
+    if integration:
+        return list(argv)
+    return ["--unit" if a in ("--touched", "--all") else a for a in argv]
+
+
+def run_tests(integration=False):
     cfg = json.load(open(os.path.join(WS, ".agent-studio", "workflow.json")))
-    argv = cfg["validation"]["argv"]
+    argv = validation_argv(cfg["validation"]["argv"], integration)
     print(f"--> running {' '.join(argv)}", flush=True)
     p = subprocess.run(argv, cwd=WS, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                        timeout=cfg["validation"].get("timeoutMs", 180000) / 1000)
@@ -286,7 +294,7 @@ def c_fix(ns):
         sys.exit("No development recorded for this story. Run: team.py dev STORY")
     blockers = [f for f in s.get("findings") or [] if not str(f).upper().startswith("SUGGESTION")]
     findings = "\n".join(f"- {f}" for f in blockers) or "(see the test output)"
-    ok, cmd, out = run_tests()
+    ok, cmd, out = run_tests(ns.integration)
     st, summary = direct(team()["agents"]["Developer"], "workspace_write",
                          f"Fix the QA blockers for the story in {ns.story}. Change only what they need; ignore suggestions.\n\n"
                          f"QA FINDINGS:\n{findings}\n\nCURRENT TEST RUN ({cmd}): {'PASS' if ok else 'FAIL'}\n{out}")
@@ -299,7 +307,7 @@ def c_qa(ns):
     s = load(key, {})
     if not s.get("base"):
         sys.exit("No development recorded for this story. Run: team.py dev STORY")
-    ok, cmd, out = run_tests()
+    ok, cmd, out = run_tests(ns.integration)
     st, summary = direct(team()["agents"]["QA"], "read_only",
                          f"QA REVIEW of the story in {ns.story}. Read the story. VALIDATION is the unit test run "
                          f"(it ran in the operator's shell, so you do not need to run it).\n\nVALIDATION ({cmd}): "
@@ -317,7 +325,7 @@ def c_final(ns):
     s = load(key, {})
     if not s.get("qaPassed") and not ns.force:
         sys.exit("QA has not passed this story yet (team.py qa STORY), or pass --force.")
-    ok, cmd, out = run_tests()
+    ok, cmd, out = run_tests(ns.integration)
     st, summary = direct(team()["agents"]["TeamLead"], "workspace_write",
                          f"FINAL REVIEW of the story in {ns.story} after QA passed. Read the story. If the work is "
                          f"complete, update the story file (Status Done with today's date, ticked items, Evidence) as "
@@ -579,6 +587,9 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("story")
         p.add_argument("--force", action="store_true")
+        if name in ("fix", "qa", "final"):
+            p.add_argument("--integration", action="store_true",
+                           help="also run the touched integration modules before handing over (slow)")
         if name == "commit":
             p.add_argument("--skip-integration", action="store_true")
     ns = ap.parse_args()

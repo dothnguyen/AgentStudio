@@ -59,7 +59,7 @@ class NoNamesInTheEngine(unittest.TestCase):
         self.assertEqual(hits(tree("worktrees.py")), [])
 
     def test_board_modules_are_clean(self):
-        for name in ("board.py", "board_config.py"):
+        for name in ("board.py", "board_config.py", "board_scheduler.py"):
             self.assertEqual(hits(tree(name)), [], name)
 
     def test_the_guard_catches_a_violation(self):

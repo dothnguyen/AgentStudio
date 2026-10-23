@@ -52,6 +52,7 @@ USAGE = """agent-studio <command>
   ticket create --workspace PATH (--story PATH | --kind bug --text TEXT [--attach PATH ...] | --kind feature --brief PATH --out DIR) [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
   ticket approve --workspace PATH KEY [--key K]
   ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
+  board run|pause [--reason TEXT] --workspace PATH
   board resume --workspace PATH (--agent ID | --all)
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
@@ -189,10 +190,11 @@ def _human_request(argv) -> dict:
     ticket_p.add_argument("--agent")
     ticket_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     board_p = sub.add_parser("board", add_help=False)
-    board_p.add_argument("action", choices=["resume"])
+    board_p.add_argument("action", choices=["run", "pause", "resume"])
     board_p.add_argument("--workspace", required=True)
     board_p.add_argument("--agent")
     board_p.add_argument("--all", action="store_true")
+    board_p.add_argument("--reason")
     board_p.add_argument("--key")
     board_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     asg_p = sub.add_parser("assignment", add_help=False)
@@ -374,10 +376,14 @@ def _human_request(argv) -> dict:
         if ns.action not in ("show", "list"):
             req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "board":
-        args = {"workspace": ns.workspace, "all": ns.all}
-        if ns.agent:
-            args["agentId"] = ns.agent
-        req.update(command="board.resume", args=args, idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+        args = {"workspace": ns.workspace}
+        if ns.action == "resume":
+            args["all"] = ns.all
+            if ns.agent:
+                args["agentId"] = ns.agent
+        elif ns.action == "pause" and ns.reason is not None:
+            args["reason"] = ns.reason
+        req.update(command="board." + ns.action, args=args, idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":
             if not ns.resolve_action:

@@ -57,6 +57,10 @@ BOARD_COLUMNS = {
     "test": {"queues": ("ready_test",), "working": "in_test", "workspace": "worktree", "seed": "diff"},
     "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
 }
+BOARD_PICK_ORDER = ("review", "triage", "refine", "unpack", "develop", "test")
+BOARD_PICK_RULES = {"develop": {"cap": "maxParallelDev", "depsMerged": True,
+                                  "rework": ("changes_requested", "fail_test")},
+                    "review": {"streak": 2}}
 BOARD_OUTCOMES = {
     "unpack": {"kind": "verdict", "pass": "unpacked", "fail": "blocked", "counter": None,
                "limit": None, "commit": "planning", "globs": ("{out}/*",), "check": "manifest"},

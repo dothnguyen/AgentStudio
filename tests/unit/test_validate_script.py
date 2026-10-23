@@ -72,6 +72,14 @@ class Modes(unittest.TestCase):
         integ.assert_called_once_with(["tests.integration.test_s04_runner"])
 
 
+class ManualLoopTier(unittest.TestCase):
+    def test_manual_commands_use_the_unit_tier_unless_asked(self):
+        argv = ["python3", "scripts/validate.py", "--touched"]
+        self.assertEqual(team.validation_argv(argv), ["python3", "scripts/validate.py", "--unit"])
+        self.assertEqual(team.validation_argv(argv, integration=True), argv)
+        self.assertEqual(team.validation_argv(["pytest", "-q"]), ["pytest", "-q"])
+
+
 class BranchChanges(unittest.TestCase):
     def test_committed_rounds_on_a_branch_still_count(self):
         repo = tempfile.mkdtemp()

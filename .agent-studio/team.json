@@ -9,10 +9,10 @@
       "reasoning": "medium"
     },
     {
-      "providerId": "codex",
+      "providerId": "claude",
       "role": "Developer",
       "name": "dev",
-      "model": "gpt-5.6-terra",
+      "model": "claude-sonnet-5-5",
       "reasoning": "medium"
     },
     {

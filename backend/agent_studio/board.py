@@ -763,20 +763,19 @@ def start_column(tx, ticket, agent, config, ctx):
         raise
 
 
-def claim_and_start(store, workspace, key, agent_id, ctx):
+def claim_and_start(store, workspace, key, agent_id, ctx, config=None):
     with store.transaction() as tx:
         ticket = tickets.get(tx, workspace, key)
         agent = tx.get("agent", agent_id)
         roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (agent["team_id"],))}
-        config = board_config.current(tx, workspace, roles)
-        claim(tx, ticket, agent, config, ctx)
+        claim(tx, ticket, agent, config or board_config.current(tx, workspace, roles), ctx)
     crashpoints.hit("after_ticket_claim_commit")
     try:
         with store.transaction() as tx:
             ticket = tickets.get(tx, workspace, key)
             agent = tx.get("agent", agent_id)
             roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (agent["team_id"],))}
-            return start_claimed(tx, ticket, agent, board_config.current(tx, workspace, roles), ctx)
+            return start_claimed(tx, ticket, agent, config or board_config.current(tx, workspace, roles), ctx)
     except AsError:
         with store.transaction() as tx:
             ticket = tickets.get(tx, workspace, key)

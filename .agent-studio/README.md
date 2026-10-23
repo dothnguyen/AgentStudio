@@ -114,6 +114,8 @@ The story's Status/Evidence update made by the lead in `final` is included in th
   integration modules this change added or modified (including earlier committed rounds on a ticket branch), in
   parallel (`VALIDATE_WORKERS`, default 4). It runs outside the agent sandbox, so agents get integration results in
   VALIDATION even though they cannot run tmux themselves.
+- **Manual loop (`team fix`, `team qa`, `team final`):** run only the unit tier before handing over, so they stay fast.
+  Add `--integration` to also run the touched integration modules first.
 - **At commit:** `team commit` runs the same `--touched` check as a final gate; `--skip-integration` commits anyway.
 - **Occasionally:** `python3 scripts/validate.py --all` runs every integration module (end of an epic, before a release).
 - **Fast loop only:** point `validation.argv` in `.agent-studio/workflow.json` at `--unit` to skip integration in the loop.

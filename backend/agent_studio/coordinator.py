@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, board, board_config, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, schema, \
+from . import PROTOCOL, VERSION, board, board_config, board_scheduler, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, schema, \
     resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, TICKET_BUSY, TICKET_TRANSITION_INVALID, UNKNOWN_COMMAND
@@ -295,6 +295,34 @@ def _handle_board_resume(args, tx, ctx):
     return {"resumed": resumed}
 
 
+def _board_team(tx, workspace):
+    team = tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running' ORDER BY created_at LIMIT 1",
+                           (workspace,)).fetchone()
+    if not team:
+        raise AsError(tasks.TEAM_NOT_RUNNING, "No team is running on this workspace.")
+    return dict(team)
+
+
+def _handle_board_run(args, tx, ctx):
+    team = _board_team(tx, args["workspace"])
+    roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (team["id"],))}
+    config = board_config.load(args["workspace"], roles)
+    tx.conn.execute("INSERT INTO board_state (workspace, status, reason, config_json, updated_at) VALUES (?, 'running', NULL, ?, ?) "
+                    "ON CONFLICT(workspace) DO UPDATE SET status = 'running', reason = NULL, config_json = excluded.config_json, updated_at = excluded.updated_at",
+                    (args["workspace"], json.dumps(config, ensure_ascii=True, sort_keys=True), state.utcnow()))
+    tx.note("team", team["id"], "board.started", {"unstaffed": config["unstaffed"]})
+    return {"board": {"workspace": args["workspace"], "status": "running", "reason": None, "unstaffed": config["unstaffed"]}}
+
+
+def _handle_board_pause(args, tx, ctx):
+    team = _board_team(tx, args["workspace"])
+    tx.conn.execute("INSERT INTO board_state (workspace, status, reason, config_json, updated_at) VALUES (?, 'paused', ?, NULL, ?) "
+                    "ON CONFLICT(workspace) DO UPDATE SET status = 'paused', reason = excluded.reason, updated_at = excluded.updated_at",
+                    (args["workspace"], args.get("reason"), state.utcnow()))
+    tx.note("team", team["id"], "board.paused", {"reason": args.get("reason")})
+    return {"board": {"workspace": args["workspace"], "status": "paused", "reason": args.get("reason")}}
+
+
 HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
@@ -318,6 +346,8 @@ HANDLERS = {
     "ticket.start": _handle_ticket_start,
     "ticket.retry": _handle_ticket_retry,
     "board.resume": _handle_board_resume,
+    "board.run": _handle_board_run,
+    "board.pause": _handle_board_pause,
 }
 MONITOR_INTERVAL_S = 2.0
 
@@ -442,6 +472,7 @@ def run(enable_debug: bool = False) -> int:
             workflow.advance(store, ctx)
             board.apply_outcomes(store, ctx)
             board.merge_ready(store, ctx)
+            board_scheduler.tick(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:

@@ -252,6 +252,18 @@ def _validate_board_resume(args):
     return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
 
 
+def _validate_board_run(args):
+    return {"workspace": _ticket_workspace(args)}
+
+
+def _validate_board_pause(args):
+    out = {"workspace": _ticket_workspace(args)}
+    reason = req_text(args, "reason", 200, required=False, allow_empty=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
 def _validate_ticket_cancel(args):
     out = _validate_ticket_key(args)
     reason = req_text(args, "reason", 500, required=False)
@@ -516,6 +528,8 @@ COMMANDS = {
     "ticket.start": _inbox("ticket.start", _validate_ticket_start),
     "ticket.retry": _inbox("ticket.retry", _validate_ticket_retry),
     "board.resume": _inbox("board.resume", _validate_board_resume),
+    "board.run": _inbox("board.run", _validate_board_run),
+    "board.pause": _inbox("board.pause", _validate_board_pause),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
 }
