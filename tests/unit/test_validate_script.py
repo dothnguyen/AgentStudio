@@ -1,6 +1,8 @@
 """scripts/validate.py and the team.py commit gate."""
 import importlib.util
 import os
+import subprocess
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -64,10 +66,39 @@ class Modes(unittest.TestCase):
     def test_touched_mode_runs_modules_and_fails_when_one_fails(self):
         with mock.patch.object(validate, "run_step", return_value=(0, "ok")), \
                 mock.patch.object(validate.subprocess, "run", return_value=types.SimpleNamespace(
-                    stdout=" M tests/integration/test_s04_runner.py\n")), \
+                    stdout=" M tests/integration/test_s04_runner.py\n", returncode=1)), \
                 mock.patch.object(validate, "run_integration", return_value=False) as integ:
             self.assertEqual(validate.main(["--touched"]), 1)
         integ.assert_called_once_with(["tests.integration.test_s04_runner"])
+
+
+class BranchChanges(unittest.TestCase):
+    def test_committed_rounds_on_a_branch_still_count(self):
+        repo = tempfile.mkdtemp()
+        git = lambda *a: subprocess.run(["git", "-C", repo, *a], check=True, stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL)
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@example.invalid")
+        git("config", "user.name", "t")
+        os.makedirs(os.path.join(repo, "tests", "integration"))
+        for name in ("test_old.py", "test_new.py"):
+            with open(os.path.join(repo, "tests", "integration", name), "w") as f:
+                f.write("x = 1\n")
+        git("add", "-A")
+        git("commit", "-qm", "base")
+        git("checkout", "-qb", "ticket/T-001")
+        with open(os.path.join(repo, "tests", "integration", "test_new.py"), "a") as f:
+            f.write("x = 2\n")
+        git("commit", "-qam", "round 1")
+        with mock.patch.object(validate, "ROOT", repo):
+            changes = validate.branch_changes()
+            self.assertEqual(validate.integration_modules(changes), ["tests.integration.test_new"])
+
+    def test_no_base_branch_means_no_extra_changes(self):
+        repo = tempfile.mkdtemp()
+        subprocess.run(["git", "-C", repo, "init", "-q", "-b", "other"], check=True)
+        with mock.patch.object(validate, "ROOT", repo):
+            self.assertEqual(validate.branch_changes(), "")
 
 
 class CommitGate(unittest.TestCase):

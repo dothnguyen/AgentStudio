@@ -58,6 +58,8 @@ BOARD_COLUMNS = {
     "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
 }
 BOARD_OUTCOMES = {
+    "unpack": {"kind": "verdict", "pass": "unpacked", "fail": "blocked", "counter": None,
+               "limit": None, "commit": "planning", "globs": ("{out}/*",), "check": "manifest"},
     "triage": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
                "limit": None, "commit": "planning", "globs": ("bugs/BUG-{key}-*.md",), "single": True,
                "check": "bugfile"},

@@ -43,6 +43,29 @@ def check_workspace_path(workspace, rel, *, require_md=True):
     return os.path.relpath(target, root).replace(os.sep, "/")
 
 
+def check_out_dir(workspace, rel):
+    """Return a safe planning output directory relative to *workspace*."""
+    def invalid(reason):
+        raise AsError(STORY_PATH_INVALID, "Story path is invalid.", data={"path": rel, "reason": reason})
+    if not isinstance(rel, str) or not rel or "\0" in rel or os.path.isabs(rel) or "\\" in rel:
+        invalid("path must be a relative POSIX path")
+    value = rel.rstrip("/")
+    parts = value.split("/")
+    if ".." in parts:
+        invalid("path must not contain '..'")
+    if len(parts) < 2 or parts[0] != "phases":
+        invalid("path must be under phases/")
+    root = os.path.realpath(workspace)
+    phases = os.path.realpath(os.path.join(root, "phases"))
+    target = os.path.realpath(os.path.join(root, value))
+    try:
+        if os.path.commonpath((phases, target)) != phases:
+            invalid("path escapes phases/")
+    except ValueError:
+        invalid("path escapes phases/")
+    return os.path.relpath(target, root).replace(os.sep, "/")
+
+
 def parse_depends(text):
     for line in text.splitlines():
         if line.startswith("Depends on:"):

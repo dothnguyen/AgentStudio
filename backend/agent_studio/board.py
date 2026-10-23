@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from . import board_config, bugfile, crashpoints, gitws, schema, tasks, tickets, workflow, workflowdef, worktrees
+from . import board_config, bugfile, crashpoints, gitws, manifest, schema, tasks, tickets, workflow, workflowdef, worktrees
 from .protocol import (AsError, BOARD_CONFIG_INVALID, TICKET_DEPS_NOT_MERGED,
                        TICKET_ROLE_MISMATCH, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
 
@@ -128,30 +128,108 @@ def _globs(ticket, values):
     for value in values:
         if value == "{phase}/*" and not phase:
             continue
-        result.append(value.replace("{story}", ticket.get("story_path") or "").replace("{phase}", phase or "").replace("{key}", ticket["key"]))
+        result.append(value.replace("{story}", ticket.get("story_path") or "").replace("{phase}", phase or "")
+                      .replace("{out}", ticket.get("out_dir") or "").replace("{key}", ticket["key"]))
     return tuple(result)
 
 
-def commit_planning(tx, ticket, column, globs, config, run_id):
-    paths = worktrees.changed_paths(ticket["workspace"])
+def commit_planning(tx, ticket, column, globs, config, run_id, *, paths=None, commit=True):
+    """Validate planning paths and, unless preflighting, commit them to base."""
+    if paths is None:
+        paths = worktrees.changed_paths(ticket["workspace"])
     allowed, offending = worktrees.check_paths(paths, _globs(ticket, globs))
     if allowed and schema.BOARD_OUTCOMES.get(column, {}).get("single"):
         pattern = re.compile(r"bugs/BUG-" + re.escape(ticket["key"]) + r"-[a-z0-9-]{1,40}\.md\Z")
         if len(paths) > 1 or any(not pattern.fullmatch(path) for path in paths):
             allowed, offending = False, paths
-    changed = paths[0] if schema.BOARD_OUTCOMES.get(column, {}).get("single") and len(paths) == 1 else ticket["story_path"]
+    changed = paths[0] if schema.BOARD_OUTCOMES.get(column, {}).get("single") and len(paths) == 1 else (ticket.get("out_dir") or ticket.get("story_path"))
     message = f"{ticket['key']}: {column} {changed}"
     if not allowed:
         return {"ok": False, "commit": None, "paths": paths, "offending": offending}
-    commit = None
-    if paths:
-        commit = worktrees.commit_paths(ticket["workspace"], config["baseBranch"], paths, message)["commit"]
+    committed = None
+    if paths and commit:
+        committed = worktrees.commit_paths(ticket["workspace"], config["baseBranch"], paths, message)["commit"]
         crashpoints.hit("after_outcome_git_commit")
-    else:
+    elif not paths and commit:
         head = _head(ticket["workspace"])
         if head and _subject(ticket["workspace"]) == message and not _recorded(tx, ticket, head):
-            commit = head
-    return {"ok": True, "commit": commit, "paths": paths, "offending": []}
+            committed = head
+    return {"ok": True, "commit": committed, "paths": paths, "offending": []}
+
+
+def plan_children(children, stories):
+    """Classify manifest stories against one feature's current children, without I/O."""
+    by_path = {child.get("story_path"): child for child in children}
+    seen = set()
+    result = {"create": [], "update": [], "kept": [], "removed": []}
+    for story in stories:
+        child = by_path.get(story["path"])
+        if child is None:
+            result["create"].append(story)
+        elif child.get("status") in ("refine", "backlog"):
+            result["update"].append((child, story))
+        else:
+            result["kept"].append(child)
+        seen.add(story["path"])
+    result["removed"] = [child for child in children if child.get("story_path") not in seen]
+    return result
+
+
+def child_priority(story):
+    return story["priority"] * 10 + 50 if story["priority"] is not None else 100
+
+
+def _manifest_result(ticket):
+    path = (ticket.get("out_dir") or "") + "/tickets.json"
+    try:
+        with open(os.path.join(ticket["workspace"], path), encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return None, [f"{path}: missing"]
+    except OSError:
+        return None, [f"{path}: missing"]
+    except json.JSONDecodeError as exc:
+        return None, [f"{path}: not valid JSON: {exc}"]
+    try:
+        return manifest.validate(ticket["workspace"], ticket["out_dir"], data), []
+    except AsError as exc:
+        return None, [f"{item['path']}: {item['message']}" for item in exc.data.get("errors", [])]
+
+
+def _apply_children(tx, parent, data, config):
+    children = [dict(row) for row in tx.conn.execute("SELECT * FROM tickets WHERE parent_ticket_id = ? ORDER BY key", (parent["id"],))]
+    planned = plan_children(children, data["stories"])
+    created, unresolved = [], []
+    target = {}
+    for story in planned["create"]:
+        child = tickets.create(tx, parent["workspace"], "story", {
+            "title": story["title"], "story_path": story["path"], "priority": child_priority(story),
+            "parent_ticket_id": parent["id"]}, hold=config["requirePlanApproval"])
+        created.append(child["key"])
+        target[story["path"]] = child
+    for child, story in planned["update"]:
+        priority = child_priority(story)
+        if child["title"] != story["title"] or child["priority"] != priority:
+            tx.update("ticket", child["id"], {"title": story["title"], "priority": priority}, "ticket.child_updated", {})
+        target[story["path"]] = tickets.get(tx, parent["workspace"], child["key"])
+    for child in planned["kept"]:
+        target[child["story_path"]] = child
+    kept_paths = {child["story_path"] for child in planned["kept"]}
+    for story in data["stories"]:
+        if story["path"] in kept_paths:
+            continue
+        child = target[story["path"]]
+        with open(os.path.join(parent["workspace"], story["path"]), encoding="utf-8") as f:
+            parsed = tickets.resolve_depends(tx, parent["workspace"], tickets.parse_depends(f.read()))
+        unresolved.extend(parsed["unresolved"])
+        wanted = list(dict.fromkeys([target[path]["key"] for path in story["dependsOn"]] + parsed["resolved"]))
+        current = [row[0] for row in tx.conn.execute("SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id WHERE d.ticket_id = ?", (child["id"],))]
+        tickets.remove_deps(tx, child, [key for key in current if key not in wanted])
+        tickets.add_deps(tx, child, [key for key in wanted if key not in current])
+    _note(tx, parent, "ticket.children_created", {"keys": created, "updated": [child["key"] for child, _ in planned["update"]],
+                                                     "kept": [child["key"] for child in planned["kept"]],
+                                                     "removed": [child["key"] for child in planned["removed"]],
+                                                     "unresolved": list(dict.fromkeys(unresolved))})
 
 
 def _note(tx, ticket, name, payload):
@@ -196,8 +274,27 @@ def _apply(tx, ticket, run, ctx):
         latest = workflow._latest_result(tx, run["id"])
         findings = _bounded([workflow._validation_text(latest)]) if latest else []
     committed_path = None
+    checked_manifest = None
     if entry.get("commit") == "planning":
-        result = commit_planning(tx, ticket, column, entry["globs"], config, run["id"])
+        # A successful unpack is special: its manifest governs the child rows,
+        # so do not make its planning commit durable until that manifest has
+        # passed validation.  Still preflight paths first, since an out-of-tree
+        # diff must be reported without reading an untrusted manifest.
+        if entry.get("check") == "manifest" and outcome["to"] == "unpacked":
+            result = commit_planning(tx, ticket, column, entry["globs"], config, run["id"], commit=False)
+            if result["ok"]:
+                checked_manifest, errors = _manifest_result(ticket)
+                if errors:
+                    outcome = {"to": "blocked", "reason": "MANIFEST_INVALID", "counter": None, "findingsFrom": "verdict"}
+                    findings = _bounded(errors)
+                else:
+                    result = commit_planning(tx, ticket, column, entry["globs"], config, run["id"],
+                                             paths=result["paths"])
+                    if checked_manifest["questions"]:
+                        outcome = {"to": "blocked", "reason": "UNPACK_QUESTIONS", "counter": None, "findingsFrom": "verdict"}
+                        findings = _bounded(checked_manifest["questions"])
+        else:
+            result = commit_planning(tx, ticket, column, entry["globs"], config, run["id"])
         if not result["ok"]:
             outcome = {"to": "blocked", "reason": "PLANNING_DIFF_INVALID", "counter": None,
                        "findingsFrom": None, "offending": result["offending"]}
@@ -265,6 +362,17 @@ def _apply(tx, ticket, run, ctx):
         else:
             tx.update("ticket", ticket["id"], {"severity": checked["severity"], "priority": schema.BUG_SEVERITY_PRIORITY[checked["severity"]]}, "ticket.bug_triaged", {})
             ticket = tx.get("ticket", ticket["id"])
+    if entry.get("check") == "manifest" and outcome["to"] == "unpacked":
+        if checked_manifest is None:
+            checked_manifest, errors = _manifest_result(ticket)
+            if errors:
+                outcome = {"to": "blocked", "reason": "MANIFEST_INVALID", "counter": None, "findingsFrom": "verdict"}
+                findings = _bounded(errors)
+            elif checked_manifest["questions"]:
+                outcome = {"to": "blocked", "reason": "UNPACK_QUESTIONS", "counter": None, "findingsFrom": "verdict"}
+                findings = _bounded(checked_manifest["questions"])
+        if outcome["to"] == "unpacked":
+            _apply_children(tx, ticket, checked_manifest, config)
     return _write_outcome(tx, ticket, run, column, outcome, findings)
 
 
@@ -302,7 +410,7 @@ def _write_outcome(tx, ticket, run, column, outcome, findings):
     if outcome["counter"]:
         values.update(outcome["counter"])
     if outcome["findingsFrom"]:
-        values["questions_json" if outcome["reason"] in ("VERDICT_FAIL:" + column, "BUG_FILE_INVALID") else "findings_json"] = findings
+        values["questions_json" if outcome["reason"] in ("VERDICT_FAIL:" + column, "BUG_FILE_INVALID", "MANIFEST_INVALID", "UNPACK_QUESTIONS") else "findings_json"] = findings
     if outcome["to"] == "release" and ticket["status"] == "blocked":
         ticket = tx.get("ticket", ticket["id"])
         tx.update("ticket", ticket["id"], values, "ticket.outcome_marked", {})

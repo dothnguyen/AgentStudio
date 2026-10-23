@@ -49,7 +49,8 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
-  ticket create --workspace PATH (--story PATH | --kind bug --text TEXT [--attach PATH ...]) [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
+  ticket create --workspace PATH (--story PATH | --kind bug --text TEXT [--attach PATH ...] | --kind feature --brief PATH --out DIR) [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
+  ticket approve --workspace PATH KEY [--key K]
   ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
@@ -105,6 +106,15 @@ def _task_text(ns) -> str:
 
 
 def _human_request(argv) -> dict:
+    # argparse's subparser positional handling rejects a trailing ticket key
+    # after options; support the documented `ticket approve --workspace PATH KEY` form.
+    if len(argv) >= 3 and argv[:2] == ["ticket", "approve"]:
+        value_options = {"--workspace", "--key", "--timeout-ms"}
+        for index, value in enumerate(argv[2:], 2):
+            if value.startswith("-") or (index > 2 and argv[index - 1] in value_options):
+                continue
+            argv = [argv[0], argv[1], value, *argv[2:index], *argv[index + 1:]]
+            break
     p = _Parser(prog="agent-studio", add_help=False)
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("health", add_help=False)
@@ -156,10 +166,12 @@ def _human_request(argv) -> dict:
     wf_p.add_argument("--key")
     wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     ticket_p = sub.add_parser("ticket", add_help=False)
-    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "block", "unblock", "cancel", "depend"])
+    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "block", "unblock", "cancel", "depend", "approve"])
     ticket_p.add_argument("ticket_key", nargs="?")
     ticket_p.add_argument("--workspace", required=True)
     ticket_p.add_argument("--story")
+    ticket_p.add_argument("--brief")
+    ticket_p.add_argument("--out")
     ticket_p.add_argument("--text")
     ticket_p.add_argument("--attach", action="append", default=[])
     ticket_p.add_argument("--title")
@@ -306,6 +318,10 @@ def _human_request(argv) -> dict:
                 args.update(kind="bug", text=ns.text)
                 if ns.attach:
                     args["attachments"] = ns.attach
+            elif ns.kind == "feature":
+                if not ns.brief or not ns.out:
+                    raise AsError(BAD_REQUEST, "ticket create --kind feature needs --brief PATH and --out DIR")
+                args.update(kind="feature", briefPath=ns.brief, outDir=ns.out)
             else:
                 if not ns.story:
                     raise AsError(BAD_REQUEST, "ticket create needs --story PATH")

@@ -108,15 +108,15 @@ verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/`.
 
 The story's Status/Evidence update made by the lead in `final` is included in the `team commit`.
 
-## Two test tiers
+## Test tiers
 
-- **In the loop (fast):** the workflow's `tests` stage runs only the unit suite (`scripts/validate.py --unit`, seconds), so
-  dev / QA / repair rounds stay quick.
-- **At commit (slow):** `team commit` runs `scripts/validate.py --touched`: the unit suite, then the integration modules
-  your change added or modified, in parallel (`VALIDATE_WORKERS`, default 4). It refuses to commit when they fail; use
-  `team commit STORY --skip-integration` to commit anyway.
+- **In the loop:** the workflow's `tests` stage runs `scripts/validate.py --touched`: the unit suite, then only the
+  integration modules this change added or modified (including earlier committed rounds on a ticket branch), in
+  parallel (`VALIDATE_WORKERS`, default 4). It runs outside the agent sandbox, so agents get integration results in
+  VALIDATION even though they cannot run tmux themselves.
+- **At commit:** `team commit` runs the same `--touched` check as a final gate; `--skip-integration` commits anyway.
 - **Occasionally:** `python3 scripts/validate.py --all` runs every integration module (end of an epic, before a release).
-Integration tests need tmux and sockets, which sandboxed agents (Codex) cannot use, so agents do not run them.
+- **Fast loop only:** point `validation.argv` in `.agent-studio/workflow.json` at `--unit` to skip integration in the loop.
 
 ## Retry a stuck stage
 

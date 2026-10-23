@@ -1,39 +1,60 @@
 # P03-S10 — Unpack outcome, child tickets, re-unpack and the plan gate
 
-Status: To Do
+Status: Done (2026-10-23)
 Depends on: P03-S06, P03-S09
 Architecture: [P03 design contract](../README.md#design-contract), §B (feature path), §C (unpack rows), §F; brief §3b
 
 ## Goal
 
-A feature ticket (`ticket add --brief`) is unpacked by the ProductOwner. The coordinator validates the manifest and the planning diff, commits the planning files to base, and creates one child story ticket per manifest entry, with its dependencies, in `refine` (or `backlog` behind the optional plan gate). Questions block the parent instead. Unpacking again updates children by story path and never deletes a child that has already left `refine`.
+A feature ticket (`ticket.create kind: feature`) is unpacked by the ProductOwner. The coordinator validates the manifest and the planning diff, commits the planning files to base, and creates one child story ticket per manifest entry, with its dependencies, in `refine` (or `backlog` behind the optional plan gate). Questions block the parent instead. Unpacking again updates children by story path and never deletes a child that has already left `refine`. The parent's `unpacked → done` move is already built (S07, `_parent_done`); `team.py ticket add --brief` is S15.
+
+What exists today (read before starting): `dispatch._validate_ticket_create` (refuses `feature`), `tickets.create` (enters `ready_unpack` for `feature`, `backlog` with `hold`), `tickets.check_workspace_path`, `tickets.parse_depends` / `resolve_depends` / `story_title` / `add_deps` / `remove_deps`, `board._apply` / `commit_planning` / `_globs` / `_write_outcome` / `_task` (already writes `Brief:` / `Out:`), `schema.BOARD_OUTCOMES`, `manifest.validate` (S09), and `board_config.current`.
 
 ## Implement in this order
 
-1. `ticket.create` with `kind: feature` (S02 refuses it with `BAD_REQUEST` until now): `briefPath` + `outDir` → `ready_unpack`. `briefPath` passes `tickets.check_workspace_path` from S02 (`STORY_PATH_INVALID`); `outDir` is relative and stays inside `phases/` (`STORY_PATH_INVALID` otherwise; it need not exist yet).
-2. Outcome hook (S06) for unpack:
-   - read `<out>/tickets.json`;
-   - check the planning paths (§F unpack glob);
-   - validate the manifest (S09).
-   Any failure → `blocked` with the errors, nothing created. Non-empty `questions` → planning commit (if the diff is valid), `blocked` with the questions, no children.
-3. Otherwise: planning commit, then in one transaction create the children (`kind: story`, `parent_ticket_id`, title, priority per §G, deps from `dependsOn` mapped to the new keys plus any `Depends on:` matches as in S02, shown in `ticket.children_created`). The parent → `unpacked`.
-4. Re-unpack (`ticket.move <parent> ready_unpack` by the operator from `unpacked` or `blocked`): children matched by `story_path`:
-   - matched and still `refine` / `backlog` → title, priority and deps updated;
-   - matched and further along → left unchanged and listed in the event;
-   - new paths → created;
-   - children no longer in the manifest → left unchanged and reported (never deleted or cancelled automatically).
-5. `requirePlanApproval: true` → children are created in `backlog`, and `ticket.approve <parent>` moves them all to `refine` (`TICKET_TRANSITION_INVALID` if the parent is not `unpacked`).
-6. CLI `agent-studio ticket create --brief PATH --out DIR`, `ticket approve KEY`. In `team.py`: `ticket add --brief PATH --out DIR`.
+1. **`ticket.create` with `kind: feature`** (`dispatch._validate_ticket_create` and the create handler). `kind` is `story` (default), `bug` or `feature`. For `feature`:
+   - `briefPath` and `outDir` are required strings; `storyPath`, `text`, `attachments`, `dependsOn` and `noDeps` are refused (`BAD_REQUEST`). `title?` (≤ 200 bytes) and `priority?` work as for stories.
+   - `briefPath` passes `tickets.check_workspace_path` (`STORY_PATH_INVALID`).
+   - `outDir`: relative, no `..` component, no backslash, a trailing `/` is stripped, and it has at least two components with the first `phases` (e.g. `phases/phase-04`); `realpath(workspace/outDir)` stays inside `realpath(workspace/phases)`. It need not exist yet. Any failure → `STORY_PATH_INVALID` with `{path, reason}`. The normalised POSIX path is stored in `out_dir`.
+   - default title: `tickets.story_title(<brief text>, <brief file stem>)`. Entry status `ready_unpack`. The receipt has `dependsOn: []` and `parsed {ids: [], resolved: [], unresolved: []}`.
+   - The existing assertions that `kind: "feature"` with `storyPath` is `BAD_REQUEST` (`tests/unit/test_p03_s02_commands.py`, `tests/unit/test_p03_s08_create.py`) still hold under these rules; keep them green.
+2. **Unpack outcome entry**: `schema.BOARD_OUTCOMES["unpack"] = {"kind": "verdict", "pass": "unpacked", "fail": "blocked", "counter": None, "limit": None, "commit": "planning", "globs": ("{out}/*",), "check": "manifest"}`. `board._globs` substitutes `{out}` with the ticket's `out_dir`. In `commit_planning`, the path in the commit message is the ticket's `out_dir` when it has one, so the subject is `<key>: unpack <out_dir>` (§F).
+3. **Applying the unpack outcome** in `board._apply`, in this order (all after the S06 paused / cancelled handling, which is unchanged):
+   1. Planning diff (`commit_planning`, whatever the verdict, as for refine and triage). A path outside `out_dir` → `blocked` / `PLANNING_DIFF_INVALID` with the offending paths, nothing committed, no children, the manifest is not read. A valid diff is committed (one commit, even when a later step blocks); an empty diff commits nothing.
+   2. Verdict `fail` → `blocked` / `VERDICT_FAIL:unpack` with the findings as questions (the existing S06 path); missing or malformed verdict → `RUN_FAILED:unpack` (existing). The manifest is not read.
+   3. Verdict `pass`: after the planning diff path check but before committing it, read `<workspace>/<out_dir>/tickets.json`. Missing or unreadable → error `{path: "<out_dir>/tickets.json", message: "missing"}`; not valid JSON → `{path: same, message: "not valid JSON: <detail>"}`; else `manifest.validate(workspace, out_dir, data)`. Any error → `blocked` / `MANIFEST_INVALID`, `questions_json` = `["<path>: <message>", …]` (bounded like findings), no planning commit and no children.
+   4. Valid manifest with non-empty `questions` → `blocked` / `UNPACK_QUESTIONS`, `questions_json` = the questions (bounded), no children.
+   5. Otherwise → children (step 4), then the parent → `unpacked` (or `blocked` → `unpacked` for a late outcome, S06), all in the outcome's one transaction.
+   - Every block above stores `return_status = ready_unpack` (the existing `_queue` rule), so `ticket.unblock` re-queues the unpack. Extend `_write_outcome` so `MANIFEST_INVALID` and `UNPACK_QUESTIONS` write `questions_json` (today only `VERDICT_FAIL:<column>` and `BUG_FILE_INVALID` do).
+4. **Children** (one transaction with the outcome). Put the matching in a pure helper `board.plan_children(children, stories) -> {"create": [story], "update": [(child, story)], "kept": [child], "removed": [child]}`, where `children` are the parent's existing child rows (`parent_ticket_id` = parent) and `stories` the validated manifest entries; it is unit-tested without git or a database. Matching is by `story_path` among this parent's children only.
+   - For each story the target values are: `title` from the manifest; `priority` = manifest priority × 10 + 50, or 100 when absent (§G); deps = the keys of the stories in `dependsOn` plus `tickets.resolve_depends` of `tickets.parse_depends(<story file>)` (resolved **after** every new child of this run is inserted, so siblings resolve; unresolved IDs are only reported).
+   - `create`: a story with no matching child → `tickets.create(tx, ws, "story", {title, story_path, priority, parent_ticket_id}, hold=config["requirePlanApproval"])`.
+   - `update`: a matched child in `refine` or `backlog` → set `title` and `priority`, and replace its dependency set with the target deps (`add_deps` / `remove_deps`). Nothing is written when every value already matches.
+   - `kept`: a matched child in any other status (including `blocked` and `cancelled`) → unchanged.
+   - `removed`: a child whose `story_path` is not in the manifest → unchanged (never deleted or cancelled).
+   - A dependency cycle raises `TICKET_DEPENDENCY_CYCLE`; the transaction rolls back and the existing `_outcome_error` path blocks the parent with that code.
+   - One event on the parent: `ticket.children_created {keys: [created], updated: [keys], kept: [keys], removed: [keys], unresolved: [ids]}` (§J), written also when every list is empty.
+5. **Re-unpack** needs no new command: the operator moves an `unpacked` parent with `ticket.move <key> ready_unpack`, or runs `ticket.unblock <key>` on a `blocked` parent (an operator move out of `blocked` is not in the §B table; the stored `return_status` is `ready_unpack`). The next unpack run is applied by steps 3–4.
+6. **Plan gate** `ticket.approve` (`workspace`, `key`; mutating, idempotency key, dispatch validator + `COMMANDS` + coordinator handler). The ticket must be a `feature` in `unpacked`, else `TICKET_TRANSITION_INVALID`. It moves every child of it in `backlog` to `refine` (`tickets.move(..., "coordinator", "plan_approved")`), writes `ticket.plan_approved {keys}` on the parent, and returns `{ticket, approved: [keys]}` (an empty list when nothing waits).
+7. **CLI** (`agent-studio`): `ticket create --workspace PATH --kind feature --brief PATH --out DIR [--title T] [--priority N] [--key K]` and `ticket approve --workspace PATH KEY [--key K]`, plus the usage text. `serve` returns the same JSON.
 
 ## Done when
 
-- [ ] Fake PO writes 3 stories, where story 3 depends on story 1: the parent is `unpacked`, there are 3 children in `refine` with one dependency edge, and one planning commit on `main` contains exactly the out-folder files. Test: `tests/integration/test_p03_s10_unpack.py`.
-- [ ] `questions` non-empty → the parent is `blocked` with them and there are no children. After `ticket.move ready_unpack` and a second fake run with no questions → children created.
-- [ ] Re-unpack with one changed title, one child already `in_dev`, one new story and one removed story → the title updated, the `in_dev` child unchanged, one new child, the removed one reported and kept. Running it twice in a row with the same manifest changes nothing (idempotent).
-- [ ] The PO writes a file outside `out_dir` → parent `blocked` / `PLANNING_DIFF_INVALID`, no commit, no children. An invalid manifest → `blocked` / `MANIFEST_INVALID`.
-- [ ] With `requirePlanApproval` the children are in `backlog` until `ticket.approve`.
-- [ ] All existing tests stay green.
+- [x] Feature create: a valid `briefPath` + `outDir` creates a `feature` in `ready_unpack` with `brief_path`, normalised `out_dir` (trailing `/` stripped) and the brief's `# ` heading as title. A missing brief, an `outDir` that is absolute, has `..`, is `phases` alone or is outside `phases/` → `STORY_PATH_INVALID`; a missing `outDir`, or `storyPath` / `text` / `dependsOn` / `noDeps` with `kind: feature` → `BAD_REQUEST`. Test: `tests/unit/test_p03_s10_create.py`.
+- [x] `plan_children`: new path → `create`; matched `refine` / `backlog` child → `update`; matched `in_dev`, `blocked` or `cancelled` child → `kept`; child missing from the manifest → `removed`; the same children and manifest twice give the same result. Priority mapping 1 → 60, 5 → 100, absent → 100. Test: `tests/unit/test_p03_s10_children.py`.
+- [x] Outcome table and blocking (with `worktrees.changed_paths` / `commit_paths` mocked, as in `tests/unit/test_p03_s08_triage.py`): `BOARD_OUTCOMES["unpack"]` is the entry of step 2; `_globs` expands `{out}`; a path outside `out_dir` is offending; the unpack commit subject is `<key>: unpack <out_dir>`. Test: `tests/unit/test_p03_s10_outcome.py`.
+- [x] Fake PO writes 3 stories, where story 3 depends on story 1 (`ticket.start` by hand): the parent is `unpacked`, there are 3 children in `refine` with `parent_ticket_id`, manifest titles and priorities, and one dependency edge (story 3 → story 1); one planning commit on `main` contains exactly the out-folder files with subject `<key>: unpack <out_dir>`; `ticket.children_created` lists the 3 keys. Test: `tests/integration/test_p03_s10_unpack.py`.
+- [x] `questions` non-empty → the parent is `blocked` / `UNPACK_QUESTIONS` with them in `questions_json`, `return_status = ready_unpack`, no children, and the planning files committed. After `ticket.unblock` and a second fake run with no questions → children created and the parent `unpacked`. Verdict `fail` → `blocked` / `VERDICT_FAIL:unpack`, no children. Test: `tests/integration/test_p03_s10_unpack.py`.
+- [x] Re-unpack (`ticket.move <parent> ready_unpack` from `unpacked`) with one changed title, one child already `in_dev`, one new story and one removed story → the title updated, the `in_dev` child unchanged, one new child, the removed child kept with its status and reported in `removed`. Running it again with the same manifest changes no child row or dependency, creates no child and makes no commit. Test: `tests/integration/test_p03_s10_unpack.py`.
+- [x] The PO writes a file outside `out_dir` → parent `blocked` / `PLANNING_DIFF_INVALID`, no commit, no children. A missing `tickets.json`, invalid JSON, and a manifest naming a missing story file → `blocked` / `MANIFEST_INVALID` with the errors in `questions_json`, no children. Test: `tests/integration/test_p03_s10_unpack.py`.
+- [x] With `requirePlanApproval: true` the children are in `backlog`; `ticket.approve` moves them all to `refine` and returns their keys; `ticket.approve` on a parent that is not `unpacked`, or on a story ticket, → `TICKET_TRANSITION_INVALID`. Test: `tests/integration/test_p03_s10_unpack.py` and the handler cases in `tests/unit/test_p03_s10_create.py`.
+- [x] CLI: `agent-studio ticket create --kind feature --brief … --out …` and `ticket approve` return the same JSON as the commands. Test: `tests/integration/test_p03_s10_unpack.py`.
+- [x] All existing tests stay green (`python3 scripts/validate.py --unit`, and the touched integration modules at commit).
 
 ## Evidence
 
-(filled in when the story is done)
+- `python3 scripts/validate.py --touched`: PASS. Unit suite: 432 tests OK (3 skipped). Integration `tests.integration.test_p03_s10_unpack`: 6 tests OK (100 s).
+- Added: `tests/unit/test_p03_s10_create.py`, `tests/unit/test_p03_s10_children.py`, `tests/unit/test_p03_s10_outcome.py`, `tests/integration/test_p03_s10_unpack.py`.
+- Changed: `backend/agent_studio/board.py` (`plan_children`, `child_priority`, `_manifest_result`, `_apply_children`, `{out}` glob, unpack commit subject, a check-only `commit_planning` so an invalid manifest commits nothing), `schema.py` (`BOARD_OUTCOMES["unpack"]`), `tickets.py` (`check_out_dir`), `dispatch.py` (feature create validator, `ticket.approve`), `coordinator.py` (feature create, `_handle_ticket_approve`), `cli.py` (`--kind feature --brief --out`, `ticket approve`), `phases/phase-03/README.md` (§C unpack rows, §F commit path, §I feature create / approve, §J events).
+- Also in this change (workflow tooling, not story scope): `scripts/validate.py` `--touched` now also counts integration modules changed on the branch since its merge base (`tests/unit/test_validate_script.py`); `.agent-studio/workflow.json` runs `--touched` in the loop; `.agent-studio/README.md` and the develop / QA prompts were updated to match.
+- QA: the two blockers it raised (approve on a feature that is not `unpacked`; unpack with the plan gate off gives `refine` children) are covered by `test_approve_rejects_feature_that_is_not_unpacked` and `test_unpack_with_plan_gate_disabled_creates_children_in_refine`. The integration test for questions does not check that the planning files are committed; `board._apply` commits them before it checks the questions.

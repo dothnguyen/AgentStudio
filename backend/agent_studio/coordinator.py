@@ -17,7 +17,7 @@ from typing import Optional
 from . import PROTOCOL, VERSION, board, board_config, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, \
     resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
 from .store import Store
-from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
+from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, TICKET_TRANSITION_INVALID, UNKNOWN_COMMAND
 
 LOCK_FILE = "coordinator.lock"
 PID_FILE = "coordinator.json"
@@ -173,6 +173,15 @@ def _handle_ticket_create(args, tx, ctx):
         ticket = tickets.get(tx, args["workspace"], ticket["key"])
         return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket),
                 "parsed": {"ids": [], "resolved": [], "unresolved": []}, "warnings": []}
+    if args.get("kind") == "feature":
+        with open(os.path.join(args["workspace"], args["briefPath"]), "r", encoding="utf-8") as f:
+            text = f.read()
+        stem = os.path.splitext(os.path.basename(args["briefPath"]))[0]
+        ticket = tickets.create(tx, args["workspace"], "feature", {
+            "title": args.get("title", tickets.story_title(text, stem)), "brief_path": args["briefPath"],
+            "out_dir": args["outDir"], "priority": args["priority"]})
+        return {"ticket": ticket, "dependsOn": [],
+                "parsed": {"ids": [], "resolved": [], "unresolved": []}, "warnings": []}
     story_path = tickets.check_workspace_path(args["workspace"], args["storyPath"])
     with open(os.path.join(args["workspace"], story_path), "r", encoding="utf-8") as f:
         text = f.read()
@@ -208,6 +217,19 @@ def _handle_ticket_block(args, tx, ctx):
 
 def _handle_ticket_unblock(args, tx, ctx):
     return {"ticket": tickets.unblock(tx, tickets.get(tx, args["workspace"], args["key"]), "operator")}
+
+
+def _handle_ticket_approve(args, tx, ctx):
+    parent = tickets.get(tx, args["workspace"], args["key"])
+    if parent["kind"] != "feature" or parent["status"] != "unpacked":
+        raise AsError(TICKET_TRANSITION_INVALID, "Ticket transition is not allowed.",
+                      data={"key": parent["key"], "from": parent["status"], "to": "refine", "actor": "coordinator"})
+    approved = []
+    for row in tx.conn.execute("SELECT * FROM tickets WHERE parent_ticket_id = ? AND status = 'backlog' ORDER BY key", (parent["id"],)):
+        child = tickets.move(tx, dict(row), "refine", "coordinator", "plan_approved")
+        approved.append(child["key"])
+    parent = board._note(tx, tickets.get(tx, args["workspace"], args["key"]), "ticket.plan_approved", {"keys": approved})
+    return {"ticket": parent, "approved": approved}
 
 
 def _handle_ticket_cancel(args, tx, ctx):
@@ -258,6 +280,7 @@ HANDLERS = {
     "ticket.move": _handle_ticket_move,
     "ticket.block": _handle_ticket_block,
     "ticket.unblock": _handle_ticket_unblock,
+    "ticket.approve": _handle_ticket_approve,
     "ticket.cancel": _handle_ticket_cancel,
     "ticket.depend": _handle_ticket_depend,
     "ticket.start": _handle_ticket_start,

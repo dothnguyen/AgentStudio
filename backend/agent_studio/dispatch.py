@@ -162,8 +162,22 @@ def _ticket_keys(args, name):
 
 def _validate_ticket_create(args):
     kind = args.get("kind", "story")
-    if kind not in ("story", "bug"):
-        raise AsError(BAD_REQUEST, "kind must be story or bug.")
+    if kind not in ("story", "bug", "feature"):
+        raise AsError(BAD_REQUEST, "kind must be story, bug or feature.")
+    if kind == "feature":
+        if any(name in args for name in ("storyPath", "text", "attachments", "dependsOn", "noDeps")):
+            raise AsError(BAD_REQUEST, "storyPath, text, attachments, dependsOn and noDeps are not valid for a feature ticket.")
+        workspace = _ticket_workspace(args)
+        brief = tickets.check_workspace_path(workspace, req_text(args, "briefPath", 4096, allow_empty=False))
+        out_dir = tickets.check_out_dir(workspace, req_text(args, "outDir", 4096, allow_empty=False))
+        out = {"workspace": workspace, "kind": kind, "briefPath": brief, "outDir": out_dir,
+               "priority": req_int(args, "priority", 0, 1000, 100)}
+        title = req_text(args, "title", 200, required=False)
+        if title is not None and len(title.encode("utf-8")) > 200:
+            raise AsError(BAD_REQUEST, "Argument 'title' must be no longer than 200 bytes.")
+        if title is not None:
+            out["title"] = title
+        return out
     depends_supplied = "dependsOn" in args
     depends = _ticket_keys(args, "dependsOn")
     no_deps = req_bool(args, "noDeps")
@@ -483,6 +497,7 @@ COMMANDS = {
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
     "ticket.block": _inbox("ticket.block", _validate_ticket_block),
     "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key),
+    "ticket.approve": _inbox("ticket.approve", _validate_ticket_key),
     "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.start": _inbox("ticket.start", _validate_ticket_start),

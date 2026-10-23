@@ -10,6 +10,7 @@ VALIDATE_WORKERS sets the parallelism (default 4); each integration module uses 
 Exit 0 only when everything that ran passed. Passing steps print a summary line, failing steps print their output."""
 import concurrent.futures
 import glob
+import json
 import os
 import re
 import signal
@@ -35,6 +36,26 @@ def integration_modules(porcelain: str) -> list:
 def all_integration_modules() -> list:
     return sorted(os.path.relpath(p, ROOT)[:-3].replace(os.sep, ".")
                   for p in glob.glob(os.path.join(ROOT, "tests", "integration", "test_*.py")))
+
+
+def branch_changes() -> str:
+    """Porcelain-style lines for files changed on this branch since it left the base branch, so a ticket
+    worktree whose earlier rounds are already committed still counts those rounds' integration tests."""
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              text=True)
+    names = []
+    try:
+        with open(os.path.join(ROOT, ".agent-studio", "board.json"), encoding="utf-8") as f:
+            names.append(json.load(f).get("baseBranch"))
+    except (OSError, ValueError, AttributeError):
+        pass
+    for base in [n for n in names if isinstance(n, str)] + ["main", "master"]:
+        merge_base = git("merge-base", "HEAD", base)
+        if merge_base.returncode == 0 and merge_base.stdout.strip():
+            diff = git("diff", "--name-only", "--diff-filter=AM", merge_base.stdout.strip(), "HEAD").stdout
+            return "".join(" M " + line + "\n" for line in diff.splitlines())
+    return ""
 
 
 def parse_mode(argv: list) -> str:
@@ -91,7 +112,7 @@ def main(argv: list) -> int:
     else:
         status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT,
                                 stdout=subprocess.PIPE, text=True).stdout
-        mods = integration_modules(status)
+        mods = integration_modules(status + branch_changes())
     if mods:
         ok = run_integration(mods) and ok
     else:
