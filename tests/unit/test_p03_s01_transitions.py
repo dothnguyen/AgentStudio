@@ -21,6 +21,17 @@ class TicketTransitions(unittest.TestCase):
                 tickets.unblock(tx, ticket, "operator")
             self.assertEqual(cm.exception.code, "TICKET_TRANSITION_INVALID")
 
+    def test_block_unblock_restores_ready_test_and_clears_block_fields(self):
+        with self.store.transaction() as tx:
+            ticket = make(tx)
+            for status in ("refining", "ready_dev", "in_dev", "ready_test"):
+                ticket = tickets.move(tx, ticket, status, "coordinator")
+            ticket = tickets.block(tx, ticket, "operator", "wait")
+            self.assertEqual(ticket["return_status"], "ready_test")
+            ticket = tickets.unblock(tx, ticket, "operator")
+            self.assertEqual((ticket["status"], ticket["return_status"], ticket["blocked_reason"]),
+                             ("ready_test", None, None))
+
     def test_working_block_restores_first_queue_and_late_outcome_clears(self):
         with self.store.transaction() as tx:
             ticket = make(tx)

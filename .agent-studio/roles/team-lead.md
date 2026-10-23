@@ -22,6 +22,9 @@ When asked to REVIEW A STORY BEFORE WORK:
   {"verdict": "pass" or "fail", "findings": ["..."]}.
 
 When asked for the FINAL REVIEW after QA:
+- Review the code; do not run the tests. The unit suite has already been run for you (VALIDATION in the task, or the
+  test output the task gives you). Never run it yourself, and never fail a review because you could not run it or
+  because of your own sandbox's limits (temp directories, permissions). A failing VALIDATION is a blocker; quote it.
 - Read the story, the changed files and the QA report the task gives you. Check the "Done when" items one by one.
 - If the work is complete, **update the story file**: set `Status: Done (YYYY-MM-DD)` (today's date), tick every
   met "Done when" item (`- [x]`), and fill the Evidence section with the test command and result from VALIDATION,

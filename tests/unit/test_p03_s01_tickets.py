@@ -76,6 +76,24 @@ class Tickets(unittest.TestCase):
             tickets.remove_deps(tx, a, [b["key"], b["key"]])
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM ticket_deps").fetchone()[0], 0)
 
+    def test_dependencies_reject_key_owned_by_another_workspace_without_writing(self):
+        with self.store.transaction() as tx:
+            other = make(tx, workspace="/two")
+            ticket = make(tx, workspace="/one")
+            # Arrange a /one dependent without a local T-001; its T-001 is only in /two.
+            tx.conn.execute("UPDATE tickets SET key = ? WHERE id = ?", ("T-002", ticket["id"]))
+            ticket = tickets.get(tx, "/one", "T-002")
+            before = (self.conn.execute("SELECT COUNT(*) FROM ticket_deps").fetchone()[0],
+                      self.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+                      self.conn.execute("SELECT COUNT(*) FROM ticket_events").fetchone()[0])
+            with self.assertRaises(AsError) as cm:
+                tickets.add_deps(tx, ticket, [other["key"]])
+            self.assertEqual(cm.exception.code, "TICKET_NOT_FOUND")
+            after = (self.conn.execute("SELECT COUNT(*) FROM ticket_deps").fetchone()[0],
+                     self.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0],
+                     self.conn.execute("SELECT COUNT(*) FROM ticket_events").fetchone()[0])
+            self.assertEqual(after, before)
+
     def test_events_are_paired_and_dependency_noop_is_silent(self):
         with self.store.transaction() as tx:
             a, b = make(tx), make(tx)
@@ -96,6 +114,8 @@ class Tickets(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual((events[0]["name"], events[0]["entity"], events[0]["entityId"]),
                          ("ticket.depends", "ticket", a["id"]))
+        self.assertEqual(events[0]["data"]["ticketId"], a["id"])
+        self.assertEqual(events[0]["data"]["key"], a["key"])
         row = self.conn.execute("SELECT event_seq, name FROM ticket_events ORDER BY id DESC LIMIT 1").fetchone()
         self.assertEqual((row["event_seq"], row["name"]), (events[0]["seq"], "ticket.depends"))
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM ticket_events").fetchone()[0],
@@ -122,3 +142,7 @@ class Tickets(unittest.TestCase):
         self.assertEqual([(row["event_seq"], row["name"], row["ticket_id"]) for row in pairs],
                          [(event["seq"], event["name"], event["entityId"]) for event in events])
         self.assertTrue(all(event["entity"] == "ticket" for event in events))
+        affected = [a, b, a, a, a, a, b, b]
+        for event, ticket in zip(events, affected):
+            self.assertEqual(event["data"]["ticketId"], ticket["id"])
+            self.assertEqual(event["data"]["key"], ticket["key"])

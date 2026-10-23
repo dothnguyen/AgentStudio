@@ -1,4 +1,4 @@
-FINAL REVIEW after QA passed. Read the story named in TASK and judge whether the work is complete against its "Done when" items, using DIFF. VALIDATION is the unit suite, run for you: do not rerun it, and fail the review if it did not pass.
+FINAL REVIEW after QA passed. Read the story named in TASK and judge whether the work is complete against its "Done when" items, using DIFF. Review the code only: do not run the tests. VALIDATION is the unit suite, already run for you; fail the review only if it did not pass.
 
 Do NOT fail the review because the story is not marked Done: marking it is your job, below. Verdict "fail" only for real problems with the work; put the blockers in findings. You must not edit code or tests, only the story file.
 
