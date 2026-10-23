@@ -21,7 +21,7 @@ A ticket can be pushed into its next column by hand. `ticket.start {key, agentId
 4. `board.start_column(tx, ticket, agent, config, ctx)`:
    - checks that the ticket is in a pickable column for the agent's role (§C) and, for develop, that `deps_merged` holds;
    - claims it (the §G transaction);
-   - on the first develop, calls `worktrees.create` and records branch, path and base commit;
+   - on the first develop, calls `worktrees.create` and records branch, path and base commit with `tickets.record_worktree` (S04);
    - composes `{{task}}` and the seed;
    - calls `workflow.start` with `workspace`, `bindings {role: agentId}`, `definition` and `seed`, then records `run_id` and writes `ticket.run_started`.
    A start error (for example `WORKSPACE_DIRTY`) rolls the claim back and is returned.

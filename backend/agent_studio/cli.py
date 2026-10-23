@@ -33,6 +33,7 @@ USAGE = """agent-studio <command>
   team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
   team stop --team ID                      stop only that team's verified tmux session
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
+              [--workspace PATH]
               [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
   task show --task ID                      a task, its assignments and its event history
   assignment cancel --assignment ID        cancel queued or running work (exactly one outcome wins)
@@ -41,9 +42,9 @@ USAGE = """agent-studio <command>
   workflow list --team ID                  workflow definitions available to the team's workspace
   workflow validate --team ID --definition NAME [--bind ROLE=AGENT ...]
                                            check a definition and its role bindings; writes nothing
-  workflow start --team ID --definition NAME [--bind ROLE=AGENT ...] (--text TEXT | --text-file PATH|-) [--wait]
+  workflow start --team ID --definition NAME [--bind ROLE=AGENT ...] (--text TEXT | --text-file PATH|-) [--workspace PATH] [--wait]
                                            run a definition (built-in: developer-reviewer)
-  workflow start --team ID --developer ID --reviewer ID (--text TEXT | --text-file PATH|-) [--wait]
+  workflow start --team ID --developer ID --reviewer ID (--text TEXT | --text-file PATH|-) [--workspace PATH] [--wait]
                                            the P00 form: same as --definition developer-reviewer
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
@@ -130,6 +131,7 @@ def _human_request(argv) -> dict:
     tk.add_argument("--agent")
     tk.add_argument("--task")
     tk.add_argument("--policy")
+    tk.add_argument("--workspace")
     tk.add_argument("--text")
     tk.add_argument("--text-file")
     tk.add_argument("--deadline-ms", type=int)
@@ -142,6 +144,7 @@ def _human_request(argv) -> dict:
     wf_p = sub.add_parser("workflow", add_help=False)
     wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate", "retry"])
     wf_p.add_argument("--team")
+    wf_p.add_argument("--workspace")
     wf_p.add_argument("--developer")
     wf_p.add_argument("--reviewer")
     wf_p.add_argument("--workflow")
@@ -240,6 +243,8 @@ def _human_request(argv) -> dict:
                                                     "text": text})
             if ns.deadline_ms:
                 req["args"]["deadlineMs"] = ns.deadline_ms
+            if ns.workspace:
+                req["args"]["workspace"] = ns.workspace
             if ns.scenario:
                 req["args"]["debugProviderOptions"] = {"scenario": ns.scenario, "durationMs": ns.duration_ms,
                                                        "progressLines": ns.lines}
@@ -266,6 +271,8 @@ def _human_request(argv) -> dict:
             args = {"teamId": ns.team, "definition": ns.definition, "text": _task_text(ns)}
             if ns.bind:
                 args["bindings"] = _bindings(ns.bind)
+            if ns.workspace:
+                args["workspace"] = ns.workspace
             req.update(command="workflow.start", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
                        timeoutMs=ns.timeout_ms)
             req["_wait_workflow"] = ns.wait
@@ -278,6 +285,8 @@ def _human_request(argv) -> dict:
             req.update(command="workflow.start", args={"teamId": ns.team, "developerAgentId": ns.developer,
                                                        "reviewerAgentId": ns.reviewer, "text": text},
                        idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+            if ns.workspace:
+                req["args"]["workspace"] = ns.workspace
             req["_wait_workflow"] = ns.wait
         else:
             if not ns.workflow:

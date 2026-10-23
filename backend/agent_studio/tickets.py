@@ -7,7 +7,7 @@ import re
 
 from . import schema
 from .protocol import (AsError, INTERNAL, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE,
-                       TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID)
+                       TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID, WORKTREE_NOT_REGISTERED)
 from .protocol import STORY_PATH_INVALID
 from .state import utcnow
 
@@ -86,6 +86,36 @@ def get(tx, workspace, key):
     if row is None:
         _error(TICKET_NOT_FOUND, "Ticket does not exist.", {"key": key})
     return dict(row)
+
+
+def registered_worktree(tx, team_workspace, path, *, state_dir=None):
+    """Return a live ticket's registered worktree, or reject every other path."""
+    from . import worktrees
+    canonical = os.path.realpath(path)
+    team_workspace = os.path.realpath(team_workspace)
+    row = tx.conn.execute(
+        "SELECT 1 FROM tickets WHERE workspace = ? AND worktree_path = ? AND status NOT IN "
+        f"({','.join('?' * len(TICKET_TERMINAL))}) LIMIT 1",
+        (team_workspace, canonical) + tuple(TICKET_TERMINAL)).fetchone()
+    listed = any(item["path"] == canonical
+                 for item in worktrees.list_registered(team_workspace, state_dir=state_dir))
+    if row is None or not listed:
+        raise AsError(WORKTREE_NOT_REGISTERED, "Workspace is not a registered live ticket worktree.",
+                      data={"workspace": canonical})
+    return canonical
+
+
+def record_worktree(tx, ticket, created):
+    """Persist the coordinator-created worktree and its durable ticket event."""
+    ticket = get(tx, ticket["workspace"], ticket["key"])
+    payload = {"branch": created["branch"], "path": created["path"], "baseCommit": created["baseCommit"]}
+    seq = tx.update("ticket", ticket["id"],
+                    {"branch": created["branch"], "worktree_path": created["path"],
+                     "base_commit": created["baseCommit"]},
+                    "ticket.worktree_created", payload)
+    out = tx.get("ticket", ticket["id"])
+    _ticket_event(tx, out, seq, "ticket.worktree_created", "coordinator", out["status"], out["status"], payload)
+    return out
 
 
 def next_key(tx, workspace):

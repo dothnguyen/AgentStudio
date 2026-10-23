@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from . import providers
+from . import providers, tickets
 from .protocol import AsError, BAD_REQUEST
 from .runner import CANCEL_MARKER, request_path, run_dir
 from .store import NOT_FOUND, Tx
@@ -65,6 +65,9 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(AGENT_NOT_IN_TEAM, f"Agent {agent['id']} is not a member of team {team['id']}.")
     if team["status"] != "running":
         raise AsError(TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
+    requested_workspace = args.get("workspace")
+    ws = team["workspace"] if requested_workspace is None or os.path.realpath(requested_workspace) == team["workspace"] else \
+        tickets.registered_worktree(tx, team["workspace"], requested_workspace, state_dir=ctx["stateDir"])
     if agent["availability"] != "idle" or agent["pane_state"] != "alive":
         code = AGENT_BUSY if agent["availability"] in ("busy", "waiting_input") else AGENT_UNAVAILABLE
         raise AsError(code, f"Agent {agent['display_name']} is {agent['availability']} (pane {agent['pane_state']}).",
@@ -79,11 +82,11 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
     if adapter.describe(dict(os.environ))["policies"].get(policy) in (None, "unsupported"):
         raise AsError(POLICY_UNSUPPORTED, f"{agent['provider_id']} has no verified mapping for {policy}.")
     if policy == "workspace_write":
-        holder = _mutating_in_workspace(tx, team["workspace"])
+        holder = _mutating_in_workspace(tx, ws)
         if holder:
             raise AsError(WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).",
-                          data={"workspace": team["workspace"]})
-    request = build_request(agent, team["workspace"])
+                          data={"workspace": ws})
+    request = build_request(agent, ws)
     if args.get("deadlineMs"):
         request["deadlineMs"] = args["deadlineMs"]
     if args.get("debugProviderOptions") is not None:
@@ -93,7 +96,7 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         request["providerOptions"] = args["debugProviderOptions"]
     if alias:
         request["fixtureAdapter"] = alias
-    task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": team["workspace"],
+    task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": ws,
                               "goal": args["text"]})
     asg = tx.create("assignment", {"team_id": team["id"], "task_id": task, "agent_id": agent["id"], "attempt": 1,
                                    "policy": policy, "provider_id": agent["provider_id"], "request_json": request},

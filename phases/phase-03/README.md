@@ -167,7 +167,8 @@ A transition is also refused when `from` or `to` is not on the ticket's kind pat
 - Root: `<state>/worktrees/<sha256(workspace)[:12]>/<key>/`, where `<state>` is the coordinator state dir from `paths.py` (WSL-native, never under `/mnt/`).
 - Create at the first `in_dev`: `git worktree add -b ticket/<key>-<slug> <path> <baseBranch>`, where `<slug>` is `[a-z0-9-]{1,40}` from the title. Record `branch`, `worktree_path`, `base_commit`. A branch is created only once all dependencies are `merged`, so it starts from them.
 - After a succeeded develop run: `git add -A` + `git commit -m "<key>: develop round <n>"` in the worktree, then record `head_commit`. Nothing to commit → findings `NO_CHANGES`, counted like a failed dev round.
-- Registered worktree = a `tickets` row with that `worktree_path`, status not terminal, **and** listed in `git worktree list --porcelain` of the main checkout. Anything else → `WORKTREE_NOT_REGISTERED`.
+- Registered worktree = a `tickets` row with that `worktree_path` (compared after `realpath`), status not terminal, **and** listed in `git worktree list --porcelain` of the main checkout under the worktree root (`worktrees.list_registered`). Anything else → `WORKTREE_NOT_REGISTERED`, including paths that do not exist. `workflow.start` / `task.direct` take an optional `workspace`: omitted or equal to the team's workspace means the main checkout; anything else must be a registered worktree (`tickets.registered_worktree`, S04). The run's task row stores the chosen path, and every later step reads it from there.
+- Recording a created worktree on its ticket is `tickets.record_worktree` (sets `branch`, `worktree_path`, `base_commit`; event `ticket.worktree_created`), used by S05 and by the debug-only test fixture `debug.ticket_worktree` (S04).
 - Removal after `merged` or `cancelled`: `git worktree remove --force <path>`, after the ticket's run is terminal. Startup reconcile removes worktrees under the root that have no live ticket (`board.worktree_orphan_removed` event) and re-creates nothing.
 
 ### F. Planning commits
@@ -221,7 +222,7 @@ Mutating commands need an idempotency key (P00 rule) and go through the command 
 
 ### J. Events
 
-`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.released {reason}`, `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}`, `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
+`ticket.created`, `ticket.moved {from, to, by, reason}`, `ticket.claimed {agentId}`, `ticket.run_started {runId, definition}`, `ticket.worktree_created {branch, path, baseCommit}`, `ticket.released {reason}`, `ticket.findings {column, count}`, `ticket.committed {branch|baseBranch, commit, paths?}`, `ticket.merged {commit}`, `ticket.merge_conflict {files}`, `ticket.merge_message_defaulted`, `ticket.depends {on}`, `ticket.children_created {keys}`, `board.started`, `board.paused {reason}`, `board.held {column, reason}`, `board.limit_reached {agentId, resetAt}`, `board.resumed`, `board.worktree_orphan_removed {path}`.
 
 ## Requirements (this phase)
 

@@ -20,7 +20,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import crashpoints, gitws, procid, prompts, tasks, validation, workflowdef
+from . import crashpoints, gitws, procid, prompts, tasks, tickets, validation, workflowdef
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -174,7 +174,9 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
     team = tx.get("team", args["teamId"])
     if team["status"] != "running":
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
-    ws = team["workspace"]
+    requested_workspace = args.get("workspace")
+    ws = team["workspace"] if requested_workspace is None or os.path.realpath(requested_workspace) == team["workspace"] else \
+        tickets.registered_worktree(tx, team["workspace"], requested_workspace, state_dir=ctx["stateDir"])
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
     first = definition.stages[0]
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)

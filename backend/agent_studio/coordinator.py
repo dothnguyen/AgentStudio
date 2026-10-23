@@ -14,8 +14,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, report_rules, reports, \
-    resolve, state, tasks, teams, tickets, tmuxctl, workflow
+from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, \
+    resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
@@ -141,6 +141,16 @@ def _handle_debug_assign(args: dict, tx, ctx: dict) -> dict:
     return teams.debug_assign(tx, args, ctx)
 
 
+def _handle_debug_ticket_worktree(args: dict, tx, ctx: dict) -> dict:
+    _require_debug(ctx)
+    ticket = tickets.get(tx, args["workspace"], args["key"])
+    branch = gitws.run(args["workspace"], "symbolic-ref", "--short", "HEAD").stdout.decode().strip()
+    created = worktrees.create(args["workspace"], ticket["key"], worktrees.slug(ticket["title"]), branch,
+                               state_dir=ctx["stateDir"])
+    tickets.record_worktree(tx, ticket, created)
+    return {"ticket": ticket["key"], "worktree": created}
+
+
 def _ticket_deps(tx, ticket):
     return [row[0] for row in tx.conn.execute(
         "SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
@@ -210,6 +220,7 @@ HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
     "debug.assign": _handle_debug_assign,
+    "debug.ticket_worktree": _handle_debug_ticket_worktree,
     "team.start": lambda args, tx, ctx: teams.team_start(tx, args, ctx),
     "team.stop": lambda args, tx, ctx: teams.team_stop(tx, args, ctx),
     "task.direct": lambda args, tx, ctx: tasks.task_direct(tx, args, ctx),

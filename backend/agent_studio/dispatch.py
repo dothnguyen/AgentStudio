@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import json
+import os
 import sys
 import traceback
 
@@ -96,7 +97,25 @@ def _validate_debug_assign(args):
     return out
 
 
+def _validate_debug_ticket_worktree(args):
+    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key"))}
+
+
 MAX_TASK_BYTES = 32 * 1024
+
+
+def _optional_run_workspace(args, out):
+    workspace = args.get("workspace")
+    if workspace is None:
+        return
+    try:
+        valid = (isinstance(workspace, str) and len(workspace.encode("utf-8")) <= 4096
+                 and os.path.isabs(workspace) and "\\" not in workspace and "\0" not in workspace)
+    except UnicodeEncodeError:
+        valid = False
+    if not valid:
+        raise AsError(BAD_REQUEST, "workspace must be an absolute POSIX path no longer than 4096 bytes.")
+    out["workspace"] = workspace
 
 
 def _validate_task_direct(args):
@@ -112,6 +131,7 @@ def _validate_task_direct(args):
         out["deadlineMs"] = req_int(args, "deadlineMs", 100, 6 * 3600 * 1000, 0)
     if args.get("debugProviderOptions") is not None:
         out["debugProviderOptions"] = _validate_fake_options(args["debugProviderOptions"])
+    _optional_run_workspace(args, out)
     return out
 
 
@@ -243,6 +263,7 @@ def _validate_definition_start(args):
             out["bindings"][role] = validate_uuid(agent, f"bindings.{role}")
     if args.get("allowDirtyTree"):
         out["allowDirtyTree"] = req_bool(args, "allowDirtyTree")
+    _optional_run_workspace(args, out)
     opts = args.get("debugStageOptions")
     if opts is not None:
         if not isinstance(opts, dict) or not all(isinstance(k, str) and STAGE_ID_KEY.match(k) for k in opts):
@@ -263,6 +284,7 @@ def _validate_workflow_start(args):
         raise AsError(BAD_REQUEST, "Task text must not be blank.")
     if args.get("allowDirtyTree"):
         out["allowDirtyTree"] = req_bool(args, "allowDirtyTree")
+    _optional_run_workspace(args, out)
     opts = args.get("debugStageOptions")
     if opts is not None:
         if not isinstance(opts, dict) or not set(opts) <= set(STAGE_NAMES):
@@ -417,6 +439,7 @@ COMMANDS = {
     "debug.echo": _inbox("debug.echo", _validate_echo),
     "debug.fixture": _inbox("debug.fixture", _validate_fixture),
     "debug.assign": _inbox("debug.assign", _validate_debug_assign),
+    "debug.ticket_worktree": _inbox("debug.ticket_worktree", _validate_debug_ticket_worktree),
     "team.start": _inbox("team.start", _validate_team_start),
     "team.stop": _inbox("team.stop", _validate_team_stop),
     "team.attach": _team_attach,
