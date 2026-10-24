@@ -13,7 +13,8 @@ import uuid
 import os
 
 from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, teamdefs, validation, watch, workspace
-from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, dumps, envelope
+from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, TEAM_NOT_FOUND, dumps, envelope
+from .store import validate_uuid
 
 USAGE = """agent-studio <command>
 
@@ -36,7 +37,9 @@ USAGE = """agent-studio <command>
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
   team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
   team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
-  team stop --team ID                      stop only that team's verified tmux session
+  team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id (no teams/: team.json)
+  team stop [--team ID|UUID] [--workspace PATH]   stop the running team of a definition (or a runtime team UUID)
+  team status [--team ID|UUID] [--workspace PATH] [--json]   the runtime team and members of a definition
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
               [--workspace PATH]
               [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
@@ -208,8 +211,92 @@ def _render_team_action(action, d):
     return _render_team(d)
 
 
+def _is_uuid(value) -> bool:
+    try:
+        validate_uuid(value)
+    except AsError:
+        return False
+    return True
+
+
+def _team_workspace(ns) -> str:
+    """--workspace PATH is used as is; otherwise the workspace found from the current directory."""
+    return ns.workspace if ns.workspace else workspace.resolve(os.getcwd())["path"]
+
+
+def _pick_def(ws, ref, verb) -> str:
+    ids = teamdefs.list_ids(ws)
+    if not ids:
+        if ref is None:
+            raise AsError(BAD_REQUEST, f"team {verb} needs --team ID")
+        raise AsError(TEAM_NOT_FOUND, f"No team {ref!r}.", remediation="run agent-studio team add --name NAME")
+    return teamdefs._select(ws, ref)[1]
+
+
+def _definition_start_args(ws, ns) -> dict:
+    fid = _pick_def(ws, ns.team, "start")
+    team = teamdefs.load(ws, fid)
+    problems = teamdefs.validate(ws, team, fid)
+    if not problems and not team.get("members"):
+        problems = [{"path": "members", "message": "the team has no members"}]
+    if problems:
+        raise teamdefs._invalid(fid, problems)
+    roster = []
+    for m in team["members"]:
+        item = {"memberId": m["id"], "displayName": m["name"], "providerId": m["provider"], "role": m["role"]}
+        for k in ("model", "reasoning"):
+            if m.get(k):
+                item[k] = m[k]
+        roster.append(item)
+    return {"workspace": ws, "name": ns.name or team["name"], "teamDefId": fid, "roster": roster}
+
+
+def _render_team_status(d: dict) -> str:
+    team = d["team"]
+    if team is None:
+        return "team {}: not running".format(d.get("_ref") or "")
+    lines = [f"{team['teamDefId'] or team['id']} ({team['name']}): {team['status']}"]
+    for m in d["members"]:
+        line = f"{m['name']} [{m['provider']}/{m['role']}] {m['availability']}"
+        if m["assignment"]:
+            line += f"  {m['assignment']['id']} {m['assignment']['status']}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _team_status_command(argv, pretty):
+    p = _Parser(prog="agent-studio", add_help=False)
+    for o in ("--team", "--workspace"):
+        p.add_argument(o)
+    p.add_argument("--json", action="store_true")
+    ref = None
+    try:
+        ns = p.parse_args(argv[2:])
+        ref = ns.team
+        if ns.team and _is_uuid(ns.team):
+            args = {"teamId": ns.team}
+        else:
+            ws = _team_workspace(ns)
+            ref = _pick_def(ws, ns.team, "status")
+            args = {"workspace": ws, "teamDefId": ref}
+        resp = dispatch.handle_request({"protocol": PROTOCOL, "command": "team.status", "args": args},
+                                       require_id=False)
+        if resp.get("ok") and resp["data"]["team"] is None:
+            resp["data"]["_ref"] = ref
+    except AsError as e:
+        err = e.to_error()
+        if e.data is not None:
+            err["data"] = e.data
+        resp = envelope(None, False, error=err)
+    if resp.get("ok") and "--json" in argv:
+        resp["data"].pop("_ref", None)
+    return emit(resp, _render_team_status, "--json" in argv, pretty)
+
+
 def _local_command(cmd, argv, pretty):
     """init / workspace list run in the CLI process (not dispatch commands). Returns None if not ours."""
+    if cmd == "team" and argv[1:2] == ["status"]:
+        return _team_status_command(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
         return _team_command(argv, pretty)
     if cmd == "init":
@@ -545,8 +632,8 @@ def _human_request(argv) -> dict:
         req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "team":
         if ns.action == "start":
-            if not ns.workspace:
-                raise AsError(BAD_REQUEST, "team start needs --workspace")
+            if ns.agent and ns.team:
+                raise AsError(BAD_REQUEST, "team start: --team cannot be combined with --agent")
             roster = []
             for spec in ns.agent:
                 head, *opts = spec.split(",")
@@ -562,11 +649,22 @@ def _human_request(argv) -> dict:
                         raise AsError(BAD_REQUEST, f"--agent option {opt!r}: use model=NAME or reasoning=LEVEL")
                     member[k] = v
                 roster.append(member)
-            req.update(command="team.start", args={"workspace": ns.workspace})
-            if roster:
-                req["args"]["roster"] = roster
-            if ns.name:
-                req["args"]["name"] = ns.name
+            if ns.agent and not ns.workspace:
+                raise AsError(BAD_REQUEST, "team start needs --workspace")
+            ws = None if ns.agent else _team_workspace(ns)
+            if ws is not None and teamdefs.list_ids(ws):
+                req.update(command="team.start", args=_definition_start_args(ws, ns))
+            else:
+                if ns.team:
+                    raise AsError(TEAM_NOT_FOUND, f"No team {ns.team!r}.", remediation="run agent-studio team add --name NAME")
+                req.update(command="team.start", args={"workspace": ns.workspace or _team_workspace(ns)})
+                if roster:
+                    req["args"]["roster"] = roster
+                if ns.name:
+                    req["args"]["name"] = ns.name
+        elif ns.action == "stop" and (ns.team is None or not _is_uuid(ns.team)):
+            ws = _team_workspace(ns)
+            req.update(command="team.stop", args={"workspace": ws, "teamDefId": _pick_def(ws, ns.team, "stop")})
         else:
             if not ns.team:
                 raise AsError(BAD_REQUEST, f"team {ns.action} needs --team ID")
@@ -653,7 +751,7 @@ def main(argv=None) -> int:
     try:
         req = _human_request(argv)
     except AsError as e:
-        return _emit(envelope(None, False, error=e.to_error()), pretty)
+        return _emit(envelope(None, False, data=e.data, error=e.to_error()), pretty)
     print_only = req.pop("_print", False)
     wait = req.pop("_wait", False)
     wait_wf = req.pop("_wait_workflow", False)

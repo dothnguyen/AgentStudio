@@ -8,7 +8,9 @@ import uuid
 from typing import List, Optional
 
 from . import ops, procid, providers, tmuxctl
-from .protocol import AsError, BAD_REQUEST
+import re
+
+from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .runner import request_path
 from .store import Store, Tx, new_id
 from .textsafe import one_line
@@ -17,6 +19,7 @@ CLEANUP_INCOMPLETE = "CLEANUP_INCOMPLETE"
 TEAM_START_FAILED = "TEAM_START_FAILED"
 TEAM_CONFIG_INVALID = "TEAM_CONFIG_INVALID"
 MAX_ROSTER = 8
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 ACTIVE = ("queued", "claimed", "running", "waiting_input", "reconciling")
 
 
@@ -94,6 +97,11 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
         names[key] = i
         member = {"agentId": aid, "providerId": pid, "role": one_line(role.strip(), 64),
                   "displayName": one_line(name.strip(), 64)}
+        mid = m.get("memberId")
+        if mid is not None:
+            if not isinstance(mid, str) or not SLUG_RE.match(mid):
+                raise AsError(BAD_REQUEST, f"roster[{i}].memberId must be a slug (lowercase letters, digits, '-').")
+            member["memberId"] = mid
         for key in ("model", "reasoning"):
             value = m.get(key)
             if value is not None and (not isinstance(value, str) or not value or len(value) > 128):
@@ -128,14 +136,25 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     for m in roster:
         if tx.conn.execute("SELECT 1 FROM agents WHERE id = ?", (m["agentId"],)).fetchone():
             raise AsError(BAD_REQUEST, f"Agent {m['agentId']} already exists in another team.")
+    def_id = args.get("teamDefId")
+    if def_id is not None:
+        running = tx.conn.execute("SELECT id FROM teams WHERE workspace = ? AND def_id = ? AND status IN "
+                                  "('starting', 'running', 'stopping') ORDER BY created_at DESC, rowid DESC",
+                                  (workspace, def_id)).fetchone()
+        if running:
+            raise AsError(TEAM_ALREADY_RUNNING, f"Team {def_id!r} is already running in this workspace.",
+                          remediation=f"run agent-studio team stop --team {def_id}",
+                          data={"teamId": running["id"], "teamDefId": def_id})
     team_id = new_id()
     marker = uuid.uuid4().hex
     name = one_line(args.get("name") or f"team {team_id[:8]}", 80)
-    tx.create("team", {"name": name, "workspace": workspace, "ownership_marker": marker}, entity_id=team_id)
+    tx.create("team", {"name": name, "workspace": workspace, "ownership_marker": marker, "def_id": def_id},
+              entity_id=team_id)
     for i, m in enumerate(roster):
         tx.create("agent", {"team_id": team_id, "ordinal": i, "provider_id": m["providerId"], "role": m["role"],
                             "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]],
-                            "model": m.get("model"), "reasoning": m.get("reasoning")},
+                            "model": m.get("model"), "reasoning": m.get("reasoning"),
+                            "member_id": m.get("memberId")},
                   entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
         for box in ("inbox", "active", "done"):
@@ -177,6 +196,19 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
             "attach": attach_info(team, tmux)}
 
 
+def find_agent(conn, team_id: str, ref: str) -> dict:
+    """The agent of a runtime team by agent UUID, else member id, else display name (case-insensitive)."""
+    rows = [dict(r) for r in conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team_id,))]
+    for key in ("id", "member_id"):
+        for r in rows:
+            if r[key] is not None and r[key] == ref:
+                return r
+    for r in rows:
+        if isinstance(ref, str) and r["display_name"].casefold() == ref.casefold():
+            return r
+    raise AsError(MEMBER_NOT_FOUND, f"No member {ref!r} in team {team_id}.")
+
+
 # ---- verification ---------------------------------------------------------------------------------
 
 def verify_team(tx_or_conn, team: dict, tmux: tmuxctl.Tmux) -> dict:
@@ -203,7 +235,15 @@ def verify_team(tx_or_conn, team: dict, tmux: tmuxctl.Tmux) -> dict:
 # ---- team.stop ------------------------------------------------------------------------------------
 
 def team_stop(tx: Tx, args: dict, ctx: dict):
-    team = tx.get("team", args["teamId"])
+    if args.get("teamId"):
+        team = tx.get("team", args["teamId"])
+    else:
+        row = tx.conn.execute("SELECT id FROM teams WHERE workspace = ? AND def_id = ? AND status != 'stopped' "
+                              "ORDER BY created_at DESC, rowid DESC", (ops.canonical_workspace(args["workspace"]),
+                                                                    args["teamDefId"])).fetchone()
+        if row is None:
+            raise AsError(TEAM_NOT_RUNNING, f"Team {args['teamDefId']!r} is not running in this workspace.")
+        team = tx.get("team", row["id"])
     if team["status"] == "stopped":
         return {"teamId": team["id"], "stopped": True, "alreadyStopped": True}
     tmux: tmuxctl.Tmux = ctx["tmux"]

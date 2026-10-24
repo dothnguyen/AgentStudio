@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, tickets, tmuxctl
+from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, teamstatus, tickets, tmuxctl
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -59,11 +59,36 @@ def _validate_team_start(args):
     name = req_text(args, "name", 80, required=False)
     if name:
         out["name"] = name
+    if args.get("teamDefId") is not None:
+        out["teamDefId"] = _slug(args["teamDefId"], "teamDefId")
     return out
 
 
+def _slug(value, name):
+    if not isinstance(value, str) or not teams.SLUG_RE.match(value):
+        raise AsError(BAD_REQUEST, f"{name} must be a slug (lowercase letters, digits, '-'; at most 64 characters).")
+    return value
+
+
+def _team_ref(args):
+    """{teamId} (runtime UUID) or {workspace, teamDefId} (definition id)."""
+    if args.get("teamId") is not None:
+        return {"teamId": validate_uuid(args["teamId"], "teamId")}
+    return {"workspace": ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False)),
+            "teamDefId": _slug(args.get("teamDefId"), "teamDefId")}
+
+
 def _validate_team_stop(args):
-    return {"teamId": validate_uuid(args.get("teamId"), "teamId")}
+    return _team_ref(args)
+
+
+def _team_status(args, req):
+    ref = _team_ref(args)
+    conn = _reader()
+    try:
+        return teamstatus.team_status(conn, ref.get("teamId"), ref.get("workspace"), ref.get("teamDefId"))
+    finally:
+        conn.close()
 
 
 def _validate_fake_options(opts):
@@ -525,6 +550,7 @@ COMMANDS = {
     "team.start": _inbox("team.start", _validate_team_start),
     "team.stop": _inbox("team.stop", _validate_team_stop),
     "team.attach": _team_attach,
+    "team.status": _team_status,
     "task.direct": _inbox("task.direct", _validate_task_direct),
     "task.show": _task_show,
     "assignment.cancel": _inbox("assignment.cancel", _validate_cancel),

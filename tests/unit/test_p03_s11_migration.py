@@ -56,14 +56,14 @@ class UsageLimitMigrationTests(unittest.TestCase):
         old = dump(conn, "agents", schema._AGENT_OLD_COLS)
 
         self.assertEqual(state.current_version(conn), 7)
-        self.assertEqual(state.migrate(conn, path), 8)
+        self.assertEqual(state.migrate(conn, path), 9)
         self.assertEqual(dump(conn, "agents", schema._AGENT_OLD_COLS), old)
         self.assertEqual([tuple(row) for row in conn.execute("SELECT limit_reset_at FROM agents ORDER BY ordinal")],
                          [(None,)] * 6)
         conn.execute("UPDATE agents SET availability = 'limit_reached' WHERE ordinal = 0")
         self.assertEqual(conn.execute("SELECT availability FROM agents WHERE ordinal = 0").fetchone()[0], "limit_reached")
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
-        self.assertEqual(state.current_version(conn), 8)
+        self.assertEqual(state.current_version(conn), 9)
 
     def test_agents_have_v8_limit_column_and_exact_new_transitions(self):
         conn, store = fresh()

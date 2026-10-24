@@ -8,7 +8,7 @@ Architecture: [P04 design contract](../README.md#design-contract), §B, §C
 The operator asks a free member to do something and runs a one-off workflow with roles bound to members, with no board. The helper operations the operator uses today (`workflows`, `check`, `retry`, blocked/resolve) become real `team` commands.
 
 ## Implement in this order
-1. `team ask --team T --member M [--wait] [--permission P] "text"`: wraps `task.direct`; a busy member returns `AGENT_BUSY`; `--wait` blocks until the result and prints it.
+1. `team ask --team T --member M [--wait] [--permission P] "text"`: wraps `task.direct`; `--team` / `--member` resolve with the S03 rules (definition id → running team, `teams.find_agent`); a busy member returns `AGENT_BUSY`; `--wait` blocks until the result and prints it.
 2. `team run-workflow --team T NAME [--bind ROLE=MEMBER ...] [--wait] "text"`: wraps `workflow.start`; unbound roles resolve to the team's members by role; ambiguity is an error naming the roles.
 3. `team workflows` lists definitions; `team check` runs `workflow validate` against the team; `team retry` wraps `workflow retry`; `team blocked` lists paused/blocked assignments; `team resolve` wraps `assignment.resolve`.
 4. Human output shows member names, the route taken and the result; `--json` gives the raw response.

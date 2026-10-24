@@ -126,7 +126,7 @@ ENTITIES: Dict[str, Entity] = {
             "stopping": ("stopped", "error"),
             "error": ("stopping", "stopped"),
             "stopped": ()}),
-        ("name", "workspace", "tmux_session_id", "tmux_window_id", "ownership_marker"),
+        ("name", "workspace", "tmux_session_id", "tmux_window_id", "ownership_marker", "def_id"),
         "team_id"),
     "agent": Entity(
         "agent", "agents", "availability", AGENT_STATES, frozenset({"starting"}),
@@ -139,7 +139,7 @@ ENTITIES: Dict[str, Entity] = {
             "offline": ("starting", "idle", "error"),
             "error": ("starting", "offline")}),
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
-         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at"),
+         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at", "member_id"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -472,3 +472,10 @@ def _rebuild_agents_for_usage_limits(conn) -> None:
 
 
 MIGRATION_8 = [_rebuild_agents_for_usage_limits]
+
+
+# v9 (P04-S03): the team definition id and member id a runtime team / agent was started from (NULL for legacy starts).
+MIGRATION_9 = [
+    "ALTER TABLE teams ADD COLUMN def_id TEXT",
+    "ALTER TABLE agents ADD COLUMN member_id TEXT",
+]
