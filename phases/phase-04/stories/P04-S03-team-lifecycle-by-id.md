@@ -12,7 +12,7 @@ Architecture: [P04 design contract](../README.md#design-contract), §C
 2. Runtime keys: store the definition team id and member ids on the runtime team/agent rows (a new additive migration only if a column is missing; record the version in Evidence). Pane titles and log names use member names.
 3. Lift the "one running team per workspace" check to "one running team per team id"; keep the per-workspace/worktree write lock from P00 (Q8).
 4. `team stop [--team ID]` stops only that team; `team status [--team ID]` shows members, state and current assignment, and never calls board code.
-5. `--member` resolves a name or id for later stories; add the resolver and test it.
+5. `--member` resolves a name or id for later stories; reuse `teamdefs.find_member` from P04-S02 and test the runtime lookup.
 
 ## Done when
 - [ ] Two teams run in one workspace and each `stop` affects only its own team. Test: integration with the fake provider.

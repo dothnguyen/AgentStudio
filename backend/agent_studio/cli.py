@@ -12,7 +12,7 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, validation, watch, workspace
+from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, teamdefs, validation, watch, workspace
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, dumps, envelope
 
 USAGE = """agent-studio <command>
@@ -30,6 +30,11 @@ USAGE = """agent-studio <command>
   team start --workspace PATH [--agent PROVIDER:ROLE[:NAME][,model=M][,reasoning=R] ...] [--name NAME]
                                            one tmux window with one pane per agent; without --agent the
                                            roster comes from <workspace>/.agent-studio/team.json
+  team add --name NAME [--id ID] [--workspace PATH]   create .agent-studio/teams/<id>.json
+  team add-member [--team ID] --name N --role R --provider P [--model M] [--reasoning X] [--workspace PATH]
+  team remove-member [--team ID] --member ID|NAME [--workspace PATH]
+  team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
+  team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
   team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
   team stop --team ID                      stop only that team's verified tmux session
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
@@ -125,8 +130,88 @@ def _render_workspaces(d: dict) -> str:
                      for w in d["workspaces"])
 
 
+_TEAM_LOCAL = {
+    "add": ("--name", "--id"),
+    "add-member": ("--team", "--name", "--role", "--provider", "--model", "--reasoning"),
+    "remove-member": ("--team", "--member"),
+    "list": (),
+    "show": ("--team",),
+    "validate": ("--team",),
+    "import-legacy": ("--id", "--name"),
+}
+
+
+def _render_team_warnings(d: dict) -> list:
+    return [f"warning: {w['path']}: {w['message']}" for w in d.get("warnings") or []]
+
+
+def _render_team(d: dict) -> str:
+    if "teams" in d:
+        if not d["teams"]:
+            return "no teams defined"
+        return "\n".join(f"{t['id']}  {t['name']}  {t['members']} member(s)" + ("  (legacy team.json)" if t["legacy"] else "")
+                         for t in d["teams"])
+    team = d["team"]
+    if "problems" in d:
+        return f"team {team}: valid"
+    if "legacy" in d:
+        lines = [f"{team.get('name')}  ({team.get('id')})" + ("  legacy team.json" if d["legacy"] else "")]
+        for m in team.get("members") or []:
+            extra = "".join(f"  {k}={m[k]}" for k in ("model", "reasoning") if m.get(k))
+            lines.append(f"  {m.get('id')}  {m.get('name')}  {m.get('role')}  {m.get('provider')}{extra}")
+        return "\n".join(lines)
+    return f"team {team['id']}"
+
+
+def _team_command(argv, pretty):
+    action = argv[1]
+    opts = _TEAM_LOCAL[action]
+    p = _Parser(prog="agent-studio", add_help=False)
+    for o in opts + ("--workspace",):
+        p.add_argument(o)
+    p.add_argument("--json", action="store_true")
+    json_flag = "--json" in argv
+    try:
+        ns = p.parse_args(argv[2:])
+        ws = workspace.resolve(os.getcwd(), override=ns.workspace)["path"]
+        if action == "add":
+            data = teamdefs.add_team(ws, ns.name, ns.id)
+        elif action == "add-member":
+            data = teamdefs.add_member(ws, ns.team, ns.name, ns.role, ns.provider, ns.model, ns.reasoning)
+        elif action == "remove-member":
+            data = teamdefs.remove_member(ws, ns.team, ns.member)
+        elif action == "list":
+            data = teamdefs.list_teams(ws)
+        elif action == "show":
+            data = teamdefs.show(ws, ns.team)
+        elif action == "validate":
+            data = teamdefs.validate_team(ws, ns.team)
+        else:
+            data = teamdefs.import_legacy(ws, ns.id or teamdefs.LEGACY_ID, ns.name or teamdefs.LEGACY_ID)
+        resp = envelope(None, True, data=data)
+    except AsError as e:
+        err = e.to_error()
+        if e.data is not None:
+            err["data"] = e.data
+        resp = envelope(None, False, error=err)
+    return emit(resp, lambda d: _render_team_action(action, d), json_flag, pretty)
+
+
+def _render_team_action(action, d):
+    if action in ("add", "add-member", "remove-member", "import-legacy"):
+        t = d["team"]
+        head = {"add": f"created team {t['id']} ({t['name']})",
+                "add-member": f"added member {d.get('member', {}).get('id')} to team {t['id']}",
+                "remove-member": f"removed member {d.get('removed', {}).get('id')} from team {t['id']}",
+                "import-legacy": f"imported team.json as team {t['id']} ({len(t['members'])} member(s))"}[action]
+        return "\n".join([head] + _render_team_warnings(d))
+    return _render_team(d)
+
+
 def _local_command(cmd, argv, pretty):
     """init / workspace list run in the CLI process (not dispatch commands). Returns None if not ours."""
+    if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
+        return _team_command(argv, pretty)
     if cmd == "init":
         render, run = _render_init, lambda ns: workspace.init(ns.path or os.getcwd(), ns.name)
         opts = ("--name", "--path")

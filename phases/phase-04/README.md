@@ -69,7 +69,7 @@ New commands print the existing response envelope as JSON when `--json` is given
 
 ### C. Team definitions
 
-`.agent-studio/teams/<id>.json` is `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`. The CLI reads and writes these same files, keeping unknown keys, key order and two-space indentation. The database holds runtime only. Hand edits take effect at the next `team start`. Legacy `.agent-studio/team.json` is read-only until S05.
+`.agent-studio/teams/<id>.json` is `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`; the file's `id` equals its file name. Team and member ids are slugs (`^[a-z0-9][a-z0-9-]{0,63}$`); a member id is the slug of its name, and `--member` accepts the id or the name (case-insensitive). The CLI reads and writes these same files (`teamdefs.py`; the definition commands run in the CLI process, not through dispatch), reading fresh before every write and keeping unknown keys, key order and two-space indentation (atomic replace). The database holds runtime only. Hand edits take effect at the next `team start`. Legacy `.agent-studio/team.json` is read-only until S05: while `teams/` has no team it is shown as team `default` (`provider` ← `providerId`), and `team import-legacy` converts it once. Codes: `TEAM_EXISTS`, `TEAM_NOT_FOUND`, `TEAM_AMBIGUOUS`, `MEMBER_EXISTS`, `MEMBER_NOT_FOUND`, `TEAM_CONFIG_INVALID` (with `data.problems: [{path, message}]`).
 
 ### D. Board
 

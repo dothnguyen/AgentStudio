@@ -117,3 +117,8 @@ def req_bool(args: dict, name: str, default: bool = False) -> bool:
     if not isinstance(value, bool):
         raise AsError(BAD_REQUEST, f"Argument '{name}' must be true or false.")
     return value
+TEAM_EXISTS = "TEAM_EXISTS"
+TEAM_NOT_FOUND = "TEAM_NOT_FOUND"
+TEAM_AMBIGUOUS = "TEAM_AMBIGUOUS"
+MEMBER_EXISTS = "MEMBER_EXISTS"
+MEMBER_NOT_FOUND = "MEMBER_NOT_FOUND"

@@ -1,27 +1,50 @@
 # P04-S02 — Team definitions
 
-Status: To Do
+Status: Done (2026-10-24)
 Depends on: P04-S01 (workspace resolution, output helper)
-Architecture: [P04 design contract](../README.md#design-contract), §B, §C
+Architecture: [P04 design contract](../README.md#design-contract), §A, §B, §C
 
 ## Goal
-The operator creates and edits teams with `team add`, `add-member`, `remove-member`, `list`, `show`, `validate` and `import-legacy`, all reading and writing the hand-editable files `.agent-studio/teams/<id>.json`. A hand edit and a command edit never fight each other.
+The operator creates and edits teams with `team add`, `add-member`, `remove-member`, `list`, `show`, `validate` and `import-legacy`, all reading and writing the hand-editable files `.agent-studio/teams/<id>.json`. A hand edit and a command edit never fight each other: every command reads the file fresh just before it writes, nothing is cached, and nothing but the file holds the definition.
 
 ## Implement in this order
-1. Definition module: load, validate and save a team file. Saving preserves unknown keys, key order and two-space indentation (round-trip test with a hand-edited fixture).
-2. `team add --name N --id ID`: refuses an existing id (`TEAM_EXISTS`). Ids are slugs; member ids are slugs of the name, unique in the team (Q7).
-3. `team add-member --team T --name N --role R --provider P [--model M] [--reasoning X]` and `remove-member`. Both print `team validate` warnings after writing (Q6).
-4. `team list` and `team show [--team ID]`; the default team is the only one, otherwise `--team` is required (`TEAM_AMBIGUOUS`).
-5. `team validate [--team ID]`: unique ids, known provider, role present in `roles.json`, model/reasoning accepted by the provider; nothing is started. Errors are `TEAM_CONFIG_INVALID` with a path to the bad field.
-6. Legacy fallback: while `teams/` has no team and `team.json` exists, `team list` and `show` present it as team `default` (read-only). `team import-legacy` converts it once into `teams/<id>.json`. No command writes `team.json`.
-7. `team start` is not changed in this story.
+1. Definition module `backend/agent_studio/teamdefs.py` (`teams.py` is the runtime team and is not changed):
+   - File: `<workspace>/.agent-studio/teams/<id>.json`, shape per §C: `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`. Unknown keys at any level are allowed and kept.
+   - Slugs (team ids and member ids): `^[a-z0-9][a-z0-9-]{0,63}$`. `slug(name)` lowercases, turns every run of characters outside `[a-z0-9]` into `-`, strips leading/trailing `-` and cuts to 64; an empty result is `BAD_REQUEST`.
+   - `load(workspace, id)`: reads with `json.load` (dict order is kept). A file that is not valid JSON or not an object is `TEAM_CONFIG_INVALID` naming the file.
+   - `save(workspace, team)`: writes `json.dumps(team, indent=2, ensure_ascii=False) + "\n"` atomically (temp file in the same folder + `os.replace`); creates `teams/` if needed. Unknown keys and key order survive because the loaded dict is edited in place.
+   - `list_ids(workspace)`: the stems of `teams/*.json` whose stem is a slug, sorted. Other files are ignored.
+   - `find_member(team, ref)`: the member whose `id` equals `ref`, else whose `name` equals `ref` case-insensitively; none is `MEMBER_NOT_FOUND` (Q7; S03 reuses it for `--member`).
+   - `validate(workspace, team, file_id)`: returns a list of problems `[{path, message}]` (empty when valid) for every rule in step 5. It never raises for a rule violation and never starts anything.
+2. CLI wiring: the new `team` actions `add`, `add-member`, `remove-member`, `list`, `show`, `validate`, `import-legacy` run in the CLI process like `init` (S01 `_local_command`), are not added to `dispatch.COMMANDS`, and use the S01 `emit` helper (`--json`, `--pretty`). They find the workspace with `workspace.resolve(cwd, override=--workspace)` (§A). `team start/stop/attach` keep their current parser and meaning. Add every new action to `USAGE`.
+3. `team add --name N [--id ID]`: `ID` defaults to `slug(N)`; a given `ID` that is not a slug is `BAD_REQUEST`. An existing `teams/<ID>.json` is `TEAM_EXISTS` and nothing is written. Writes `{"id": ID, "name": N, "members": []}`.
+4. Team selection, shared by `add-member`, `remove-member`, `show` and `validate`: `--team ID` picks `teams/ID.json` (missing is `TEAM_NOT_FOUND`). Without `--team`, the only team is used; no team is `TEAM_NOT_FOUND` (remediation `run agent-studio team add --name NAME`); two or more is `TEAM_AMBIGUOUS` (message lists the ids).
+5. `team add-member [--team T] --name N --role R --provider P [--model M] [--reasoning X]`: the member id is `slug(N)`; an id already in the team is `MEMBER_EXISTS` and nothing is written. Appends `{id, name, role, provider}` plus `model` / `reasoning` only when given. `team remove-member [--team T] --member M` removes `find_member(team, M)`. Both write, then run `validate` and return its problems as `data.warnings` (human: one `warning: <path>: <message>` line each); warnings never change the exit code (Q6). A file that does not load (step 1) is `TEAM_CONFIG_INVALID` and is not rewritten.
+6. `team validate [--team ID]` rules, each a problem with a field path:
+   - shape: `id`, `name` non-empty strings, `members` a list of objects, each with non-empty string `id`, `name`, `role`, `provider` and, when present, string `model` / `reasoning` (path e.g. `members[1].role`);
+   - `id` is a slug and equals the file stem (path `id`); each member `id` is a slug (path `members[i].id`); member ids unique in the team (path `members[i].id` of the later duplicate);
+   - at most `teams.MAX_ROSTER` (8) members (path `members`);
+   - provider known: in `providers.PEERS`; a `providers.TEST_ONLY` provider (`fake`) is accepted, because `team start` decides that on a debug coordinator (path `members[i].provider`);
+   - role present as a key of `roles.json` `roles` (`roles.load_config`); with no `roles.json` every role is a problem (path `members[i].role`);
+   - model and reasoning accepted by the provider: `providers.get(provider, allow_test_only=True).validate_settings(model, None)` and `(None, reasoning)` separately, so the path is `members[i].model` or `members[i].reasoning`; skipped when the provider is unknown.
+   Valid: `ok` with `{team, problems: []}`; human `team <id>: valid`. Invalid: error `TEAM_CONFIG_INVALID` with `data.problems` and the message listing each `path: message`; exit 1.
+7. `team list` (`data.teams: [{id, name, members: <count>, legacy: bool}]`; human: one line per team, or `no teams defined`) and `team show [--team ID]` (`data.team`: the definition as stored, plus `legacy: bool`; human: the team name and id, then one line per member with id, name, role, provider and model/reasoning when set).
+8. Legacy fallback: while `list_ids` is empty and `.agent-studio/team.json` exists, `list`, `show` and `validate` present it as team `default` (name `default`, `legacy: true`). Mapping per `team.json` agent `i`: `provider` ← `providerId`; `name` ← `name`, else `displayName`, else `<role>-<i+1>` (as `teams.validate_roster` does); `id` ← `slug(name)`; `role`, `model`, `reasoning` copied when present; other keys dropped. `add-member` / `remove-member` on the legacy team are `BAD_REQUEST` with remediation `run agent-studio team import-legacy`. `team add` is allowed and, once a team file exists, the fallback no longer applies.
+9. `team import-legacy [--id ID] [--name N]` (defaults `default` / `default`): converts `team.json` with the step-8 mapping into `teams/<ID>.json` and returns the new definition plus its `validate` problems as `data.warnings`. No `team.json` is `TEAM_NOT_FOUND`; any existing team file in `teams/` is `TEAM_EXISTS` (so a second run is refused) and nothing is written. No command writes or deletes `team.json`.
+10. `team start` is not changed in this story; it still reads `team.json` through `roles.load_team`.
 
 ## Done when
-- [ ] A command edit keeps a hand-added unknown key, key order and indentation. Test: unit round-trip.
-- [ ] `validate` reports each rule violation (duplicate id, unknown provider, missing role, bad model) with a field path. Test: unit.
-- [ ] The legacy fallback is read-only and `import-legacy` writes a valid team file once, refusing a second run. Test: unit.
-- [ ] Human and `--json` output for every command. Test: unit.
-- [ ] The existing `team start` with `team.json` still works. Test: existing suites stay green.
+- [x] `team add` then `add-member` on a hand-edited fixture (unknown top-level key, unknown member key, non-alphabetical key order, written in the `save` format: two-space indentation, `": "` separators, non-ASCII text unescaped, trailing newline) keeps the unknown keys, the key order and the formatting; a `load` + `save` with no change leaves the fixture byte-identical; a hand edit made between two commands is kept by the second. Test: unit, `tests/unit/test_p04_s02_team_definitions.py` (temp workspace from `workspace.init`, temp `XDG_STATE_HOME`).
+- [x] `team add` refuses an existing id (`TEAM_EXISTS`) and a non-slug `--id` (`BAD_REQUEST`); `--id` defaults to the slug of the name; `add-member` gives member id `slug(name)` and refuses a duplicate (`MEMBER_EXISTS`); `remove-member` accepts an id or a name and an unknown one is `MEMBER_NOT_FOUND`. Test: unit.
+- [x] Without `--team`, one team is picked, none is `TEAM_NOT_FOUND`, two is `TEAM_AMBIGUOUS`; an unknown `--team` is `TEAM_NOT_FOUND`. Test: unit.
+- [x] `validate` reports each rule violation with its field path — bad shape, file id mismatch, duplicate member id, more than 8 members, unknown provider, missing role, model on a provider without model selection or a bad model name, unsupported reasoning — all problems of one file in one response; a valid fixture (with a `roles.json` fixture) passes, and a `fake` member is accepted. Test: unit.
+- [x] `add-member` with an unknown provider or role writes the member and returns the problems as `data.warnings` with exit 0. Test: unit.
+- [x] Legacy: with only `team.json`, `list`/`show`/`validate` present team `default` with the step-8 mapping (fixture: this repo's `team.json` shape, with `providerId` and `name`), `add-member` on it is refused, `import-legacy` writes a team file that passes `validate` against the fixture roles, a second `import-legacy` is `TEAM_EXISTS`, and `team.json` is byte-identical after every command. Test: unit.
+- [x] Every new command gives human text without `--json` and the response envelope with `--json`, errors print `CODE: message` plus remediation on stderr, exit codes 0/1, and none of the new actions is a `dispatch.COMMANDS` key. Test: unit (call `cli.main`, capture stdout/stderr).
+- [x] The existing `team start --workspace` with `team.json`, `team stop/attach` and the other P04 constraint-1 commands still work. Test: existing suites stay green (`python3 scripts/validate.py --unit`).
 
 ## Evidence
-(filled in when the story is done)
+- Implemented: `backend/agent_studio/teamdefs.py` (new: slug, load/save with atomic replace, list_ids, find_member, validate, legacy mapping, add/add-member/remove-member/list/show/validate/import-legacy); `backend/agent_studio/cli.py` (the seven new `team` actions run in the CLI process via `_local_command`, `--workspace`/`--json`/`--pretty`, human renderers, `USAGE`); `backend/agent_studio/protocol.py` (codes `TEAM_EXISTS`, `TEAM_NOT_FOUND`, `TEAM_AMBIGUOUS`, `MEMBER_EXISTS`, `MEMBER_NOT_FOUND`; `TEAM_CONFIG_INVALID` reused from `teams.py`).
+- Tests: `tests/unit/test_p04_s02_team_definitions.py` — round-trip byte-identity and hand edits between commands, add/member rules, team selection, validate problems with field paths (shape, file id, duplicate, >8 members, unknown provider, missing role, opencode model, bad model/reasoning, `fake` accepted), warnings with exit 0, legacy fallback/refusal/import once with `team.json` byte-identical, CLI human/`--json`/stderr errors, no `dispatch.COMMANDS` entries.
+- Validation: `python3 scripts/validate.py --unit` — Ran 570 tests, OK (skipped=3). Integration tests: none changed, not run.
+- `team start` unchanged (still reads `team.json` through `roles.load_team`); QA reported no findings.
