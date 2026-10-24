@@ -48,12 +48,14 @@ def run_workspace(tx, team: dict, requested) -> str:
 
 
 def build_request(agent: dict, workspace: str, extra: dict = None) -> dict:
-    """Freeze, at assignment creation, what the runner will use: model, reasoning, and the workspace role context
-    (text + source hashes), so the journal shows exactly what each attempt was given."""
+    """Freeze, at assignment creation, what the runner will use: model, reasoning, the workspace role context
+    (text + source hashes), and whether the runner starts the board MCP server for this assignment, so the
+    journal shows exactly what each attempt was given."""
     from . import roles
     request = dict(extra or {})
     request["model"] = agent.get("model")
     request["reasoning"] = agent.get("reasoning")
+    request["mcpTickets"] = bool(agent.get("can_add_tickets"))
     ctx = roles.context_for(workspace, agent["role"])
     request["roleContext"] = ctx
     return request

@@ -75,6 +75,9 @@ claims tickets by its rules; `team stop-board` stops claiming while running work
 | `TICKET_BUSY` | the ticket is claimed by a member (its phase cannot change), or the run you asked to apply is still running | wait for the round to finish, or `ticket retry --workspace <ws> <KEY>` to clear a stuck claim |
 | `TICKET_DEPENDENCY_CYCLE` | the dependency would make tickets wait for each other | `ticket show` both tickets and drop one edge (`ticket depend --remove KEY`) |
 | `TICKET_ROLE_MISMATCH` | kept for rules that mismatch roles and members (not currently raised) | check `rules[].role` against `roles.json` with `board rules check` |
+| `FORBIDDEN` (from an MCP `ticket_add`) | the assignment is not active, or its member has no `canAddTickets` | enable the member with `team add-member --can-add-tickets true` (or edit `teams/<id>.json`), or let the board claim a ticket first |
+| `TICKET_CAP_REACHED` (from an MCP `ticket_add`) | the assignment already added the per-assignment cap of tickets (default 10) | work the existing tickets first; new findings fit into them |
+| `TICKET_DUPLICATE` (from an MCP `ticket_add`) | an open ticket with the same title already exists | `ticket list` for it; add detail to the existing ticket instead |
 | `BOARD_RULE_MISSING` from applying a run | the ticket's status has no rule, so no outcome can be applied | `board rules check`; add a rule for that status or move the ticket by hand |
 | `PHASE_NOT_FOUND` / `PHASE_EXISTS` | no phase with that slug / one already exists | `board phase list --workspace <ws>` |
 | `PHASE_PROTECTED` | the default phase cannot be removed or closed | its name and description can still be edited |

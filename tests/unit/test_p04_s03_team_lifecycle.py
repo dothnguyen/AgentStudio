@@ -72,21 +72,21 @@ def v8_database(path):
 
 class Migration(unittest.TestCase):
     def test_fresh_and_v8_databases_reach_the_current_version_with_null_columns(self):
-        self.assertEqual(state.SCHEMA_VERSION, 13)
+        self.assertEqual(state.SCHEMA_VERSION, 14)
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         conn = v8_database(os.path.join(d, "old.db"))
         self.assertEqual(state.current_version(conn), 8)
         self.assertNotIn("def_id", {r[1] for r in conn.execute("PRAGMA table_info(teams)")})
         self.assertNotIn("member_id", {r[1] for r in conn.execute("PRAGMA table_info(agents)")})
-        self.assertEqual(state.migrate(conn, os.path.join(d, "old.db")), 13)
-        self.assertEqual(state.current_version(conn), 13)
+        self.assertEqual(state.migrate(conn, os.path.join(d, "old.db")), 14)
+        self.assertEqual(state.current_version(conn), 14)
         self.assertEqual(conn.execute("SELECT id, def_id FROM teams").fetchall()[0][:], (TEAM_ID, None))
         self.assertEqual(conn.execute("SELECT id, member_id, display_name FROM agents").fetchall()[0][:],
                          (AGENT_ID, None, "Ryan"))
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
         fresh = state.connect(os.path.join(d, "new.db"), role="coordinator", create=True)
-        self.assertEqual(state.migrate(fresh, os.path.join(d, "new.db")), 13)
+        self.assertEqual(state.migrate(fresh, os.path.join(d, "new.db")), 14)
         cols = {r[1] for r in fresh.execute("PRAGMA table_info(agents)")}
         self.assertIn("member_id", cols)
         self.assertIn("def_id", {r[1] for r in fresh.execute("PRAGMA table_info(teams)")})

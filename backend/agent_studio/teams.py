@@ -107,6 +107,10 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
             if value is not None and (not isinstance(value, str) or not value or len(value) > 128):
                 raise AsError(BAD_REQUEST, f"roster[{i}].{key} must be a non-empty string of at most 128 characters.")
             member[key] = value
+        if m.get("canAddTickets") is not None:
+            if not isinstance(m.get("canAddTickets"), bool):
+                raise AsError(TEAM_CONFIG_INVALID, f"roster[{i}].canAddTickets must be true or false.")
+            member["canAddTickets"] = m["canAddTickets"]
         clean.append(member)
     return clean
 
@@ -154,7 +158,8 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
         tx.create("agent", {"team_id": team_id, "ordinal": i, "provider_id": m["providerId"], "role": m["role"],
                             "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]],
                             "model": m.get("model"), "reasoning": m.get("reasoning"),
-                            "member_id": m.get("memberId")},
+                            "member_id": m.get("memberId"),
+                            "can_add_tickets": 1 if m.get("canAddTickets") else 0},
                   entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
         for box in ("inbox", "active", "done"):

@@ -68,7 +68,18 @@ class FakeAdapter(Adapter):
             if not isinstance(final_text, str) or not 0 < len(final_text) <= 1500:
                 raise AsError("BAD_REQUEST", "fake finalText must be a string of 1..1500 characters.")
             argv += ["--final-text", final_text]
-        return Prepared(argv=argv, env_allowlist=BASE_ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
+        extra_env = {}
+        if inp.mcp_tickets:
+            # the fake CLI drives the real MCP server as a subprocess, the way a real CLI would, on
+            # every scenario of an MCP-enabled assignment
+            from ..base import mcp_env, mcp_launch
+            launch = mcp_launch()
+            argv += ["--mcp"]
+            extra_env["AGENT_STUDIO_MCP_COMMAND"] = json.dumps([launch["command"]] + launch["args"])
+            extra_env.update(launch["env"])  # the server subprocess inherits our capped env
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+        return Prepared(argv=argv, env_allowlist=BASE_ENV, stdin_path=inp.prompt_path, cwd=inp.workspace,
+                        extra_env=extra_env)
 
     def parse_line(self, line: bytes, state: ParseState):
         state.events += 1

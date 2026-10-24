@@ -51,6 +51,7 @@ class AssignmentInput:
     provider_session_id: Optional[str] = None
     options: dict = field(default_factory=dict)  # provider-specific, validated by the adapter
     expects_verdict: bool = False                # reviewer stages: read a verdict from the final message
+    mcp_tickets: bool = False                    # start the board MCP server for this assignment (P04-S12)
 
 
 @dataclass
@@ -60,6 +61,7 @@ class Prepared:
     stdin_path: Optional[str]
     cwd: str
     extra_env: Dict[str, str] = field(default_factory=dict)
+    mcp_config_path: Optional[str] = None   # per-assignment MCP config for the provider CLI (P04-S12)
 
     def __post_init__(self):
         if not self.argv or not all(isinstance(a, str) and "\x00" not in a for a in self.argv):
@@ -74,6 +76,31 @@ class Prepared:
         env = {k: source[k] for k in self.env_allowlist if k in source}
         env.update(self.extra_env)
         return env
+
+
+def mcp_launch() -> dict:
+    """How a provider CLI launches the board MCP server (P04-S12): the same interpreter that runs this
+    backend, the same entry module, one server per assignment. The runner's environment already carries
+    the state-dir settings; the per-assignment identity rides the server's env below."""
+    import sys
+    from .. import paths
+    entry = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                         "launch.py")
+    base = os.environ.get("XDG_STATE_HOME") or ""
+    if not os.path.isabs(base):
+        base = os.path.join(os.path.expanduser("~"), ".local", "state")
+    return {"command": sys.executable, "args": ["-s", entry, "mcp"],
+            "env": {"AGENT_STUDIO_ENV_MODE": os.environ.get("AGENT_STUDIO_ENV_MODE", "inherit"),
+                    "XDG_STATE_HOME": base}}  # the server appends agent-studio itself
+
+
+def mcp_env(assignment_id: str, agent_id: str, workspace: str = "") -> dict:
+    """The per-assignment identity the MCP server needs; merged into the provider's process env and, for
+    CLIs that re-read config, into the server definition's own env."""
+    env = {"AGENT_STUDIO_ASSIGNMENT": assignment_id, "AGENT_STUDIO_AGENT": agent_id}
+    if workspace:
+        env["AGENT_STUDIO_WORKSPACE"] = workspace
+    return env
 
 
 MISSING = object()

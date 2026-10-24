@@ -343,7 +343,8 @@ def run(agent_id: str, assignment_id: str) -> int:
                                                           MAX_DEADLINE_MS) / 1000.0,
         output_budget_bytes=_clamp(r.get("outputBudgetBytes"), DEFAULT_BUDGET, 1024, MAX_BUDGET),
         model=r.get("model"), reasoning=r.get("reasoning"), options=r.get("providerOptions") or {},
-        expects_verdict=bool(r.get("expectsVerdict")) or r.get("stage") in ("reviewer", "reviewer_recheck"))
+        expects_verdict=bool(r.get("expectsVerdict")) or r.get("stage") in ("reviewer", "reviewer_recheck"),
+        mcp_tickets=bool(r.get("mcpTickets")))
     oc = {"outputPath": os.path.join(rd, "stdout.jsonl"), "stderrPath": os.path.join(rd, "stderr.log"),
           "exitCode": None, "signal": None, "timedOut": False, "cancelRequested": False, "truncated": False}
     st = ParseState()

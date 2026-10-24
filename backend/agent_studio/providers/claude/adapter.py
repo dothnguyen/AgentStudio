@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 
 from ...protocol import AsError
 from .. import cli_support
-from ..base import BASE_ENV, POLICIES, UNSUPPORTED, Adapter, AssignmentInput, ParseState, Prepared
+from ..base import BASE_ENV, POLICIES, UNSUPPORTED, AssignmentInput, Adapter, ParseState, Prepared, mcp_env
 
 short = cli_support.short
 
@@ -174,16 +174,36 @@ class ClaudeAdapter(Adapter):
         return cli_support.apply_deep(out, self, info, env, deep)
 
     # ---- execution ----------------------------------------------------------------------------
+    def _mcp_config(self, inp: AssignmentInput) -> Optional[str]:
+        """The per-assignment MCP config for `--mcp-config`: only the Agent Studio board server, so
+        `--strict-mcp-config` still means 'nothing but what Agent Studio passes' (P04-S12)."""
+        from ..base import mcp_env, mcp_launch
+        launch = mcp_launch()
+        config = {"mcpServers": {"agent-studio": {
+            "type": "stdio", "command": launch["command"], "args": launch["args"],
+            "env": dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))}}}
+        path = os.path.join(os.path.dirname(inp.prompt_path), "mcp.json")
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(config, f)
+        return path
+
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
         exe = self.executable(env)
         if not exe:
             raise AsError("PROVIDER_UNAVAILABLE", "claude was not found on the login PATH.")
         self.validate_settings(inp.model, inp.reasoning)
+        extra_env, mcp_path = {}, None
+        if inp.mcp_tickets:
+            mcp_path = self._mcp_config(inp)
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
         if commands_enabled(inp.workspace):
             argv = [exe] + [a for a in COMMON if a != "--restricted"] + COMMAND_FLAGS[inp.policy]
             banned = [a for a in NEVER if a != "Bash"]
         else:
             argv, banned = [exe] + COMMON + POLICY_FLAGS[inp.policy], NEVER
+        if mcp_path:
+            argv += ["--mcp-config", mcp_path]
         if any(a in banned for a in argv):
             raise AsError("BAD_ADAPTER", "refusing a permission-bypass flag or a code-running tool")
         if inp.model:
@@ -191,7 +211,8 @@ class ClaudeAdapter(Adapter):
         if inp.reasoning:
             argv += ["--effort", inp.reasoning]
         # The prompt arrives on stdin (the private prompt file); the workspace is the working directory.
-        return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
+        return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace,
+                        extra_env=extra_env, mcp_config_path=mcp_path)
 
     def parse_line(self, line: bytes, state: ParseState):
         state.events += 1

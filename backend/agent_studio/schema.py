@@ -73,7 +73,8 @@ ENTITIES: Dict[str, Entity] = {
             "offline": ("starting", "idle", "error"),
             "error": ("starting", "offline")}),
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
-         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at", "member_id"),
+         "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at",
+         "member_id", "can_add_tickets"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -509,4 +510,10 @@ MIGRATION_13 = [
     "ALTER TABLE tickets ADD COLUMN active_run_id TEXT",
     "ALTER TABLE tickets ADD COLUMN branch TEXT",
     "ALTER TABLE tickets ADD COLUMN worktree_path TEXT",
+]
+
+
+# v14 (P04-S12): the MCP server — which members may add tickets from an assignment.
+MIGRATION_14 = [
+    "ALTER TABLE agents ADD COLUMN can_add_tickets INTEGER NOT NULL DEFAULT 0",
 ]

@@ -60,7 +60,7 @@ class Migration6(unittest.TestCase):
         self.path = os.path.join(self.dir, "state.db")
 
     def test_version_is_current(self):
-        self.assertEqual(state.SCHEMA_VERSION, 13)
+        self.assertEqual(state.SCHEMA_VERSION, 14)
 
     def test_p00_database_migrates_with_every_row_and_foreign_key_intact(self):
         conn = v5_database(self.path)
@@ -68,7 +68,7 @@ class Migration6(unittest.TestCase):
         old_sa = dump(conn, "stage_attempts", schema._SA_OLD_COLS)
         old_as = dump(conn, "assignments", "id, stage_attempt_id, task_id, agent_id, policy, status")
         self.assertEqual((len(old_wf), len(old_sa), len(old_as)), (1, 2, 2))
-        self.assertEqual(state.migrate(conn, self.path), 13)
+        self.assertEqual(state.migrate(conn, self.path), 14)
         self.assertEqual(dump(conn, "workflow_runs", schema._WF_OLD_COLS), old_wf)
         self.assertEqual(dump(conn, "stage_attempts", schema._SA_OLD_COLS), old_sa)
         self.assertEqual(dump(conn, "assignments", "id, stage_attempt_id, task_id, agent_id, policy, status"), old_as)
@@ -128,9 +128,9 @@ class Migration6(unittest.TestCase):
         conn = v5_database(self.path)
         state.migrate(conn, self.path)
         state.migrate(conn, self.path)
-        self.assertEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 13)
+        self.assertEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 14)
         fresh = state.connect(os.path.join(self.dir, "fresh.db"), role="coordinator", create=True)
-        self.assertEqual(state.migrate(fresh, os.path.join(self.dir, "fresh.db")), 13)
+        self.assertEqual(state.migrate(fresh, os.path.join(self.dir, "fresh.db")), 14)
 
     def test_a_failed_foreign_key_check_rolls_the_whole_migration_back(self):
         conn = v5_database(self.path)

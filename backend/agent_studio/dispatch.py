@@ -212,6 +212,19 @@ def _validate_ticket_add(args):
     phase = req_text(args, "phase", 64, required=False, allow_empty=False)
     if phase is not None:
         out["phase"] = _slug_arg(phase, "phase")
+    # the MCP server path (P04-S12): the caller presents an active assignment and is subject to its rules
+    assignment = req_text(args, "assignment", 64, required=False)
+    if assignment is not None:
+        out["assignment"] = validate_uuid(assignment, "assignment")
+        on = args.get("dependsOn")
+        if on is not None:
+            if not isinstance(on, list) or len(on) > 20 or not all(
+                    isinstance(k, str) and TICKET_KEY.match(k) for k in on):
+                raise AsError(BAD_REQUEST, "dependsOn must be a list of ticket keys (at most 20).")
+            if on:
+                out["dependsOn"] = on
+        cap = req_int(args, "cap", 1, 100, boardmodel.MCP_TICKET_CAP)
+        out["cap"] = cap
     return out
 
 

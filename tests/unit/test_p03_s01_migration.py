@@ -61,7 +61,8 @@ class BoardTableDrop(unittest.TestCase):
     def test_v9_database_with_board_rows_migrates_to_the_current_version(self):
         path = os.path.join(tempfile.mkdtemp(), "state.db")
         conn = v9_database(path)
-        preserved = {table: dump(conn, table, "*") for table in ("teams", "agents")}
+        agent_cols = "id, team_id, ordinal, provider_id, role, display_name, availability, created_at"
+        preserved = {"teams": dump(conn, "teams", "*"), "agents": dump(conn, "agents", agent_cols)}
         events_before = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         self.assertEqual(state.current_version(conn), 9)
 
@@ -75,8 +76,8 @@ class BoardTableDrop(unittest.TestCase):
         p03_columns = {"kind", "story_path", "severity", "dev_rounds", "merged_commit", "assignee_agent_id"}
         self.assertFalse(p03_columns & columns(conn, "tickets"))
         self.assertTrue({"phase_id", "created_by_member", "rounds_json"} <= columns(conn, "tickets"))
-        for table, rows in preserved.items():
-            self.assertEqual(dump(conn, table, "*"), rows, table)
+        self.assertEqual(dump(conn, "teams", "*"), preserved["teams"])
+        self.assertEqual(dump(conn, "agents", agent_cols), preserved["agents"])
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0], events_before)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0], 0)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM board_state").fetchone()[0], 0)

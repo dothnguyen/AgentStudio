@@ -126,6 +126,7 @@ class CodexAdapter(Adapter):
 
     # ---- execution ----------------------------------------------------------------------------
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
+        from ..base import mcp_env, mcp_launch
         exe = self.executable(env)
         if not exe:
             raise AsError("PROVIDER_UNAVAILABLE", "codex was not found on the login PATH.")
@@ -138,8 +139,19 @@ class CodexAdapter(Adapter):
             argv += ["--model", inp.model]
         if inp.reasoning:
             argv += ["-c", f'model_reasoning_effort="{inp.reasoning}"']
+        extra_env = {}
+        if inp.mcp_tickets:  # the Agent Studio board server, as config overrides (P04-S12)
+            launch = mcp_launch()
+            server = dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+            argv += ["-c", f'mcp_servers.agent-studio.command="{launch["command"]}"']
+            for i, arg in enumerate(launch["args"]):
+                argv += ["-c", f'mcp_servers.agent-studio.args.{i}="{arg}"']
+            for key, value in server.items():
+                argv += ["-c", f'mcp_servers.agent-studio.env.{key}="{value}"']
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
         argv.append("-")  # the prompt comes from stdin (the private prompt file), never the command line
-        return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace)
+        return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace,
+                        extra_env=extra_env)
 
     def parse_line(self, line: bytes, state: ParseState):
         state.events += 1

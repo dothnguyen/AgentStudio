@@ -148,6 +148,8 @@ def validate(workspace: str, team: dict, file_id: str) -> list:
         for k in ("model", "reasoning"):
             if k in m and not isinstance(m[k], str):
                 add(f"{p}.{k}", "must be a string")
+        if "canAddTickets" in m and not isinstance(m["canAddTickets"], bool):
+            add(f"{p}.canAddTickets", "must be true or false")
         mid = m.get("id")
         if _text(mid):
             if not SLUG_RE.match(mid):
@@ -222,7 +224,8 @@ def add_team(workspace: str, name, team_id=None) -> dict:
     return {"team": team}
 
 
-def add_member(workspace: str, team_id, name, role, provider, model=None, reasoning=None) -> dict:
+def add_member(workspace: str, team_id, name, role, provider, model=None, reasoning=None,
+               can_add_tickets=None) -> dict:
     if not (_text(name) and _text(role) and _text(provider)):
         raise AsError(BAD_REQUEST, "team add-member needs --name, --role and --provider")
     team, fid = _select_writable(workspace, team_id)
@@ -236,6 +239,8 @@ def add_member(workspace: str, team_id, name, role, provider, model=None, reason
         member["model"] = model
     if reasoning is not None:
         member["reasoning"] = reasoning
+    if can_add_tickets is not None:
+        member["canAddTickets"] = can_add_tickets
     team["members"].append(member)
     save(workspace, team)
     return {"team": team, "member": member, "warnings": validate(workspace, team, fid)}

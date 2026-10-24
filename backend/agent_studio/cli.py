@@ -32,7 +32,8 @@ USAGE = """agent-studio <command>
   team start --workspace PATH [--agent PROVIDER:ROLE[:NAME][,model=M][,reasoning=R] ...] [--name NAME]
                                            one tmux window with one pane per agent (the P00 form; needs --agent each)
   team add --name NAME [--id ID] [--workspace PATH]   create .agent-studio/teams/<id>.json
-  team add-member [--team ID] --name N --role R --provider P [--model M] [--reasoning X] [--workspace PATH]
+  team add-member [--team ID] --name N --role R --provider P [--model M] [--reasoning X]
+                  [--can-add-tickets true|false] [--workspace PATH]   canAddTickets: MCP ticket tools
   team remove-member [--team ID] --member ID|NAME [--workspace PATH]
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
   team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
@@ -108,6 +109,8 @@ USAGE = """agent-studio <command>
                [--write-file REL]          give an agent a fake-provider assignment (debug coordinators only)
   request                                  read one JSON request from stdin, print one response
   serve                                    line-delimited JSON requests/responses over stdio
+  mcp                                      board MCP server (stdio JSON-RPC; started per assignment by the
+                                           runner for members with canAddTickets; never by hand)
   keepalive                                hold the WSL keep-alive lock until terminated
 
 Options: --pretty (indent JSON for humans)
@@ -171,7 +174,8 @@ def _render_workspaces(d: dict) -> str:
 
 _TEAM_LOCAL = {
     "add": ("--name", "--id"),
-    "add-member": ("--team", "--name", "--role", "--provider", "--model", "--reasoning"),
+    "add-member": ("--team", "--name", "--role", "--provider", "--model", "--reasoning",
+                   "--can-add-tickets"),
     "remove-member": ("--team", "--member"),
     "list": (),
     "show": ("--team",),
@@ -216,7 +220,10 @@ def _team_command(argv, pretty):
         if action == "add":
             data = teamdefs.add_team(ws, ns.name, ns.id)
         elif action == "add-member":
-            data = teamdefs.add_member(ws, ns.team, ns.name, ns.role, ns.provider, ns.model, ns.reasoning)
+            can_add = (ns.can_add_tickets.lower() in ("1", "true", "yes")
+                       if ns.can_add_tickets is not None else None)
+            data = teamdefs.add_member(ws, ns.team, ns.name, ns.role, ns.provider, ns.model, ns.reasoning,
+                                       can_add)
         elif action == "remove-member":
             data = teamdefs.remove_member(ws, ns.team, ns.member)
         elif action == "list":
@@ -283,6 +290,8 @@ def _definition_start_args(ws, ns) -> dict:
         for k in ("model", "reasoning"):
             if m.get(k):
                 item[k] = m[k]
+        if m.get("canAddTickets") is not None:
+            item["canAddTickets"] = bool(m["canAddTickets"])
         roster.append(item)
     return {"workspace": ws, "name": ns.name or team["name"], "teamDefId": fid, "roster": roster}
 
@@ -666,6 +675,9 @@ def main(argv=None) -> int:
         return local
     if cmd == "serve":
         return serve.run()
+    if cmd == "mcp":
+        from . import mcpserver
+        return mcpserver.serve()
     if cmd == "keepalive":
         return keepalive.run()
     if cmd == "coordinator" and argv[1:2] == ["run"]:

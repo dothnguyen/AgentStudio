@@ -13,9 +13,10 @@ import os
 import re
 
 from . import roles as rolefiles, workflowdef
-from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, PHASE_CLOSED, \
-    PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE, \
-    TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID
+from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
+    PHASE_CLOSED, PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, \
+    TICKET_CAP_REACHED, TICKET_DEPENDENCY_CYCLE, TICKET_DUPLICATE, TICKET_NOT_FOUND, \
+    TICKET_TRANSITION_INVALID
 from .state import utcnow
 from .store import new_id
 
@@ -43,6 +44,8 @@ RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRo
 RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
+MCP_TICKET_CAP = 10            # per assignment, unless the call says otherwise (§G)
+ACTIVE_ASSIGNMENT_STATES = ("queued", "claimed", "running", "waiting_input", "reconciling")
 
 
 def _invalid(problems):
@@ -516,6 +519,59 @@ def _target_phase(tx, workspace: str, slug):
         raise AsError(PHASE_CLOSED, f"Phase {phase['slug']!r} is closed; it cannot take tickets.",
                       data={"phase": phase["slug"]})
     return phase
+
+
+def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
+    """A ticket added by an agent through the MCP server (design contract §G).
+
+    The call rides the normal command path and names the assignment it belongs to. The coordinator checks
+    that the assignment is active and its member may add tickets, records `createdBy`, puts the ticket in
+    the board's initial status and the requested phase (default when omitted), enforces a per-assignment
+    cap and a duplicate check against open tickets, and links dependencies. The server sends the same
+    idempotency key for a retried call, so the coordinator's receipt deduplicates it."""
+    config = load_config(workspace)
+    assignment_id = args["assignment"]
+    row = tx.conn.execute(
+        "SELECT a.id, a.agent_id, a.status, a.team_id, ag.can_add_tickets, ag.member_id, ag.team_id AS agent_team "
+        "FROM assignments a JOIN agents ag ON ag.id = a.agent_id WHERE a.id = ?",
+        (assignment_id,)).fetchone()
+    if row is None or row["status"] not in ACTIVE_ASSIGNMENT_STATES:
+        raise AsError(FORBIDDEN, "The assignment is not active; tickets cannot be added through it.",
+                      data={"assignment": assignment_id})
+    if not row["can_add_tickets"]:
+        raise AsError(FORBIDDEN, "This member may not add tickets (canAddTickets is not enabled).",
+                      data={"assignment": assignment_id})
+    member_id = row["member_id"] or row["agent_id"]
+    existing = tx.conn.execute("SELECT COUNT(*) FROM tickets WHERE created_by_assignment = ?",
+                               (assignment_id,)).fetchone()[0]
+    if existing >= int(args.get("cap", MCP_TICKET_CAP)):
+        raise AsError(TICKET_CAP_REACHED, f"The assignment already added {existing} ticket(s) "
+                                          f"(cap {args.get('cap', MCP_TICKET_CAP)}).",
+                      data={"assignment": assignment_id, "cap": args.get("cap", MCP_TICKET_CAP)})
+    title = args["title"].strip()
+    terminal = {s["id"] for s in config["statuses"] if s["kind"] in TERMINAL_KINDS}
+    duplicate = tx.conn.execute(
+        "SELECT key FROM tickets WHERE workspace = ? AND title = ? AND status NOT IN "
+        f"({','.join('?' * len(terminal))}) LIMIT 1", (workspace, title) + tuple(terminal)).fetchone()
+    if duplicate is not None:
+        raise AsError(TICKET_DUPLICATE, f"An open ticket with this title already exists ({duplicate[0]}).",
+                      data={"key": duplicate[0], "title": title})
+    ensure_board(tx, workspace)
+    phase = _target_phase(tx, workspace, args["phase"]) if args.get("phase") \
+        else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
+    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100),
+                                           createdByMember=member_id, createdByAssignment=assignment_id))
+    deps = []
+    for key in list(dict.fromkeys(args.get("dependsOn") or [])):
+        other = get_ticket(tx.conn, workspace, key)
+        tx.conn.execute("INSERT INTO ticket_deps (ticket_id, blocked_by_ticket_id) VALUES (?, ?)",
+                        (added["ticket"]["id"], other["id"]))
+        deps.append(other["key"])
+    if deps:
+        _ticket_event(tx.conn, added["ticket"]["id"], "ticket.depends", "coordinator",
+                      added["ticket"]["status"], added["ticket"]["status"],
+                      {"ticketId": added["ticket"]["id"], "key": added["ticket"]["key"], "on": deps})
+    return dict(added, dependsOn=deps)
 
 
 def ticket_add(tx, workspace: str, args: dict) -> dict:
