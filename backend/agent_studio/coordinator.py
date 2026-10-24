@@ -149,6 +149,14 @@ def _handle_board_resume(args, tx, ctx):
     team = teams[0]
     if args["all"]:
         agents = [dict(row) for row in tx.conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team["id"],))]
+    elif args.get("member") is not None:
+        ref = str(args["member"]).casefold()
+        rows = [dict(row) for row in tx.conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal",
+                                                     (team["id"],)).fetchall()]
+        agents = [a for a in rows if a["member_id"] == ref or a["display_name"].casefold() == ref]
+        if not agents:
+            raise AsError("MEMBER_NOT_FOUND", f"No member {args['member']!r} in the running team.",
+                          data={"member": args["member"], "members": [a["display_name"] for a in rows]})
     else:
         agent = tx.get("agent", args["agentId"])
         if agent["team_id"] != team["id"]:
@@ -182,6 +190,7 @@ HANDLERS = {
     "ticket.phase": lambda args, tx, ctx: boardmodel.ticket_phase(tx, args["workspace"], args),
     "ticket.apply": lambda args, tx, ctx: boardmodel.apply_run_outcome(tx, args["workspace"], args),
     "ticket.unblock": lambda args, tx, ctx: boardmodel.ticket_unblock(tx, args["workspace"], args),
+    "ticket.retry": lambda args, tx, ctx: boardsched.ticket_retry(tx, args["workspace"], args, ctx),
     "phase.add": lambda args, tx, ctx: boardmodel.phase_add(tx, args["workspace"], args),
     "phase.edit": lambda args, tx, ctx: boardmodel.phase_edit(tx, args["workspace"], args),
     "phase.close": lambda args, tx, ctx: boardmodel.phase_close(tx, args["workspace"], args),

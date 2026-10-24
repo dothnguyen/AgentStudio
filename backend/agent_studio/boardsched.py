@@ -16,6 +16,10 @@ from .protocol import AsError, BOARD_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .state import utcnow
 
 ACTIVE_ASSIGNMENT = ("queued", "claimed", "running", "waiting_input", "reconciling")
+# runs the tick applies by itself; a paused run waits for the operator (assignment resolve) or, once its
+# lease expires, for the recovery pass to release the claim
+APPLY_RUN_STATES = ("succeeded", "failed", "cancelled")
+UNSETTLED_RUN_STATES = ("queued", "running", "paused")
 
 
 def _board_row(conn, workspace):
@@ -70,6 +74,7 @@ def tick(store, ctx: dict) -> dict:
         workspace = row["workspace"]
         try:
             with store.transaction(actor="coordinator") as tx:  # running work always finishes
+                _recover(tx, workspace, ctx)
                 out["applied"] += _apply_finished(tx, workspace)
                 out["merged"] += _run_merge_actions(tx, workspace, ctx)
             if row["run_status"] == "running":
@@ -95,13 +100,108 @@ def _apply_finished(tx, workspace: str) -> int:
     applied = 0
     for row in rows:
         run = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (row["run"],)).fetchone()
-        if run is None or run["status"] not in boardmodel.FINISHED_RUN_STATES:
+        if run is None or run["status"] not in APPLY_RUN_STATES:
             continue
         ticket = boardmodel.get_ticket(tx.conn, workspace, row["key"])
+        if run["status"] == "failed" and _usage_limited(tx, row["run"]):
+            # a USAGE_LIMIT result releases the ticket without counting a round; report_rules has already
+            # marked the member limit_reached, and `board resume` makes them eligible again
+            _release_with_run(tx, workspace, ticket, "usage_limit")
+            applied += 1
+            continue
         rule = _claiming_rule(tx, workspace, ticket)
         boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]}, rule=rule)
         applied += 1
     return applied
+
+
+def _usage_limited(tx, run_id: str) -> bool:
+    row = tx.conn.execute(
+        "SELECT 1 FROM assignments a JOIN workflow_runs w ON w.task_id = a.task_id "
+        "WHERE w.id = ? AND a.diagnostic_code = 'USAGE_LIMIT' LIMIT 1", (run_id,)).fetchone()
+    return row is not None
+
+
+def _release_with_run(tx, workspace: str, ticket: dict, reason: str, to_status=None):
+    """Release a claim and record the run it was for, so a late report of that run is never re-applied."""
+    rule_to = to_status
+    if rule_to is None:
+        rule = _claiming_rule(tx, workspace, ticket)
+        rule_to = rule["when"]["status"] if rule else ticket["status"]
+    tx.conn.execute("UPDATE tickets SET run_id = ? WHERE id = ?", (ticket["active_run_id"], ticket["id"]))
+    boardmodel.release_claim(tx, ticket, reason, to_status=rule_to)
+
+
+# ---- crash recovery ---------------------------------------------------------------------------------------
+
+def _recover(tx, workspace: str, ctx: dict) -> dict:
+    """Lease expiry and orphan worktrees. A claim whose lease has expired while its run is unsettled
+    (queued, running or paused — a coordinator or runner death) is released exactly once, its run
+    cancelled, and the ticket returns to its rule's status. Worktrees the board created that no ticket
+    references any more are removed."""
+    out = {"released": 0, "worktrees": 0}
+    now = utcnow()
+    rows = tx.conn.execute(
+        "SELECT * FROM tickets WHERE workspace = ? AND assignee IS NOT NULL AND lease_until IS NOT NULL "
+        "AND lease_until < ?", (workspace, now)).fetchall()
+    for row in rows:
+        ticket = dict(row)
+        status = None
+        if ticket["active_run_id"]:
+            run = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
+                                  (ticket["active_run_id"],)).fetchone()
+            status = run["status"] if run is not None else None
+        if status not in UNSETTLED_RUN_STATES and status is not None:
+            continue  # settled after all: the normal apply pass owns it
+        if ticket["active_run_id"]:
+            try:
+                _cancel_run(tx, ticket["active_run_id"], ctx)
+            except AsError:
+                pass  # already terminal; nothing to settle
+        boardmodel.release_claim(tx, ticket, "lease_expired", to_status=_return_status(tx, workspace, ticket))
+        tx.conn.execute("UPDATE tickets SET run_id = ? WHERE id = ?",
+                        (ticket["active_run_id"], ticket["id"]))
+        _ticket_event_note(tx, ticket, "ticket.lease_expired", {"run": ticket["active_run_id"]})
+        out["released"] += 1
+    referenced = {r[0] for r in tx.conn.execute(
+        "SELECT worktree_path FROM tickets WHERE workspace = ? AND worktree_path IS NOT NULL", (workspace,))}
+    for entry in worktrees.list_registered(workspace, state_dir=ctx["stateDir"]):
+        if entry["path"] not in referenced:
+            worktrees.remove(workspace, entry["path"], state_dir=ctx["stateDir"])
+            out["worktrees"] += 1
+    return out
+
+
+def _return_status(tx, workspace: str, ticket: dict) -> str:
+    rule = _claiming_rule(tx, workspace, ticket)
+    return rule["when"]["status"] if rule else ticket["status"]
+
+
+def _ticket_event_note(tx, ticket: dict, name: str, payload: dict) -> None:
+    boardmodel._ticket_event(tx.conn, ticket["id"], name, "coordinator", ticket["status"], ticket["status"],
+                             dict({"ticketId": ticket["id"], "key": ticket["key"]}, **payload))
+
+
+def _cancel_run(tx, run_id, ctx) -> None:
+    from . import workflow
+    workflow.cancel(tx, {"workflowRunId": run_id}, ctx)
+
+
+def ticket_retry(tx, workspace: str, args: dict, ctx: dict) -> dict:
+    """`ticket retry`: clear a stuck claim — release it back to its rule's status and cancel its run."""
+    ticket = boardmodel.get_ticket(tx.conn, workspace, args["key"])
+    if ticket["assignee"] is None:
+        raise AsError("TICKET_TRANSITION_INVALID", f"Ticket {ticket['key']} is not claimed.",
+                      data={"key": ticket["key"], "status": ticket["status"]})
+    if ticket["active_run_id"]:
+        try:
+            _cancel_run(tx, ticket["active_run_id"], ctx)
+        except AsError:
+            pass
+    _release_with_run(tx, workspace, ticket, "operator_retry")
+    _ticket_event_note(tx, ticket, "ticket.released", {"reason": "operator_retry"})
+    return {"ticket": boardmodel._ticket_json(tx.conn, tx.conn.execute(
+        "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
 
 
 def _claiming_rule(tx, workspace: str, ticket: dict) -> dict:

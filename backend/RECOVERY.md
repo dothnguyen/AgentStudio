@@ -56,3 +56,48 @@ transaction that never committed is stopped (by its recorded identity) before th
 
 `workflow cancel` works in every phase: an active agent stage is cancelled, a running validator is killed by its
 verified identity, and a paused run is ended and its agents freed.
+
+## The generic board (P04)
+
+`agent-studio team run-board --team T` binds a running team to the workspace board (`.agent-studio/board.json`) and
+claims tickets by its rules; `team stop-board` stops claiming while running work finishes. `board show` /
+`board phase list` show where everything stands; every ticket change is a `ticket_events` row (`ticket show`).
+`<KEY>` is a ticket like `T-004`, `<ID>` a phase slug like `default`.
+
+| You see | Meaning | Command |
+|---|---|---|
+| `BOARD_CONFIG_INVALID` (from any board command) | `board.json` is invalid (statuses, rules, `leaseSeconds`, `baseBranch`) or `board rules check` failed | `agent-studio board rules check --workspace <ws>` lists every problem; fix `board.json`, then `team run-board` again |
+| `BOARD_ALREADY_RUNNING` from `team run-board` | another team already runs this board | `team stop-board`, or wait; one team runs a board at a time |
+| `TEAM_NOT_RUNNING` | no team is running on the workspace (or none is bound to the board) | `agent-studio team start --team T`, then `team run-board --team T` |
+| `BOARD_STATUS_UNKNOWN` | that status is not configured on this board | `board show` for the configured statuses, then move with one of them |
+| `TICKET_NOT_FOUND` | no ticket with that key in this workspace | `agent-studio ticket list --workspace <ws>` |
+| `TICKET_TRANSITION_INVALID` | that move is not allowed: the ticket is already in the target status, terminal (`done`/`closed` kind) without `--force`, not blocked on `ticket unblock`, or not claimed on `ticket retry` | `ticket show --workspace <ws> <KEY>`, then `ticket move ... --to <status> [--force]` |
+| `TICKET_BUSY` | the ticket is claimed by a member (its phase cannot change), or the run you asked to apply is still running | wait for the round to finish, or `ticket retry --workspace <ws> <KEY>` to clear a stuck claim |
+| `TICKET_DEPENDENCY_CYCLE` | the dependency would make tickets wait for each other | `ticket show` both tickets and drop one edge (`ticket depend --remove KEY`) |
+| `TICKET_ROLE_MISMATCH` | kept for rules that mismatch roles and members (not currently raised) | check `rules[].role` against `roles.json` with `board rules check` |
+| `BOARD_RULE_MISSING` from applying a run | the ticket's status has no rule, so no outcome can be applied | `board rules check`; add a rule for that status or move the ticket by hand |
+| `PHASE_NOT_FOUND` / `PHASE_EXISTS` | no phase with that slug / one already exists | `board phase list --workspace <ws>` |
+| `PHASE_PROTECTED` | the default phase cannot be removed or closed | its name and description can still be edited |
+| `PHASE_CLOSED` | a closed phase cannot be set current or receive tickets | `board phase reopen --workspace <ws> ID` first |
+| `PHASE_NOT_EMPTY` | removing a phase that still holds tickets needs a target | `board phase remove --workspace <ws> ID --move-to OTHER` (an open phase) |
+| ticket `blocked` (`!ROUND_LIMIT:<status>` or `!RUN_BLOCKED:<run>`) | a round limit was hit, or a run ended in a way with no `onBlocked` target | read the findings (`ticket show`), fix the cause, then `agent-studio ticket unblock --workspace <ws> <KEY>` (or raise `maxRounds` first) |
+| ticket back in its queue, event `ticket.lease_expired` | its lease expired while the run was unsettled — a coordinator or runner death; the claim was released once and the run cancelled | nothing: the board claims it again. A late report of the cancelled run is ignored |
+| ticket claimed for long, nothing happens | the run is stuck (paused, runner gone) and the lease has not expired | `agent-studio ticket retry --workspace <ws> <KEY>` releases the claim and cancels the run, or wait for the lease |
+| agent `limit_reached`, event `board.limit_reached`, ticket released without a round | the provider reported `USAGE_LIMIT`; the member takes no work until reset | wait for the reset time, then `agent-studio board resume --workspace <ws> --member NAME` (or `--agent ID` / `--all`) |
+| `MAIN_CHECKOUT_DIRTY` / `MAIN_CHECKOUT_WRONG_BRANCH` (`ticket.merge_held` events) | the coordinator-only merge waits: the main checkout is dirty or not on `baseBranch` | `git -C <ws> status --porcelain`, commit or stash, `git -C <ws> switch <baseBranch>`; the merge happens on the next pass |
+| `MERGE_CONFLICT` (event `ticket.merge_conflict`, ticket back to the rule's `onFail`) | the ticket branch no longer merges into the base branch; nothing was committed and nothing left dirty | the fixing round starts from the conflict (`rules[].onFail` carries it), or move the ticket and resolve by hand |
+| `WORKTREE_NOT_REGISTERED` from `task direct` / `workflow start` | the requested `--workspace` is neither the team's nor a worktree registered to a claimed ticket | run the work in the team's workspace, or let the board create the ticket's worktree |
+| `WORKTREE_EXISTS` (event `ticket.claim_released`, reason `start_failed`) | a branch or worktree for that ticket already exists | `git -C <ws> worktree list` / `branch`; if leftover, `git -C <ws> worktree remove --force <path>` and `git -C <ws> branch -D <branch>`, then the board retries |
+
+### Danger zones
+
+- **The main checkout.** While the board runs, do not edit, commit or switch branches in `<ws>`: `main`-workspace
+  rules and every `merge` action hold until it is clean again, on `baseBranch`.
+- **Worktrees.** They live under the WSL state directory (`~/.local/state/agent-studio/worktrees/...`). Never move
+  them or create them by hand; never put a worktree root on `/mnt/c`.
+- **`leaseSeconds`.** A claim whose lease expires while its run is still unsettled is released and its run
+  cancelled — exactly once. Set `leaseSeconds` comfortably above your longest expected run.
+- **Changing the current phase** never interrupts running work: it finishes and its outcome is applied; only new
+  claims use the new phase. Closing or removing the current phase falls back to the default phase.
+- **Aborting a merge.** After a squash merge never use `git merge --abort`; the coordinator already ran
+  `git reset --merge` when it recorded the conflict.

@@ -183,12 +183,17 @@ def _ticket_keys(args, name):
 
 
 def _validate_board_resume(args):
-    agent = args.get("agentId")
-    all_agents = args.get("all") is True
-    if (agent is None) != all_agents:
-        raise AsError(BAD_REQUEST, "board.resume needs exactly one of agentId or all: true.")
+    agent, member, all_agents = args.get("agentId"), args.get("member"), args.get("all") is True
+    given = sum(1 for value in (agent, member, all_agents) if value)
+    if given != 1:
+        raise AsError(BAD_REQUEST, "board.resume needs exactly one of agentId, member or all: true.")
     workspace = _workspace_arg(args)
-    return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
+    out = {"workspace": workspace, "all": all_agents}
+    if agent is not None:
+        out["agentId"] = validate_uuid(agent, "agentId")
+    if member is not None:
+        out["member"] = req_text(args, "member", 80, allow_empty=False)
+    return out
 
 
 def _slug_arg(value, name):
@@ -218,6 +223,10 @@ def _validate_ticket_phase(args):
 def _validate_ticket_apply(args):
     return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
             "run": validate_uuid(args.get("run"), "run")}
+
+
+def _validate_ticket_retry(args):
+    return _validate_ticket_key_args(args)
 
 
 def _validate_ticket_move(args):
@@ -566,6 +575,7 @@ COMMANDS = {
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),
     "ticket.apply": _inbox("ticket.apply", _validate_ticket_apply),
     "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key_args),
+    "ticket.retry": _inbox("ticket.retry", _validate_ticket_retry),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
     "board.show": _board_show,

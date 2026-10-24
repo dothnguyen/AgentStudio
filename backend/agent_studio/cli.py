@@ -89,6 +89,7 @@ USAGE = """agent-studio <command>
   ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
   ticket apply (--workspace PATH | cwd) KEY RUN   apply a finished workflow run's outcome to its ticket
   ticket unblock (--workspace PATH | cwd) KEY   return a blocked ticket to its recorded status
+  ticket retry (--workspace PATH | cwd) KEY   clear a stuck claim: release it and cancel its run
   board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
   board rules check (--workspace PATH | cwd)   validate the rules: statuses, roles, workflows, path to done
   board phase add (--workspace PATH | cwd) --id ID --name N [--description D] [--before ID]
@@ -97,7 +98,7 @@ USAGE = """agent-studio <command>
   board phase show|edit|close|reopen|set-current (--workspace PATH | cwd) ID [options]
                                            one phase / rename it / close it / reopen it / make it current
   board phase remove (--workspace PATH | cwd) ID [--move-to ID]   remove a phase (empty, or move its tickets)
-  board resume --workspace PATH (--agent ID | --all)
+  board resume --workspace PATH (--agent ID | --member NAME | --all)
                                            clear an agent's USAGE_LIMIT hold (limit_reached -> idle)
   init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
   workspace list [--json]                  registered workspaces (missing ones are flagged)
@@ -434,6 +435,7 @@ def _human_request(argv) -> dict:
     board_p.add_argument("action", choices=["resume"])
     board_p.add_argument("--workspace")
     board_p.add_argument("--agent")
+    board_p.add_argument("--member")
     board_p.add_argument("--all", action="store_true")
     board_p.add_argument("--key")
     board_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
@@ -565,6 +567,8 @@ def _human_request(argv) -> dict:
         args = {"workspace": ns.workspace, "all": ns.all}
         if ns.agent:
             args["agentId"] = ns.agent
+        if ns.member:
+            args["member"] = ns.member
         req.update(command="board.resume", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
                    timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":

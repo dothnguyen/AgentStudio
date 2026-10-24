@@ -743,7 +743,10 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
         target, reason = BLOCKED_STATUS, f"ROUND_LIMIT:{rule_status_id}"
     now = utcnow()
     if target == BLOCKED_STATUS:
-        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), ticket["status"], reason, now)
+        # a blocked ticket returns to the queue it was claimed from (the rule's when status), not the
+        # during status it sits in while worked
+        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), rule["when"]["status"],
+                  reason, now)
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
     tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "

@@ -96,8 +96,7 @@ class CleanSlate(unittest.TestCase):
 
     def test_p03_board_commands_are_gone_but_the_generic_board_is_routed(self):
         for argv in (["board", "pause", "--workspace", self.ws], ["board", "list"],
-                     ["ticket", "start", "--workspace", self.ws, "T-001"],
-                     ["ticket", "retry", "--workspace", self.ws, "T-001"]):
+                     ["ticket", "start", "--workspace", self.ws, "T-001"]):
             rc, r, p = self.sb.run(*argv)
             self.assertEqual(rc, 1, argv)
             self.assertIn(r["error"]["code"], ("BAD_REQUEST", "UNKNOWN_COMMAND"), (argv, r))
@@ -114,6 +113,8 @@ class CleanSlate(unittest.TestCase):
                                     "args": {"workspace": self.ws,
                                              "teamId": "1" * 8 + "-0000-4000-8000-" + "1" * 12}})
         self.assertEqual(r["error"]["code"], "BOARD_CONFIG_INVALID", r)
+        rc, r, p = self.sb.run("ticket", "retry", "--workspace", self.ws, "T-001", "--json")
+        self.assertEqual(r["error"]["code"], "TICKET_NOT_FOUND", r)  # routed (S11); no such ticket
         rc, r, p = self.sb.run("board", "resume", "--workspace", self.ws, "--all")
         self.assertEqual(r["error"]["code"], "TEAM_NOT_RUNNING", r)  # routed and validated; no team runs here
 

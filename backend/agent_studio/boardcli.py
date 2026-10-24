@@ -11,7 +11,7 @@ from . import boardmodel
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, envelope
 from .teamcli import _Fail, _call, _write_call
 
-TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase", "apply", "unblock")
+TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase", "apply", "unblock", "retry")
 BOARD_ACTIONS = ("show", "phase", "rules")
 PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
 RULES_ACTIONS = ("check",)
@@ -69,6 +69,8 @@ def _parser(action, group="ticket"):
         p.add_argument("ticket_key")
         p.add_argument("run")
     elif action == "unblock":
+        p.add_argument("ticket_key")
+    elif action == "retry":
         p.add_argument("ticket_key")
     elif action in ("show", "depend"):
         p.add_argument("ticket_key")
@@ -140,6 +142,11 @@ def _ticket_apply(ns):
 def _ticket_unblock(ns):
     data = _write_call("ticket.unblock", {"workspace": _workspace(ns), "key": ns.ticket_key})
     return data, lambda d: f"{d['ticket']['key']}: unblocked -> {d['ticket']['status']}"
+
+
+def _ticket_retry(ns):
+    data = _write_call("ticket.retry", {"workspace": _workspace(ns), "key": ns.ticket_key})
+    return data, lambda d: f"{d['ticket']['key']}: claim released -> {d['ticket']['status']}"
 
 
 def _depend(ns):
@@ -310,7 +317,7 @@ def _render_board(d) -> str:
 
 
 _HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
-             "apply": _ticket_apply, "unblock": _ticket_unblock}
+             "apply": _ticket_apply, "unblock": _ticket_unblock, "retry": _ticket_retry}
 _PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, "edit": _phase_edit,
                    "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,
                    "set-current": _phase_set_current, "clear-current": _phase_clear_current}
