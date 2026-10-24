@@ -196,17 +196,26 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
             "attach": attach_info(team, tmux)}
 
 
-def find_agent(conn, team_id: str, ref: str) -> dict:
-    """The agent of a runtime team by agent UUID, else member id, else display name (case-insensitive)."""
-    rows = [dict(r) for r in conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team_id,))]
-    for key in ("id", "member_id"):
+def match_member(rows, ref, keys=("id", "member_id"), name_key="display_name"):
+    """The row whose agent id equals ref, else whose member id equals ref, else whose name equals ref
+    (case-insensitive); None if none does. Pure: shared by find_agent and the team CLI."""
+    for key in keys:
         for r in rows:
             if r[key] is not None and r[key] == ref:
                 return r
     for r in rows:
-        if isinstance(ref, str) and r["display_name"].casefold() == ref.casefold():
+        if isinstance(ref, str) and r[name_key].casefold() == ref.casefold():
             return r
-    raise AsError(MEMBER_NOT_FOUND, f"No member {ref!r} in team {team_id}.")
+    return None
+
+
+def find_agent(conn, team_id: str, ref: str) -> dict:
+    """The agent of a runtime team by agent UUID, else member id, else display name (case-insensitive)."""
+    rows = [dict(r) for r in conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team_id,))]
+    found = match_member(rows, ref)
+    if found is None:
+        raise AsError(MEMBER_NOT_FOUND, f"No member {ref!r} in team {team_id}.")
+    return found
 
 
 # ---- verification ---------------------------------------------------------------------------------

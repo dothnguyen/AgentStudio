@@ -73,6 +73,8 @@ New commands print the existing response envelope as JSON when `--json` is given
 
 Runtime (S03): `team start` reads and validates the definition in the CLI and sends the mapped roster with `teamDefId`; the coordinator stores it as `teams.def_id` and `agents.member_id` (NULL for legacy `team.json` and `--agent` starts), so a running team never re-reads its file. Several definitions can run in one workspace; one definition id has at most one team in `starting`/`running`/`stopping` (`TEAM_ALREADY_RUNNING`). `team stop` / `team status` take a definition id, or a runtime UUID as before. `team status` is a read-only query and never touches board code. `teams.find_agent` resolves `--member` (agent UUID, member id, or name, case-insensitive).
 
+Use (S04): `team ask | run-workflow | workflows | check | retry | blocked | resolve` live in `teamcli.py` and are CLI wrappers over the existing dispatch commands (`team.status`, `snapshot`, `task.direct`, `workflow.list/validate/start/retry`, `assignment.resolve`); no dispatch or engine rule changes. They need the team `running` (`TEAM_NOT_RUNNING` otherwise, nothing written), map `--member` / `--bind ROLE=MEMBER` to agent ids with the `find_agent` rules, and `ask` takes `--policy read_only|workspace_write` (default `read_only`).
+
 ### D. Board
 
 `.agent-studio/board.json` holds `statuses` (`id`, optional `kind`: `initial`, `done`, `closed`), `phases`, `currentPhase`, `ticketFields` and `rules`. Statuses are validated in code, not by an SQL CHECK. Nothing in board code names a role, a workflow, a status or git; rules carry all of that.

@@ -12,7 +12,7 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, teamdefs, validation, watch, workspace
+from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, teamcli, teamdefs, validation, watch, workspace
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, TEAM_NOT_FOUND, dumps, envelope
 from .store import validate_uuid
 
@@ -40,6 +40,15 @@ USAGE = """agent-studio <command>
   team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id (no teams/: team.json)
   team stop [--team ID|UUID] [--workspace PATH]   stop the running team of a definition (or a runtime team UUID)
   team status [--team ID|UUID] [--workspace PATH] [--json]   the runtime team and members of a definition
+  team ask [--team T] --member M [--policy read_only|workspace_write] [--wait] (TEXT | --text-file PATH|-)
+                                           ask one free member to do something
+  team run-workflow [--team T] NAME [--bind ROLE=MEMBER ...] [--wait] (TEXT | --text-file PATH|-)
+                                           one-off workflow with roles bound to members (no board)
+  team workflows|check NAME [--bind ROLE=MEMBER ...]   workflow definitions / validate one against the team
+  team retry [--workflow ID]               run the stuck stage of the team's running or paused workflow again
+  team blocked                             members waiting for a decision, and how to free them
+  team resolve (--member M | --assignment ID) --action fail|retry|cancel   free a blocked member
+                (all of the above take [--team ID|UUID] [--workspace PATH] [--json])
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
               [--workspace PATH]
               [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
@@ -297,6 +306,8 @@ def _local_command(cmd, argv, pretty):
     """init / workspace list run in the CLI process (not dispatch commands). Returns None if not ours."""
     if cmd == "team" and argv[1:2] == ["status"]:
         return _team_status_command(argv, pretty)
+    if cmd == "team" and argv[1:2] and argv[1] in teamcli.ACTIONS:
+        return teamcli.run(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
         return _team_command(argv, pretty)
     if cmd == "init":
