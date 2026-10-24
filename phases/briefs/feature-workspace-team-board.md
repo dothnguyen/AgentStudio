@@ -12,7 +12,7 @@ agent-studio team start | stop                                   # the team's ag
 agent-studio team ask  --team dev-team --member Ryan "..."       # ask a FREE member to do something
 agent-studio team run-workflow --team dev-team refine-dev-qa ... # a one-off workflow, no board
 agent-studio board config --statuses "backlog,dev-ready,qa-ready,review-ready,done,close-not-required" ...
-agent-studio board phase set <phase>                             # the team only works tickets of the current phase
+agent-studio board phase add|list|show|set-current ...           # phases are board data; the team works the current phase's tickets only
 agent-studio team run-board | stop-board                         # the team works the board autonomously
 ```
 
@@ -35,7 +35,7 @@ Principles:
 | Ask a member | `task direct` (refuses a busy agent: `AGENT_BUSY`). | Exists; needs member names and a friendly command. |
 | One-off workflow | `workflow start`, definitions in `.agent-studio/workflows`; `team.py review/dev/fix/qa/final` are operator glue. | Exists; glue should become real commands. |
 | Board data | `tickets`, `ticket_deps`, `board_state` per workspace. **Statuses, columns, the pass/fail outcome table and the pick order are hard-wired** in `schema.py` (`TICKET_STATES` SQL CHECK, `BOARD_COLUMNS`, `BOARD_OUTCOMES`, `BOARD_PICK_*`); three ticket kinds with their own status sets. | Not configurable; a different status set means a code change and a migration. |
-| Board phases | Phases exist only as documents (`phases/phase-NN`). | No phase on the board, no "current phase". |
+| Board phases | Phases exist only as documents (`phases/phase-NN`). | No phase records on the board, no "current phase". |
 | Board <-> team | The scheduler serves "the running team on the workspace"; `board run` needs it. Git worktrees, branch rounds and the squash merge are built into the board. | No explicit binding; git delivery cannot be turned off or reused for other work. |
 | Human interface | JSON-only CLI (for Windows/Electron callers) plus the `team.py` helper. | Hand-driving means `team.py`; no single human CLI. |
 
@@ -69,12 +69,28 @@ resolves the workspace by walking up from the current directory; `--workspace` s
 ```json
 { "statuses": [ {"id":"backlog","kind":"initial"}, {"id":"dev-ready"}, {"id":"qa-ready"}, {"id":"review-ready"},
                 {"id":"done","kind":"done"}, {"id":"close-not-required","kind":"closed"} ],
-  "phases":   [ {"id":"p1","name":"Foundation"}, {"id":"p2","name":"UI"} ],
-  "currentPhase": "p1",
   "ticketFields": ["title","body","priority","dependsOn"] }
 ```
 Tickets: key, title, body, phase, status, priority, dependencies, assignee, lease, events. Kinds and per-kind status sets
 become optional templates, not a schema rule.
+
+**Phases are database records, not configuration (decided).** The board file holds statuses and rules; phases are rows in
+the board database and are managed with commands, so they can be added at any time without editing a file or restarting:
+- **Every board has a default phase**, created with the board (`id: default`, name "Default", position first). It cannot
+  be removed or closed; its name and description can be edited.
+- A phase has an `id` (slug, unique on the board), `name`, optional `description`, a `position` (order), a `status`
+  (`open` | `closed`) and timestamps. Every change writes a board event.
+- `board phase add --id p2 --name "UI" [--description ...] [--before p3]`, `board phase list`, `board phase show ID`
+  (tickets per status), `board phase edit ID` (name, description, position), `board phase close|reopen ID`,
+  `board phase remove ID` (not the default phase; only when it has no tickets, or with `--move-to OTHER`).
+- Every ticket belongs to exactly one phase: `ticket add ... --phase p2`; **without `--phase` it goes to the default
+  phase** (the same for tickets agents add through MCP and for `ticket phase KEY default`). `ticket phase KEY p2` moves
+  a ticket into another phase.
+- **Current phase:** the board has one pointer, `board phase set-current ID` (only an `open` phase) and
+  `board phase clear-current`. **When no phase is set as current, the default phase is current**, so a new board works
+  its default phase out of the box. The scheduler offers a team only tickets of the effective current phase. Changing the
+  pointer never interrupts running work: it finishes and its outcome is applied, and new claims use
+  the new phase. The board state records who changed it and when.
 
 **Board rules (who works what).** Part of the board config, validated against the team's roles and the workflow
 definitions:
@@ -89,9 +105,9 @@ Optional per-rule keys: `during` (status while running), `cap` (parallel limit),
 (`main` | `worktree` | `none`), `action` (a coordinator-only step such as `merge`, no agent), `priority` ordering.
 
 **Running.** `team run-board --team dev-team [--board id]` binds a team to a board and starts the scheduler tick for the
-pair; `stop-board` stops claiming (running work finishes). The scheduler only offers tickets whose phase is the
-board's `currentPhase` (or unphased). `board phase set <id>` changes it. A team not running a board is free for
-`ask` and `run-workflow`.
+pair; `stop-board` stops claiming (running work finishes). The scheduler only offers tickets of the board's current phase
+(`board phase set-current`; with none set, the default phase). A team not running a board is free for `ask` and
+`run-workflow`.
 
 **What the generic board must keep from the software board** (all optional, driven by rules), so replacing it loses no
 capability the operator relies on: an isolated git worktree and branch per ticket (`workspace: worktree`), a
@@ -145,11 +161,11 @@ Team without a board is usable first; the board generalisation follows.
 | P04-S05 | **Cut-over: the new team replaces `team.py`**: `team unpack / review / dev / fix / qa / final / commit` and `team index` with the same behaviour and per-story state as `team.py`; delete `team.py` and the `team.json` fallback; verify on one real story. |
 | P04-S06 | **Remove the software board**: delete its code, tables (migration), commands, built-in board workflows/prompts and tests; tag the old code in git first. |
 | P04-S07 | **Generic board model**: new tables, statuses from `board config` validated in code (no SQL status CHECK), generic `ticket add/move/show/list/depend`, `board show`. |
-| P04-S08 | **Board phases**: phase entity, `ticket.phase`, `currentPhase`, `board phase set/list`. |
+| P04-S08 | **Board phases (database)**: `gphases` table and events; the default phase created with the board and protected; `board phase add / list / show / edit / close / reopen / remove`; `ticket add --phase` (default phase when omitted) and `ticket phase KEY ID`; the current-phase pointer (`set-current` / `clear-current`, default phase when unset) with its event; `board show` groups tickets by phase. |
 | P04-S09 | **Board rules and outcome applier**: rules schema + validation (`board rules check`), apply a finished workflow run to the ticket (`onPass`/`onFail`/`onBlocked`, round limits, blocking). |
-| P04-S10 | **Scheduler and `team run-board` / `stop-board`**: team<->board binding, claim, lease, phase filter, caps, dependencies, free-member rule; ticket workspace modes `main` / `worktree` and the `merge` action. |
+| P04-S10 | **Scheduler and `team run-board` / `stop-board`**: team<->board binding, claim, lease, current-phase filter, caps, dependencies, free-member rule; ticket workspace modes `main` / `worktree` and the `merge` action. |
 | P04-S11 | **Recovery, limits and live gate**: lease expiry and crash recovery, usage-limit release and `board resume`, docs, a live run of the board on a real project. |
-| P04-S12 | **Board MCP server for agents**: `agent-studio mcp` (stdio MCP server) exposing `ticket_add`, `ticket_list`, `ticket_show`, `board_show`; first step is a spike with the real Claude Code and Codex CLIs (can they launch it, reach the command inbox from their sandbox, and are the tools callable under the adapters' allowlists); per-assignment config generated by the Claude and Codex adapters; agent identity and run recorded on every ticket (`createdBy`); tickets land in the board's initial status; per-run cap and duplicate-title check; a per-role `canAddTickets` switch; providers without MCP support are out of scope (no file hand-off). |
+| P04-S12 | **Board MCP server for agents**: `agent-studio mcp` (stdio MCP server) exposing `ticket_add` (with `phase`), `ticket_list`, `ticket_show`, `phase_list`, `board_show`; first step is a spike with the real Claude Code and Codex CLIs (can they launch it, reach the command inbox from their sandbox, and are the tools callable under the adapters' allowlists); per-assignment config generated by the Claude and Codex adapters; agent identity and run recorded on every ticket (`createdBy`); tickets land in the board's initial status; per-run cap and duplicate-title check; a per-role `canAddTickets` switch; providers without MCP support are out of scope (no file hand-off). |
 
 S01-S05 deliver "the new team", usable on this project without any board, and replace `team.py` (S05 is the cut-over).
 S06 is the clean slate; S07-S11 build the generic board with the new team. S12 lets agents add tickets to it through an MCP server

@@ -18,7 +18,7 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | Q2 | Where is the workspace registry kept? | In the WSL state dir (next to `state.db`), not in the workspace. `workspace.json` holds only `{id, name}`. |
 | Q3 | The brief allows `board.json` or `boards/<id>.json` and `--board id`, but decision 1 says one board per workspace. | One board: `.agent-studio/board.json`. `run-board` has no `--board` flag. |
 | Q4 | `.agent-studio/board.json` already holds the P03 software-board config. | S06 deletes the P03 reader. S07 defines the new format and rejects the old shape with `BOARD_CONFIG_INVALID`. The file in this repo is rewritten by hand when S07 lands. |
-| Q5 | Which schema version do the new tables use? | `SCHEMA_VERSION` is 8 today. Each story that needs a schema change adds the next free version (S03 adds `teams.def_id` / `agents.member_id`, expected 9, then S06 drops the P03 tables, then S07 adds the generic tables). Stories say "next migration" and record the number in Evidence. |
+| Q5 | Which schema version do the new tables use? | `SCHEMA_VERSION` is 8 today. Each story that needs a schema change adds the next free version (S03 added `teams.def_id` / `agents.member_id` as 9; S06 drops the P03 tables, expected 10; S07 adds the generic tables, expected 11). Stories say "next migration" and record the number in Evidence. |
 | Q6 | What does `team add-member` do for `--provider` and `--role` it cannot check? | It writes the file, then prints `team validate` warnings; `team start` is where an invalid file fails (`TEAM_CONFIG_INVALID`). |
 | Q7 | Member names vs ids. | The id is a slug of the name, unique in the team; the name is for people and panes. `--member` accepts either. |
 | Q8 | Multiple teams in one workspace and the one-active-assignment-per-workspace rule from P00. | Unchanged: workspace-mutating work is serialized per workspace/worktree path as today. Several teams can run, but write-heavy work waits on that lock; read-only asks do not. |
@@ -84,3 +84,7 @@ Story delivery (S05): `team unpack | review | dev | fix | qa | final | commit | 
 ### E. Rules and running
 
 A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?}`. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets whose phase is `currentPhase` or unphased, and only to free members.
+
+### F. Engine between S06 and S10
+
+S06 cuts the engine's links to the P03 board without changing what it does on a database with no tickets. `task.direct` and `workflow.start` accept only the team's workspace; any other path is `WORKTREE_NOT_REGISTERED` and nothing is written. S10 restores the worktree check against the generic tickets. Usage limits stay in the engine: a `USAGE_LIMIT` report still marks the agent `limit_reached` (`agents.limit_reset_at`), and the agents-only `board.resume` command (`--agent ID | --all`) stays as the way to clear it. S11 extends it to `board resume --member M`. Every other `board.*` and `ticket.*` command, and `debug.ticket_worktree`, is removed in S06. `worktrees.py` and `gitws.py` stay for S10.
