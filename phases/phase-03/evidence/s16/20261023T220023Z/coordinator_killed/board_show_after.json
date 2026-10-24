@@ -1,0 +1,157 @@
+{
+  "agents": [
+    {
+      "agentId": "207aa173-6b14-4e8c-b08a-49e4c8858bc5",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "teamlead",
+      "role": "TeamLead"
+    },
+    {
+      "agentId": "c3908d9d-2d58-4bf3-994c-4291f994abc0",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "qa",
+      "role": "QA"
+    },
+    {
+      "agentId": "ff1ac516-3ee8-4b6d-b6b5-ba34a6fa524c",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "dev-1",
+      "role": "Developer"
+    }
+  ],
+  "board": {
+    "reason": null,
+    "status": "running"
+  },
+  "columns": [
+    {
+      "count": 0,
+      "status": "backlog",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_unpack",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "unpacking",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "unpacked",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "done",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "refine",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "refining",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_dev",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_dev",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "fail_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_review",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_review",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_merge",
+      "tickets": []
+    },
+    {
+      "count": 1,
+      "status": "merged",
+      "tickets": [
+        {
+          "assignee": null,
+          "blockedReason": null,
+          "depsOpen": [],
+          "key": "T-001",
+          "kind": "story",
+          "priority": 100,
+          "rounds": {
+            "dev": 0,
+            "review": 0,
+            "test": 0
+          },
+          "runId": "676951f4-df75-483a-b267-b9a3be911c19",
+          "severity": null,
+          "title": "Story 1"
+        }
+      ]
+    },
+    {
+      "count": 0,
+      "status": "changes_requested",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "triage",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "triaging",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "blocked",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "cancelled",
+      "tickets": []
+    }
+  ],
+  "cursor": 143,
+  "dbId": "bece83d9-aca7-4d02-adc3-6b30578d773c",
+  "held": [],
+  "workspace": "/tmp/as-drill-_ie_3xv0/repo"
+}

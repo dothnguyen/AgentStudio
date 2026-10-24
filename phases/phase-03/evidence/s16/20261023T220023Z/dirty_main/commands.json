@@ -1,0 +1,9 @@
+[
+  {
+    "argv": [
+      "rm",
+      "scratch.txt"
+    ],
+    "response": "ok"
+  }
+]

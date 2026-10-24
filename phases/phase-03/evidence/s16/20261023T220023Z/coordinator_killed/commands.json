@@ -1,0 +1,10 @@
+[
+  {
+    "argv": [
+      "coordinator",
+      "start",
+      "--enable-debug"
+    ],
+    "response": "ok"
+  }
+]

@@ -1,0 +1,180 @@
+{
+  "agents": [
+    {
+      "agentId": "16a92749-ea24-4ade-804d-553a6a9cda55",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "teamlead",
+      "role": "TeamLead"
+    },
+    {
+      "agentId": "51b6f086-7ec2-4491-8489-c30fa9f444d6",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "qa",
+      "role": "QA"
+    },
+    {
+      "agentId": "4fd207fc-2e7f-41f0-a3d2-239d9c6e10e8",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "dev-1",
+      "role": "Developer"
+    },
+    {
+      "agentId": "0e4b3c4d-e5a8-47ef-9255-2dd49c115785",
+      "availability": "idle",
+      "limitResetAt": null,
+      "name": "dev-2",
+      "role": "Developer"
+    }
+  ],
+  "board": {
+    "reason": null,
+    "status": "running"
+  },
+  "columns": [
+    {
+      "count": 0,
+      "status": "backlog",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_unpack",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "unpacking",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "unpacked",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "done",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "refine",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "refining",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_dev",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_dev",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "fail_test",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_review",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "in_review",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "ready_merge",
+      "tickets": []
+    },
+    {
+      "count": 2,
+      "status": "merged",
+      "tickets": [
+        {
+          "assignee": null,
+          "blockedReason": null,
+          "depsOpen": [],
+          "key": "T-002",
+          "kind": "story",
+          "priority": 100,
+          "rounds": {
+            "dev": 0,
+            "review": 1,
+            "test": 0
+          },
+          "runId": "54385dd1-5b27-4421-b0a4-488689e3a00c",
+          "severity": null,
+          "title": "Story 2"
+        },
+        {
+          "assignee": null,
+          "blockedReason": null,
+          "depsOpen": [],
+          "key": "T-001",
+          "kind": "story",
+          "priority": 100,
+          "rounds": {
+            "dev": 0,
+            "review": 0,
+            "test": 0
+          },
+          "runId": "1e3a2d9e-9a01-41f9-a358-069b95c70f3d",
+          "severity": null,
+          "title": "Story 1"
+        }
+      ]
+    },
+    {
+      "count": 0,
+      "status": "changes_requested",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "triage",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "triaging",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "blocked",
+      "tickets": []
+    },
+    {
+      "count": 0,
+      "status": "cancelled",
+      "tickets": []
+    }
+  ],
+  "cursor": 377,
+  "dbId": "ab7c7f53-3659-48bb-bd3e-1712df3ed55a",
+  "held": [],
+  "workspace": "/tmp/as-drill-i3wv2wqg/repo"
+}

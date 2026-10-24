@@ -1,0 +1,62 @@
+[
+  {
+    "request": {
+      "args": {
+        "key": "T-001",
+        "workspace": "/tmp/as-drill-khb9frfi/repo"
+      },
+      "command": "ticket.unblock",
+      "idempotencyKey": "drill-6cff968c63d3414ca213b313f6c73836",
+      "protocol": "agent-studio/v1"
+    },
+    "response": {
+      "data": {
+        "ticket": {
+          "applied_run_id": "d49d8d1b-f844-41d7-b4fa-1d75c1c2c826",
+          "assignee_agent_id": null,
+          "attachments_json": null,
+          "base_commit": null,
+          "blocked_reason": null,
+          "branch": null,
+          "brief_path": null,
+          "created_at": "2026-10-23T22:01:26.364Z",
+          "dev_rounds": 0,
+          "duplicate_of": null,
+          "findings_json": null,
+          "head_commit": null,
+          "id": "103c20f3-11e2-4637-b97c-c511a3a3ce43",
+          "key": "T-001",
+          "kind": "story",
+          "lease_until": null,
+          "merged_commit": null,
+          "out_dir": null,
+          "parent_ticket_id": null,
+          "priority": 100,
+          "questions_json": null,
+          "raw_text": null,
+          "return_status": null,
+          "review_rounds": 0,
+          "run_id": "d49d8d1b-f844-41d7-b4fa-1d75c1c2c826",
+          "severity": null,
+          "status": "refine",
+          "story_path": "phases/phase-03/stories/story-1.md",
+          "test_rounds": 0,
+          "title": "Story 1",
+          "updated_at": "2026-10-23T22:01:28.600Z",
+          "workspace": "/tmp/as-drill-khb9frfi/repo",
+          "worktree_path": null
+        }
+      },
+      "id": null,
+      "ok": true,
+      "protocol": "agent-studio/v1"
+    }
+  },
+  {
+    "argv": [
+      "rm",
+      "outside.txt"
+    ],
+    "response": "ok"
+  }
+]

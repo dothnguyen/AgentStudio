@@ -1,0 +1,63 @@
+[
+  {
+    "argv": [
+      "coordinator",
+      "start",
+      "--enable-debug"
+    ],
+    "response": "ok"
+  },
+  {
+    "request": {
+      "args": {
+        "key": "T-001",
+        "workspace": "/tmp/as-drill-dlsrjyn1/repo"
+      },
+      "command": "ticket.retry",
+      "idempotencyKey": "drill-0b54419caea04add9223d65fe89c76ef",
+      "protocol": "agent-studio/v1"
+    },
+    "response": {
+      "data": {
+        "ticket": {
+          "applied_run_id": null,
+          "assignee_agent_id": null,
+          "attachments_json": null,
+          "base_commit": "e618e3e6522e8d76ad6f416628de96eac0b785f9",
+          "blocked_reason": null,
+          "branch": "ticket/T-001-story-1",
+          "brief_path": null,
+          "created_at": "2026-10-23T22:02:07.385Z",
+          "dev_rounds": 0,
+          "duplicate_of": null,
+          "findings_json": null,
+          "head_commit": null,
+          "id": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+          "key": "T-001",
+          "kind": "story",
+          "lease_until": null,
+          "merged_commit": null,
+          "out_dir": null,
+          "parent_ticket_id": null,
+          "priority": 100,
+          "questions_json": null,
+          "raw_text": null,
+          "return_status": null,
+          "review_rounds": 0,
+          "run_id": null,
+          "severity": null,
+          "status": "ready_dev",
+          "story_path": "phases/phase-03/stories/story-1.md",
+          "test_rounds": 0,
+          "title": "Story 1",
+          "updated_at": "2026-10-23T22:02:14.903Z",
+          "workspace": "/tmp/as-drill-dlsrjyn1/repo",
+          "worktree_path": "/tmp/as-drill-dlsrjyn1/state/agent-studio/worktrees/f554a710fd69/T-001"
+        }
+      },
+      "id": null,
+      "ok": true,
+      "protocol": "agent-studio/v1"
+    }
+  }
+]

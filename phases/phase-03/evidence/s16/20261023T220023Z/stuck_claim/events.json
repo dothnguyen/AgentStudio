@@ -1,0 +1,562 @@
+[
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:07.386Z",
+    "commandSeq": 2,
+    "data": {
+      "key": "T-001",
+      "kind": "story",
+      "status": "refine",
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "name": "ticket.created",
+    "seq": 13,
+    "to": "refine"
+  },
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:07.743Z",
+    "commandSeq": 3,
+    "data": {
+      "by": "operator",
+      "from": "refine",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "ready_dev"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "refine",
+    "name": "ticket.moved",
+    "seq": 14,
+    "to": "ready_dev"
+  },
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:08.073Z",
+    "commandSeq": 4,
+    "data": {
+      "unstaffed": [
+        "unpack"
+      ]
+    },
+    "entity": "team",
+    "entityId": "20fb580e-ced5-4f30-af2e-726aa25e6c27",
+    "from": "running",
+    "name": "board.started",
+    "seq": 15,
+    "teamId": "20fb580e-ced5-4f30-af2e-726aa25e6c27",
+    "to": "running"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:08.077Z",
+    "data": {
+      "by": "coordinator",
+      "from": "ready_dev",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "in_dev"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_dev",
+    "name": "ticket.moved",
+    "seq": 16,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:08.077Z",
+    "data": {
+      "agentId": "8545333d-c957-464d-99de-b6b7d6998dac"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.claimed",
+    "seq": 17,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:08.091Z",
+    "data": {
+      "baseCommit": "e618e3e6522e8d76ad6f416628de96eac0b785f9",
+      "branch": "ticket/T-001-story-1",
+      "path": "/tmp/as-drill-dlsrjyn1/state/agent-studio/worktrees/f554a710fd69/T-001"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.worktree_created",
+    "seq": 18,
+    "to": "in_dev"
+  },
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:14.903Z",
+    "commandSeq": 5,
+    "data": {
+      "by": "coordinator",
+      "from": "in_dev",
+      "key": "T-001",
+      "reason": "operator_retry",
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "ready_dev"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.moved",
+    "seq": 19,
+    "to": "ready_dev"
+  },
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:14.903Z",
+    "commandSeq": 5,
+    "data": {
+      "reason": "operator_retry"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_dev",
+    "name": "ticket.released",
+    "seq": 20,
+    "to": "ready_dev"
+  },
+  {
+    "actor": "operator",
+    "at": "2026-10-23T22:02:14.903Z",
+    "commandSeq": 5,
+    "data": {},
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_dev",
+    "name": "ticket.release_marked",
+    "seq": 21,
+    "to": "ready_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:14.907Z",
+    "data": {
+      "by": "coordinator",
+      "from": "ready_dev",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "in_dev"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_dev",
+    "name": "ticket.moved",
+    "seq": 22,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:14.908Z",
+    "data": {
+      "agentId": "8545333d-c957-464d-99de-b6b7d6998dac"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.claimed",
+    "seq": 23,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:14.967Z",
+    "data": {
+      "definition": "board-develop",
+      "runId": "ce122cc7-e19b-48df-ac80-ad132fea2f72"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.run_started",
+    "seq": 33,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {
+      "branch": "ticket/T-001-story-1",
+      "commit": "2b492e5aaf36ec44ddfa1e9f5811be7311b04690",
+      "runId": "ce122cc7-e19b-48df-ac80-ad132fea2f72"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.commit_recorded",
+    "seq": 51,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {
+      "branch": "ticket/T-001-story-1",
+      "commit": "2b492e5aaf36ec44ddfa1e9f5811be7311b04690",
+      "runId": "ce122cc7-e19b-48df-ac80-ad132fea2f72"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.committed",
+    "seq": 52,
+    "to": "in_dev"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {
+      "by": "coordinator",
+      "from": "in_dev",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "ready_test"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_dev",
+    "name": "ticket.moved",
+    "seq": 53,
+    "to": "ready_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {},
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_test",
+    "name": "ticket.outcome_marked",
+    "seq": 54,
+    "to": "ready_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {
+      "column": "develop",
+      "reason": null,
+      "runId": "ce122cc7-e19b-48df-ac80-ad132fea2f72",
+      "runStatus": "succeeded",
+      "to": "ready_test",
+      "verdict": null
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_test",
+    "name": "ticket.outcome_marked",
+    "seq": 55,
+    "to": "ready_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.307Z",
+    "data": {
+      "column": "develop",
+      "reason": null,
+      "runId": "ce122cc7-e19b-48df-ac80-ad132fea2f72",
+      "runStatus": "succeeded",
+      "to": "ready_test",
+      "verdict": null
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_test",
+    "name": "ticket.outcome_applied",
+    "seq": 56,
+    "to": "ready_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.311Z",
+    "data": {
+      "by": "coordinator",
+      "from": "ready_test",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "in_test"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_test",
+    "name": "ticket.moved",
+    "seq": 57,
+    "to": "in_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.311Z",
+    "data": {
+      "agentId": "7e782af3-1d38-4e74-a2b1-369891dc49e9"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_test",
+    "name": "ticket.claimed",
+    "seq": 58,
+    "to": "in_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:16.373Z",
+    "data": {
+      "definition": "board-test",
+      "runId": "79595023-becb-42f3-a56b-c7d0d96283a1"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_test",
+    "name": "ticket.run_started",
+    "seq": 69,
+    "to": "in_test"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.153Z",
+    "data": {
+      "by": "coordinator",
+      "from": "in_test",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "ready_review"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_test",
+    "name": "ticket.moved",
+    "seq": 82,
+    "to": "ready_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.153Z",
+    "data": {},
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_review",
+    "name": "ticket.outcome_marked",
+    "seq": 83,
+    "to": "ready_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.153Z",
+    "data": {
+      "column": "test",
+      "reason": null,
+      "runId": "79595023-becb-42f3-a56b-c7d0d96283a1",
+      "runStatus": "succeeded",
+      "to": "ready_review",
+      "verdict": "pass"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_review",
+    "name": "ticket.outcome_marked",
+    "seq": 84,
+    "to": "ready_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.153Z",
+    "data": {
+      "column": "test",
+      "reason": null,
+      "runId": "79595023-becb-42f3-a56b-c7d0d96283a1",
+      "runStatus": "succeeded",
+      "to": "ready_review",
+      "verdict": "pass"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_review",
+    "name": "ticket.outcome_applied",
+    "seq": 85,
+    "to": "ready_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.157Z",
+    "data": {
+      "by": "coordinator",
+      "from": "ready_review",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "in_review"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_review",
+    "name": "ticket.moved",
+    "seq": 86,
+    "to": "in_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.157Z",
+    "data": {
+      "agentId": "58a983ac-9aca-4d3a-a882-fae6bc2591ef"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_review",
+    "name": "ticket.claimed",
+    "seq": 87,
+    "to": "in_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:17.224Z",
+    "data": {
+      "definition": "board-review",
+      "runId": "354cc6ac-fc0b-41ed-9694-ee309e61ee38"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_review",
+    "name": "ticket.run_started",
+    "seq": 98,
+    "to": "in_review"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.285Z",
+    "data": {
+      "by": "coordinator",
+      "from": "in_review",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "ready_merge"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "in_review",
+    "name": "ticket.moved",
+    "seq": 111,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.285Z",
+    "data": {},
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.outcome_marked",
+    "seq": 112,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.285Z",
+    "data": {
+      "column": "review",
+      "commitMessage": "T-001: Story 1\n\nTicket: T-001",
+      "reason": null,
+      "runId": "354cc6ac-fc0b-41ed-9694-ee309e61ee38",
+      "runStatus": "succeeded",
+      "to": "ready_merge",
+      "verdict": "pass"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.outcome_marked",
+    "seq": 113,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.285Z",
+    "data": {
+      "column": "review",
+      "commitMessage": "T-001: Story 1\n\nTicket: T-001",
+      "reason": null,
+      "runId": "354cc6ac-fc0b-41ed-9694-ee309e61ee38",
+      "runStatus": "succeeded",
+      "to": "ready_merge",
+      "verdict": "pass"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.outcome_applied",
+    "seq": 114,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.285Z",
+    "data": {},
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.merge_message_defaulted",
+    "seq": 115,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.303Z",
+    "data": {
+      "commit": "ad4f13135a3d9e317ba565a092a802df83ed831c"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.merge_recorded",
+    "seq": 116,
+    "to": "ready_merge"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.303Z",
+    "data": {
+      "by": "coordinator",
+      "from": "ready_merge",
+      "key": "T-001",
+      "reason": null,
+      "ticketId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+      "to": "merged"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "ready_merge",
+    "name": "ticket.moved",
+    "seq": 117,
+    "to": "merged"
+  },
+  {
+    "actor": "coordinator",
+    "at": "2026-10-23T22:02:18.303Z",
+    "data": {
+      "commit": "ad4f13135a3d9e317ba565a092a802df83ed831c"
+    },
+    "entity": "ticket",
+    "entityId": "1d9ea5e2-c90a-4475-9fea-b7cbebec9198",
+    "from": "merged",
+    "name": "ticket.merged",
+    "seq": 118,
+    "to": "merged"
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "request": {
+      "args": {
+        "agentId": "543634c2-567c-4bba-b72d-3ecca9e7fc95",
+        "workspace": "/tmp/as-drill-xr49ch9a/repo"
+      },
+      "command": "board.resume",
+      "idempotencyKey": "drill-5c92efb424084f798b22d91cf68a2207",
+      "protocol": "agent-studio/v1"
+    },
+    "response": {
+      "data": {
+        "resumed": [
+          "543634c2-567c-4bba-b72d-3ecca9e7fc95"
+        ]
+      },
+      "id": null,
+      "ok": true,
+      "protocol": "agent-studio/v1"
+    }
+  }
+]

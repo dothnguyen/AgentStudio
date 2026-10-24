@@ -1,0 +1,55 @@
+{
+  "provider": "fake",
+  "drills": [
+    {
+      "name": "coordinator_killed",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 20.4
+    },
+    {
+      "name": "runner_killed",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 11.6
+    },
+    {
+      "name": "merge_conflict",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 17.3
+    },
+    {
+      "name": "round_limit",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 16.1
+    },
+    {
+      "name": "planning_outside",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 10.6
+    },
+    {
+      "name": "dirty_main",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 15.3
+    },
+    {
+      "name": "usage_limit",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 16.9
+    },
+    {
+      "name": "stuck_claim",
+      "ok": true,
+      "finalStatus": "merged",
+      "seconds": 14.3
+    }
+  ],
+  "passed": 8,
+  "failed": 0
+}

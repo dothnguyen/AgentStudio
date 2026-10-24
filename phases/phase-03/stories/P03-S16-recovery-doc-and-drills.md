@@ -1,35 +1,57 @@
 # P03-S16 — Recovery doc and failure drills
 
-Status: To Do
-Depends on: P03-S13, P03-S14, P03-S15
-Architecture: [P03 design contract](../README.md#design-contract), §D, §E, §G, §H
+Status: Done (2026-10-24)
+Depends on: P03-S11 (usage limits, `board.resume`), P03-S12 (leases, `ticket.retry`), P03-S13 (scheduler, `board.run`), P03-S14 (rosters), P03-S15 (`board.show`, `team.py board`)
+Architecture: [P03 design contract](../README.md#design-contract), §C (block reasons), §D, §E, §F, §G, §H, §I
 
 ## Goal
 
-Every board failure mode has a written recovery and a drill that proves the recovery works on the fake provider: the coordinator killed mid-ticket, a runner killed, a merge conflict, a round-limit block, a planning diff outside the allowed paths, a dirty main checkout, a usage limit, and a stuck claim. The operator can get any ticket moving again from the doc alone.
+Every board failure mode has a written recovery and a drill that proves the recovery works on the fake provider: the coordinator killed mid-ticket, a runner killed, a merge conflict, a round-limit block, a planning diff outside the allowed paths, a dirty main checkout, a usage limit, and a stuck claim. The operator can get any ticket moving again from the doc alone. This story adds no product code: only the doc, a drill script, and tests.
 
 ## Implement in this order
 
-1. `backend/RECOVERY.md`, new section "Board". For each failure: the symptom (what `team.py board` / `board.show` shows), the cause, and the exact commands (`ticket.retry`, `ticket.move`, `ticket.unblock`, `assignment.resolve`, `board.resume`, cleaning the main checkout). Also document the danger zones: the operator editing the main checkout while the board runs, and worktrees on `/mnt/c`.
-2. `scripts/live/board_drills.py`: runs each drill against a throwaway repo with the fake provider and writes `phases/phase-03/evidence/s16/<timestamp>/<drill>/` (`board.show` before and after, events, and the commands used).
-3. One integration test per drill that runs the same steps without the evidence writer.
+1. **`backend/RECOVERY.md`, new section `## Board (P03)`** after the P01 section, in the same table style (`You see | Meaning | Command`):
+   - One row per failure drilled below, plus one row per code in the **code list** (step 4). Each row gives the symptom as `team.py board` / `board.show` shows it (column, `!<blockedReason>`, `HELD:` or `LIMIT:` line, or the error code a command returns), the cause, and the exact command(s): `ticket.retry`, `ticket.move`, `ticket.unblock`, `ticket.cancel`, `assignment.resolve`, `board.resume`, `board.run`, `coordinator start`, or the git commands that clean the main checkout (`git -C <workspace> status --porcelain`, then `git -C <workspace> stash push --include-untracked` or `git -C <workspace> checkout -- <path>` / `rm <path>`). Use both the `agent-studio …` form and the `team.py …` form where `team.py` wraps the command (S15).
+   - A short "Danger zones" subsection: editing or committing in the main checkout while the board runs (it holds unpack/triage/refine/merge as `MAIN_CHECKOUT_DIRTY` / `MAIN_CHECKOUT_WRONG_BRANCH`, and a planning diff that mixes your edits with an agent's is blocked `PLANNING_DIFF_INVALID`, never reverted, §F); and worktrees: they live under the WSL state dir (§E), never move them or create worktrees by hand, and never put a worktree root on `/mnt/c` (slow, and Windows tools lock files there). Never use `git merge --abort` after a squash, use `git reset --merge` (§E).
+2. **`scripts/live/board_drills.py`**, an importable module plus a CLI: `python3 scripts/live/board_drills.py --provider fake [--only NAME ...]`.
+   - **Isolation.** It never touches the operator's coordinator or state: each drill gets a fresh `XDG_STATE_HOME` and `TMUX_TMPDIR` under a temp dir (as `tests.helpers.Sandbox` does), `AGENT_STUDIO_TEST_FIXTURE_PROVIDERS=codex=fake,claude=fake,agy=fake`, a debug coordinator (`coordinator start --enable-debug`), and a throwaway git repo under the temp dir (never under `/mnt/`). It removes all of these at the end, including on failure. `--provider` accepts only `fake`; anything else exits 2.
+   - **Fixture per drill.** The repo has `.agent-studio/board.json` with `baseBranch` set, the story files under `phases/phase-03/stories/`, and a validation command that passes. The team is TeamLead, Developer and QA (two Developers for `merge_conflict`). Tickets are created with `ticket.create` and enter `refine`. The drill then runs `board.run`, so the scheduler drives every column. It does not use `ticket.start`.
+   - **Scripted fakes.** Provider options are installed with the S13 approach, an `AFTER INSERT ON assignments` trigger in the drill's own `state.db`. Make the trigger table-driven, so a drill can give a different option per (ticket key, stage, occurrence): the nth assignment of that stage for that ticket's runs. The default script is the S13 happy path (refine writes the story file, develop writes `fixed.txt`, verdicts pass).
+   - **Drills**, one function each, `drill_<name>(env, evidence)`. `evidence` is `None` in tests. Each returns `{name, ok, finalStatus, seconds}` and raises `AssertionError` on a wrong path. Every drill asserts the path below, then waits (timeout from `TEST_WAIT_SECONDS`, default 120 s) until every ticket in it is `merged`:
+
+     | Name | Failure injected | Expected path, then recovery |
+     |---|---|---|
+     | `coordinator_killed` | slow develop fake (≥ 10 s); `SIGKILL` the coordinator (PID from `<state>/coordinator.json`) while the ticket is `in_dev` | `coordinator start --enable-debug`; the run completes and the ticket goes on to `merged` with exactly one `ticket.outcome_applied` for that develop run |
+     | `runner_killed` | slow QA fake; `SIGKILL` the QA assignment's `processPid` while `in_test` | assignment `reconciling` / `RUNNER_GONE`, ticket `blocked` with `RUN_PAUSED:` prefix, `returnStatus` `ready_test`; `assignment.resolve --action retry` (next QA fake passes) → late outcome → `merged` |
+     | `merge_conflict` | two tickets, two Developers, both develop fakes write the same path (`shared.txt`, the fake's content differs per prompt) | the second to merge goes `changes_requested` with findings `MERGE_CONFLICT: shared.txt` and a `ticket.merge_conflict` event; no operator command is needed: the next develop round (base merged in, the fake rewrites the file) → both `merged` |
+     | `round_limit` | `roundLimits.test = 1`; QA fails twice | `fail_test` after fail 1, then `blocked` / `ROUND_LIMIT:test` with `returnStatus` `fail_test`; `ticket.unblock` → develop → QA pass → `merged` |
+     | `planning_outside` | refine fake writes `outside.txt` at the repo root | `blocked` / `PLANNING_DIFF_INVALID`, nothing committed, `outside.txt` still there; `ticket.unblock` → the ticket waits in `refine` and `board.show.held` contains `{column: "refine", reason: "MAIN_CHECKOUT_DIRTY"}` (holds are listed only while a ticket waits, S13); `rm outside.txt` → refine runs again (the next refine fake writes the story file) → `merged` |
+     | `dirty_main` | the drill writes an untracked `scratch.txt` into the main checkout once the ticket is `ready_review` | the ticket waits in `ready_merge` with `board.show.held` containing `{column: "merge", reason: "MAIN_CHECKOUT_DIRTY"}`; `rm scratch.txt` → `merged` |
+     | `usage_limit` | develop fake `usage_limit` | ticket back to `ready_dev` with `ticket.released {reason: "usage_limit"}`, `dev_rounds` 0, Developer `limit_reached`, the ticket not reclaimed for 5 s; `board.resume --agent <developer>` → `merged` |
+     | `stuck_claim` | `board.json` `leaseSeconds: 3600`; coordinator started with `AGENT_STUDIO_TEST_CRASH_AT=after_ticket_claim_commit`, so it dies right after the develop claim | restart the coordinator without the variable; the ticket stays `in_dev` with a pending claim (no `ticket.run_started` after its last `ticket.claimed`) for 5 s; `ticket.retry` → `ticket.released {reason: "operator_retry"}` → reclaimed → `merged` |
+
+   - **Evidence** (only when `evidence` is set): `phases/phase-03/evidence/s16/<UTC YYYYMMDDTHHMMSSZ>/<drill>/` with `board_show_before.json` (right after the failure is visible), `board_show_after.json` (at the end), `events.json` (every `ticket.*` / `board.*` event for the drill's workspace, from `agent-studio events`), and `commands.json` (each recovery command sent, as argv or request, with its response). The run folder gets `summary.json` `{provider: "fake", drills: [{name, ok, finalStatus, seconds, error?}], passed, failed}`. The CLI prints one `PASS|FAIL <name>` line per drill and `<passed>/<total> drills passed`, and exits 0 only when all pass.
+3. **`tests/integration/test_p03_s16_drills.py`**: loads `scripts/live/board_drills.py` with `importlib.util.spec_from_file_location` (as the S15 tests load `team.py`) and runs each drill in its own test method with `evidence=None`, asserting `ok` and `finalStatus == "merged"`.
+4. **Code list and doc check.** The operator-visible codes are, exactly: the §I error codes `TICKET_NOT_FOUND`, `TICKET_TRANSITION_INVALID`, `TICKET_BUSY`, `TICKET_DEPENDENCY_CYCLE`, `STORY_PATH_INVALID`, `BOARD_CONFIG_INVALID`, `WORKTREE_NOT_REGISTERED`, `WORKTREE_EXISTS`, `MAIN_CHECKOUT_DIRTY`, `MAIN_CHECKOUT_WRONG_BRANCH`, `PLANNING_DIFF_INVALID`, `MANIFEST_INVALID`, `BUG_FILE_INVALID`, `MERGE_CONFLICT`, `USAGE_LIMIT`, `TICKET_ROLE_MISMATCH`, `TICKET_DEPS_NOT_MERGED`, `TEAM_CONFIG_INVALID`; the §C block reasons `RUN_PAUSED`, `ROUND_LIMIT`, `VERDICT_FAIL`, `UNPACK_QUESTIONS`, `RUN_FAILED`, `OUTCOME_UNSUPPORTED`, `WORKTREE_MISSING`, `START_FAILED`; the hold reason `MAIN_CHECKOUT_BUSY`; and the findings code `NO_CHANGES`. `tests/unit/test_p03_s16_recovery_doc.py` holds this list as a constant and checks that:
+   - every code occurs in `backend/agent_studio/*.py`, so the list cannot name a code the backend lacks;
+   - every code appears in the `## Board (P03)` section of `backend/RECOVERY.md`, in a table row whose `Command` cell contains a backticked command;
+   - every drill name in `board_drills.DRILLS` appears in that section.
 
 ## Done when
 
-- [ ] Drills, each ending with the ticket `merged` or deliberately `cancelled`:
-  - kill the coordinator in `in_dev`;
-  - kill the runner in `in_test`;
-  - a merge conflict between two tickets;
-  - `roundLimits.test = 1` with two QA fails, then `ticket.unblock`;
-  - a refine that writes outside the phase folder;
-  - a dirty main checkout blocking a merge;
-  - `usage_limit` then `board.resume`;
-  - a stuck claim then `ticket.retry`.
-  Test: `tests/integration/test_p03_s16_drills.py`.
-- [ ] `scripts/live/board_drills.py --provider fake` writes one evidence folder per drill, and its summary lists all pass.
-- [ ] RECOVERY.md "Board" names every error code from §I that the operator can see, with a command for each. A unit test checks the doc against the code list.
-- [ ] All existing tests stay green.
+- [x] The eight drills in step 2 each follow their expected path and end with every ticket `merged`. Test: `tests/integration/test_p03_s16_drills.py` (one method per drill).
+- [x] The drills never use the operator's state: each drill's `XDG_STATE_HOME` and repo are under a temp dir and are removed afterwards, and `--provider codex` exits 2 without starting anything. Test: `tests/unit/test_p03_s16_drills_cli.py` (the environment builder and argument parsing, no coordinator).
+- [x] `python3 scripts/live/board_drills.py --provider fake` writes one evidence folder per drill with the four files from step 2 plus `summary.json`, and prints `8/8 drills passed`. Evidence: the run folder, linked in this story's Evidence section.
+- [x] RECOVERY.md `## Board (P03)` names every code in the step 4 list with a command for each, has a row for each drill, and has the "Danger zones" subsection. Test: `tests/unit/test_p03_s16_recovery_doc.py`.
+- [x] All existing tests stay green (`python3 -m unittest discover -s tests/unit`).
 
 ## Evidence
 
-(filled in when the story is done)
+- Validation: `python3 scripts/validate.py --unit` → PASS (`Ran 532 tests`, `OK (skipped=3)`).
+- `python3 scripts/live/board_drills.py --provider fake` → `8/8 drills passed`; run folder [`phases/phase-03/evidence/s16/20261023T220023Z/`](../evidence/s16/20261023T220023Z/) (one folder per drill with `board_show_before.json`, `board_show_after.json`, `events.json`, `commands.json`, plus `summary.json`: 8 passed, 0 failed, every `finalStatus` `merged`).
+- Unit: `tests/unit/test_p03_s16_drills_cli.py`, `tests/unit/test_p03_s16_recovery_doc.py`. Integration: `tests/integration/test_p03_s16_drills.py` (one method per drill, plus a check that every registered drill has a test).
+- Files: `backend/RECOVERY.md` (new `## Board (P03)` section: failures, codes, danger zones), `scripts/live/board_drills.py` (new), the three test files above, and the evidence folder.
+- Note: `stuck_claim` moves its ticket to `ready_dev` before `board.run`, because `after_ticket_claim_commit` fires on the first claim of any column.
+- QA notes, checked at final review:
+  - `coordinator_killed/board_show_before.json` is a full `board.show` snapshot with T-001 in `in_dev`. The drill also records `drill.coordinatorPid` and a note next to it, so the QA finding that the file is "only a note and PID" is not correct.
+  - In `runner_killed`, the ticket's reason is `RUN_PAUSED:MALFORMED_VERDICT` while its assignment is `reconciling` / `RUNNER_GONE` (recorded under `drill.assignment` in `board_show_before.json`). That meets the contract, which asks for the `RUN_PAUSED:` prefix plus `RUNNER_GONE` on the assignment. The suffix comes from existing backend code (`backend/agent_studio/workflow.py:431-432`): it reads `diagnosticCode` from the result JSON, but reconcile writes it to the assignment column. This story is not allowed to change product code, so it is left as a follow-up: the pause reason should show `RUNNER_GONE` for a lost verdict runner.

@@ -1,0 +1,55 @@
+[
+  {
+    "request": {
+      "args": {
+        "key": "T-001",
+        "workspace": "/tmp/as-drill-lcapyjwx/repo"
+      },
+      "command": "ticket.unblock",
+      "idempotencyKey": "drill-7fec0a640b0c47f7922367a4efcf9370",
+      "protocol": "agent-studio/v1"
+    },
+    "response": {
+      "data": {
+        "ticket": {
+          "applied_run_id": "6a552a4f-581d-4d64-84f6-ecf36b38d8f6",
+          "assignee_agent_id": null,
+          "attachments_json": null,
+          "base_commit": "e210f7824e3b6d6569800c4b3180f29ff768aa24",
+          "blocked_reason": null,
+          "branch": "ticket/T-001-story-1",
+          "brief_path": null,
+          "created_at": "2026-10-23T22:01:12.186Z",
+          "dev_rounds": 0,
+          "duplicate_of": null,
+          "findings_json": "[\"test_add fails: expected 4, got 5\", \"shell text is data: $(touch CANARY_FINDING) `touch CANARY_BACKTICK`; rm -rf ~ && echo pwned\"]",
+          "head_commit": "cfdb28d8399900a80777fd64f04dbfc971410c73",
+          "id": "75c58400-4af7-491a-ad3c-e9f498b55ce1",
+          "key": "T-001",
+          "kind": "story",
+          "lease_until": null,
+          "merged_commit": null,
+          "out_dir": null,
+          "parent_ticket_id": null,
+          "priority": 100,
+          "questions_json": null,
+          "raw_text": null,
+          "return_status": null,
+          "review_rounds": 0,
+          "run_id": "6a552a4f-581d-4d64-84f6-ecf36b38d8f6",
+          "severity": null,
+          "status": "fail_test",
+          "story_path": "phases/phase-03/stories/story-1.md",
+          "test_rounds": 2,
+          "title": "Story 1",
+          "updated_at": "2026-10-23T22:01:18.048Z",
+          "workspace": "/tmp/as-drill-lcapyjwx/repo",
+          "worktree_path": "/tmp/as-drill-lcapyjwx/state/agent-studio/worktrees/b63eaf09d01f/T-001"
+        }
+      },
+      "id": null,
+      "ok": true,
+      "protocol": "agent-studio/v1"
+    }
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "request": {
+      "args": {
+        "action": "retry",
+        "assignmentId": "d49b7dbc-4171-4c29-944e-f95dea9ca9f3"
+      },
+      "command": "assignment.resolve",
+      "idempotencyKey": "drill-f4acc1cb8dd14e7b9d7e2ab3004558ea",
+      "protocol": "agent-studio/v1"
+    },
+    "response": {
+      "data": {
+        "action": "retry",
+        "assignmentId": "d49b7dbc-4171-4c29-944e-f95dea9ca9f3",
+        "newAssignmentId": "5c2e5946-777e-48df-a540-77f51be92b47",
+        "previousStatus": "reconciling",
+        "stage": "verdict",
+        "status": "retried"
+      },
+      "id": null,
+      "ok": true,
+      "protocol": "agent-studio/v1"
+    }
+  }
+]
