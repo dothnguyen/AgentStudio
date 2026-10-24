@@ -12,7 +12,7 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, validation, watch
+from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, validation, watch, workspace
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, dumps, envelope
 
 USAGE = """agent-studio <command>
@@ -56,6 +56,8 @@ USAGE = """agent-studio <command>
   board resume --workspace PATH (--agent ID | --all)
   board show --workspace PATH              every column with its tickets, the agents, limits and holds (read-only)
   board list                               one summary per workspace that has a board (read-only)
+  init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
+  workspace list [--json]                  registered workspaces (missing ones are flagged)
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
   debug fixture [--agents N]               create a fake team/task/assignment (debug coordinators only)
   debug assign --agent ID [--scenario S] [--policy P] [--duration-ms N] [--lines N] [--deadline-ms N]
@@ -93,6 +95,59 @@ def _emit(resp: dict, pretty: bool) -> int:
         sys.stdout.buffer.write(dumps(resp) + b"\n")
         sys.stdout.buffer.flush()
     return 0 if resp.get("ok") else 1
+
+
+def emit(resp: dict, human_renderer, json_flag: bool, pretty: bool = False) -> int:
+    """Shared output for the human-first commands: text by default, the response envelope with --json."""
+    if json_flag:
+        return _emit(resp, pretty)
+    if resp.get("ok"):
+        sys.stdout.write(human_renderer(resp.get("data")).rstrip("\n") + "\n")
+        sys.stdout.flush()
+        return 0
+    err = resp.get("error") or {}
+    sys.stderr.write(f"{err.get('code')}: {err.get('message')}\n")
+    if err.get("remediation"):
+        sys.stderr.write(f"{err['remediation']}\n")
+    sys.stderr.flush()
+    return 1
+
+
+def _render_init(d: dict) -> str:
+    head = "Workspace already initialised" if d.get("existed") else "Workspace initialised"
+    return f"{head}\nname: {d['name']}\nid: {d['id']}\npath: {d['path']}"
+
+
+def _render_workspaces(d: dict) -> str:
+    if not d["workspaces"]:
+        return "no workspaces registered"
+    return "\n".join(f"{w['name']}  {w['id']}  {w['path']}" + ("  (missing)" if w["missing"] else "")
+                     for w in d["workspaces"])
+
+
+def _local_command(cmd, argv, pretty):
+    """init / workspace list run in the CLI process (not dispatch commands). Returns None if not ours."""
+    if cmd == "init":
+        render, run = _render_init, lambda ns: workspace.init(ns.path or os.getcwd(), ns.name)
+        opts = ("--name", "--path")
+        rest = argv[1:]
+    elif cmd == "workspace" and argv[1:2] == ["list"]:
+        render, run = _render_workspaces, lambda ns: workspace.list_workspaces()
+        opts = ()
+        rest = argv[2:]
+    else:
+        return None
+    p = _Parser(prog="agent-studio", add_help=False)
+    for o in opts:
+        p.add_argument(o)
+    p.add_argument("--json", action="store_true")
+    json_flag = "--json" in rest
+    try:
+        ns = p.parse_args(rest)
+        resp = envelope(None, True, data=run(ns))
+    except AsError as e:
+        resp = envelope(None, False, error=e.to_error())
+    return emit(resp, render, json_flag, pretty)
 
 
 def _task_text(ns) -> str:
@@ -466,6 +521,9 @@ def main(argv=None) -> int:
         sys.stderr.write(USAGE)
         return 0 if argv else 2
     cmd = argv[0]
+    local = _local_command(cmd, argv, pretty)
+    if local is not None:
+        return local
     if cmd == "serve":
         return serve.run()
     if cmd == "keepalive":

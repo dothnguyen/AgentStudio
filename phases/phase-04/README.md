@@ -59,11 +59,13 @@ Every P04 story targets this section as its "Architecture". The P00, P01 and P03
 
 ### A. Workspace
 
-`agent-studio init` writes `.agent-studio/workspace.json` `{id, name}` and registers it. Commands resolve the workspace by walking up from the current directory; `--workspace` overrides. No hidden global default.
+`agent-studio init` writes `.agent-studio/workspace.json` `{id, name}` (the id is a uuid written once and never changed) and registers it. Commands resolve the workspace by walking up from the current directory to the first `.agent-studio/workspace.json` (a `.agent-studio/` without that file is not a workspace); `--workspace PATH` overrides and must itself contain `workspace.json`. No match is `WORKSPACE_NOT_FOUND` with remediation `run agent-studio init`. No hidden global default. The resolver reads files only and never needs the registry.
+
+The registry is the file `workspaces.json` in the state dir (`{"workspaces":[{id, name, path}]}`, one entry per canonical path, atomic replace), not part of `state.db`. `init` and `workspace list` run in the CLI process and are not dispatch commands. A registered path that no longer exists is shown as missing, never deleted silently.
 
 ### B. CLI output
 
-New commands print human text on a terminal and JSON with `--json` (and always JSON when stdout is not a terminal and `--json` is given). `request` and `serve` stay JSON for machine callers. Errors carry the existing `{code, message, remediation}` shape; the human form prints them as `CODE: message` plus the remediation.
+New commands print the existing response envelope as JSON when `--json` is given (whether or not stdout is a terminal; `--pretty` still indents) and human text otherwise. `request` and `serve` stay JSON for machine callers. Errors carry the existing `{code, message, remediation}` shape; the human form prints them on stderr as `CODE: message` plus the remediation. Exit code is 0 on success and 1 on error in both modes.
 
 ### C. Team definitions
 
