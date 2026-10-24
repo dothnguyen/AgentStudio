@@ -1,0 +1,92 @@
+{
+  "stories": [
+    {
+      "path": "phases/phase-04/stories/P04-S01-workspace-init-and-resolution.md",
+      "title": "Workspace init and resolution",
+      "dependsOn": [],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S02-team-definitions.md",
+      "title": "Team definitions",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S01-workspace-init-and-resolution.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S03-team-lifecycle-by-id.md",
+      "title": "Team lifecycle by id",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S02-team-definitions.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S04-ask-and-one-off-workflows.md",
+      "title": "Ask and one-off workflows",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S03-team-lifecycle-by-id.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S05-cutover-replace-team-py.md",
+      "title": "Cut-over: the new team replaces team.py",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S04-ask-and-one-off-workflows.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S06-remove-software-board.md",
+      "title": "Remove the software board",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S05-cutover-replace-team-py.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S07-generic-board-model.md",
+      "title": "Generic board model",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S06-remove-software-board.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S08-board-phases.md",
+      "title": "Board phases",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S07-generic-board-model.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S09-board-rules-and-outcome-applier.md",
+      "title": "Board rules and outcome applier",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S07-generic-board-model.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S10-scheduler-and-run-board.md",
+      "title": "Scheduler and team run-board",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S08-board-phases.md",
+        "phases/phase-04/stories/P04-S09-board-rules-and-outcome-applier.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S11-recovery-limits-and-live-gate.md",
+      "title": "Recovery, limits and live gate",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S10-scheduler-and-run-board.md"
+      ],
+      "priority": 3
+    }
+  ],
+  "questions": []
+}

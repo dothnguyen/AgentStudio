@@ -1,0 +1,78 @@
+# Phase 04 — Workspace, team and board as independent components
+
+> Status: Planned, rev 1 (2026-10-24)
+> Brief: [feature-workspace-team-board.md](../briefs/feature-workspace-team-board.md) (decisions recorded 2026-10-24, §5)
+> Product: [PRD.md](../../PRD.md) · Delivery: [ROADMAP.md](../../ROADMAP.md) · Builds on: [P00 contract](../phase-00/architecture.md), [P01 contract](../phase-01/README.md#design-contract), [P03 board](../phase-03/README.md) (replaced here)
+
+## Goal
+
+The operator gets one human CLI: `agent-studio init` makes a workspace, `team add / add-member / start / ask / run-workflow` build and use a team with no board, and a generic, data-driven board (statuses, phases, tickets, rules) is worked by a team through `team run-board`. The hard-wired P03 software board is deleted and replaced in place; nothing is migrated.
+
+The team and the board stay independent: the coordinator is only the glue between them, and the board code never names a role, a workflow or git.
+
+## Open questions and the assumptions this plan uses
+
+| # | Question | Assumption until answered |
+|---|---|---|
+| Q1 | ROADMAP lists P04 as "Advanced coordination", and PRD lists project/backlog management as a non-goal. | This work is phase 04 because the brief says so. The operator needs a ROADMAP/PRD rev-4 note; this plan does not write it. The board stays a work queue for agents, with no estimates, sprints or reporting. |
+| Q2 | Where is the workspace registry kept? | In the WSL state dir (next to `state.db`), not in the workspace. `workspace.json` holds only `{id, name}`. |
+| Q3 | The brief allows `board.json` or `boards/<id>.json` and `--board id`, but decision 1 says one board per workspace. | One board: `.agent-studio/board.json`. `run-board` has no `--board` flag. |
+| Q4 | `.agent-studio/board.json` already holds the P03 software-board config. | S06 deletes the P03 reader. S07 defines the new format and rejects the old shape with `BOARD_CONFIG_INVALID`. The file in this repo is rewritten by hand when S07 lands. |
+| Q5 | Which schema version do the new tables use? | `SCHEMA_VERSION` is 8 today. Each story that needs a schema change adds the next free version (S03 only if a column is missing, then S06 drops the P03 tables, then S07 adds the generic tables). Stories say "next migration" and record the number in Evidence. |
+| Q6 | What does `team add-member` do for `--provider` and `--role` it cannot check? | It writes the file, then prints `team validate` warnings; `team start` is where an invalid file fails (`TEAM_CONFIG_INVALID`). |
+| Q7 | Member names vs ids. | The id is a slug of the name, unique in the team; the name is for people and panes. `--member` accepts either. |
+| Q8 | Multiple teams in one workspace and the one-active-assignment-per-workspace rule from P00. | Unchanged: workspace-mutating work is serialized per workspace/worktree path as today. Several teams can run, but write-heavy work waits on that lock; read-only asks do not. |
+| Q9 | `board.json` and the ticket store. | Tickets live in the state DB (runtime data); the board config (statuses, phases, rules, `currentPhase`) is the hand-editable file. `board phase set` edits the file. |
+
+## Epics → stories
+
+| Epic | Story | Deliverable |
+|---|---|---|
+| A The new team (no board) | [P04-S01](./stories/P04-S01-workspace-init-and-resolution.md) | `init`, `workspace.json`, cwd resolution, `--workspace` override, output convention |
+| | [P04-S02](./stories/P04-S02-team-definitions.md) | `team add/add-member/remove-member/list/show/validate/import-legacy` on `teams/<id>.json` |
+| | [P04-S03](./stories/P04-S03-team-lifecycle-by-id.md) | `team start/stop/status` by id, several teams, member-named panes |
+| | [P04-S04](./stories/P04-S04-ask-and-one-off-workflows.md) | `team ask`, `run-workflow`, `workflows`, `check`, `retry`, `blocked`, `resolve` |
+| | [P04-S05](./stories/P04-S05-cutover-replace-team-py.md) | Cut-over: `team unpack/review/dev/fix/qa/final/commit/index`; delete `team.py` and `team.json` fallback |
+| B Clean slate | [P04-S06](./stories/P04-S06-remove-software-board.md) | Tag, then delete the software board: code, tables, commands, tests, workflows, prompts |
+| C The generic board | [P04-S07](./stories/P04-S07-generic-board-model.md) | Config-driven statuses, generic tickets, `ticket add/move/show/list/depend`, `board show` |
+| | [P04-S08](./stories/P04-S08-board-phases.md) | Phases, `ticket.phase`, `currentPhase`, `board phase set/list` |
+| | [P04-S09](./stories/P04-S09-board-rules-and-outcome-applier.md) | Rules schema and `board rules check`; apply a finished run to its ticket |
+| | [P04-S10](./stories/P04-S10-scheduler-and-run-board.md) | Scheduler, `team run-board` / `stop-board`, caps, deps, workspace modes, `merge` action |
+| | [P04-S11](./stories/P04-S11-recovery-limits-and-live-gate.md) | Lease recovery, usage limits, `board resume`, docs, live gate |
+
+Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in parallel) → S10 → S11. S01–S05 give the new team and replace `team.py`; S06 is the clean slate; S07–S11 build the generic board with the new team.
+
+## Constraints for implementers (self-hosting)
+
+Until S05 the project is built with the current tooling (`team.py`, the `story-delivery` workflow, `scripts/validate.py`), which does not use the board. From S05 the operator builds the rest with the new commands instead of `team.py`.
+
+1. Through S04, after every story: `agent-studio team start --workspace` with `.agent-studio/team.json`, `task direct`, `workflow start/show/retry`, `scripts/validate.py` and every `team.py` command still work. A change to any of them is backward compatible.
+2. S05 is the cut-over. `team.py` stays in git history; it is deleted only after the operator verifies the new team on one real story.
+3. S06 deletes the software board **and its tests**. Nothing the operator runs after S05 may call the software board; `team status` and the other new commands never do.
+4. Every story leaves the unit suite and its own integration tests green. Deleting tests with their code is expected only in S06.
+5. The engine (workflow, runner, providers, migrations up to version 8) is not rewritten. Schema changes are new migrations.
+6. Tests use throwaway repos and temp state dirs (P00 [rules for implementers](../phase-00/stories/README.md#rules-for-implementers)). Mocks never prove a real provider.
+
+## Design contract
+
+Every P04 story targets this section as its "Architecture". The P00, P01 and P03 contracts still hold where not replaced: the coordinator is the only writer of state and events, the CLI writes only to the command inbox, runners write only to the report inbox, and no shell ever receives user text. A story that changes a rule here updates this section in the same change.
+
+### A. Workspace
+
+`agent-studio init` writes `.agent-studio/workspace.json` `{id, name}` and registers it. Commands resolve the workspace by walking up from the current directory; `--workspace` overrides. No hidden global default.
+
+### B. CLI output
+
+New commands print human text on a terminal and JSON with `--json` (and always JSON when stdout is not a terminal and `--json` is given). `request` and `serve` stay JSON for machine callers. Errors carry the existing `{code, message, remediation}` shape; the human form prints them as `CODE: message` plus the remediation.
+
+### C. Team definitions
+
+`.agent-studio/teams/<id>.json` is `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`. The CLI reads and writes these same files, keeping unknown keys, key order and two-space indentation. The database holds runtime only. Hand edits take effect at the next `team start`. Legacy `.agent-studio/team.json` is read-only until S05.
+
+### D. Board
+
+`.agent-studio/board.json` holds `statuses` (`id`, optional `kind`: `initial`, `done`, `closed`), `phases`, `currentPhase`, `ticketFields` and `rules`. Statuses are validated in code, not by an SQL CHECK. Nothing in board code names a role, a workflow, a status or git; rules carry all of that.
+
+### E. Rules and running
+
+A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?}`. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets whose phase is `currentPhase` or unphased, and only to free members.
