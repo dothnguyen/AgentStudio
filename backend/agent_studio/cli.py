@@ -12,7 +12,7 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, teamcli, teamdefs, validation, watch, workspace
+from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, storycli, teamcli, teamdefs, validation, watch, workspace
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, TEAM_NOT_FOUND, dumps, envelope
 from .store import validate_uuid
 
@@ -36,7 +36,7 @@ USAGE = """agent-studio <command>
   team remove-member [--team ID] --member ID|NAME [--workspace PATH]
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
   team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
-  team attach --team ID [--print]          attach this terminal to the team's tmux window (or print commands)
+  team attach --team ID|UUID [--print]     attach this terminal to the team's tmux window (or print commands)
   team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id (no teams/: team.json)
   team stop [--team ID|UUID] [--workspace PATH]   stop the running team of a definition (or a runtime team UUID)
   team status [--team ID|UUID] [--workspace PATH] [--json]   the runtime team and members of a definition
@@ -48,7 +48,17 @@ USAGE = """agent-studio <command>
   team retry [--workflow ID]               run the stuck stage of the team's running or paused workflow again
   team blocked                             members waiting for a decision, and how to free them
   team resolve (--member M | --assignment ID) --action fail|retry|cancel   free a blocked member
+  team run-workflow NAME --story PATH      deliver a story with a workflow; records what `team commit` needs
                 (all of the above take [--team ID|UUID] [--workspace PATH] [--json])
+  team unpack BRIEF --out DIR [--member M]   product owner (else team lead) turns a feature brief into story files
+  team review STORY [--member M]           team lead reviews a story before work (verdict pass = approved)
+  team dev STORY [--force]                 Developer implements, tests run, QA reviews (workflow); saves story state
+  team fix STORY [--integration] [--member M]   developer fixes the latest QA findings
+  team qa STORY [--integration] [--member M]    you run the tests here; QA reviews diff + results
+  team final STORY [--force] [--integration] [--member M]   team lead final review + commit message
+  team commit STORY [--skip-integration]   integration gate, then commit with the lead's message (asks first)
+  team index                               build the ctags symbol index (.agent-studio/cache/tags)
+                (review..index take [--team ID|UUID] [--workspace PATH] [--json])
   task direct --team ID --agent ID --policy read_only|workspace_write (--text TEXT | --text-file PATH|-)
               [--workspace PATH]
               [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
@@ -308,6 +318,8 @@ def _local_command(cmd, argv, pretty):
         return _team_status_command(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in teamcli.ACTIONS:
         return teamcli.run(argv, pretty)
+    if cmd == "team" and argv[1:2] and argv[1] in storycli.ACTIONS:
+        return storycli.run(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
         return _team_command(argv, pretty)
     if cmd == "init":
@@ -679,7 +691,10 @@ def _human_request(argv) -> dict:
         else:
             if not ns.team:
                 raise AsError(BAD_REQUEST, f"team {ns.action} needs --team ID")
-            req.update(command=f"team.{ns.action}", args={"teamId": ns.team})
+            team_id = ns.team
+            if ns.action == "attach" and not _is_uuid(team_id):
+                team_id = teamcli.running_team_id(ns)
+            req.update(command=f"team.{ns.action}", args={"teamId": team_id})
             req["_print"] = ns.print
         if ns.action != "attach":
             req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)

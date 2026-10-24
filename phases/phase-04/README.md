@@ -32,8 +32,8 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | | [P04-S02](./stories/P04-S02-team-definitions.md) | `team add/add-member/remove-member/list/show/validate/import-legacy` on `teams/<id>.json` |
 | | [P04-S03](./stories/P04-S03-team-lifecycle-by-id.md) | `team start/stop/status` by id, several teams, member-named panes |
 | | [P04-S04](./stories/P04-S04-ask-and-one-off-workflows.md) | `team ask`, `run-workflow`, `workflows`, `check`, `retry`, `blocked`, `resolve` |
-| | [P04-S05](./stories/P04-S05-cutover-replace-team-py.md) | Cut-over: `team unpack/review/dev/fix/qa/final/commit/index`; delete `team.py` and `team.json` fallback |
-| B Clean slate | [P04-S06](./stories/P04-S06-remove-software-board.md) | Tag, then delete the software board: code, tables, commands, tests, workflows, prompts |
+| | [P04-S05](./stories/P04-S05-cutover-replace-team-py.md) | Cut-over: `team unpack/review/dev/fix/qa/final/commit/index`, `run-workflow --story`, `attach` by id, on `team.py`'s state files |
+| B Clean slate | [P04-S06](./stories/P04-S06-remove-software-board.md) | Delivered with the new commands; tag, then delete the software board (code, tables, commands, tests, workflows, prompts), then `team.py` and the CLI-side `team.json` fallback |
 | C The generic board | [P04-S07](./stories/P04-S07-generic-board-model.md) | Config-driven statuses, generic tickets, `ticket add/move/show/list/depend`, `board show` |
 | | [P04-S08](./stories/P04-S08-board-phases.md) | Phases, `ticket.phase`, `currentPhase`, `board phase set/list` |
 | | [P04-S09](./stories/P04-S09-board-rules-and-outcome-applier.md) | Rules schema and `board rules check`; apply a finished run to its ticket |
@@ -47,9 +47,9 @@ Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in para
 Until S05 the project is built with the current tooling (`team.py`, the `story-delivery` workflow, `scripts/validate.py`), which does not use the board. From S05 the operator builds the rest with the new commands instead of `team.py`.
 
 1. Through S04, after every story: `agent-studio team start --workspace` with `.agent-studio/team.json`, `task direct`, `workflow start/show/retry`, `scripts/validate.py` and every `team.py` command still work. A change to any of them is backward compatible.
-2. S05 is the cut-over. `team.py` stays in git history; it is deleted only after the operator verifies the new team on one real story.
+2. S05 is the cut-over: it ports the commands and leaves `team.py` in place. The operator verifies the new commands by finishing S05 (`qa`, `final`, `commit`) and delivering S06 end to end with them; `team.py` and its tests are deleted as the last step of S06 (it stays in git history).
 3. S06 deletes the software board **and its tests**. Nothing the operator runs after S05 may call the software board; `team status` and the other new commands never do.
-4. Every story leaves the unit suite and its own integration tests green. Deleting tests with their code is expected only in S06.
+4. Every story leaves the unit suite and its own integration tests green. Deleting tests with their code is expected only in S06 (software board and `team.py`).
 5. The engine (workflow, runner, providers, migrations up to version 8) is not rewritten. Schema changes are new migrations.
 6. Tests use throwaway repos and temp state dirs (P00 [rules for implementers](../phase-00/stories/README.md#rules-for-implementers)). Mocks never prove a real provider.
 
@@ -69,11 +69,13 @@ New commands print the existing response envelope as JSON when `--json` is given
 
 ### C. Team definitions
 
-`.agent-studio/teams/<id>.json` is `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`; the file's `id` equals its file name. Team and member ids are slugs (`^[a-z0-9][a-z0-9-]{0,63}$`); a member id is the slug of its name, and `--member` accepts the id or the name (case-insensitive). The CLI reads and writes these same files (`teamdefs.py`; the definition commands run in the CLI process, not through dispatch), reading fresh before every write and keeping unknown keys, key order and two-space indentation (atomic replace). The database holds runtime only. Hand edits take effect at the next `team start`. Legacy `.agent-studio/team.json` is read-only until S05: while `teams/` has no team it is shown as team `default` (`provider` ← `providerId`), and `team import-legacy` converts it once. Codes: `TEAM_EXISTS`, `TEAM_NOT_FOUND`, `TEAM_AMBIGUOUS`, `MEMBER_EXISTS`, `MEMBER_NOT_FOUND`, `TEAM_CONFIG_INVALID` (with `data.problems: [{path, message}]`).
+`.agent-studio/teams/<id>.json` is `{id, name, members:[{id, name, role, provider, model?, reasoning?}]}`; the file's `id` equals its file name. Team and member ids are slugs (`^[a-z0-9][a-z0-9-]{0,63}$`); a member id is the slug of its name, and `--member` accepts the id or the name (case-insensitive). The CLI reads and writes these same files (`teamdefs.py`; the definition commands run in the CLI process, not through dispatch), reading fresh before every write and keeping unknown keys, key order and two-space indentation (atomic replace). The database holds runtime only. Hand edits take effect at the next `team start`. Legacy `.agent-studio/team.json` is read-only until S06 deletes the CLI-side fallback: while `teams/` has no team it is shown as team `default` (`provider` ← `providerId`), and `team import-legacy` converts it once. Codes: `TEAM_EXISTS`, `TEAM_NOT_FOUND`, `TEAM_AMBIGUOUS`, `MEMBER_EXISTS`, `MEMBER_NOT_FOUND`, `TEAM_CONFIG_INVALID` (with `data.problems: [{path, message}]`).
 
 Runtime (S03): `team start` reads and validates the definition in the CLI and sends the mapped roster with `teamDefId`; the coordinator stores it as `teams.def_id` and `agents.member_id` (NULL for legacy `team.json` and `--agent` starts), so a running team never re-reads its file. Several definitions can run in one workspace; one definition id has at most one team in `starting`/`running`/`stopping` (`TEAM_ALREADY_RUNNING`). `team stop` / `team status` take a definition id, or a runtime UUID as before. `team status` is a read-only query and never touches board code. `teams.find_agent` resolves `--member` (agent UUID, member id, or name, case-insensitive).
 
 Use (S04): `team ask | run-workflow | workflows | check | retry | blocked | resolve` live in `teamcli.py` and are CLI wrappers over the existing dispatch commands (`team.status`, `snapshot`, `task.direct`, `workflow.list/validate/start/retry`, `assignment.resolve`); no dispatch or engine rule changes. They need the team `running` (`TEAM_NOT_RUNNING` otherwise, nothing written), map `--member` / `--bind ROLE=MEMBER` to agent ids with the `find_agent` rules, and `ask` takes `--policy read_only|workspace_write` (default `read_only`).
+
+Story delivery (S05): `team unpack | review | dev | fix | qa | final | commit | index` live in `storycli.py` and run in the CLI process as operator-side glue (they run git, the validation command and `ctags`; agents are reached only through `task.direct`, `workflow.start` and the watch helpers). Per-story state stays in `team.py`'s files, `<state home>/agent-studio/project-team/<slug of workspace root>/story-<key>.json`, same keys, unknown keys kept, so a story begun with `team.py` continues. A command picks its member by role (`ROLE_UNBOUND` / `ROLE_AMBIGUOUS`, `--member` overrides). Codes added: `STORY_NOT_READY`, `WORKSPACE_DIRTY`, `TESTS_FAILED`, `NOT_COMMITTED`. `team attach` accepts a definition id.
 
 ### D. Board
 

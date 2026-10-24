@@ -1,0 +1,9 @@
+{
+  "review": "Story is clear.\n{\"verdict\": \"pass\", \"findings\": []}",
+  "qa_fail": "Tests fail.\n{\"verdict\": \"fail\", \"findings\": [\"SUGGESTION: rename x\", \"blocker: fix y\"]}",
+  "fix": "Fixed y.",
+  "qa_pass": "Looks right.\n{\"verdict\": \"pass\", \"findings\": []}",
+  "final": "Done.\n{\"verdict\": \"pass\", \"findings\": []}\n```commit\nDeliver P99-S01\n\nBody line\n```",
+  "dev_findings": ["blocker: first"],
+  "run_stage_text": "Approved.\n```commit\nRun commit message\n```"
+}

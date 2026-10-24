@@ -54,6 +54,7 @@ def _parser(action):
     elif action == "run-workflow":
         p.add_argument("--bind", action="append", default=[])
         p.add_argument("--wait", action="store_true")
+        p.add_argument("--story")
         p.add_argument("--text-file")
         p.add_argument("name")
         p.add_argument("text", nargs="?")
@@ -69,7 +70,7 @@ def _parser(action):
     return p
 
 
-def _running_team(ns):
+def _running_team(ns, verb="ask"):
     """-> (team, members) of the running runtime team, found like `team status`; nothing is written."""
     from . import cli
     ref = ns.team
@@ -77,7 +78,7 @@ def _running_team(ns):
         args = {"teamId": ref}
     else:
         ws = cli._team_workspace(ns)
-        ref = cli._pick_def(ws, ns.team, "ask")
+        ref = cli._pick_def(ws, ns.team, verb)
         args = {"workspace": ws, "teamDefId": ref}
     data = _call("team.status", args)
     team = data["team"]
@@ -87,6 +88,17 @@ def _running_team(ns):
         raise AsError(TEAM_NOT_RUNNING, f"Team {shown} is {state}.",
                       remediation=f"run agent-studio team start --team {shown}")
     return team, data["members"]
+
+
+def running_team_id(ns) -> str:
+    """The runtime team UUID of the running team named by ns.team (a definition id); for `team attach`."""
+    try:
+        team, _ = _running_team(ns)
+    except _Fail as f:
+        err = f.resp.get("error") or {}
+        raise AsError(err.get("code") or BAD_REQUEST, err.get("message") or "team.status failed",
+                      remediation=err.get("remediation"))
+    return team["id"]
 
 
 def _member(members, ref):
@@ -168,8 +180,18 @@ def _binding_lines(bindings, members):
 
 
 def _run_workflow(ns):
-    from . import cli
-    text = cli._task_text(ns)
+    from . import cli, storycli
+    story = ns.story
+    if story:
+        if ns.text is not None or ns.text_file is not None:
+            raise AsError(BAD_REQUEST, "--story replaces the task text; give neither TEXT nor --text-file")
+        ws = storycli._Run(ns).ws
+        text = storycli.story_prompt(ws, story)
+        storycli.require_clean(ws)
+        base = storycli.head(ws)
+        ns.wait = True
+    else:
+        text = cli._task_text(ns)
     team, members = _running_team(ns)
     try:
         checked = _validate(team, members, ns)
@@ -184,6 +206,21 @@ def _run_workflow(ns):
     sys.stderr.write(f"accepted: workflow {receipt['workflowRunId']} (base {receipt['baseCommit'][:12]})\n")
     detail = _follow("workflow", watch.follow_workflow, receipt["workflowRunId"])
     data = dict(detail, receipt=receipt)
+    next_step = ""
+    if story:
+        key, state = storycli.save_run(ws, story, base, detail)
+        status = detail["workflowRun"]["status"]
+        asg = {a["id"]: a for a in detail.get("assignments", [])}
+        out_text = ""
+        for sa in detail.get("stageAttempts", []):
+            if asg.get(sa.get("assignmentId")):
+                out_text = _result_text(asg[sa["assignmentId"]])
+        data.update(story=story, key=key, state=state, status=status, output=out_text)
+        if status == "succeeded" and state["finalPassed"]:
+            next_step = f"Approved - next: agent-studio team commit {story}"
+        elif status != "succeeded":
+            next_step = ("Not finished - fix and run again, or loop by hand with agent-studio team fix / qa / "
+                         "final.")
 
     def render(d):
         asg = {a["id"]: a for a in d.get("assignments", [])}
@@ -197,7 +234,7 @@ def _run_workflow(ns):
         if findings:
             out += ["last findings:"] + [f"- {f}" for f in findings]
         out += ["last stage summary:", last or "(none)"]
-        return "\n".join(out)
+        return "\n".join(out + ([next_step] if next_step else []))
     return data, render
 
 
