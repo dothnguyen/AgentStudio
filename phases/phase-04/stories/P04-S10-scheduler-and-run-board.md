@@ -9,14 +9,14 @@ Architecture: [P04 design contract](../README.md#design-contract), §E
 
 ## Implement in this order
 1. Binding: one team runs the board at a time (`BOARD_ALREADY_RUNNING`). `run-board --team T` runs `rules check` first; `stop-board` stops claiming and leaves running work alone.
-2. Tick: for each rule in priority order, pick tickets in that status that are `ticket_in_scope`, have dependencies in a `done` status when `requiresDeps`, are under the rule's `cap`, and match a free member of the rule's role. Claim with a lease, set the `during` status if configured, and start the rule's workflow.
+2. Tick: for each rule in priority order, pick tickets in that status that are `ticket_in_scope` (their phase is the effective current phase: the pointer, or the default phase when none is set), have dependencies in a `done` status when `requiresDeps`, are under the rule's `cap`, and match a free member of the rule's role. Claim with a lease, set the `during` status if configured, and start the rule's workflow.
 3. Free-member rule: members running `ask`/`run-workflow` or another ticket are never claimed; `ask` to a member holding a ticket returns `AGENT_BUSY`.
 4. Workspace modes: `main` (default), `none`, and `worktree` (one branch and worktree per ticket using the retained `worktrees.py`/`gitws.py`). `task.direct` / `workflow.start` then accept a worktree again only when it is registered to a live ticket of the generic board (restoring the check S06 removed, design contract §F); every other path stays `WORKTREE_NOT_REGISTERED`.
 5. `merge` action: the coordinator, with no agent, merges the ticket branch into the base branch under a main-checkout lock; a conflict sends the ticket to `onFail` with findings, never leaves the checkout dirty.
 6. Finished runs go through the S09 applier.
 
 ## Done when
-- [ ] The phase filter, `requiresDeps`, and per-rule `cap` are respected. Test: unit tick tests.
+- [ ] The phase filter (tickets of other phases are never claimed; with no current phase the default phase is worked; changing the current phase mid-run lets running work finish and uses the new phase for new claims), `requiresDeps`, and per-rule `cap` are respected. Test: unit tick tests.
 - [ ] A ticket runs through three rules to `done` on the fake provider with no operator command beyond `run-board`. Test: integration.
 - [ ] A busy member is never claimed and `stop-board` stops new claims only. Test: integration.
 - [ ] Worktree mode isolates two tickets, and `merge` lands both, including a conflict that returns to `onFail`. Test: integration on a throwaway repo.

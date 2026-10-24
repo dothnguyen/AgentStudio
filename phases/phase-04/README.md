@@ -1,6 +1,6 @@
 # Phase 04 — Workspace, team and board as independent components
 
-> Status: Planned, rev 1 (2026-10-24)
+> Status: Planned, rev 2 (2026-10-24: phases are database records with a default phase; S12 adds the board MCP server)
 > Brief: [feature-workspace-team-board.md](../briefs/feature-workspace-team-board.md) (decisions recorded 2026-10-24, §5)
 > Product: [PRD.md](../../PRD.md) · Delivery: [ROADMAP.md](../../ROADMAP.md) · Builds on: [P00 contract](../phase-00/architecture.md), [P01 contract](../phase-01/README.md#design-contract), [P03 board](../phase-03/README.md) (replaced here)
 
@@ -18,11 +18,12 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | Q2 | Where is the workspace registry kept? | In the WSL state dir (next to `state.db`), not in the workspace. `workspace.json` holds only `{id, name}`. |
 | Q3 | The brief allows `board.json` or `boards/<id>.json` and `--board id`, but decision 1 says one board per workspace. | One board: `.agent-studio/board.json`. `run-board` has no `--board` flag. |
 | Q4 | `.agent-studio/board.json` already holds the P03 software-board config. | S06 deletes the P03 reader. S07 defines the new format and rejects the old shape with `BOARD_CONFIG_INVALID`. The file in this repo is rewritten by hand when S07 lands. |
-| Q5 | Which schema version do the new tables use? | `SCHEMA_VERSION` is 8 today. Each story that needs a schema change adds the next free version (S03 added `teams.def_id` / `agents.member_id` as 9; S06 drops the P03 tables, expected 10; S07 adds the generic tables, expected 11). Stories say "next migration" and record the number in Evidence. |
+| Q5 | Which schema version do the new tables use? | `SCHEMA_VERSION` is 8 today. Each story that needs a schema change adds the next free version (S03 added `teams.def_id` / `agents.member_id` as 9; S06 drops the P03 tables, expected 10; S07 adds the generic tables including `phases`, expected 11; S08 adds the board-state pointer if S07 did not, expected 12). Stories say "next migration" and record the number in Evidence. |
 | Q6 | What does `team add-member` do for `--provider` and `--role` it cannot check? | It writes the file, then prints `team validate` warnings; `team start` is where an invalid file fails (`TEAM_CONFIG_INVALID`). |
 | Q7 | Member names vs ids. | The id is a slug of the name, unique in the team; the name is for people and panes. `--member` accepts either. |
 | Q8 | Multiple teams in one workspace and the one-active-assignment-per-workspace rule from P00. | Unchanged: workspace-mutating work is serialized per workspace/worktree path as today. Several teams can run, but write-heavy work waits on that lock; read-only asks do not. |
-| Q9 | `board.json` and the ticket store. | Tickets live in the state DB (runtime data); the board config (statuses, phases, rules, `currentPhase`) is the hand-editable file. `board phase set` edits the file. |
+| Q9 | `board.json` and the ticket store. | Tickets **and phases** live in the state DB (runtime data); the board config (statuses, `ticketFields`, rules) is the hand-editable file. Phases are managed only with `board phase ...` commands. |
+| Q10 | Can Claude Code and Codex start the board MCP server and reach the command inbox from their sandboxes? | Unknown. S12 begins with a spike on the real CLIs and records the result; if one cannot, S12 says so and that provider is out of scope. |
 
 ## Epics → stories
 
@@ -35,12 +36,13 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | | [P04-S05](./stories/P04-S05-cutover-replace-team-py.md) | Cut-over: `team unpack/review/dev/fix/qa/final/commit/index`, `run-workflow --story`, `attach` by id, on `team.py`'s state files |
 | B Clean slate | [P04-S06](./stories/P04-S06-remove-software-board.md) | Delivered with the new commands; tag, then delete the software board (code, tables, commands, tests, workflows, prompts), then `team.py` and the CLI-side `team.json` fallback |
 | C The generic board | [P04-S07](./stories/P04-S07-generic-board-model.md) | Config-driven statuses, generic tickets, `ticket add/move/show/list/depend`, `board show` |
-| | [P04-S08](./stories/P04-S08-board-phases.md) | Phases, `ticket.phase`, `currentPhase`, `board phase set/list` |
+| | [P04-S08](./stories/P04-S08-board-phases.md) | Phases as database records with a protected default phase: `board phase add/list/show/edit/close/reopen/remove/set-current/clear-current`, `ticket add --phase`, `ticket phase` |
 | | [P04-S09](./stories/P04-S09-board-rules-and-outcome-applier.md) | Rules schema and `board rules check`; apply a finished run to its ticket |
 | | [P04-S10](./stories/P04-S10-scheduler-and-run-board.md) | Scheduler, `team run-board` / `stop-board`, caps, deps, workspace modes, `merge` action |
 | | [P04-S11](./stories/P04-S11-recovery-limits-and-live-gate.md) | Lease recovery, usage limits, `board resume`, docs, live gate |
+| D Agents use the board | [P04-S12](./stories/P04-S12-board-mcp-server.md) | `agent-studio mcp` stdio MCP server: agents add and list tickets and phases; spike first |
 
-Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in parallel) → S10 → S11. S01–S05 give the new team and replace `team.py`; S06 is the clean slate; S07–S11 build the generic board with the new team.
+Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in parallel) → S10 → S11, and S12 after S08 (best after S10). S01–S05 give the new team and replace `team.py`; S06 is the clean slate; S07–S11 build the generic board with the new team.
 
 ## Constraints for implementers (self-hosting)
 
@@ -79,12 +81,18 @@ Story delivery (S05): `team unpack | review | dev | fix | qa | final | commit | 
 
 ### D. Board
 
-`.agent-studio/board.json` holds `statuses` (`id`, optional `kind`: `initial`, `done`, `closed`), `phases`, `currentPhase`, `ticketFields` and `rules`. Statuses are validated in code, not by an SQL CHECK. Nothing in board code names a role, a workflow, a status or git; rules carry all of that.
+`.agent-studio/board.json` holds `statuses` (`id`, optional `kind`: `initial`, `done`, `closed`), `ticketFields` and `rules`. Statuses are validated in code, not by an SQL CHECK. Nothing in board code names a role, a workflow, a status or git; rules carry all of that.
+
+**Phases are database records, not configuration.** Each board has a `phases` table (`id` slug unique on the board, `name`, `description`, `position`, `status` open/closed, timestamps) managed only by `board phase` commands, so they can be added at any time. Every board has a **default phase** (`id: default`, name "Default", first position) created in the same transaction as the board's state row on first use; it cannot be removed or closed, but its name and description can be edited. Every ticket belongs to exactly one phase; `ticket add` without `--phase` uses the default phase. The board state holds one pointer, the **current phase**, set by `board phase set-current ID` (an open phase) and cleared by `board phase clear-current`; **when none is set, the default phase is current** ("effective current phase"). Changing the pointer never interrupts running work: it finishes and its outcome is applied, and new claims use the new phase. Phase changes write board events with who and when. Codes: `PHASE_NOT_FOUND`, `PHASE_EXISTS`, `PHASE_PROTECTED` (default phase), `PHASE_CLOSED`, `PHASE_NOT_EMPTY`.
 
 ### E. Rules and running
 
-A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?}`. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets whose phase is `currentPhase` or unphased, and only to free members.
+A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?}`. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets of the effective current phase, and only to free members.
 
 ### F. Engine between S06 and S10
 
 S06 cuts the engine's links to the P03 board without changing what it does on a database with no tickets. `task.direct` and `workflow.start` accept only the team's workspace; any other path is `WORKTREE_NOT_REGISTERED` and nothing is written. S10 restores the worktree check against the generic tickets. Usage limits stay in the engine: a `USAGE_LIMIT` report still marks the agent `limit_reached` (`agents.limit_reset_at`), and the agents-only `board.resume` command (`--agent ID | --all`) stays as the way to clear it. S11 extends it to `board resume --member M`. Every other `board.*` and `ticket.*` command, and `debug.ticket_worktree`, is removed in S06. `worktrees.py` and `gitws.py` stay for S10.
+
+### G. Board MCP server (S12)
+
+`agent-studio mcp` is a stdio MCP server (JSON-RPC 2.0 over stdin/stdout, standard library only) that an agent's own client launches. Tools: `ticket_add` (title, body, priority?, phase?, dependsOn?), `ticket_list`, `ticket_show`, `phase_list`, `board_show`. Every call is sent to the coordinator through the same validated command path as the CLI (`request` envelope with an idempotency key), so the coordinator stays the only writer and agents never open the database. The adapters generate a per-assignment MCP config only for members whose definition says `canAddTickets: true` (a new optional boolean in `teams/<id>.json`); the server's environment carries the assignment id and agent id. The coordinator checks that the assignment is active and its member may add tickets, records `createdBy` (member id, assignment id) on the ticket, enforces a per-assignment cap (default 10, `TICKET_CAP_REACHED`) and a duplicate check against open tickets of the same title (`TICKET_DUPLICATE`), and puts the ticket in the board's `initial` status in the requested phase (default phase when omitted). Providers without MCP support, and a provider whose spike fails (Q10), are out of scope; there is no file hand-off.
