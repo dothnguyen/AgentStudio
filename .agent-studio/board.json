@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "baseBranch": "main",
+  "maxParallelDev": 2,
+  "roundLimits": {"dev": 3, "test": 3, "review": 3},
+  "leaseSeconds": 120,
+  "requirePlanApproval": true,
+  "columns": {
+    "unpack": {"role": "ProductOwner", "definition": "board-unpack"},
+    "triage": {"role": "TeamLead", "definition": "board-triage"},
+    "refine": {"role": "TeamLead", "definition": "board-refine"},
+    "develop": {"role": "Developer", "definition": "board-develop", "bugDefinition": "board-develop-bug"},
+    "test": {"role": "QA", "definition": "board-test", "bugDefinition": "board-test-bug"},
+    "review": {"role": "TeamLead", "definition": "board-review", "bugDefinition": "board-review-bug"}
+  }
+}
