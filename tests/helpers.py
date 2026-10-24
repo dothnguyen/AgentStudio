@@ -133,3 +133,13 @@ def make_repo(config=None, check_for="fixed.txt"):
 def reset_repo(ws):
     for args in (["reset", "-q", "--hard"], ["clean", "-qfdx"]):
         subprocess.run(["git", "-C", ws] + args, check=True)
+
+
+def fresh():
+    """A migrated coordinator-role database with its Store (board-era unit tests and their successors)."""
+    from agent_studio import state
+    from agent_studio.store import Store
+    path = os.path.join(tempfile.mkdtemp(), "state.db")
+    conn = state.connect(path, role="coordinator", create=True)
+    state.migrate(conn, path)
+    return conn, Store(conn)

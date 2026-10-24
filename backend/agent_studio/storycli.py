@@ -1,10 +1,11 @@
 """`agent-studio team unpack | review | dev | fix | qa | final | commit | index` (P04-S05).
 
-Operator-side glue ported from scripts/team/team.py: it builds the task texts, runs git, the validation command and
-ctags in the CLI process (agents cannot run commands) and keeps the per-story state files in the same place and format
-as team.py, so a story begun with team.py continues here. Agents are reached only through the existing dispatch
-commands (team.status, task.direct, workflow.start). Nothing here touches board code or sends a board.* / ticket.*
-command.
+Operator-side glue: it builds the task texts, runs git, the validation command and
+ctags in the CLI process (agents cannot run commands) and keeps the per-story state files under
+<state home>/agent-studio/project-team/<slug of workspace root>/story-<key>.json, the directory and file
+format earlier releases wrote, so a story begun before P04-S05 continues here. Agents are reached only
+through the existing dispatch commands (team.status, task.direct, workflow.start). Nothing here touches
+board code or sends a board.* / ticket.* command.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ DIFF_LIMIT, TEST_LIMIT = 16 * 1024, 5 * 1024
 PLANNING = ("phases/", "PRD.md", "ROADMAP.md")
 
 
-# ---- plumbing (ported verbatim where team.py has the same function) ---------------------------------------
+# ---- plumbing ---------------------------------------------------------------------------------------------
 
 def sh(ws, *argv, check=True):
     p = subprocess.run(list(argv), cwd=ws, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -107,7 +108,7 @@ def changed_paths(ws):
     return [l[3:].split(" -> ")[-1].strip('"') for l in out if l.strip()]
 
 
-# ---- per-story state (same directory, file names and format as team.py) -----------------------------------
+# ---- per-story state (directory, file names and format unchanged from earlier releases) --------------------
 
 def state_dir(ws):
     return os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "agent-studio",
@@ -160,7 +161,7 @@ def story_prompt(ws, story):
 
 
 def run_summary(detail):
-    """(findings, last stage text, commit message) of a finished workflow detail, as team.py's summarize()."""
+    """(findings, last stage text, commit message) of a finished workflow detail."""
     asg = {a["id"]: a for a in detail.get("assignments", [])}
     findings, last, commit = [], "", None
     for sa in detail.get("stageAttempts", []):

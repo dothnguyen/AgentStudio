@@ -100,12 +100,6 @@ def remove(workspace: str, path: str, *, state_dir: Optional[str] = None) -> Non
     gitws.run(workspace, "worktree", "prune")
 
 
-def discard(workspace: str, created: dict, *, state_dir: Optional[str] = None) -> None:
-    """Remove only a worktree and branch returned by create()."""
-    remove(workspace, created["path"], state_dir=state_dir)
-    gitws.run(os.path.realpath(workspace), "branch", "-D", created["branch"])
-
-
 def commit_round(path: str, message: str) -> dict:
     path = os.path.realpath(path)
     gitws.run(path, "add", "-A")

@@ -13,7 +13,7 @@ NTM and OrchestMux are retired from the new runtime path. Previous Phase 00 work
 | Phase | Outcome | Gate |
 |---|---|---|
 | P00 — Backend proof of concept | Proven Windows↔WSL boundary; configurable roster; N native tmux panes; direct idle-agent task; two-provider automatic workflow; durable status, resolution, and recovery. | Real gate in [P00-S12](./phases/phase-00/stories/P00-S12-live-gate.md) **passed 2026-10-22** with Codex + Claude Code; P00 closes when S10 (agy) and S11 (OpenCode) are Done or Blocked with a recorded gap. |
-| P01 — Configurable workflows | Workflow definitions in JSON or YAML: ordered stages with role, permission, prompt template, and outcome routing; validation stages; bounded loops; `workflow start --definition` and `team.py run NAME "prompt"`. | Real three-role definition run in [P01-S10](./phases/phase-01/stories/P01-S10-live-gate.md); fake-adapter proof of fail → Developer loops and bounds. |
+| P01 — Configurable workflows | Workflow definitions in JSON or YAML: ordered stages with role, permission, prompt template, and outcome routing; validation stages; bounded loops; `workflow start --definition` and `team run-workflow NAME "prompt"`. | Real three-role definition run in [P01-S10](./phases/phase-01/stories/P01-S10-live-gate.md); fake-adapter proof of fail → Developer loops and bounds. |
 | P02 — Desktop Command Center | Electron setup, team/task/workflow status (including definition picker and route), dispatch, resolve, and Stop over `serve`; Open terminals attaches native tmux. | Fresh user can operate the proven backend without WSL CLI knowledge. |
 | P03 — Reusable teams | Saved profiles, role instructions, multiple workspaces, and history. | Relaunch a saved mixed-provider team in a new folder. |
 | P04 — Advanced coordination | Optional lead-assisted decomposition, parallel work isolation (e.g. per-agent worktrees), richer adapters, session resume, and review gates. | Concurrent tasks have traceable ownership and no workspace contamination. |
@@ -55,14 +55,14 @@ The [P00 implementation contract](./phases/phase-00/architecture.md) defines bou
 | 5 | S05 Routing and bounds | The brief's loops (QA fail → Developer, TeamLead fail → Developer). |
 | 6 | S06 Validation stages, built-in definition | One engine; P00 workflow re-expressed and legacy path removed. |
 | 7–8 | S07 Recovery/resolve/cancel, S08 Commands | Independent; both need the single engine. |
-| 9 | S09 `story-delivery.yaml` and `team.py run` | Uses the feature on this project. |
+| 9 | S09 `story-delivery.yaml` and one-off story runs | Uses the feature on this project. |
 | 10 | S10 Live gate | Only P01 release gate. |
 
 ## P01 operator journey
 
 1. Write `.agent-studio/workflows/<name>.yaml` (or `.json`): stages, roles, permissions, prompt templates, routing.
 2. `agent-studio workflow validate --definition <name> --team ID` — static errors and role binding, nothing started.
-3. `team.py run <name> "prompt"` (or `agent-studio workflow start --definition <name> --text …`), watch panes in tmux.
+3. `agent-studio team run-workflow <name> "prompt"` (or `agent-studio workflow start --definition <name> --text …`), watch panes in tmux.
 4. `workflow show` gives the frozen definition, bindings, visits, and the route taken; paused stages resolve with `assignment.resolve`.
 
 See the [P01 overview and design contract](./phases/phase-01/README.md) and [stories](./phases/phase-01/stories/README.md).

@@ -1,56 +1,90 @@
-import sqlite3
+"""P04-S06: migration 10 drops the P03 software-board tables (children first) from every version-9 database."""
+import os
+import shutil
+import tempfile
 import unittest
 
-from tests.unit.test_p01_s04_migration import dump, schema, v5_database
+from tests import helpers  # noqa: F401
 from agent_studio import state
+from tests.unit.test_p01_s04_migration import dump
+
+NOW = "2030-01-01T00:00:00.000Z"
+TEAM = "a" * 8 + "-0000-4000-8000-" + "a" * 12
+AGENT = "b" * 8 + "-0000-4000-8000-" + "b" * 12
+T1 = "c" * 8 + "-0000-4000-8000-" + "c" * 12
+T2 = "d" * 8 + "-0000-4000-8000-" + "d" * 12
+BOARD_TABLES = {"tickets", "ticket_deps", "ticket_events", "board_locks", "board_state"}
 
 
-TEAM_OLD_COLS = "id, name, workspace, status, tmux_session_id, tmux_window_id, ownership_marker, created_at, updated_at"
-
-
-class TicketMigration(unittest.TestCase):
-    def test_v6_upgrade_creates_ticket_tables_and_checks(self):
-        import os
-        import tempfile
-        path = os.path.join(tempfile.mkdtemp(), "state.db")
-        conn = v5_database(path)
-        preserved = {table: dump(conn, table, cols) for table, cols in {
-            "teams": TEAM_OLD_COLS, "agents": schema._AGENT_OLD_COLS, "tasks": "*", "workflow_runs": schema._WF_OLD_COLS,
-            "stage_attempts": schema._SA_OLD_COLS, "assignments": "*",
-        }.items()}
-        # Reproduce the v6 release state without advancing through the current v7 migration.
-        conn.execute("PRAGMA foreign_keys = OFF")
-        conn.execute("BEGIN IMMEDIATE")
-        for step in state.MIGRATIONS[6]:
+def v9_database(path):
+    """A database exactly as version 9 left it: engine rows plus one row in every board table."""
+    conn = state.connect(path, role="coordinator", create=True)
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
+    for version in range(1, 10):
+        for step in state.MIGRATIONS[version]:
             step(conn) if callable(step) else conn.execute(step)
-        conn.execute("INSERT INTO schema_migrations VALUES (6, 'now')")
-        conn.execute("COMMIT")
-        conn.execute("PRAGMA foreign_keys = ON")
-        self.assertEqual(state.migrate(conn, path), 9)
-        names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        self.assertTrue({"tickets", "ticket_deps", "ticket_events", "board_state", "board_locks"} <= names)
+        conn.execute("INSERT INTO schema_migrations VALUES (?, ?)", (version, NOW))
+    conn.execute("INSERT INTO teams (id, name, workspace, status, created_at, updated_at) "
+                 "VALUES (?, 't', '/w', 'running', ?, ?)", (TEAM, NOW, NOW))
+    conn.execute("INSERT INTO agents (id, team_id, ordinal, provider_id, role, display_name, availability, pane_state, "
+                 "created_at, updated_at) VALUES (?, ?, 0, 'fake', 'developer', 'Dev', 'idle', 'alive', ?, ?)",
+                 (AGENT, TEAM, NOW, NOW))
+    for ident, key in ((T1, "T-001"), (T2, "T-002")):
+        conn.execute("INSERT INTO tickets (id, workspace, key, kind, title, status, priority, created_at, updated_at) "
+                     "VALUES (?, '/w', ?, 'story', 'x', 'refine', 100, ?, ?)", (ident, key, NOW, NOW))
+    conn.execute("INSERT INTO ticket_deps (ticket_id, blocked_by_ticket_id) VALUES (?, ?)", (T1, T2))
+    conn.execute("INSERT INTO board_state (workspace, status, reason, config_json, review_streak, updated_at) "
+                 "VALUES ('/w', 'running', NULL, '{}', 0, ?)", (NOW,))
+    conn.execute("INSERT INTO board_locks (workspace, name, ticket_id, created_at) VALUES ('/w', 'develop', ?, ?)",
+                 (T1, NOW))
+    seq = conn.execute("INSERT INTO events (at, actor, name, entity, entity_id, payload_json) "
+                       "VALUES (?, 'coordinator', 'ticket.created', 'ticket', ?, '{}')", (NOW, T1)).lastrowid
+    conn.execute("INSERT INTO ticket_events (ticket_id, event_seq, at, actor, name, payload_json) "
+                 "VALUES (?, ?, ?, 'coordinator', 'ticket.created', '{}')", (T1, seq, NOW))
+    conn.execute("COMMIT")
+    return conn
+
+
+def tables(conn):
+    return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+
+class BoardTableDrop(unittest.TestCase):
+    def test_v9_database_with_board_rows_migrates_to_v10(self):
+        path = os.path.join(tempfile.mkdtemp(), "state.db")
+        conn = v9_database(path)
+        preserved = {table: dump(conn, table, "*") for table in ("teams", "agents")}
+        events_before = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        self.assertEqual(state.current_version(conn), 9)
+
+        self.assertEqual(state.migrate(conn, path), 10)
+
+        self.assertFalse(BOARD_TABLES & tables(conn))
         for table, rows in preserved.items():
-            columns = {"teams": TEAM_OLD_COLS, "agents": schema._AGENT_OLD_COLS, "workflow_runs": schema._WF_OLD_COLS,
-                       "stage_attempts": schema._SA_OLD_COLS}.get(table, "*")
-            self.assertEqual(dump(conn, table, columns), rows, table)
-        good = ("00000000-0000-4000-8000-000000000000", "/w", "T-001", "story", "x", "refine", "n", "n")
-        conn.execute("INSERT INTO tickets (id, workspace, key, kind, title, status, created_at, updated_at) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", good)
-        with self.assertRaises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO tickets (id, workspace, key, kind, title, status, created_at, updated_at) "
-                         "VALUES ('20000000-0000-4000-8000-000000000000', '/w', 'T-002', 'bad', 'x', 'refine', 'n', 'n')")
-        for column, value in (("status", "bad"), ("severity", "bad")):
-            with self.assertRaises(sqlite3.IntegrityError, msg=column):
-                conn.execute(f"UPDATE tickets SET {column} = ? WHERE id = ?", (value, good[0]))
-        with self.assertRaises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO tickets (id, workspace, key, kind, title, status, created_at, updated_at) "
-                         "VALUES ('10000000-0000-4000-8000-000000000000', '/w', 'T-001', 'story', 'x', 'refine', 'n', 'n')")
-        with self.assertRaises(sqlite3.IntegrityError):
-            conn.execute("INSERT INTO ticket_deps VALUES (?, ?)", (good[0], good[0]))
-        seq = conn.execute("INSERT INTO events (at, actor, name, entity, entity_id, payload_json) "
-                           "VALUES ('n', 'coordinator', 'ticket.created', 'ticket', ?, '{}')", (good[0],)).lastrowid
-        conn.execute("INSERT INTO ticket_events (ticket_id, event_seq, at, actor, name, payload_json) "
-                     "VALUES (?, ?, 'n', 'coordinator', 'ticket.created', '{}')", (good[0], seq))
-        with self.assertRaises(sqlite3.IntegrityError):
-            conn.execute("UPDATE ticket_events SET name = 'ticket.moved'")
+            self.assertEqual(dump(conn, table, "*"), rows, table)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0], events_before)
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+        self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        self.assertEqual(state.current_version(conn), 10)
+        state.check_schema(conn)
+
+    def test_fresh_database_has_the_same_schema_and_no_board_tables(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        old = v9_database(os.path.join(d, "old.db"))
+        state.migrate(old, os.path.join(d, "old.db"))
+        fresh = state.connect(os.path.join(d, "new.db"), role="coordinator", create=True)
+        state.migrate(fresh, os.path.join(d, "new.db"))
+
+        def schema(conn):
+            return sorted((r[0], r[1]) for r in conn.execute(
+                "SELECT name, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
+
+        self.assertEqual(schema(fresh), schema(old))
+        self.assertFalse(BOARD_TABLES & tables(fresh))
+        self.assertEqual(state.migrate(old, os.path.join(d, "old.db")), 10)  # migrating twice is a no-op
+
+
+if __name__ == "__main__":
+    unittest.main()

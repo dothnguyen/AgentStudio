@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, teamstatus, tickets, tmuxctl
+from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, teamstatus, tmuxctl
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -122,10 +122,6 @@ def _validate_debug_assign(args):
     return out
 
 
-def _validate_debug_ticket_worktree(args):
-    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key"))}
-
-
 MAX_TASK_BYTES = 32 * 1024
 
 
@@ -165,107 +161,10 @@ STAGE_NAMES = ("developer", "reviewer", "developer_repair", "reviewer_recheck")
 
 STAGE_ID_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 DEFINITION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-TICKET_KEY = re.compile(r"^T-\d{3,}$")
 
 
-def _ticket_workspace(args):
+def _workspace_arg(args):
     return ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False))
-
-
-def _ticket_key(value, name="key"):
-    if not isinstance(value, str) or not TICKET_KEY.match(value):
-        raise AsError(BAD_REQUEST, f"Argument '{name}' must match T- followed by at least three digits.")
-    return value
-
-
-def _ticket_keys(args, name):
-    value = args.get(name, [])
-    if not isinstance(value, list):
-        raise AsError(BAD_REQUEST, f"Argument '{name}' must be a list.")
-    return [_ticket_key(item, name) for item in value]
-
-
-def _validate_ticket_create(args):
-    kind = args.get("kind", "story")
-    if kind not in ("story", "bug", "feature"):
-        raise AsError(BAD_REQUEST, "kind must be story, bug or feature.")
-    if kind == "feature":
-        if any(name in args for name in ("storyPath", "text", "attachments", "dependsOn", "noDeps")):
-            raise AsError(BAD_REQUEST, "storyPath, text, attachments, dependsOn and noDeps are not valid for a feature ticket.")
-        workspace = _ticket_workspace(args)
-        brief = tickets.check_workspace_path(workspace, req_text(args, "briefPath", 4096, allow_empty=False))
-        out_dir = tickets.check_out_dir(workspace, req_text(args, "outDir", 4096, allow_empty=False))
-        out = {"workspace": workspace, "kind": kind, "briefPath": brief, "outDir": out_dir,
-               "priority": req_int(args, "priority", 0, 1000, 100)}
-        title = req_text(args, "title", 200, required=False)
-        if title is not None and len(title.encode("utf-8")) > 200:
-            raise AsError(BAD_REQUEST, "Argument 'title' must be no longer than 200 bytes.")
-        if title is not None:
-            out["title"] = title
-        return out
-    depends_supplied = "dependsOn" in args
-    depends = _ticket_keys(args, "dependsOn")
-    no_deps = req_bool(args, "noDeps")
-    if depends_supplied and no_deps:
-        raise AsError(BAD_REQUEST, "dependsOn and noDeps cannot be used together.")
-    out = {"workspace": _ticket_workspace(args), "kind": kind,
-           "noDeps": no_deps, "priority": req_int(args, "priority", 0, 1000, 100)}
-    if kind == "story":
-        out["storyPath"] = req_text(args, "storyPath", 4096, allow_empty=False)
-    else:
-        if "storyPath" in args:
-            raise AsError(BAD_REQUEST, "storyPath is not valid for a bug ticket.")
-        text = req_text(args, "text", 32 * 1024, allow_empty=False)
-        if not text.strip():
-            raise AsError(BAD_REQUEST, "Bug text must not be blank.")
-        out["text"] = text
-        attachments = args.get("attachments", [])
-        if not isinstance(attachments, list) or len(attachments) > 20:
-            raise AsError(BAD_REQUEST, "attachments must be a list of at most 20 paths.")
-        clean = []
-        for rel in attachments:
-            if not isinstance(rel, str) or len(rel) > 4096:
-                raise AsError(BAD_REQUEST, "each attachment must be a string no longer than 4096 characters.")
-            clean.append(tickets.check_workspace_path(out["workspace"], rel, require_md=False))
-        if clean:
-            out["attachments"] = clean
-    if depends_supplied:
-        # Presence is meaningful: an explicit [] overrides parsed story dependencies.
-        out["dependsOn"] = depends
-    title = req_text(args, "title", 80 if kind == "bug" else 200, required=False)
-    if title is not None:
-        out["title"] = title
-    return out
-
-
-def _validate_ticket_move(args):
-    to = args.get("to")
-    if to not in tickets.TICKET_STATES:
-        raise AsError(BAD_REQUEST, "to must be a ticket state.")
-    out = {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key")), "to": to}
-    reason = req_text(args, "reason", 500, required=False)
-    if reason is not None:
-        out["reason"] = reason
-    return out
-
-
-def _validate_ticket_block(args):
-    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key")),
-            "reason": req_text(args, "reason", 500, allow_empty=False)}
-
-
-def _validate_ticket_key(args):
-    return {"workspace": _ticket_workspace(args), "key": _ticket_key(args.get("key"))}
-
-
-def _validate_ticket_start(args):
-    out = _validate_ticket_key(args)
-    out["agentId"] = validate_uuid(args.get("agentId"), "agentId")
-    return out
-
-
-def _validate_ticket_retry(args):
-    return _validate_ticket_key(args)
 
 
 def _validate_board_resume(args):
@@ -273,77 +172,8 @@ def _validate_board_resume(args):
     all_agents = args.get("all") is True
     if (agent is None) != all_agents:
         raise AsError(BAD_REQUEST, "board.resume needs exactly one of agentId or all: true.")
-    workspace = _ticket_workspace(args)
+    workspace = _workspace_arg(args)
     return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
-
-
-def _validate_board_run(args):
-    return {"workspace": _ticket_workspace(args)}
-
-
-def _validate_board_pause(args):
-    out = {"workspace": _ticket_workspace(args)}
-    reason = req_text(args, "reason", 200, required=False, allow_empty=False)
-    if reason is not None:
-        out["reason"] = reason
-    return out
-
-
-def _validate_ticket_cancel(args):
-    out = _validate_ticket_key(args)
-    reason = req_text(args, "reason", 500, required=False)
-    if reason is not None:
-        out["reason"] = reason
-    return out
-
-
-def _validate_ticket_depend(args):
-    out = _validate_ticket_key(args)
-    out["on"] = _ticket_keys(args, "on")
-    out["remove"] = _ticket_keys(args, "remove")
-    if not out["on"] and not out["remove"]:
-        raise AsError(BAD_REQUEST, "ticket.depend needs on or remove.")
-    return out
-
-
-def _ticket_show(args, req):
-    clean = _validate_ticket_key(args)
-    conn = _reader()
-    try:
-        return queries.ticket_detail(conn, clean["workspace"], clean["key"])
-    finally:
-        conn.close()
-
-
-def _board_show(args, req):
-    workspace = _ticket_workspace(args)
-    conn = _reader()
-    try:
-        return queries.board_show(conn, workspace)
-    finally:
-        conn.close()
-
-
-def _board_list(args, req):
-    conn = _reader()
-    try:
-        return queries.board_list(conn)
-    finally:
-        conn.close()
-
-
-def _ticket_list(args, req):
-    workspace = _ticket_workspace(args)
-    status, kind = args.get("status"), args.get("kind")
-    if status is not None and status not in tickets.TICKET_STATES:
-        raise AsError(BAD_REQUEST, "status must be a ticket state.")
-    if kind is not None and kind not in tickets.TICKET_KINDS:
-        raise AsError(BAD_REQUEST, "kind must be a ticket kind.")
-    conn = _reader()
-    try:
-        return queries.ticket_list(conn, workspace, status, kind)
-    finally:
-        conn.close()
 
 
 def _validate_definition_start(args):
@@ -546,7 +376,6 @@ COMMANDS = {
     "debug.echo": _inbox("debug.echo", _validate_echo),
     "debug.fixture": _inbox("debug.fixture", _validate_fixture),
     "debug.assign": _inbox("debug.assign", _validate_debug_assign),
-    "debug.ticket_worktree": _inbox("debug.ticket_worktree", _validate_debug_ticket_worktree),
     "team.start": _inbox("team.start", _validate_team_start),
     "team.stop": _inbox("team.stop", _validate_team_stop),
     "team.attach": _team_attach,
@@ -561,22 +390,7 @@ COMMANDS = {
     "workflow.show": _workflow_show,
     "workflow.list": _workflow_list,
     "workflow.validate": _workflow_validate,
-    "ticket.create": _inbox("ticket.create", _validate_ticket_create),
-    "ticket.move": _inbox("ticket.move", _validate_ticket_move),
-    "ticket.block": _inbox("ticket.block", _validate_ticket_block),
-    "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key),
-    "ticket.approve": _inbox("ticket.approve", _validate_ticket_key),
-    "ticket.cancel": _inbox("ticket.cancel", _validate_ticket_cancel),
-    "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
-    "ticket.start": _inbox("ticket.start", _validate_ticket_start),
-    "ticket.retry": _inbox("ticket.retry", _validate_ticket_retry),
     "board.resume": _inbox("board.resume", _validate_board_resume),
-    "board.run": _inbox("board.run", _validate_board_run),
-    "board.pause": _inbox("board.pause", _validate_board_pause),
-    "board.show": _board_show,
-    "board.list": _board_list,
-    "ticket.show": _ticket_show,
-    "ticket.list": _ticket_list,
 }
 
 

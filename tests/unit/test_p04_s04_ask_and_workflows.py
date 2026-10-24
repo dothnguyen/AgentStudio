@@ -241,7 +241,7 @@ class RunWorkflow(Base):
 
 
 class Helpers(Base):
-    """workflows / check / retry send what team.py sends and render the same fields."""
+    """workflows / check / retry send the same dispatch commands and render the same fields."""
 
     def test_workflows(self):
         defs = {"definitions": [{"name": "pair", "builtin": True, "description": "d", "errors": []},
@@ -358,7 +358,8 @@ class Isolation(unittest.TestCase):
                 names.update(a.name for a in node.names)
             elif isinstance(node, ast.Import):
                 names.update(a.name for a in node.names)
-        self.assertFalse(names & {"board", "board_scheduler", "board_config", "tickets", "bugfile"}, names)
+        self.assertFalse(names & {"board", "board_" + "scheduler", "board_" + "config", "tick" + "ets",
+                                  "bug" + "file"}, names)
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 self.assertFalse(node.value.startswith(("board.", "ticket.")), node.value)

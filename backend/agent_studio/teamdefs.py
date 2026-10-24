@@ -186,17 +186,14 @@ def _invalid(team_id: str, problems: list) -> AsError:
 # ---- commands -----------------------------------------------------------------------------------
 
 def _select(workspace: str, team_id):
-    """-> (team dict, file id, legacy flag)."""
+    """-> (team dict, file id, legacy flag). The legacy flag is always False since P04-S06 removed the
+    team.json fallback from the CLI (the coordinator's roster-less team.start still reads team.json)."""
     ids = list_ids(workspace)
     if team_id:
         if team_id in ids:
             return load(workspace, team_id), team_id, False
-        if not ids and team_id == LEGACY_ID and legacy_exists(workspace):
-            return legacy_team(workspace), LEGACY_ID, True
         raise AsError(TEAM_NOT_FOUND, f"No team {team_id!r}.", remediation=_ADD_HINT)
     if not ids:
-        if legacy_exists(workspace):
-            return legacy_team(workspace), LEGACY_ID, True
         raise AsError(TEAM_NOT_FOUND, "No team is defined in this workspace.", remediation=_ADD_HINT)
     if len(ids) > 1:
         raise AsError(TEAM_AMBIGUOUS, f"Several teams exist ({', '.join(ids)}); pass --team ID.")
@@ -264,9 +261,6 @@ def list_teams(workspace: str) -> dict:
         members = t.get("members")
         out.append({"id": tid, "name": t.get("name"), "members": len(members) if isinstance(members, list) else 0,
                     "legacy": False})
-    if not ids and legacy_exists(workspace):
-        t = legacy_team(workspace)
-        out.append({"id": t["id"], "name": t["name"], "members": len(t["members"]), "legacy": True})
     return {"teams": out}
 
 

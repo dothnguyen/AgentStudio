@@ -1,1 +1,0 @@
-{"version":1,"description":"Review a board ticket.","stages":[{"id":"verdict","role":"TeamLead","permission":"read_only","promptFile":"prompts/board-review.md","next":{"pass":"$succeed","fail":"$fail"}}]}

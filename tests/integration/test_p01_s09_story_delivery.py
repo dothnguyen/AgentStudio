@@ -57,21 +57,6 @@ class StoryDelivery(StartCase):
         flags = {stage[a["id"]]: (a.get("request") or {}).get("expectsVerdict") for a in d["assignments"]}
         self.assertEqual(flags, {"review": True, "develop": False, "qa": True, "final": True})
 
-    def test_team_py_summarize_captures_commit(self):
-        os.environ["AGENT_STUDIO"] = "/bin/true"
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("team_py", os.path.join(PROJECT, "..", "scripts", "team",
-                                                                              "team.py"))
-        team = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(team)
-        final = fake("verdict_pass")
-        final["finalText"] = "ok\n```commit\n" + COMMIT + "\n```"
-        r = self.start("story-delivery", debugStageOptions={"review": fake("verdict_pass"), "develop": fake("success", "fixed.txt"),
-                                                            "qa": fake("verdict_pass"), "final": final})["data"]
-        d = self.wait(r["workflowRunId"], FINAL + ("paused",), 90)
-        route, status, findings, last, commit = team.summarize(d)
-        self.assertEqual((status, commit), ("succeeded", COMMIT))
-
 
 if __name__ == "__main__":
     unittest.main()

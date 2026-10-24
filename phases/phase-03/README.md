@@ -1,6 +1,6 @@
 # Phase 03 — Asynchronous ticket board (kanban)
 
-> Status: Planned, rev 1 (2026-10-22)
+> Status: Replaced by [P04](../phase-04/README.md) (P04-S06 deleted the software board; rev 1, 2026-10-22)
 > Brief: [feature-kanban-board.md](../briefs/feature-kanban-board.md) (decisions recorded 2026-10-22, §9)
 > Product: [PRD.md](../../PRD.md) · Delivery: [ROADMAP.md](../../ROADMAP.md) · Stories: [stories/README.md](./stories/README.md)
 > Builds on: [P00 implementation contract](../phase-00/architecture.md), [P01 design contract](../phase-01/README.md#design-contract)

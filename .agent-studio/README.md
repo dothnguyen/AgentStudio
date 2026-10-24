@@ -1,24 +1,24 @@
 # Running this project with an Agent Studio team
 
-Team (from `team.json`): **lead** = TeamLead, **dev** = Developer, **qa** = QA, and **po** = ProductOwner. Roles:
+Team: **lead** = TeamLead, **dev** = Developer, **qa** = QA, and **po** = ProductOwner. Roles:
 `roles.json`, `roles/*.md`; shared skills: `skills/`.
 The workflow's automatic test step: `workflow.json` (unit tests).
 
-Everything below runs **inside WSL** (Ubuntu-24.04). `team.py` is `scripts/team/team.py`; it only glues the normal
-`agent-studio` commands together and runs git and the tests in your shell.
+Everything below runs **inside WSL** (Ubuntu-24.04). The `agent-studio team …` story commands only glue the normal
+`agent-studio` commands together and run git and the tests in your shell.
 
 ## What P00 can and cannot do (so the steps make sense)
 
 - Command access is opt-in per workspace: `.agent-studio/permissions.json` (`{"version":1,"claude":{"commands":true}}`,
   present in this project). With it, Claude Developers can run any command in the workspace (tests, git), and QA and
   the lead get read-only commands (git status/diff/log/show/ls-files/rev-parse, ls, cat, the unit tests). Without it
-  agents never run commands, and the built-in workflow's test step and `team.py` run the tests for them. **You**
+  agents never run commands, and the built-in workflow's test step and the team commands run the tests for them. **You**
   commit (with the lead's message); the story-delivery prompts forbid history-changing git.
 - Turning it on drops Claude's `--restricted` flag, so file tools are no longer confined to the workspace and
   project settings files are honoured. Only enable it for workspaces you trust. Other providers are unchanged.
 - Each task is one-shot: an agent remembers nothing between tasks. Files (stories, plans) are the memory.
 - The built-in workflow is fixed: dev -> unit tests -> QA -> at most one repair round. Further dev/QA rounds and the
-  lead's reviews are direct tasks that `team.py` sends for you.
+  lead's reviews are direct tasks that the team commands send for you.
 - Only one agent writes to the workspace at a time; a second writer is refused (`WORKSPACE_BUSY`).
 
 ## One-time setup
@@ -39,16 +39,19 @@ Everything below runs **inside WSL** (Ubuntu-24.04). `team.py` is `scripts/team/
 2. Make sure `~/.local/bin` is on your PATH (`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`), and that
    `claude auth status` shows you logged in.
 
-3. Optional shortcut: `alias team='python3 /mnt/c/Works/Projects/AgentStudio/scripts/team/team.py'`
-   (the commands below use `team`).
+3. If the workspace still has the legacy `.agent-studio/team.json` and no `.agent-studio/teams/`, convert it once:
+
+   ```bash
+   agent-studio team import-legacy          # writes .agent-studio/teams/<id>.json from team.json
+   ```
 
 ## Daily: start and watch
 
 ```bash
 cd /mnt/c/Works/Projects/AgentStudio
-team start          # three panes: lead, dev, qa
-team attach         # in a second terminal; Ctrl-b d detaches, Ctrl-b z zooms a pane
-team status         # who is busy, recent results
+agent-studio team start    # the panes: lead, dev, qa (the team definition from .agent-studio/teams/)
+agent-studio team attach   # in a second terminal; Ctrl-b d detaches, Ctrl-b z zooms a pane
+agent-studio team status   # who is busy, recent results
 ```
 
 From Windows Terminal, `agent-studio team attach --team <id> --print` gives a ready `wt.exe ...` command.
@@ -56,10 +59,10 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
 ## Workflow 1 - unpack a feature with the product owner
 
 1. Write a brief, e.g. `phases/briefs/feature-x.md`: the goal, users, constraints, what is out of scope.
-2. `team unpack phases/briefs/feature-x.md --out phases/phase-02`
+2. `agent-studio team unpack phases/briefs/feature-x.md --out phases/phase-02`
    The product owner reads PRD/ROADMAP/phases, writes `phases/phase-02/README.md`, one story file per story, and
    `phases/phase-02/tickets.json`, then ends with open questions and decisions for you. The lead remains the fallback
-   if a saved team has no ProductOwner.
+   if the team has no ProductOwner.
 3. Read the files. Answer the questions **in the brief** (add an "Answers" section) or edit the plan directly, then
    run the same `team unpack` again; the product owner revises the files. Repeat until you are happy.
 4. Commit the plan: `git add -A && git commit -m "Plan: feature X"`.
@@ -68,43 +71,44 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
 
 ```bash
 S=phases/phase-02/stories/P02-S01-something.md
-team workflows                      # definitions available (built-in and .agent-studio/workflows)
-team check story-delivery           # validate it against the saved team, no tokens spent
-team run story-delivery --story $S  # 1. lead reviews/fixes the story -> dev -> unit tests (run by the coordinator, outside any agent sandbox) -> QA -> lead final review
+agent-studio team workflows                # definitions available (built-in and .agent-studio/workflows)
+agent-studio team check story-delivery     # validate it against the running team, no tokens spent
+agent-studio team run-workflow story-delivery --story $S   # 1. lead reviews/fixes the story -> dev -> unit tests (run by the coordinator, outside any agent sandbox) -> QA -> lead final review
                                     #    a review "fail" stops with the lead's questions; QA/final "fail" goes back to dev
-team commit $S                      # 2. runs the integration tests the change touched (parallel), shows the files and the
+agent-studio team commit $S      # 2. runs the integration tests the change touched (parallel), shows the files and the
                                     #    lead's ```commit message, asks, then commits
 ```
 
 The first stage is the lead's story review, so `team review` is not needed first.
 
-`team run NAME "prompt"` runs any definition with a free-text prompt; `--prompt-file PATH` reads it from a file,
-`--bind ROLE=NAME` picks a different agent for a role, `--no-wait` returns after starting. It needs a clean working
-tree and prints the route, status, last findings and the last stage's summary. With `--story` it also records what
-`team commit` needs. The final stage may edit only the story file: it marks the story Done, ticks items, fills Evidence and proposes the commit message;
-check the story diff, then `team commit`.
+`agent-studio team run-workflow NAME "prompt"` runs any definition with a free-text prompt (or `--text-file PATH|-`);
+`--bind ROLE=MEMBER` picks a different member for a role, `--wait` follows the run to the end (without it the command
+returns after starting). It needs a clean working tree and, with `--wait`, prints the route, status, last findings and
+the last stage's summary. With `--story` it also records what `team commit` needs. The final stage may edit only the
+story file: it marks the story Done, ticks items, fills Evidence and proposes the commit message; check the story
+diff, then `team commit`.
 The definition is `.agent-studio/workflows/story-delivery.yaml` with prompts in `workflows/prompts/`.
 
 ## Workflow 2b - develop one story by hand (P00 fallback)
 
 ```bash
 S=phases/phase-02/stories/P02-S01-something.md
-team review $S      # 1. lead reviews the story and fixes it in place (offers to commit its edits)
-                    #    -> APPROVED, or questions only you can answer
-team dev $S         # 2. dev implements -> unit tests -> QA -> (one repair round)
-                    #    succeeded -> go to 4;  failed -> 3
-team fix $S         # 3. dev fixes QA's findings (and the failing tests)
-team qa $S          #    you run the tests here, QA reviews the diff + results
-                    #    repeat fix / qa until "QA passed"
-team final $S       # 4. lead final review; if complete it marks the story Done (ticks, Evidence)
-                    #    and proposes the commit message
-                    #    changes requested -> team fix / team qa again, then team final
-team commit $S      # 5. shows the files and message, asks, then commits
+agent-studio team review $S   # 1. lead reviews the story and fixes it in place (offers to commit its edits)
+                              #    -> APPROVED, or questions only you can answer
+agent-studio team dev $S      # 2. dev implements -> unit tests -> QA -> (one repair round)
+                              #    succeeded -> go to 4;  failed -> 3
+agent-studio team fix $S      # 3. dev fixes QA's findings (and the failing tests)
+agent-studio team qa $S       #    you run the tests here, QA reviews the diff + results
+                              #    repeat fix / qa until "QA passed"
+agent-studio team final $S    # 4. lead final review; if complete it marks the story Done (ticks, Evidence)
+                              #    and proposes the commit message
+                              #    changes requested -> team fix / team qa again, then team final
+agent-studio team commit $S   # 5. shows the files and message, asks, then commits
 ```
 
-Rules the helper enforces: `dev` needs the lead's approval (or `--force`) and a clean working tree (commit or stash
+Rules the commands enforce: `dev` needs the lead's approval (or `--force`) and a clean working tree (commit or stash
 first); `final` needs QA passed; `commit` needs the lead's final approval. Per-story state (base commit, findings,
-verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/`.
+verdicts, commit message) lives in `~/.local/state/agent-studio/project-team/` (same files earlier releases wrote).
 
 The story's Status/Evidence update made by the lead in `final` is included in the `team commit`.
 
@@ -123,7 +127,7 @@ The story's Status/Evidence update made by the lead in `final` is included in th
 ## Retry a stuck stage
 
 ```bash
-team retry     # rerun the active workflow's current stage with its original prompt
+agent-studio team retry     # rerun the active workflow's current stage with its original prompt
 ```
 Use it when a stage is `waiting_input` (permission denied), the engine paused the run (verdict missing, unclear
 restart), or an agent was lost. Same as `agent-studio workflow retry --workflow ID`. It refuses while the stage's
@@ -142,7 +146,7 @@ processes may still be running (cancel first) and when the agent is not alive. T
 | an agent lost / pane closed | `team stop`, `team start` (state and story progress are kept) |
 | anything else | `agent-studio task show --task ID --pretty` and the pane's output |
 
-## Doing it by hand (what team.py runs)
+## Doing it by hand (what the team commands run)
 
 ```bash
 agent-studio snapshot --team $TEAM --pretty                       # IDs and status

@@ -1,4 +1,4 @@
-"""scripts/validate.py and the team.py commit gate."""
+"""scripts/validate.py."""
 import importlib.util
 import os
 import subprocess
@@ -19,7 +19,6 @@ def load(name, rel):
 
 
 validate = load("validate_py", "scripts/validate.py")
-team = load("team_py2", "scripts/team/team.py")
 
 
 class Modules(unittest.TestCase):
@@ -72,14 +71,6 @@ class Modes(unittest.TestCase):
         integ.assert_called_once_with(["tests.integration.test_s04_runner"])
 
 
-class ManualLoopTier(unittest.TestCase):
-    def test_manual_commands_use_the_unit_tier_unless_asked(self):
-        argv = ["python3", "scripts/validate.py", "--touched"]
-        self.assertEqual(team.validation_argv(argv), ["python3", "scripts/validate.py", "--unit"])
-        self.assertEqual(team.validation_argv(argv, integration=True), argv)
-        self.assertEqual(team.validation_argv(["pytest", "-q"]), ["pytest", "-q"])
-
-
 class BranchChanges(unittest.TestCase):
     def test_committed_rounds_on_a_branch_still_count(self):
         repo = tempfile.mkdtemp()
@@ -107,21 +98,6 @@ class BranchChanges(unittest.TestCase):
         subprocess.run(["git", "-C", repo, "init", "-q", "-b", "other"], check=True)
         with mock.patch.object(validate, "ROOT", repo):
             self.assertEqual(validate.branch_changes(), "")
-
-
-class CommitGate(unittest.TestCase):
-    def test_gate_runs_touched_and_blocks_on_failure(self):
-        with mock.patch.object(team.subprocess, "run", return_value=types.SimpleNamespace(returncode=1)) as run:
-            with self.assertRaises(SystemExit):
-                team.integration_gate(False)
-        self.assertIn("--touched", run.call_args[0][0])
-
-    def test_gate_passes_and_can_be_skipped(self):
-        with mock.patch.object(team.subprocess, "run", return_value=types.SimpleNamespace(returncode=0)):
-            team.integration_gate(False)
-        with mock.patch.object(team.subprocess, "run") as run:
-            team.integration_gate(True)
-        run.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -41,84 +41,14 @@ TEAM_STATES = ("starting", "running", "stopping", "stopped", "error")
 STAGE_ATTEMPT_STATES = ("active", "completed", "abandoned")
 TICKET_KINDS = ("feature", "story", "bug")
 TICKET_SEVERITIES = ("blocker", "major", "minor")
-BUG_SEVERITY_PRIORITY = {"blocker": 10, "major": 40, "minor": 70}
+# P04-S06 deleted the P03 software board and its state machine; these three remain because migration 7's
+# DDL (uneditable, constraint 5) still creates the tickets table with CHECKs built from them, and
+# migration 10 drops it again on every database.
 TICKET_STATES = ("backlog", "ready_unpack", "unpacking", "unpacked", "done", "refine", "refining",
                  "ready_dev", "in_dev", "ready_test", "in_test", "fail_test", "ready_review", "in_review",
                  "ready_merge", "merged", "changes_requested", "triage", "triaging", "blocked", "cancelled")
-TICKET_TERMINAL = ("merged", "done", "cancelled")
-TICKET_WORKING = {"unpacking": ("ready_unpack",), "refining": ("refine",), "triaging": ("triage",),
-                  "in_dev": ("ready_dev", "fail_test", "changes_requested"), "in_test": ("ready_test",),
-                  "in_review": ("ready_review",)}
-BOARD_COLUMNS = {
-    "unpack": {"queues": ("ready_unpack",), "working": "unpacking", "workspace": "main", "seed": "none"},
-    "triage": {"queues": ("triage",), "working": "triaging", "workspace": "main", "seed": "none"},
-    "refine": {"queues": ("refine",), "working": "refining", "workspace": "main", "seed": "none"},
-    "develop": {"queues": ("ready_dev", "fail_test", "changes_requested"), "working": "in_dev", "workspace": "worktree", "seed": "findings"},
-    "test": {"queues": ("ready_test",), "working": "in_test", "workspace": "worktree", "seed": "diff"},
-    "review": {"queues": ("ready_review",), "working": "in_review", "workspace": "worktree", "seed": "diff"},
-}
-BOARD_PICK_ORDER = ("review", "triage", "refine", "unpack", "develop", "test")
-BOARD_PICK_RULES = {"develop": {"cap": "maxParallelDev", "depsMerged": True,
-                                  "rework": ("changes_requested", "fail_test")},
-                    "review": {"streak": 2}}
-BOARD_OUTCOMES = {
-    "unpack": {"kind": "verdict", "pass": "unpacked", "fail": "blocked", "counter": None,
-               "limit": None, "commit": "planning", "globs": ("{out}/*",), "check": "manifest"},
-    "triage": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
-               "limit": None, "commit": "planning", "globs": ("bugs/BUG-{key}-*.md",), "single": True,
-               "check": "bugfile"},
-    "refine": {"kind": "verdict", "pass": "ready_dev", "fail": "blocked", "counter": None,
-               "limit": None, "commit": "planning", "globs": ("{story}", "{phase}/*")},
-    "develop": {"kind": "work", "pass": "ready_test", "fail": "ready_dev", "counter": "dev_rounds",
-                "limit": "dev", "commit": "branch"},
-    "test": {"kind": "verdict", "pass": "ready_review", "fail": "fail_test", "counter": "test_rounds",
-             "limit": "test", "commit": None},
-    "review": {"kind": "verdict", "pass": "ready_merge", "fail": "changes_requested", "counter": "review_rounds",
-               "limit": "review", "commit": None},
-}
-TICKET_OPERATOR_TARGETS = ("backlog", "ready_unpack", "ready_dev", "ready_test", "ready_review", "refine",
-                           "triage", "fail_test", "changes_requested", "blocked")
-KIND_STATUSES = {
-    "feature": frozenset(("backlog", "ready_unpack", "unpacking", "unpacked", "done", "blocked", "cancelled")),
-    "story": frozenset(("backlog", "refine", "refining", "ready_dev", "in_dev", "ready_test", "in_test",
-                          "ready_review", "in_review", "ready_merge", "merged", "fail_test", "changes_requested",
-                          "blocked", "cancelled")),
-    "bug": frozenset(("triage", "triaging", "ready_dev", "in_dev", "ready_test", "in_test", "ready_review",
-                        "in_review", "ready_merge", "merged", "fail_test", "changes_requested", "blocked", "cancelled")),
-}
-_ticket_transitions = set()
-for _work, _queues in TICKET_WORKING.items():
-    for _queue in _queues:
-        _ticket_transitions.update(((_queue, _work, "coordinator"), (_work, _queue, "coordinator")))
-_ticket_transitions.update((("unpacking", "unpacked", "coordinator"), ("unpacked", "done", "coordinator"),
-    ("refining", "ready_dev", "coordinator"), ("triaging", "ready_dev", "coordinator"),
-    ("in_dev", "ready_test", "coordinator"), ("in_test", "ready_review", "coordinator"),
-    ("in_test", "fail_test", "coordinator"), ("in_review", "ready_merge", "coordinator"),
-    ("in_review", "changes_requested", "coordinator"), ("ready_merge", "merged", "coordinator"),
-    ("ready_merge", "changes_requested", "coordinator"), ("backlog", "refine", "coordinator")))
-for _to in ("unpacked", "ready_dev", "ready_test", "fail_test", "ready_review", "changes_requested", "ready_merge"):
-    _ticket_transitions.add(("blocked", _to, "coordinator"))
-for _from in set(TICKET_STATES) - set(TICKET_TERMINAL) - {"blocked"}:
-    for _to in TICKET_OPERATOR_TARGETS:
-        if _to != _from:
-            _ticket_transitions.add((_from, _to, "operator"))
-    for _actor in ("coordinator", "operator"):
-        _ticket_transitions.update(((_from, "blocked", _actor), (_from, "cancelled", _actor)))
-for _actor in ("coordinator", "operator"):
-    _ticket_transitions.add(("blocked", "cancelled", _actor))
-TICKET_TRANSITIONS = frozenset(_ticket_transitions)
 
 ENTITIES: Dict[str, Entity] = {
-    "ticket": Entity("ticket", "tickets", "status", TICKET_STATES,
-        frozenset({"backlog", "ready_unpack", "refine", "triage"}),
-        _t({s: tuple(t for f, t, _a in TICKET_TRANSITIONS if f == s) +
-               (tuple(x for x in TICKET_STATES if x not in TICKET_TERMINAL and x not in TICKET_WORKING)
-                if s == "blocked" else ()) for s in TICKET_STATES}),
-        ("workspace", "key", "kind", "title", "story_path", "brief_path", "out_dir", "raw_text",
-         "attachments_json", "severity", "duplicate_of", "parent_ticket_id", "return_status", "blocked_reason",
-         "priority", "branch", "worktree_path", "base_commit", "head_commit", "merged_commit", "assignee_agent_id",
-         "lease_until", "run_id", "applied_run_id", "dev_rounds", "test_rounds", "review_rounds", "findings_json",
-         "questions_json"), None),
     "team": Entity(
         "team", "teams", "status", TEAM_STATES, frozenset({"starting"}),
         _t({"starting": ("running", "stopping", "error"),
@@ -478,4 +408,23 @@ MIGRATION_8 = [_rebuild_agents_for_usage_limits]
 MIGRATION_9 = [
     "ALTER TABLE teams ADD COLUMN def_id TEXT",
     "ALTER TABLE agents ADD COLUMN member_id TEXT",
+]
+
+
+def _check_drop_foreign_keys(conn) -> None:
+    bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad:
+        raise RuntimeError(f"migration 10 broke {len(bad)} foreign key(s): {[tuple(r) for r in bad[:5]]}")
+
+
+# v10 (P04-S06): the P03 software board is deleted; its tables (and, with them, their indexes and the
+# ticket_events immutability triggers) are dropped children-first. Existing board data is not migrated;
+# dropping a table also drops its indexes and triggers, so only the order matters here.
+MIGRATION_10 = [
+    "DROP TABLE board_locks",
+    "DROP TABLE ticket_deps",
+    "DROP TABLE ticket_events",
+    "DROP TABLE board_state",
+    "DROP TABLE tickets",
+    _check_drop_foreign_keys,
 ]

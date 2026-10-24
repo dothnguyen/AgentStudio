@@ -5,7 +5,7 @@ import unittest
 from tests import helpers  # noqa: F401
 from agent_studio import schema, state
 from tests.unit.test_p01_s04_migration import dump
-from tests.unit.test_p03_s01_tickets import fresh
+from tests.helpers import fresh
 
 
 NOW = "2030-01-01T00:00:00.000Z"
@@ -56,14 +56,14 @@ class UsageLimitMigrationTests(unittest.TestCase):
         old = dump(conn, "agents", schema._AGENT_OLD_COLS)
 
         self.assertEqual(state.current_version(conn), 7)
-        self.assertEqual(state.migrate(conn, path), 9)
+        self.assertEqual(state.migrate(conn, path), 10)
         self.assertEqual(dump(conn, "agents", schema._AGENT_OLD_COLS), old)
         self.assertEqual([tuple(row) for row in conn.execute("SELECT limit_reset_at FROM agents ORDER BY ordinal")],
                          [(None,)] * 6)
         conn.execute("UPDATE agents SET availability = 'limit_reached' WHERE ordinal = 0")
         self.assertEqual(conn.execute("SELECT availability FROM agents WHERE ordinal = 0").fetchone()[0], "limit_reached")
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
-        self.assertEqual(state.current_version(conn), 9)
+        self.assertEqual(state.current_version(conn), 10)
 
     def test_agents_have_v8_limit_column_and_exact_new_transitions(self):
         conn, store = fresh()

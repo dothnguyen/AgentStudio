@@ -1,1 +1,0 @@
-{"version":1,"description":"Unpack a board feature into planning files.","stages":[{"id":"verdict","role":"ProductOwner","permission":"workspace_write","promptFile":"prompts/board-unpack.md","next":{"pass":"$succeed","fail":"$fail"}}]}

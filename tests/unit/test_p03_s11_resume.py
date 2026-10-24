@@ -3,7 +3,7 @@ import unittest
 from tests import helpers  # noqa: F401
 from agent_studio import coordinator, dispatch
 from agent_studio.protocol import AsError
-from tests.unit.test_p03_s01_tickets import fresh
+from tests.helpers import fresh
 
 
 class BoardResumeTests(unittest.TestCase):

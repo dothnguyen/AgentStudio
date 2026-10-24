@@ -1,1 +1,0 @@
-{"version":1,"description":"Develop a board ticket.","stages":[{"id":"work","role":"Developer","permission":"workspace_write","promptFile":"prompts/board-develop.md","maxVisits":3,"next":{"done":"tests"}},{"id":"tests","type":"validation","maxVisits":3,"next":{"pass":"$succeed","fail":"work"}}]}

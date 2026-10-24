@@ -89,7 +89,7 @@ Task states: `queued`, `assigned`, `running`, `waiting_input`, `review`, `succee
 |---|---|---|
 | R-13 | Workflow definitions in JSON or YAML. | Both formats load into the same model; every invalid definition is rejected statically with a file/path/line error; no third-party parser. |
 | R-14 | Stage = role + permission + prompt template + outcome routing. | Fake-adapter runs prove QA fail → Developer, QA pass → TeamLead, TeamLead fail → Developer, and both bounds (`maxVisits`, `maxSteps`). |
-| R-15 | Run a workflow with one prompt. | `workflow start --definition NAME --text …` (CLI and `serve`) and `team.py run NAME "prompt"`; real three-role run in the P01 gate. |
+| R-15 | Run a workflow with one prompt. | `workflow start --definition NAME --text …` (CLI and `serve`) and `team run-workflow NAME "prompt"`; real three-role run in the P01 gate. |
 | R-16 | P00 guarantees hold for definition runs. | Frozen definition, restart without duplicate dispatch, resolve/cancel, one writer per workspace, `read_only` stages write nothing; P00 workflow form still works. |
 
 ## 6. P00 workflow and test contract
@@ -128,7 +128,7 @@ The [P01 design contract](./phases/phase-01/README.md#design-contract) is author
 
 **P00 CLI:** `health`, `preflight`, `coordinator start|stop`, `team.start`, `team.attach`, `team.status`, `team.stop`, `task.direct`, `workflow.start`, `snapshot`, `events`, `assignment.cancel`, `assignment.resolve`, and `serve` (persistent JSON stdio for Windows callers). Team start returns the tmux session ID and exact attach commands for both a WSL shell and Windows Terminal. tmux provides tiled panes, zoom, scrolling, copying, detach, and reattach. Status distinguishes coordinator health, pane liveness, agent availability, assignment status, task status, and workflow stage.
 
-**P01 CLI additions:** `workflow list`, `workflow validate --definition NAME`, `workflow start --definition NAME --text … [--bind ROLE=AGENT]`, and `workflow show` with definition, bindings, visits, and the route taken. The project helper adds `team.py run NAME "prompt"`.
+**P01 CLI additions:** `workflow list`, `workflow validate --definition NAME`, `workflow start --definition NAME --text … [--bind ROLE=AGENT]`, and `workflow show` with definition, bindings, visits, and the route taken. The team CLI adds `team run-workflow NAME "prompt"`.
 
 **P02 UI:** setup/provider selection, roster, workflow definition picker, task/workflow timeline, direct dispatch, attention and resolution, stage/retry count, diagnostics, and safe Stop. An Open terminals action opens Windows Terminal attached to the existing tmux session; no in-app terminal widget or output stream. Status comes from backend snapshots/events over `serve`. Closing/reopening the UI does not affect the team.
 

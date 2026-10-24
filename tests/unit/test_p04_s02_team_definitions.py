@@ -191,6 +191,8 @@ class ValidateTests(Base):
 
 
 class LegacyTests(Base):
+    """P04-S06 removed the CLI-side team.json fallback: only `team import-legacy` reads team.json now."""
+
     def setUp(self):
         super().setUp()
         self.roles()
@@ -202,24 +204,36 @@ class LegacyTests(Base):
         with open(os.path.join(self.cfg, "team.json"), "rb") as f:
             self.assertEqual(f.read(), self.legacy_bytes)
 
-    def test_fallback_list_show_validate(self):
-        lst = teamdefs.list_teams(self.ws)["teams"]
-        self.assertEqual(lst, [{"id": "default", "name": "default", "members": 2, "legacy": True}])
-        shown = teamdefs.show(self.ws, None)
-        self.assertTrue(shown["legacy"])
-        self.assertEqual(shown["team"]["members"], [
-            {"id": "dev-one", "name": "Dev One", "role": "developer", "provider": "codex"},
-            {"id": "reviewer-2", "name": "reviewer-2", "role": "reviewer", "provider": "claude", "model": "opus"}])
-        self.assertEqual(teamdefs.validate_team(self.ws, None)["team"], "default")
+    def test_no_default_team_anywhere_and_team_json_untouched(self):
+        self.assertEqual(teamdefs.list_teams(self.ws)["teams"], [])
+        self.assertEqual(self.code(teamdefs.show, self.ws, None), "TEAM_NOT_FOUND")
+        self.assertEqual(self.code(teamdefs.validate_team, self.ws, None), "TEAM_NOT_FOUND")
+        self.assertEqual(self.code(teamdefs.add_member, self.ws, None, "A", "developer", "codex"), "TEAM_NOT_FOUND")
+        self.assertEqual(self.code(teamdefs.remove_member, self.ws, None, "dev-one"), "TEAM_NOT_FOUND")
         self.same()
 
-    def test_edit_refused_then_import(self):
-        for fn, args in ((teamdefs.add_member, (self.ws, None, "A", "developer", "codex")),
-                         (teamdefs.remove_member, (self.ws, None, "dev-one"))):
-            with self.assertRaises(AsError) as c:
-                fn(*args)
-            self.assertEqual(c.exception.code, "BAD_REQUEST")
-            self.assertIn("import-legacy", c.exception.remediation)
+    def test_team_start_without_teams_is_team_not_found_naming_import_legacy(self):
+        rc, out, err = self.cli("team", "start")
+        self.assertEqual(rc, 1)
+        resp = json.loads(out)
+        self.assertEqual(resp["error"]["code"], "TEAM_NOT_FOUND")
+        self.assertIn("team import-legacy", resp["error"]["remediation"])
+        self.same()
+
+    def test_team_start_named_default_is_also_refused(self):
+        rc, out, _ = self.cli("team", "start", "--team", "default")
+        self.assertEqual(rc, 1)
+        self.assertEqual(json.loads(out)["error"]["code"], "TEAM_NOT_FOUND")
+        self.same()
+
+    def test_team_list_shows_no_default_team(self):
+        rc, out, _ = self.cli("team", "list", "--json")
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out)["data"]["teams"], [])
+        rc, out, _ = self.cli("team", "list")
+        self.assertEqual(out.strip(), "no teams defined")
+
+    def test_import_legacy_still_converts(self):
         res = teamdefs.import_legacy(self.ws)
         self.assertEqual(res["warnings"], [])
         self.assertEqual(teamdefs.validate_team(self.ws, "default")["problems"], [])
@@ -250,7 +264,7 @@ class LegacyTests(Base):
         self.assertEqual(rc, 1)
         self.assertEqual(json.loads(out)["error"]["code"], "TEAM_NOT_FOUND")
 
-    def test_team_add_ends_fallback(self):
+    def test_team_add_ignores_team_json(self):
         teamdefs.add_team(self.ws, "new")
         self.assertEqual([t["id"] for t in teamdefs.list_teams(self.ws)["teams"]], ["new"])
         self.same()

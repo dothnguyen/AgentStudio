@@ -14,10 +14,10 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, board, board_config, board_scheduler, crashpoints, envresolve, fixtures, gitws, inbox, paths, procid, reconcile, report_rules, reports, schema, \
-    resolve, state, tasks, teams, tickets, tmuxctl, workflow, worktrees
+from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, report_rules, \
+    reports, resolve, state, tasks, teams, tmuxctl, workflow
 from .store import Store
-from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, TICKET_BUSY, TICKET_TRANSITION_INVALID, UNKNOWN_COMMAND
+from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
 LOCK_FILE = "coordinator.lock"
 PID_FILE = "coordinator.json"
@@ -141,137 +141,6 @@ def _handle_debug_assign(args: dict, tx, ctx: dict) -> dict:
     return teams.debug_assign(tx, args, ctx)
 
 
-def _handle_debug_ticket_worktree(args: dict, tx, ctx: dict) -> dict:
-    _require_debug(ctx)
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    branch = gitws.run(args["workspace"], "symbolic-ref", "--short", "HEAD").stdout.decode().strip()
-    created = worktrees.create(args["workspace"], ticket["key"], worktrees.slug(ticket["title"]), branch,
-                               state_dir=ctx["stateDir"])
-    tickets.record_worktree(tx, ticket, created)
-    return {"ticket": ticket["key"], "worktree": created}
-
-
-def _ticket_deps(tx, ticket):
-    return [row[0] for row in tx.conn.execute(
-        "SELECT t.key FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
-        "WHERE d.ticket_id = ? ORDER BY t.key", (ticket["id"],))]
-
-
-def _handle_ticket_create(args, tx, ctx):
-    if args.get("kind", "story") == "bug":
-        text = args["text"]
-        title = args.get("title")
-        if title is None:
-            title = next((line.strip() for line in text.splitlines() if line.strip()), "")[:80]
-        ticket = tickets.create(tx, args["workspace"], "bug", {
-            "title": title, "raw_text": text,
-            "attachments_json": json.dumps(args.get("attachments", []), ensure_ascii=True),
-            "priority": args["priority"]})
-        deps = [] if args["noDeps"] else args.get("dependsOn", [])
-        if deps:
-            tickets.add_deps(tx, ticket, deps)
-        ticket = tickets.get(tx, args["workspace"], ticket["key"])
-        return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket),
-                "parsed": {"ids": [], "resolved": [], "unresolved": []}, "warnings": []}
-    if args.get("kind") == "feature":
-        with open(os.path.join(args["workspace"], args["briefPath"]), "r", encoding="utf-8") as f:
-            text = f.read()
-        stem = os.path.splitext(os.path.basename(args["briefPath"]))[0]
-        ticket = tickets.create(tx, args["workspace"], "feature", {
-            "title": args.get("title", tickets.story_title(text, stem)), "brief_path": args["briefPath"],
-            "out_dir": args["outDir"], "priority": args["priority"]})
-        return {"ticket": ticket, "dependsOn": [],
-                "parsed": {"ids": [], "resolved": [], "unresolved": []}, "warnings": []}
-    story_path = tickets.check_workspace_path(args["workspace"], args["storyPath"])
-    with open(os.path.join(args["workspace"], story_path), "r", encoding="utf-8") as f:
-        text = f.read()
-    stem = os.path.splitext(os.path.basename(story_path))[0]
-    parsed_ids = tickets.parse_depends(text)
-    parsed = tickets.resolve_depends(tx, args["workspace"], parsed_ids)
-    ticket = tickets.create(tx, args["workspace"], "story", {
-        "title": args.get("title", tickets.story_title(text, stem)), "story_path": story_path,
-        "priority": args["priority"]})
-    if args["noDeps"]:
-        deps = []
-    elif "dependsOn" in args:
-        deps = args["dependsOn"]
-    else:
-        deps = parsed["resolved"]
-    if deps:
-        tickets.add_deps(tx, ticket, deps)
-    ticket = tickets.get(tx, args["workspace"], ticket["key"])
-    return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket),
-            "parsed": {"ids": parsed_ids, **parsed},
-            "warnings": [{"code": "DEPENDS_UNRESOLVED", "id": ident} for ident in parsed["unresolved"]]}
-
-
-def _handle_ticket_move(args, tx, ctx):
-    ticket = tickets.move(tx, tickets.get(tx, args["workspace"], args["key"]), args["to"], "operator",
-                          args.get("reason"))
-    return {"ticket": ticket}
-
-
-def _handle_ticket_block(args, tx, ctx):
-    return {"ticket": tickets.block(tx, tickets.get(tx, args["workspace"], args["key"]), "operator", args["reason"])}
-
-
-def _handle_ticket_unblock(args, tx, ctx):
-    return {"ticket": tickets.unblock(tx, tickets.get(tx, args["workspace"], args["key"]), "operator")}
-
-
-def _handle_ticket_approve(args, tx, ctx):
-    parent = tickets.get(tx, args["workspace"], args["key"])
-    if parent["kind"] != "feature" or parent["status"] != "unpacked":
-        raise AsError(TICKET_TRANSITION_INVALID, "Ticket transition is not allowed.",
-                      data={"key": parent["key"], "from": parent["status"], "to": "refine", "actor": "coordinator"})
-    approved = []
-    for row in tx.conn.execute("SELECT * FROM tickets WHERE parent_ticket_id = ? AND status = 'backlog' ORDER BY key", (parent["id"],)):
-        child = tickets.move(tx, dict(row), "refine", "coordinator", "plan_approved")
-        approved.append(child["key"])
-    parent = board._note(tx, tickets.get(tx, args["workspace"], args["key"]), "ticket.plan_approved", {"keys": approved})
-    return {"ticket": parent, "approved": approved}
-
-
-def _handle_ticket_cancel(args, tx, ctx):
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    run = None
-    if ticket["run_id"]:
-        row = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (ticket["run_id"],)).fetchone()
-        if row is not None and row["status"] in ("queued", "running", "paused"):
-            run = workflow.cancel(tx, {"workflowRunId": ticket["run_id"]}, ctx)
-    ticket = tickets.cancel(tx, ticket, "operator", args.get("reason"))
-    return {"ticket": ticket, "run": run}
-
-
-def _handle_ticket_depend(args, tx, ctx):
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    if args["on"]:
-        tickets.add_deps(tx, ticket, args["on"])
-    if args["remove"]:
-        tickets.remove_deps(tx, ticket, args["remove"])
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    return {"ticket": ticket, "dependsOn": _ticket_deps(tx, ticket)}
-
-
-def _handle_ticket_start(args, tx, ctx):
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    agent = tx.get("agent", args["agentId"])
-    team = tx.get("team", agent["team_id"])
-    if team["status"] != "running" or team["workspace"] != args["workspace"]:
-        raise AsError(tasks.TEAM_NOT_RUNNING, "Agent team is not running on this workspace.")
-    roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (team["id"],))}
-    return board.start_column(tx, ticket, agent, board_config.current(tx, args["workspace"], roles), ctx)
-
-
-def _handle_ticket_retry(args, tx, ctx):
-    ticket = tickets.get(tx, args["workspace"], args["key"])
-    if ticket["status"] not in schema.TICKET_WORKING:
-        raise AsError(TICKET_TRANSITION_INVALID, "Ticket is not a pending claim.")
-    if not board._pending(tx, ticket):
-        raise AsError(TICKET_BUSY, "Ticket already has a started run.")
-    return {"ticket": board.release(tx, ticket, "operator_retry")}
-
-
 def _handle_board_resume(args, tx, ctx):
     teams = [dict(row) for row in tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running'",
                                                    (args["workspace"],)).fetchall()]
@@ -295,39 +164,10 @@ def _handle_board_resume(args, tx, ctx):
     return {"resumed": resumed}
 
 
-def _board_team(tx, workspace):
-    team = tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running' ORDER BY created_at LIMIT 1",
-                           (workspace,)).fetchone()
-    if not team:
-        raise AsError(tasks.TEAM_NOT_RUNNING, "No team is running on this workspace.")
-    return dict(team)
-
-
-def _handle_board_run(args, tx, ctx):
-    team = _board_team(tx, args["workspace"])
-    roles = {row[0] for row in tx.conn.execute("SELECT role FROM agents WHERE team_id = ?", (team["id"],))}
-    config = board_config.load(args["workspace"], roles)
-    tx.conn.execute("INSERT INTO board_state (workspace, status, reason, config_json, updated_at) VALUES (?, 'running', NULL, ?, ?) "
-                    "ON CONFLICT(workspace) DO UPDATE SET status = 'running', reason = NULL, config_json = excluded.config_json, updated_at = excluded.updated_at",
-                    (args["workspace"], json.dumps(config, ensure_ascii=True, sort_keys=True), state.utcnow()))
-    tx.note("team", team["id"], "board.started", {"unstaffed": config["unstaffed"]})
-    return {"board": {"workspace": args["workspace"], "status": "running", "reason": None, "unstaffed": config["unstaffed"]}}
-
-
-def _handle_board_pause(args, tx, ctx):
-    team = _board_team(tx, args["workspace"])
-    tx.conn.execute("INSERT INTO board_state (workspace, status, reason, config_json, updated_at) VALUES (?, 'paused', ?, NULL, ?) "
-                    "ON CONFLICT(workspace) DO UPDATE SET status = 'paused', reason = excluded.reason, updated_at = excluded.updated_at",
-                    (args["workspace"], args.get("reason"), state.utcnow()))
-    tx.note("team", team["id"], "board.paused", {"reason": args.get("reason")})
-    return {"board": {"workspace": args["workspace"], "status": "paused", "reason": args.get("reason")}}
-
-
 HANDLERS = {
     "debug.echo": _handle_debug_echo,
     "debug.fixture": _handle_debug_fixture,
     "debug.assign": _handle_debug_assign,
-    "debug.ticket_worktree": _handle_debug_ticket_worktree,
     "team.start": lambda args, tx, ctx: teams.team_start(tx, args, ctx),
     "team.stop": lambda args, tx, ctx: teams.team_stop(tx, args, ctx),
     "task.direct": lambda args, tx, ctx: tasks.task_direct(tx, args, ctx),
@@ -336,18 +176,7 @@ HANDLERS = {
     "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
     "workflow.retry": lambda args, tx, ctx: workflow.retry(tx, args, ctx),
     "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),
-    "ticket.create": _handle_ticket_create,
-    "ticket.move": _handle_ticket_move,
-    "ticket.block": _handle_ticket_block,
-    "ticket.unblock": _handle_ticket_unblock,
-    "ticket.approve": _handle_ticket_approve,
-    "ticket.cancel": _handle_ticket_cancel,
-    "ticket.depend": _handle_ticket_depend,
-    "ticket.start": _handle_ticket_start,
-    "ticket.retry": _handle_ticket_retry,
     "board.resume": _handle_board_resume,
-    "board.run": _handle_board_run,
-    "board.pause": _handle_board_pause,
 }
 MONITOR_INTERVAL_S = 2.0
 
@@ -453,8 +282,6 @@ def run(enable_debug: bool = False) -> int:
     for name, step in (("reports", lambda: reports.apply_pending(store, report_rules.apply)),
                        ("panes", lambda: teams.monitor(store, tmux)),
                        ("assignments", lambda: reconcile.tick(store, ctx)),
-                       ("merge", lambda: board.recover_merge(store, ctx)),
-                       ("board", lambda: board.reconcile(store, ctx, startup=True)),
                        ("orphanSessions", lambda: reconcile.orphan_sessions(store, tmux))):
         try:
             startup[name] = step()
@@ -470,16 +297,12 @@ def run(enable_debug: bool = False) -> int:
             reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
-            board.apply_outcomes(store, ctx)
-            board.merge_ready(store, ctx)
-            board_scheduler.tick(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:
                 _reap_children()
                 teams.monitor(store, tmux)
                 reconcile.tick(store, ctx)
-                board.reconcile(store, ctx)
                 next_monitor = time.monotonic() + MONITOR_INTERVAL_S
         except Exception:
             _log(f"loop error:\n{traceback.format_exc()}")

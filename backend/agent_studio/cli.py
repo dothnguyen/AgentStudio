@@ -29,15 +29,14 @@ USAGE = """agent-studio <command>
   snapshot [--team ID] [--include-stopped]  current teams, agents, tasks, workflow runs, assignments + cursor
   events [--after N] [--limit N] [--team ID] [--db-id ID]   journal events after a cursor
   team start --workspace PATH [--agent PROVIDER:ROLE[:NAME][,model=M][,reasoning=R] ...] [--name NAME]
-                                           one tmux window with one pane per agent; without --agent the
-                                           roster comes from <workspace>/.agent-studio/team.json
+                                           one tmux window with one pane per agent (the P00 form; needs --agent each)
   team add --name NAME [--id ID] [--workspace PATH]   create .agent-studio/teams/<id>.json
   team add-member [--team ID] --name N --role R --provider P [--model M] [--reasoning X] [--workspace PATH]
   team remove-member [--team ID] --member ID|NAME [--workspace PATH]
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
   team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
   team attach --team ID|UUID [--print]     attach this terminal to the team's tmux window (or print commands)
-  team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id (no teams/: team.json)
+  team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id
   team stop [--team ID|UUID] [--workspace PATH]   stop the running team of a definition (or a runtime team UUID)
   team status [--team ID|UUID] [--workspace PATH] [--json]   the runtime team and members of a definition
   team ask [--team T] --member M [--policy read_only|workspace_write] [--wait] (TEXT | --text-file PATH|-)
@@ -76,13 +75,8 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
-  ticket create --workspace PATH (--story PATH | --kind bug --text TEXT [--attach PATH ...] | --kind feature --brief PATH --out DIR) [--title T] [--depends KEY ...] [--no-deps] [--priority N] [--key K]
-  ticket approve --workspace PATH KEY [--key K]
-  ticket show|list|move|start|block|unblock|cancel|depend --workspace PATH [KEY] [ticket options]
-  board run|pause [--reason TEXT] --workspace PATH
   board resume --workspace PATH (--agent ID | --all)
-  board show --workspace PATH              every column with its tickets, the agents, limits and holds (read-only)
-  board list                               one summary per workspace that has a board (read-only)
+                                           clear an agent's USAGE_LIMIT hold (limit_reached -> idle)
   init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
   workspace list [--json]                  registered workspaces (missing ones are flagged)
   debug echo --text TEXT [--key KEY]       round-trip text through the command inbox (debug coordinators only)
@@ -360,15 +354,6 @@ def _task_text(ns) -> str:
 
 
 def _human_request(argv) -> dict:
-    # argparse's subparser positional handling rejects a trailing ticket key
-    # after options; support the documented `ticket approve --workspace PATH KEY` form.
-    if len(argv) >= 3 and argv[:2] == ["ticket", "approve"]:
-        value_options = {"--workspace", "--key", "--timeout-ms"}
-        for index, value in enumerate(argv[2:], 2):
-            if value.startswith("-") or (index > 2 and argv[index - 1] in value_options):
-                continue
-            argv = [argv[0], argv[1], value, *argv[2:index], *argv[index + 1:]]
-            break
     p = _Parser(prog="agent-studio", add_help=False)
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("health", add_help=False)
@@ -419,34 +404,11 @@ def _human_request(argv) -> dict:
     wf_p.add_argument("--wait", action="store_true")
     wf_p.add_argument("--key")
     wf_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
-    ticket_p = sub.add_parser("ticket", add_help=False)
-    ticket_p.add_argument("action", choices=["create", "show", "list", "move", "start", "retry", "block", "unblock", "cancel", "depend", "approve"])
-    ticket_p.add_argument("ticket_key", nargs="?")
-    ticket_p.add_argument("--workspace", required=True)
-    ticket_p.add_argument("--story")
-    ticket_p.add_argument("--brief")
-    ticket_p.add_argument("--out")
-    ticket_p.add_argument("--text")
-    ticket_p.add_argument("--attach", action="append", default=[])
-    ticket_p.add_argument("--title")
-    ticket_p.add_argument("--depends", action="append", default=[])
-    ticket_p.add_argument("--no-deps", action="store_true")
-    ticket_p.add_argument("--priority", type=int)
-    ticket_p.add_argument("--to")
-    ticket_p.add_argument("--reason")
-    ticket_p.add_argument("--status")
-    ticket_p.add_argument("--kind")
-    ticket_p.add_argument("--on", action="append", default=[])
-    ticket_p.add_argument("--remove", action="append", default=[])
-    ticket_p.add_argument("--key")
-    ticket_p.add_argument("--agent")
-    ticket_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     board_p = sub.add_parser("board", add_help=False)
-    board_p.add_argument("action", choices=["run", "pause", "resume", "show", "list"])
+    board_p.add_argument("action", choices=["resume"])
     board_p.add_argument("--workspace")
     board_p.add_argument("--agent")
     board_p.add_argument("--all", action="store_true")
-    board_p.add_argument("--reason")
     board_p.add_argument("--key")
     board_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     asg_p = sub.add_parser("assignment", add_help=False)
@@ -571,78 +533,14 @@ def _human_request(argv) -> dict:
             req.update(command=f"workflow.{ns.action}", args={"workflowRunId": ns.workflow})
             if ns.action in ("cancel", "retry"):
                 req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
-    elif ns.cmd == "ticket":
-        args = {"workspace": ns.workspace}
-        if ns.action == "create":
-            if ns.kind == "bug":
-                if ns.text is None:
-                    raise AsError(BAD_REQUEST, "ticket create --kind bug needs --text TEXT")
-                args.update(kind="bug", text=ns.text)
-                if ns.attach:
-                    args["attachments"] = ns.attach
-            elif ns.kind == "feature":
-                if not ns.brief or not ns.out:
-                    raise AsError(BAD_REQUEST, "ticket create --kind feature needs --brief PATH and --out DIR")
-                args.update(kind="feature", briefPath=ns.brief, outDir=ns.out)
-            else:
-                if not ns.story:
-                    raise AsError(BAD_REQUEST, "ticket create needs --story PATH")
-                args["storyPath"] = ns.story
-            if ns.title is not None:
-                args["title"] = ns.title
-            if ns.depends:
-                args["dependsOn"] = ns.depends
-            if ns.no_deps:
-                args["noDeps"] = True
-            if ns.priority is not None:
-                args["priority"] = ns.priority
-        elif ns.action == "list":
-            if ns.status is not None:
-                args["status"] = ns.status
-            if ns.kind is not None:
-                args["kind"] = ns.kind
-        else:
-            if not ns.ticket_key:
-                raise AsError(BAD_REQUEST, f"ticket {ns.action} needs a ticket KEY")
-            args["key"] = ns.ticket_key
-            if ns.action == "move":
-                if ns.to is None:
-                    raise AsError(BAD_REQUEST, "ticket move needs --to STATE")
-                args["to"] = ns.to
-            if ns.action == "start":
-                if ns.agent is None:
-                    raise AsError(BAD_REQUEST, "ticket start needs --agent ID")
-                args["agentId"] = ns.agent
-            if ns.action == "block":
-                if ns.reason is None:
-                    raise AsError(BAD_REQUEST, "ticket block needs --reason TEXT")
-                args["reason"] = ns.reason
-            elif ns.action == "cancel" and ns.reason is not None:
-                args["reason"] = ns.reason
-            elif ns.action == "depend":
-                if ns.on:
-                    args["on"] = ns.on
-                if ns.remove:
-                    args["remove"] = ns.remove
-        req.update(command=f"ticket.{ns.action}", args=args)
-        if ns.action not in ("show", "list"):
-            req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
-    elif ns.cmd == "board" and ns.action == "list":
-        req.update(command="board.list", args={})
     elif ns.cmd == "board":
         if not ns.workspace:
-            raise AsError(BAD_REQUEST, f"board {ns.action} needs --workspace PATH")
-        args = {"workspace": ns.workspace}
-        if ns.action == "show":
-            req.update(command="board.show", args=args)
-        elif ns.action == "resume":
-            args["all"] = ns.all
-            if ns.agent:
-                args["agentId"] = ns.agent
-        if ns.action == "pause" and ns.reason is not None:
-            args["reason"] = ns.reason
-        if ns.action != "show":
-            req.update(command="board." + ns.action, args=args, idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
+            raise AsError(BAD_REQUEST, "board resume needs --workspace PATH")
+        args = {"workspace": ns.workspace, "all": ns.all}
+        if ns.agent:
+            args["agentId"] = ns.agent
+        req.update(command="board.resume", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
+                   timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":
             if not ns.resolve_action:
@@ -674,17 +572,20 @@ def _human_request(argv) -> dict:
                 roster.append(member)
             if ns.agent and not ns.workspace:
                 raise AsError(BAD_REQUEST, "team start needs --workspace")
-            ws = None if ns.agent else _team_workspace(ns)
-            if ws is not None and teamdefs.list_ids(ws):
-                req.update(command="team.start", args=_definition_start_args(ws, ns))
-            else:
-                if ns.team:
-                    raise AsError(TEAM_NOT_FOUND, f"No team {ns.team!r}.", remediation="run agent-studio team add --name NAME")
-                req.update(command="team.start", args={"workspace": ns.workspace or _team_workspace(ns)})
+            if ns.agent:
+                args = {"workspace": ns.workspace}
                 if roster:
-                    req["args"]["roster"] = roster
+                    args["roster"] = roster
                 if ns.name:
-                    req["args"]["name"] = ns.name
+                    args["name"] = ns.name
+                req.update(command="team.start", args=args)
+            else:
+                ws = _team_workspace(ns)
+                if not teamdefs.list_ids(ws):
+                    remediation = ("run agent-studio team import-legacy" if teamdefs.legacy_exists(ws)
+                                   else "run agent-studio team add --name NAME")
+                    raise AsError(TEAM_NOT_FOUND, "No team definition in this workspace.", remediation=remediation)
+                req.update(command="team.start", args=_definition_start_args(ws, ns))
         elif ns.action == "stop" and (ns.team is None or not _is_uuid(ns.team)):
             ws = _team_workspace(ns)
             req.update(command="team.stop", args={"workspace": ws, "teamDefId": _pick_def(ws, ns.team, "stop")})

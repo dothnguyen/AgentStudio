@@ -71,22 +71,22 @@ def v8_database(path):
 
 
 class Migration(unittest.TestCase):
-    def test_fresh_and_v8_databases_reach_v9_with_null_columns(self):
-        self.assertEqual(state.SCHEMA_VERSION, 9)
+    def test_fresh_and_v8_databases_reach_the_current_version_with_null_columns(self):
+        self.assertEqual(state.SCHEMA_VERSION, 10)
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         conn = v8_database(os.path.join(d, "old.db"))
         self.assertEqual(state.current_version(conn), 8)
         self.assertNotIn("def_id", {r[1] for r in conn.execute("PRAGMA table_info(teams)")})
         self.assertNotIn("member_id", {r[1] for r in conn.execute("PRAGMA table_info(agents)")})
-        self.assertEqual(state.migrate(conn, os.path.join(d, "old.db")), 9)
-        self.assertEqual(state.current_version(conn), 9)
+        self.assertEqual(state.migrate(conn, os.path.join(d, "old.db")), 10)
+        self.assertEqual(state.current_version(conn), 10)
         self.assertEqual(conn.execute("SELECT id, def_id FROM teams").fetchall()[0][:], (TEAM_ID, None))
         self.assertEqual(conn.execute("SELECT id, member_id, display_name FROM agents").fetchall()[0][:],
                          (AGENT_ID, None, "Ryan"))
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
         fresh = state.connect(os.path.join(d, "new.db"), role="coordinator", create=True)
-        self.assertEqual(state.migrate(fresh, os.path.join(d, "new.db")), 9)
+        self.assertEqual(state.migrate(fresh, os.path.join(d, "new.db")), 10)
         cols = {r[1] for r in fresh.execute("PRAGMA table_info(agents)")}
         self.assertIn("member_id", cols)
         self.assertIn("def_id", {r[1] for r in fresh.execute("PRAGMA table_info(teams)")})
@@ -136,16 +136,17 @@ class ModeSelection(Base):
         self.assertEqual(c.exception.code, "TEAM_CONFIG_INVALID")
         self.assertEqual(c.exception.data["problems"][0]["path"], "members")
 
-    def test_legacy_start_unchanged_without_workspace_json(self):
+    def test_legacy_start_is_refused_and_names_import_legacy(self):
+        # P04-S06 deleted the CLI-side team.json fallback: only team import-legacy reads it now.
         legacy = os.path.join(self.root, "legacy")
         os.makedirs(os.path.join(legacy, ".agent-studio"))
         with open(os.path.join(legacy, ".agent-studio", "team.json"), "w") as f:
             json.dump({"version": 1, "agents": [{"providerId": "fake", "role": "developer"}]}, f)
-        req = self.build("start", "--workspace", legacy)
-        self.assertEqual(req["args"], {"workspace": legacy})
-        with self.assertRaises(AsError) as c:
-            self.build("start", "--workspace", legacy, "--team", "x")
-        self.assertEqual(c.exception.code, "TEAM_NOT_FOUND")
+        for argv in (("start", "--workspace", legacy), ("start", "--workspace", legacy, "--team", "x")):
+            with self.assertRaises(AsError) as c:
+                self.build(*argv)
+            self.assertEqual(c.exception.code, "TEAM_NOT_FOUND")
+            self.assertIn("team import-legacy", c.exception.remediation)
 
     def test_agent_roster_path_and_conflict_with_team(self):
         self.put_team("alpha", [member("a", "A")])
@@ -236,7 +237,8 @@ class StatusAndLookup(unittest.TestCase):
                 names.update(a.name for a in n.names)
             elif isinstance(n, ast.Import):
                 names.update(a.name.split(".")[0] for a in n.names)
-        self.assertFalse(names & {"board", "board_scheduler", "board_config", "tickets", "queries"}, names)
+        self.assertFalse(names & {"board", "board_" + "scheduler", "board_" + "config", "tick" + "ets", "queries"},
+                         names)
 
     def test_render_human(self):
         d = teamstatus.team_status(self.conn, None, "/w", "alpha")

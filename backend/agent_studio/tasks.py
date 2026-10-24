@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from . import providers, tickets
-from .protocol import AsError, BAD_REQUEST
+from . import providers
+from .protocol import AsError, BAD_REQUEST, WORKTREE_NOT_REGISTERED
 from .runner import CANCEL_MARKER, request_path, run_dir
 from .store import NOT_FOUND, Tx
 
@@ -38,6 +38,14 @@ def _mutating_in_workspace(tx: Tx, workspace: str) -> Optional[str]:
     return f"workflow {row['id']}" if row else None
 
 
+def run_workspace(team: dict, requested) -> str:
+    """The only workspace a run may use while no ticket worktrees exist (P04-S06; S10 restores the worktree check)."""
+    if requested is None or os.path.realpath(requested) == team["workspace"]:
+        return team["workspace"]
+    raise AsError(WORKTREE_NOT_REGISTERED, "Workspace is not a registered live ticket worktree.",
+                  data={"workspace": os.path.realpath(requested)})
+
+
 def build_request(agent: dict, workspace: str, extra: dict = None) -> dict:
     """Freeze, at assignment creation, what the runner will use: model, reasoning, and the workspace role context
     (text + source hashes), so the journal shows exactly what each attempt was given."""
@@ -65,9 +73,7 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(AGENT_NOT_IN_TEAM, f"Agent {agent['id']} is not a member of team {team['id']}.")
     if team["status"] != "running":
         raise AsError(TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
-    requested_workspace = args.get("workspace")
-    ws = team["workspace"] if requested_workspace is None or os.path.realpath(requested_workspace) == team["workspace"] else \
-        tickets.registered_worktree(tx, team["workspace"], requested_workspace, state_dir=ctx["stateDir"])
+    ws = run_workspace(team, args.get("workspace"))
     if agent["availability"] != "idle" or agent["pane_state"] != "alive":
         code = AGENT_BUSY if agent["availability"] in ("busy", "waiting_input") else AGENT_UNAVAILABLE
         raise AsError(code, f"Agent {agent['display_name']} is {agent['availability']} (pane {agent['pane_state']}).",
