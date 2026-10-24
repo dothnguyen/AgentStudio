@@ -144,8 +144,9 @@ class TicketTests(BoardCase):
         self.move("T-001", "doing")
         self.move("T-001", "done")
         shown = boardmodel.board_show(self.conn, self.ws)
-        self.assertEqual([c["status"] for c in shown["columns"]], ["todo", "doing", "review", "done", "dropped"])
-        self.assertEqual(shown["columns"][3]["tickets"][0]["key"], "T-001")
+        columns = shown["phases"][0]["columns"]  # the default phase holds every ticket
+        self.assertEqual([c["status"] for c in columns], ["todo", "doing", "review", "done", "dropped"])
+        self.assertEqual(columns[3]["tickets"][0]["key"], "T-001")
         self.assertEqual(shown["currentPhase"]["slug"], "default")
 
     def test_move_rules_and_events(self):
@@ -225,10 +226,12 @@ class TicketTests(BoardCase):
         self.add("b")
         self.move("T-002", "finished")
         shown = boardmodel.board_show(self.conn, self.ws)
-        self.assertEqual([c["status"] for c in shown["columns"]], ["open", "wip", "finished"])
-        self.assertEqual([(c["count"], [t["key"] for t in c["tickets"]]) for c in shown["columns"]],
+        self.assertEqual([(p["slug"], p["ticketCount"]) for p in shown["phases"]], [("default", 2)])
+        columns = shown["phases"][0]["columns"]
+        self.assertEqual([c["status"] for c in columns], ["open", "wip", "finished"])
+        self.assertEqual([(c["count"], [t["key"] for t in c["tickets"]]) for c in columns],
                          [(1, ["T-001"]), (0, []), (1, ["T-002"])])
-        self.assertEqual([p["slug"] for p in shown["phases"]], ["default"])
+        self.assertTrue(shown["phases"][0]["current"])
 
 
 class DispatchTests(BoardCase):
@@ -246,9 +249,18 @@ class DispatchTests(BoardCase):
         with self.assertRaises(AsError):
             dispatch._validate_ticket_move({"workspace": ws, "key": "T1", "to": "wip"})
 
-    def test_command_table_has_exactly_the_s07_commands(self):
-        for name in ("ticket.add", "ticket.move", "ticket.depend", "ticket.show", "ticket.list", "board.show"):
+    def test_command_table_has_exactly_the_board_commands(self):
+        """S07 added the generic ticket commands; S08 added ticket.phase and the phase.* commands. The P03
+        scheduler and operator commands stay gone."""
+        for name in ("ticket.add", "ticket.move", "ticket.depend", "ticket.show", "ticket.list",
+                     "ticket.phase", "board.show"):
             self.assertIn(name, dispatch.COMMANDS)
+        self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
+                         ["ticket.add", "ticket.depend", "ticket.list", "ticket.move", "ticket.phase",
+                          "ticket.show"])
+        self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("phase.")),
+                         ["phase.add", "phase.clear-current", "phase.close", "phase.edit", "phase.list",
+                          "phase.remove", "phase.reopen", "phase.set-current", "phase.show"])
         for name in ("ticket.start", "ticket.retry", "ticket.cancel", "ticket.create", "board.run", "board.pause"):
             self.assertNotIn(name, dispatch.COMMANDS)
 
@@ -291,19 +303,26 @@ class CliTests(BoardCase):
         self.assertIn("pick from the board", err)
 
     def test_board_show_human_output(self):
+        ticket = {"key": "T-001", "title": "One", "status": "todo", "priority": 100, "phase": "default",
+                  "phaseName": "Default"}
         data = {"workspace": self.ws, "currentPhase": {"slug": "default", "name": "Default"},
-                "phases": [{"slug": "default", "name": "Default"}],
-                "columns": [{"status": "open", "kind": "initial", "title": "open", "count": 1,
-                             "tickets": [{"key": "T-001", "title": "One", "status": "open", "priority": 100,
-                                          "phase": "default", "phaseName": "Default"}]},
-                            {"status": "wip", "kind": None, "title": "wip", "count": 0, "tickets": []}]}
+                "phases": [
+                    {"slug": "default", "name": "Default", "description": None, "position": 0, "status": "open",
+                     "current": True, "ticketCount": 1,
+                     "columns": [{"status": "todo", "kind": "initial", "title": "todo", "count": 1,
+                                  "tickets": [ticket]},
+                                 {"status": "doing", "kind": None, "title": "doing", "count": 0, "tickets": []}]},
+                    {"slug": "later", "name": "Later", "description": None, "position": 1, "status": "closed",
+                     "current": False, "ticketCount": 0, "columns": []}]}
         rc, out, err = self.run_cli(lambda req: {"ok": True, "data": data}, "board", "show",
                                     "--workspace", self.ws)
         self.assertEqual((rc, err), (0, ""))
         self.assertIn("current phase: Default", out)
-        self.assertIn("open (1) [initial]", out)
-        self.assertIn("T-001", out.splitlines()[3])
-        self.assertIn("One", out)
+        self.assertIn("default  Default  (current)", out)
+        self.assertIn("todo (1) [initial]", out)
+        self.assertIn("T-001", out)
+        self.assertIn("later  Later  [closed]", out)
+        self.assertIn("(no tickets)", out)
 
     def test_depend_needs_on_or_remove(self):
         rc, out, err = self.run_cli(lambda req: {"ok": True}, "ticket", "depend", "--workspace", self.ws, "T-001")

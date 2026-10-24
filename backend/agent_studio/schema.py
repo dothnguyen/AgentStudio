@@ -47,8 +47,12 @@ TICKET_SEVERITIES = ("blocker", "major", "minor")
 TICKET_STATES = ("backlog", "ready_unpack", "unpacking", "unpacked", "done", "refine", "refining",
                  "ready_dev", "in_dev", "ready_test", "in_test", "fail_test", "ready_review", "in_review",
                  "ready_merge", "merged", "changes_requested", "triage", "triaging", "blocked", "cancelled")
+PHASE_STATES = ("open", "closed")
 
 ENTITIES: Dict[str, Entity] = {
+    "phase": Entity("phase", "phases", "status", PHASE_STATES, frozenset({"open"}),
+                    _t({"open": ("closed",), "closed": ("open",)}),
+                    ("workspace", "slug", "name", "description", "position"), None),
     "team": Entity(
         "team", "teams", "status", TEAM_STATES, frozenset({"starting"}),
         _t({"starting": ("running", "stopping", "error"),

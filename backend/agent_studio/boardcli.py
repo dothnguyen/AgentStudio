@@ -10,8 +10,9 @@ from __future__ import annotations
 from .protocol import AsError, BAD_REQUEST, envelope
 from .teamcli import _Fail, _call, _write_call
 
-TICKET_ACTIONS = ("add", "move", "show", "list", "depend")
-BOARD_ACTIONS = ("show",)
+TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase")
+BOARD_ACTIONS = ("show", "phase")
+PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
 
 
 def _workspace(ns):
@@ -27,17 +28,41 @@ def _parser(action, group="ticket"):
     p = cli._Parser(prog="agent-studio", add_help=False)
     p.add_argument("--workspace")
     p.add_argument("--json", action="store_true")
-    if group != "ticket":
+    if group == "board":
+        return p
+    if group == "phase":
+        if action == "add":
+            p.add_argument("--id", required=True)
+            p.add_argument("--name", required=True)
+            p.add_argument("--description")
+            p.add_argument("--before")
+        elif action == "list":
+            pass
+        elif action == "edit":
+            p.add_argument("phase")
+            p.add_argument("--name")
+            p.add_argument("--description")
+        elif action == "remove":
+            p.add_argument("phase")
+            p.add_argument("--move-to", dest="move_to")
+        elif action == "clear-current":
+            pass
+        else:  # show, close, reopen, set-current
+            p.add_argument("phase")
         return p
     if action == "add":
         p.add_argument("--title", required=True)
         p.add_argument("--body")
         p.add_argument("--priority", type=int)
+        p.add_argument("--phase")
     elif action == "move":
         p.add_argument("ticket_key")
         p.add_argument("--to", required=True)
         p.add_argument("--reason")
         p.add_argument("--force", action="store_true")
+    elif action == "phase":
+        p.add_argument("ticket_key")
+        p.add_argument("phase")
     elif action in ("show", "depend"):
         p.add_argument("ticket_key")
         if action == "depend":
@@ -45,10 +70,11 @@ def _parser(action, group="ticket"):
             p.add_argument("--remove", action="append", default=[])
     elif action == "list":
         p.add_argument("--status")
+        p.add_argument("--phase")
     return p
 
 
-# ---- commands ---------------------------------------------------------------------------------------------
+# ---- ticket commands -------------------------------------------------------------------------------------
 
 
 def _add(ns):
@@ -57,6 +83,8 @@ def _add(ns):
         args["body"] = ns.body
     if ns.priority is not None:
         args["priority"] = ns.priority
+    if ns.phase is not None:
+        args["phase"] = ns.phase
     data = _write_call("ticket.add", dict(args, workspace=_workspace(ns)))
     t = data["ticket"]
     return data, lambda d: (f"added {t['key']} to phase {d['phase']['name']} "
@@ -70,14 +98,26 @@ def _move(ns):
     return data, lambda d: f"{t['key']}: {d.get('from') or '?'} -> {t['status']}" + ("  (forced)" if ns.force else "")
 
 
+def _ticket_phase(ns):
+    data = _write_call("ticket.phase", {"workspace": _workspace(ns), "key": ns.ticket_key, "phase": ns.phase})
+    t = data["ticket"]
+    if not data.get("moved", True):
+        return data, lambda d: f"{t['key']} is already in phase {t['phase']}"
+    return data, lambda d: f"{t['key']}: {d.get('from')} -> {t['phase']}"
+
+
 def _show(ns):
     data = _call("ticket.show", {"workspace": _workspace(ns), "key": ns.ticket_key})
     return data, lambda d: _render_detail(d)
 
 
 def _list(ns):
-    data = _call("ticket.list", dict({"workspace": _workspace(ns)},
-                                     **({"status": ns.status} if ns.status else {})))
+    args = {"workspace": _workspace(ns)}
+    if ns.status is not None:
+        args["status"] = ns.status
+    if ns.phase is not None:
+        args["phase"] = ns.phase
+    data = _call("ticket.list", args)
     return data, lambda d: _render_list(d)
 
 
@@ -89,6 +129,70 @@ def _depend(ns):
     t = data["ticket"]
     return data, lambda d: (f"{t['key']} depends on: {', '.join(d['dependsOn'])}"
                             if d["dependsOn"] else f"{t['key']} has no dependencies")
+
+
+# ---- phase commands --------------------------------------------------------------------------------------
+
+
+def _phase_add(ns):
+    args = {"id": ns.id, "name": ns.name}
+    if ns.description is not None:
+        args["description"] = ns.description
+    if ns.before is not None:
+        args["before"] = ns.before
+    data = _write_call("phase.add", dict(args, workspace=_workspace(ns)))
+    p = data["phase"]
+    return data, lambda d: f"added phase {p['slug']} ({p['name']}) at position {p['position']}"
+
+
+def _phase_list(ns):
+    data = _call("phase.list", {"workspace": _workspace(ns)})
+    return data, lambda d: _render_phase_list(d)
+
+
+def _phase_show(ns):
+    data = _call("phase.show", {"workspace": _workspace(ns), "phase": ns.phase})
+    return data, lambda d: _render_phase_detail(d)
+
+
+def _phase_edit(ns):
+    args = {"phase": ns.phase}
+    if ns.name is not None:
+        args["name"] = ns.name
+    if ns.description is not None:
+        args["description"] = ns.description
+    data = _write_call("phase.edit", dict(args, workspace=_workspace(ns)))
+    return data, lambda d: f"edited phase {d['phase']['slug']}"
+
+
+def _phase_close(ns):
+    data = _write_call("phase.close", {"workspace": _workspace(ns), "phase": ns.phase})
+    suffix = " (was current; fell back to the default phase)" if data.get("clearedCurrent") else ""
+    return data, lambda d: f"closed phase {d['phase']['slug']}{suffix}"
+
+
+def _phase_reopen(ns):
+    data = _write_call("phase.reopen", {"workspace": _workspace(ns), "phase": ns.phase})
+    return data, lambda d: f"reopened phase {d['phase']['slug']}"
+
+
+def _phase_remove(ns):
+    args = {"phase": ns.phase}
+    if ns.move_to is not None:
+        args["moveTo"] = ns.move_to
+    data = _write_call("phase.remove", dict(args, workspace=_workspace(ns)))
+    moved = f", moved {len(data.get('movedTickets') or [])} ticket(s) to {data['moveTo']}" if data.get("moveTo") else ""
+    return data, lambda d: f"removed phase {d['removed']}{moved}"
+
+
+def _phase_set_current(ns):
+    data = _write_call("phase.set-current", {"workspace": _workspace(ns), "phase": ns.phase})
+    return data, lambda d: f"current phase: {d['currentPhase']['name']}" + ("" if data["changed"] else " (already)")
+
+
+def _phase_clear_current(ns):
+    data = _write_call("phase.clear-current", {"workspace": _workspace(ns)})
+    return data, lambda d: f"current phase: {d['currentPhase']['name']} (default)"
 
 
 def _board_show(ns):
@@ -121,34 +225,81 @@ def _render_detail(d) -> str:
 
 def _render_list(d) -> str:
     if not d["tickets"]:
-        return "no tickets" + (f" in status {d['status']}" if d.get("status") else "")
+        scope = "".join(f" in {part} {value}" for part, value in (("status", d["status"]), ("phase", d["phase"]))
+                        if value)
+        return "no tickets" + scope
     return "\n".join(f"{t['key']}  P{t['priority']:<4}  {t['status']:<10}  {t['phase']:<10}  {t['title']}"
                      for t in d["tickets"])
 
 
-def _render_board(d) -> str:
-    lines = [f"board {d['workspace']}  (current phase: {d['currentPhase']['name']})"]
-    for column in d["columns"]:
-        lines.append("")
-        kind = f" [{column['kind']}]" if column["kind"] else ""
-        lines.append(f"{column['title']} ({column['count']}){kind}")
-        for t in column["tickets"]:
-            lines.append(f"  {t['key']}  P{t['priority']:<4}  {t['phase']:<10}  {t['title']}")
+def _phase_header(p, current=None) -> str:
+    marker = "  (current)" if (current is None and p.get("current")) or p.get("slug") == (current or {}).get("slug") \
+        else ""
+    state = f"  [{p['status']}]" if p["status"] != "open" else ""
+    description = f"  - {p['description']}" if p.get("description") else ""
+    return f"{p['slug']}  {p['name']}{state}{marker}{description}"
+
+
+def _render_phase_list(d) -> str:
+    lines = [f"phases of {d['workspace']}  (current: {d['currentPhase']['name']})"]
+    for p in d["phases"]:
+        counts = "  ".join(f"{status}:{n}" for status, n in p["counts"].items())
+        lines.append(f"{_phase_header(p)}  tickets: {p['ticketCount']}  ({counts})")
     return "\n".join(lines)
 
 
-_HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend}
+def _render_phase_detail(d) -> str:
+    p = d["phase"]
+    lines = [_phase_header(p, d["currentPhase"].get("slug")),
+             f"tickets: {p['ticketCount']}  (" + "  ".join(f"{s}:{n}" for s, n in p["counts"].items()) + ")"]
+    for t in d["tickets"]:
+        lines.append(f"  {t['key']}  P{t['priority']:<4}  {t['status']:<10}  {t['title']}")
+    if not d["tickets"]:
+        lines.append("  (no tickets)")
+    return "\n".join(lines)
+
+
+def _render_board(d) -> str:
+    lines = [f"board {d['workspace']}  (current phase: {d['currentPhase']['name']})"]
+    for phase in d["phases"]:
+        lines.append("")
+        lines.append(_phase_header(phase))
+        if not phase["ticketCount"]:
+            lines.append("  (no tickets)")
+            continue
+        for column in phase["columns"]:
+            if not column["count"]:
+                continue
+            kind = f" [{column['kind']}]" if column["kind"] else ""
+            lines.append(f"  {column['title']} ({column['count']}){kind}")
+            for t in column["tickets"]:
+                lines.append(f"    {t['key']}  P{t['priority']:<4}  {t['title']}")
+    return "\n".join(lines)
+
+
+_HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase}
+_PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, "edit": _phase_edit,
+                   "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,
+                   "set-current": _phase_set_current, "clear-current": _phase_clear_current}
 _BOARD_HANDLERS = {"show": _board_show}
 
 
 def run(argv, pretty) -> int:
-    """argv is the full argument list: ['ticket'|'board', ACTION, ...]."""
+    """argv is the full argument list: ['ticket', ACTION, ...] or ['board', ACTION, ...] where ACTION may be
+    'phase' followed by a phase action."""
     from . import cli
-    group, action = argv[0], argv[1]
-    handlers = _BOARD_HANDLERS if group == "board" else _HANDLERS
+    group = argv[0]
+    action = argv[1]
+    if group == "board" and action == "phase":
+        action = argv[2]
+        handlers, rest, kind = _PHASE_HANDLERS, argv[3:], "phase"
+    elif group == "board":
+        handlers, rest, kind = _BOARD_HANDLERS, argv[2:], "board"
+    else:
+        handlers, rest, kind = _HANDLERS, argv[2:], "ticket"
     render = None
     try:
-        ns = _parser(action, group).parse_intermixed_args(argv[2:])
+        ns = _parser(action, kind).parse_intermixed_args(rest)
         data, render = handlers[action](ns)
         resp = envelope(None, True, data=data)
     except _Fail as f:

@@ -179,6 +179,14 @@ HANDLERS = {
     "ticket.add": lambda args, tx, ctx: boardmodel.ticket_add(tx, args["workspace"], args),
     "ticket.move": lambda args, tx, ctx: boardmodel.ticket_move(tx, args["workspace"], args),
     "ticket.depend": lambda args, tx, ctx: boardmodel.ticket_depend(tx, args["workspace"], args),
+    "ticket.phase": lambda args, tx, ctx: boardmodel.ticket_phase(tx, args["workspace"], args),
+    "phase.add": lambda args, tx, ctx: boardmodel.phase_add(tx, args["workspace"], args),
+    "phase.edit": lambda args, tx, ctx: boardmodel.phase_edit(tx, args["workspace"], args),
+    "phase.close": lambda args, tx, ctx: boardmodel.phase_close(tx, args["workspace"], args),
+    "phase.reopen": lambda args, tx, ctx: boardmodel.phase_reopen(tx, args["workspace"], args),
+    "phase.remove": lambda args, tx, ctx: boardmodel.phase_remove(tx, args["workspace"], args),
+    "phase.set-current": lambda args, tx, ctx: boardmodel.phase_set_current(tx, args["workspace"], args),
+    "phase.clear-current": lambda args, tx, ctx: boardmodel.phase_clear_current(tx, args["workspace"], args),
     "board.resume": _handle_board_resume,
 }
 MONITOR_INTERVAL_S = 2.0

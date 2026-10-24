@@ -191,13 +191,28 @@ def _validate_board_resume(args):
     return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
 
 
+def _slug_arg(value, name):
+    if not isinstance(value, str) or not DEFINITION_NAME.match(value):
+        raise AsError(BAD_REQUEST, f"Argument '{name}' must be a slug (lowercase letters, digits, '-'; at "
+                                   f"most 64 characters).")
+    return value
+
+
 def _validate_ticket_add(args):
     out = {"workspace": _workspace_arg(args), "title": req_text(args, "title", 200, allow_empty=False)}
     body = req_text(args, "body", 32 * 1024, required=False)
     if body is not None:
         out["body"] = body
     out["priority"] = req_int(args, "priority", 0, 1000, 100)
+    phase = req_text(args, "phase", 64, required=False, allow_empty=False)
+    if phase is not None:
+        out["phase"] = _slug_arg(phase, "phase")
     return out
+
+
+def _validate_ticket_phase(args):
+    return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+            "phase": _slug_arg(args.get("phase"), "phase")}
 
 
 def _validate_ticket_move(args):
@@ -229,11 +244,69 @@ def _validate_ticket_list(args):
     status = req_text(args, "status", 64, required=False, allow_empty=False)
     if status is not None:
         out["status"] = status
+    phase = req_text(args, "phase", 64, required=False, allow_empty=False)
+    if phase is not None:
+        out["phase"] = _slug_arg(phase, "phase")
     return out
 
 
 def _validate_board_show(args):
     return {"workspace": _workspace_arg(args)}
+
+
+def _validate_phase_add(args):
+    out = {"workspace": _workspace_arg(args), "id": _slug_arg(args.get("id"), "id"),
+           "name": req_text(args, "name", 80, allow_empty=False)}
+    description = req_text(args, "description", 2000, required=False)
+    if description is not None:
+        out["description"] = description
+    before = req_text(args, "before", 64, required=False, allow_empty=False)
+    if before is not None:
+        out["before"] = _slug_arg(before, "before")
+    return out
+
+
+def _validate_phase_edit(args):
+    out = {"workspace": _workspace_arg(args), "phase": _slug_arg(args.get("phase"), "phase")}
+    name = req_text(args, "name", 80, required=False, allow_empty=False)
+    if name is not None:
+        out["name"] = name
+    description = req_text(args, "description", 2000, required=False)
+    if description is not None:
+        out["description"] = description
+    if "name" not in out and "description" not in out:
+        raise AsError(BAD_REQUEST, "phase edit needs name or description.")
+    return out
+
+
+def _validate_phase_ref(args):
+    return {"workspace": _workspace_arg(args), "phase": _slug_arg(args.get("phase"), "phase")}
+
+
+def _validate_phase_remove(args):
+    out = _validate_phase_ref(args)
+    move_to = req_text(args, "moveTo", 64, required=False, allow_empty=False)
+    if move_to is not None:
+        out["moveTo"] = _slug_arg(move_to, "moveTo")
+    return out
+
+
+def _phase_show(args, req):
+    clean = _validate_phase_ref(args)
+    conn = _reader()
+    try:
+        return boardmodel.phase_detail(conn, clean["workspace"], clean["phase"])
+    finally:
+        conn.close()
+
+
+def _phase_list(args, req):
+    clean = _validate_board_show(args)
+    conn = _reader()
+    try:
+        return boardmodel.phase_list(conn, clean["workspace"])
+    finally:
+        conn.close()
 
 
 def _ticket_show(args, req):
@@ -481,9 +554,19 @@ COMMANDS = {
     "ticket.add": _inbox("ticket.add", _validate_ticket_add),
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
+    "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
     "board.show": _board_show,
+    "phase.add": _inbox("phase.add", _validate_phase_add),
+    "phase.edit": _inbox("phase.edit", _validate_phase_edit),
+    "phase.close": _inbox("phase.close", _validate_phase_ref),
+    "phase.reopen": _inbox("phase.reopen", _validate_phase_ref),
+    "phase.remove": _inbox("phase.remove", _validate_phase_remove),
+    "phase.set-current": _inbox("phase.set-current", _validate_phase_ref),
+    "phase.clear-current": _inbox("phase.clear-current", _validate_board_show),
+    "phase.show": _phase_show,
+    "phase.list": _phase_list,
 }
 
 

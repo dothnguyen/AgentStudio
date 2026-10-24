@@ -12,7 +12,8 @@ import json
 import os
 import re
 
-from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_STATUS_UNKNOWN, TICKET_DEPENDENCY_CYCLE, \
+from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_STATUS_UNKNOWN, PHASE_CLOSED, PHASE_EXISTS, \
+    PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE, \
     TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID
 from .state import utcnow
 from .store import new_id
@@ -153,8 +154,18 @@ def _row_to_json(row) -> dict:
     return out
 
 
-def _phase_row(tx, workspace, slug):
-    return tx.conn.execute("SELECT * FROM phases WHERE workspace = ? AND slug = ?", (workspace, slug)).fetchone()
+def _phase_row(conn_or_tx, workspace, slug):
+    conn = getattr(conn_or_tx, "conn", conn_or_tx)
+    return conn.execute("SELECT * FROM phases WHERE workspace = ? AND slug = ?",
+                        (workspace, slug)).fetchone()
+
+
+def get_phase(conn, workspace: str, slug: str) -> dict:
+    row = _phase_row(conn, workspace, slug)
+    if row is None:
+        raise AsError(PHASE_NOT_FOUND, f"Phase {slug!r} does not exist on this board.",
+                      data={"phase": slug})
+    return dict(row)
 
 
 def ensure_board(tx, workspace: str) -> dict:
@@ -165,9 +176,8 @@ def ensure_board(tx, workspace: str) -> dict:
                         "VALUES (?, NULL, ?, ?)", (workspace, utcnow(), utcnow()))
     phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     if phase is None:
-        tx.conn.execute("INSERT INTO phases (id, workspace, slug, name, description, position, status, "
-                        "created_at, updated_at) VALUES (?, ?, ?, ?, NULL, 0, 'open', ?, ?)",
-                        (new_id(), workspace, DEFAULT_PHASE_SLUG, DEFAULT_PHASE_NAME, utcnow(), utcnow()))
+        tx.create("phase", {"workspace": workspace, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME,
+                            "description": None, "position": 0})
         phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     return {"board": dict(row) if row is not None else {"workspace": workspace, "currentPhaseId": None},
             "defaultPhase": _phase_row_json(phase)}
@@ -178,18 +188,207 @@ def _phase_row_json(row) -> dict:
             "position": row["position"], "status": row["status"]}
 
 
-def effective_phase(conn, workspace: str) -> dict:
-    """The current phase: the board's pointer when set, else the default phase (§D)."""
-    board = conn.execute("SELECT current_phase_id FROM board_state WHERE workspace = ?", (workspace,)).fetchone()
-    if board is not None and board["current_phase_id"] is not None:
-        row = conn.execute("SELECT * FROM phases WHERE id = ?", (board["current_phase_id"],)).fetchone()
-        if row is not None:
+def _synthetic_default_phase() -> dict:
+    return {"id": None, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME, "description": None,
+            "position": 0, "status": "open"}
+
+
+def _board_pointer(conn, workspace):
+    row = conn.execute("SELECT current_phase_id FROM board_state WHERE workspace = ?", (workspace,)).fetchone()
+    return row["current_phase_id"] if row is not None else None
+
+
+def effective_current_phase(conn, workspace: str) -> dict:
+    """The current phase (§D): the board's pointer when it names an open phase, else the default phase."""
+    pointer = _board_pointer(conn, workspace)
+    if pointer is not None:
+        row = conn.execute("SELECT * FROM phases WHERE id = ?", (pointer,)).fetchone()
+        if row is not None and row["status"] == "open":
             return _phase_row_json(row)
     default = conn.execute("SELECT * FROM phases WHERE workspace = ? AND slug = ?",
                            (workspace, DEFAULT_PHASE_SLUG)).fetchone()
-    return _phase_row_json(default) if default is not None else \
-        {"id": None, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME, "description": None,
-         "position": 0, "status": "open"}
+    return _phase_row_json(default) if default is not None else _synthetic_default_phase()
+
+
+def ticket_in_scope(ticket: dict, current_phase: dict) -> bool:
+    """True when the ticket's phase is the effective current phase; the S10 scheduler offers only these."""
+    return ticket["phase_id"] == current_phase["id"]
+
+
+def _clear_pointer(tx, workspace: str, phase, why: str):
+    tx.conn.execute("UPDATE board_state SET current_phase_id = NULL, updated_at = ? WHERE workspace = ?",
+                    (utcnow(), workspace))
+    tx.note("phase", phase["id"], "phase.clear_current", {"workspace": workspace, "phase": phase["slug"],
+                                                          "why": why})
+
+
+# ---- phase commands ---------------------------------------------------------------------------------------
+
+def _ordered_phases(conn, workspace):
+    return conn.execute("SELECT * FROM phases WHERE workspace = ? ORDER BY position, slug",
+                        (workspace,)).fetchall()
+
+
+def _renumber(tx, rows):
+    for position, row in enumerate(rows):
+        if row["position"] != position:
+            tx.conn.execute("UPDATE phases SET position = ? WHERE id = ?", (position, row["id"]))
+
+
+def phase_add(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    if _phase_row(tx, workspace, args["id"]) is not None:
+        raise AsError(PHASE_EXISTS, f"Phase {args['id']!r} already exists on this board.",
+                      data={"phase": args["id"]})
+    rows = [dict(r) for r in _ordered_phases(tx.conn, workspace)]
+    index = len(rows)
+    if args.get("before"):
+        target = get_phase(tx.conn, workspace, args["before"])
+        index = next((i for i, r in enumerate(rows) if r["id"] == target["id"]), len(rows))
+    for offset, row in enumerate(rows[index:]):  # make room at `index`
+        tx.conn.execute("UPDATE phases SET position = ? WHERE id = ?", (index + 1 + offset, row["id"]))
+    tx.create("phase", {"workspace": workspace, "slug": args["id"], "name": args["name"],
+                        "description": args.get("description"), "position": index},
+              payload={"phase": args["id"], "name": args["name"], "position": index})
+    return {"phase": _phase_row_json(_phase_row(tx, workspace, args["id"]))}
+
+
+def phase_edit(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    phase = get_phase(tx.conn, workspace, args["phase"])
+    values, changes = {}, {}
+    for field in ("name", "description"):
+        if field in args:
+            values[field] = args[field]
+            changes[field] = {"from": phase[field], "to": args[field]}
+    if not values:
+        raise AsError("BAD_REQUEST", "phase edit needs --name or --description.")
+    tx.update("phase", phase["id"], values, "phase.edited", {"phase": phase["slug"], "changes": changes})
+    return {"phase": _phase_row_json(_phase_row(tx, workspace, phase["slug"]))}
+
+
+def phase_close(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    phase = get_phase(tx.conn, workspace, args["phase"])
+    if phase["slug"] == DEFAULT_PHASE_SLUG:
+        raise AsError(PHASE_PROTECTED, "The default phase cannot be closed.",
+                      data={"phase": phase["slug"]})
+    if phase["status"] == "closed":
+        return {"phase": _phase_row_json(_phase_row(tx, workspace, phase["slug"]))}
+    tx.transition("phase", phase["id"], "closed", event="phase.closed",
+                  payload={"phase": phase["slug"]})
+    cleared = _board_pointer(tx.conn, workspace) == phase["id"]
+    if cleared:
+        _clear_pointer(tx, workspace, phase, "phase_closed")
+    return {"phase": _phase_row_json(_phase_row(tx, workspace, phase["slug"])), "clearedCurrent": cleared}
+
+
+def phase_reopen(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    phase = get_phase(tx.conn, workspace, args["phase"])
+    if phase["slug"] == DEFAULT_PHASE_SLUG and phase["status"] == "closed":
+        raise AsError(PHASE_PROTECTED, "The default phase cannot be closed.", data={"phase": phase["slug"]})
+    if phase["status"] == "closed":
+        tx.transition("phase", phase["id"], "open", event="phase.reopened", payload={"phase": phase["slug"]})
+    return {"phase": _phase_row_json(_phase_row(tx, workspace, phase["slug"]))}
+
+
+def phase_remove(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    phase = get_phase(tx.conn, workspace, args["phase"])
+    if phase["slug"] == DEFAULT_PHASE_SLUG:
+        raise AsError(PHASE_PROTECTED, "The default phase cannot be removed.", data={"phase": phase["slug"]})
+    tickets = tx.conn.execute("SELECT id, key FROM tickets WHERE phase_id = ?", (phase["id"],)).fetchall()
+    moved = []
+    if tickets:
+        if not args.get("moveTo"):
+            raise AsError(PHASE_NOT_EMPTY, f"Phase {phase['slug']!r} still holds {len(tickets)} ticket(s); "
+                                           f"name a target with --move-to.",
+                          data={"phase": phase["slug"], "tickets": len(tickets)},
+                          remediation="pass --move-to <open phase> or move the tickets first")
+        if args["moveTo"] == phase["slug"]:
+            raise AsError("BAD_REQUEST", "A phase's tickets cannot move into the phase being removed.",
+                          data={"phase": phase["slug"]})
+        target = get_phase(tx.conn, workspace, args["moveTo"])
+        if target["status"] != "open":
+            raise AsError(PHASE_CLOSED, f"Phase {target['slug']!r} is closed; tickets cannot move into it.",
+                          data={"phase": target["slug"]})
+        now = utcnow()
+        for ticket in tickets:
+            tx.conn.execute("UPDATE tickets SET phase_id = ?, updated_at = ? WHERE id = ?",
+                            (target["id"], now, ticket["id"]))
+            _ticket_event(tx.conn, ticket["id"], "ticket.phase_changed", "operator", None, None,
+                          {"ticketId": ticket["id"], "key": ticket["key"], "from": phase["slug"],
+                           "to": target["slug"], "why": "phase_removed"})
+            moved.append(ticket["key"])
+    tx.note("phase", phase["id"], "phase.removed", {"phase": phase["slug"], "movedTickets": moved,
+                                                    "moveTo": args.get("moveTo")})
+    cleared = _board_pointer(tx.conn, workspace) == phase["id"]
+    if cleared:
+        _clear_pointer(tx, workspace, phase, "phase_removed")
+    tx.conn.execute("DELETE FROM phases WHERE id = ?", (phase["id"],))
+    _renumber(tx, _ordered_phases(tx.conn, workspace))
+    return {"removed": phase["slug"], "movedTickets": moved, "moveTo": args.get("moveTo"),
+            "clearedCurrent": cleared}
+
+
+def phase_set_current(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    phase = get_phase(tx.conn, workspace, args["phase"])
+    if phase["status"] != "open":
+        raise AsError(PHASE_CLOSED, f"Phase {phase['slug']!r} is closed; it cannot be the current phase.",
+                      data={"phase": phase["slug"]})
+    if _board_pointer(tx.conn, workspace) == phase["id"]:
+        return {"currentPhase": _phase_row_json(phase), "changed": False}
+    previous = _board_pointer(tx.conn, workspace)
+    tx.conn.execute("UPDATE board_state SET current_phase_id = ?, updated_at = ? WHERE workspace = ?",
+                    (phase["id"], utcnow(), workspace))
+    tx.note("phase", phase["id"], "phase.set_current",
+            {"workspace": workspace, "phase": phase["slug"], "previous": previous})
+    return {"currentPhase": _phase_row_json(phase), "changed": True}
+
+
+def phase_clear_current(tx, workspace: str, args: dict) -> dict:
+    ensure_board(tx, workspace)
+    pointer = _board_pointer(tx.conn, workspace)
+    if pointer is None:
+        return {"currentPhase": effective_current_phase(tx.conn, workspace), "changed": False}
+    phase = dict(tx.conn.execute("SELECT * FROM phases WHERE id = ?", (pointer,)).fetchone())
+    _clear_pointer(tx, workspace, phase, "operator")
+    return {"currentPhase": effective_current_phase(tx.conn, workspace), "changed": True}
+
+
+def _phase_counts(conn, phase_id, config):
+    return {r["status"]: r["n"] for r in conn.execute(
+        "SELECT status, COUNT(*) AS n FROM tickets WHERE phase_id = ? GROUP BY status", (phase_id,))}
+
+
+def phase_list(conn, workspace: str) -> dict:
+    config = load_config(workspace)
+    current = effective_current_phase(conn, workspace)
+    rows = _ordered_phases(conn, workspace)
+    if not rows:
+        rows = [{"id": None, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME, "description": None,
+                 "position": 0, "status": "open"}]
+    counts = {s["id"]: 0 for s in config["statuses"]}
+    phases = []
+    for row in rows:
+        per_status = dict(counts, **_phase_counts(conn, row["id"], config)) if row["id"] else dict(counts)
+        phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
+                           ticketCount=sum(per_status.values()), counts=per_status))
+    return {"workspace": workspace, "currentPhase": current, "phases": phases}
+
+
+def phase_detail(conn, workspace: str, slug: str) -> dict:
+    config = load_config(workspace)
+    listed = phase_list(conn, workspace)
+    phase = next((p for p in listed["phases"] if p["slug"] == slug), None)
+    if phase is None:
+        raise AsError(PHASE_NOT_FOUND, f"Phase {slug!r} does not exist on this board.", data={"phase": slug})
+    tickets = conn.execute("SELECT * FROM tickets WHERE phase_id = ? ORDER BY priority, created_at, key",
+                           (phase["id"],)).fetchall() if phase["id"] else []
+    return {"workspace": workspace, "currentPhase": listed["currentPhase"], "phase": phase,
+            "tickets": [_ticket_json(conn, r) for r in tickets]}
 
 
 # ---- tickets ---------------------------------------------------------------------------------------------
@@ -222,10 +421,22 @@ def next_key(conn, workspace: str) -> str:
     return f"T-{max(numbers, default=0) + 1:03d}"
 
 
+def _target_phase(tx, workspace: str, slug):
+    """The phase a new ticket or a moved ticket goes to: an open phase, else PHASE_CLOSED/PHASE_NOT_FOUND."""
+    phase = get_phase(tx.conn, workspace, slug)
+    if phase["status"] != "open":
+        raise AsError(PHASE_CLOSED, f"Phase {phase['slug']!r} is closed; it cannot take tickets.",
+                      data={"phase": phase["slug"]})
+    return phase
+
+
 def ticket_add(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
     ensure_board(tx, workspace)
-    phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
+    if args.get("phase"):
+        phase = _target_phase(tx, workspace, args["phase"])
+    else:
+        phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     ident, key, status = new_id(), next_key(tx.conn, workspace), config["initial"]
     now = utcnow()
     tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, status, priority, assignee, "
@@ -238,6 +449,30 @@ def ticket_add(tx, workspace: str, args: dict) -> dict:
                    "priority": args["priority"]})
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?", (ident,)).fetchone()),
             "phase": _phase_row_json(phase)}
+
+
+def ticket_phase(tx, workspace: str, args: dict) -> dict:
+    """Move a ticket to another open phase; a claimed or running ticket stays put (TICKET_BUSY)."""
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    if ticket["assignee"] is not None:
+        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; its phase cannot change.",
+                      data={"key": ticket["key"], "assignee": ticket["assignee"]})
+    target = get_phase(tx.conn, workspace, args["phase"])
+    if target["id"] == ticket["phase_id"]:
+        return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                                (ticket["id"],)).fetchone()),
+                "from": target["slug"], "moved": False}
+    if target["status"] != "open":
+        raise AsError(PHASE_CLOSED, f"Phase {target['slug']!r} is closed; it cannot take tickets.",
+                      data={"phase": target["slug"]})
+    old = tx.conn.execute("SELECT slug FROM phases WHERE id = ?", (ticket["phase_id"],)).fetchone()["slug"]
+    tx.conn.execute("UPDATE tickets SET phase_id = ?, updated_at = ? WHERE id = ?",
+                    (target["id"], utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.phase_changed", "operator", ticket["status"], ticket["status"],
+                  {"ticketId": ticket["id"], "key": ticket["key"], "from": old, "to": target["slug"]})
+    return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone()),
+            "from": old, "moved": True}
 
 
 def ticket_move(tx, workspace: str, args: dict) -> dict:
@@ -340,7 +575,7 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
         "statuses": config_status_ids(config)}
 
 
-def ticket_list(conn, workspace: str, status=None) -> dict:
+def ticket_list(conn, workspace: str, status=None, phase=None) -> dict:
     config = load_config(workspace)
     if status is not None and status not in config["byId"]:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {status!r} is not on this board.",
@@ -349,21 +584,33 @@ def ticket_list(conn, workspace: str, status=None) -> dict:
     if status is not None:
         clauses.append("status = ?")
         params.append(status)
+    if phase is not None:
+        clauses.append("phase_id = ?")
+        params.append(get_phase(conn, workspace, phase)["id"])
     rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
                         " ORDER BY priority, created_at, key", params).fetchall()
-    return {"workspace": workspace, "statuses": config_status_ids(config), "status": status,
+    return {"workspace": workspace, "statuses": config_status_ids(config), "status": status, "phase": phase,
             "tickets": [_ticket_json(conn, r) for r in rows]}
 
 
 def board_show(conn, workspace: str) -> dict:
+    """The whole board: phases in position order (the current one marked), each with every configured
+    status column and its tickets."""
     config = load_config(workspace)
-    columns = []
-    for entry in config["statuses"]:
-        rows = conn.execute("SELECT * FROM tickets WHERE workspace = ? AND status = ? "
-                            "ORDER BY priority, created_at, key", (workspace, entry["id"])).fetchall()
-        columns.append({"status": entry["id"], "kind": entry["kind"], "title": entry["name"],
-                        "count": len(rows), "tickets": [_ticket_json(conn, r) for r in rows]})
-    return {"workspace": workspace, "currentPhase": effective_phase(conn, workspace),
-            "phases": [_phase_row_json(r) for r in conn.execute(
-                "SELECT * FROM phases WHERE workspace = ? ORDER BY position, slug", (workspace,))],
-            "columns": columns}
+    current = effective_current_phase(conn, workspace)
+    rows = _ordered_phases(conn, workspace)
+    if not rows:
+        rows = [{"id": None, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME, "description": None,
+                 "position": 0, "status": "open"}]
+    phases = []
+    for row in rows:
+        tickets = conn.execute("SELECT * FROM tickets WHERE phase_id = ? "
+                               "ORDER BY priority, created_at, key", (row["id"],)).fetchall() if row["id"] else []
+        by_status = {}
+        for ticket in tickets:
+            by_status.setdefault(ticket["status"], []).append(_ticket_json(conn, ticket))
+        columns = [{"status": s["id"], "kind": s["kind"], "title": s["name"], "count": len(by_status.get(s["id"], [])),
+                    "tickets": by_status.get(s["id"], [])} for s in config["statuses"]]
+        phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
+                           ticketCount=len(tickets), columns=columns))
+    return {"workspace": workspace, "currentPhase": current, "phases": phases}

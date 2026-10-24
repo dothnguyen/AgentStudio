@@ -76,14 +76,21 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
-  ticket add (--workspace PATH | cwd) --title TEXT [--body TEXT] [--priority N]
-                                           add a ticket to the default phase in the board's initial status
+  ticket add (--workspace PATH | cwd) --title TEXT [--body TEXT] [--priority N] [--phase ID]
+                                           add a ticket to a phase (the default phase) in the initial status
   ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
                                            move a ticket; finished tickets need --force
   ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)
-  ticket list [--status STATUS] (--workspace PATH | cwd)   the workspace's tickets (read-only)
+  ticket list [--status STATUS] [--phase ID] (--workspace PATH | cwd)   the workspace's tickets (read-only)
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
-  board show (--workspace PATH | cwd)      every status column with its tickets, in configured order (read-only)
+  ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
+  board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
+  board phase add (--workspace PATH | cwd) --id ID --name N [--description D] [--before ID]
+                                           add a phase (appended, or inserted before another and renumbered)
+  board phase list|clear-current (--workspace PATH | cwd)   the phases with per-status counts / back to default
+  board phase show|edit|close|reopen|set-current (--workspace PATH | cwd) ID [options]
+                                           one phase / rename it / close it / reopen it / make it current
+  board phase remove (--workspace PATH | cwd) ID [--move-to ID]   remove a phase (empty, or move its tickets)
   board resume --workspace PATH (--agent ID | --all)
                                            clear an agent's USAGE_LIMIT hold (limit_reached -> idle)
   init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
