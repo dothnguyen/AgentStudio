@@ -12,8 +12,9 @@ import json
 import os
 import re
 
-from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_STATUS_UNKNOWN, PHASE_CLOSED, PHASE_EXISTS, \
-    PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE, \
+from . import roles as rolefiles, workflowdef
+from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, PHASE_CLOSED, \
+    PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, TICKET_DEPENDENCY_CYCLE, \
     TICKET_NOT_FOUND, TICKET_TRANSITION_INVALID
 from .state import utcnow
 from .store import new_id
@@ -28,10 +29,17 @@ DEFAULT_PHASE_NAME = "Default"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 FIELD_TYPES = ("text", "number")
 EVENTS_SHOWN = 50
+BLOCKED_STATUS = "blocked"            # reserved ticket status; boards may not configure an id like it
+RUN_OUTCOMES = {"succeeded": "pass", "failed": "fail", "paused": "blocked", "cancelled": "blocked"}
+FINISHED_RUN_STATES = tuple(RUN_OUTCOMES)
+WORKSPACE_MODES = ("main", "worktree", "none")
+BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
 _TOP_KEYS = ("version", "statuses", "ticketFields", "rules")
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
+RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
+             "requiresDeps", "workspace", "action", "priority")
 
 
 def _invalid(problems):
@@ -83,7 +91,9 @@ def load_config(workspace: str) -> dict:
             problems.append((path, f"unknown keys {', '.join(unknown)}"))
         ident = _slug(entry.get("id"), f"{path}.id", problems)
         if ident is not None:
-            if ident in [s["id"] for s in seen]:
+            if ident == BLOCKED_STATUS:
+                problems.append((f"{path}.id", f"{BLOCKED_STATUS!r} is reserved for blocked tickets"))
+            elif ident in [s["id"] for s in seen]:
                 problems.append((f"{path}.id", f"duplicate status id {ident!r}"))
             else:
                 seen.append({"id": ident, "kind": entry.get("kind"),
@@ -128,12 +138,78 @@ def load_config(workspace: str) -> dict:
     rules = raw.get("rules", [])
     if not isinstance(rules, list):
         problems.append(("rules", "must be a list"))
+        rules = []
+    known = {s["id"] for s in seen}
+
+    def rule_status(value, path, required=True):
+        if value is None:
+            if required:
+                problems.append((path, "is required"))
+            return
+        if not isinstance(value, str) or value not in known:
+            problems.append((path, f"must be a status on this board (got {value!r})"))
+
+    def rule_text(value, path, limit, slug=False):
+        ok = isinstance(value, str) and bool(value.strip()) and len(value) <= limit
+        if ok and slug and not SLUG_RE.match(value):
+            ok = False
+        if not ok:
+            problems.append((path, f"must be {'a slug of at most ' if slug else 'text of at most '} "
+                                   f"{limit} characters"))
+
+    def rule_int(value, path, minimum):
+        if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+            problems.append((path, f"must be an integer of at least {minimum}"))
+
+    rule_statuses = []
+    for i, rule in enumerate(rules):
+        path = f"rules[{i}]"
+        if not isinstance(rule, dict):
+            problems.append((path, "must be an object"))
+            continue
+        unknown = sorted(set(rule) - set(RULE_KEYS))
+        if unknown:
+            problems.append((path, f"unknown keys {', '.join(unknown)}"))
+        when = rule.get("when")
+        if not isinstance(when, dict) or set(when) != {"status"}:
+            problems.append((f"{path}.when", 'must be {"status": ID}'))
+        else:
+            rule_status(when.get("status"), f"{path}.when.status")
+            if isinstance(when.get("status"), str):
+                rule_statuses.append(when["status"])
+        for key, required in (("onPass", True), ("onFail", True), ("onBlocked", False)):
+            if key in rule or required:
+                rule_status(rule.get(key), f"{path}.{key}", required)
+        has_action, has_pair = "action" in rule, "role" in rule or "workflow" in rule
+        if has_action and has_pair:
+            problems.append((path, "has action and role/workflow; a rule takes one or the other, never both"))
+        if not has_action and not ("role" in rule and "workflow" in rule):
+            problems.append((path, "needs action, or role and workflow"))
+        if "role" in rule:
+            rule_text(rule["role"], f"{path}.role", 200)
+        if "workflow" in rule:
+            rule_text(rule["workflow"], f"{path}.workflow", 64, slug=True)
+        if "action" in rule:
+            rule_text(rule["action"], f"{path}.action", 64)
+        for key, minimum in (("maxRounds", 1), ("cap", 1), ("priority", 0)):
+            if key in rule:
+                rule_int(rule[key], f"{path}.{key}", minimum)
+        if "requiresDeps" in rule and not isinstance(rule["requiresDeps"], bool):
+            problems.append((f"{path}.requiresDeps", "must be true or false"))
+        if "workspace" in rule and rule["workspace"] not in WORKSPACE_MODES:
+            problems.append((f"{path}.workspace", f"must be one of {list(WORKSPACE_MODES)}"))
+        if "during" in rule:
+            rule_text(rule["during"], f"{path}.during", 64, slug=True)
+    duplicates = sorted({s for s in rule_statuses if rule_statuses.count(s) > 1})
+    for slug in duplicates:
+        problems.append(("rules", f"more than one rule for status {slug!r}"))
     if problems:
         raise _invalid(problems)
     by_id = {s["id"]: s for s in seen}
     return {"version": CONFIG_VERSION, "statuses": seen, "byId": by_id, "initial": initial[0],
             "terminal": frozenset(s["id"] for s in seen if s["kind"] in TERMINAL_KINDS),
-            "ticketFields": fields, "rules": rules}
+            "ticketFields": fields, "rules": rules,
+            "rulesByStatus": {r["when"]["status"]: r for r in rules}}
 
 
 def config_status_ids(config: dict) -> list:
@@ -555,6 +631,129 @@ def _dep_keys(conn, ticket_id: str) -> list:
         "WHERE d.ticket_id = ? ORDER BY t.key", (ticket_id,))]
 
 
+# ---- rules check ------------------------------------------------------------------------------------------
+
+def check_rules(workspace: str, config: dict) -> list:
+    """The full check `board rules check` runs: the schema checks load_config already did, plus every role
+    existing in roles.json, every workflow loading (bindable), and a path from the initial status to a
+    done one. -> [{path, message}] (empty means the rules are sound)."""
+    problems = []
+    if not os.path.exists(os.path.join(workspace, CONFIG_DIR, "roles.json")):
+        problems.append({"path": "roles.json", "message": "does not exist; the rules cannot name roles"})
+        known_roles = set()
+    else:
+        try:
+            known_roles = set((rolefiles.load_config(workspace) or {}).get("roles") or {})
+        except AsError as e:
+            problems.append({"path": "roles.json", "message": e.message})
+            known_roles = set()
+    definitions = {d["name"]: d for d in workflowdef.list_definitions(workspace, BUILTIN_DEFINITIONS_DIR)}
+    for i, rule in enumerate(config["rules"]):
+        path = f"rules[{i}]"
+        if "role" in rule and rule["role"] not in known_roles:
+            problems.append({"path": f"{path}.role", "message": f"role {rule['role']!r} is not defined in "
+                                                                f"{CONFIG_DIR}/roles.json"})
+        if "workflow" in rule:
+            definition = definitions.get(rule["workflow"])
+            if definition is None:
+                problems.append({"path": f"{path}.workflow",
+                                 "message": f"workflow {rule['workflow']!r} does not exist in "
+                                            f"{CONFIG_DIR}/workflows or the built-ins"})
+            else:
+                try:
+                    workflowdef.load(workspace, rule["workflow"], BUILTIN_DEFINITIONS_DIR)
+                except AsError as e:
+                    problems.append({"path": f"{path}.workflow", "message": f"cannot be bound: {e.message}"})
+    if config["rules"]:
+        edges = {}
+        for rule in config["rules"]:
+            targets = [rule["onPass"], rule["onFail"]] + ([rule["onBlocked"]] if "onBlocked" in rule else [])
+            edges.setdefault(rule["when"]["status"], set()).update(t for t in targets if t)
+        reachable, pending = set(), [config["initial"]]
+        while pending:
+            current = pending.pop()
+            if current in reachable:
+                continue
+            reachable.add(current)
+            pending.extend(edges.get(current, ()))
+        if not any(s["id"] in reachable for s in config["statuses"] if s["kind"] == "done"):
+            problems.append({"path": "rules",
+                             "message": f"no path from the initial status {config['initial']!r} to a done status"})
+    return problems
+
+
+# ---- outcome applier --------------------------------------------------------------------------------------
+
+def apply_run_outcome(tx, workspace: str, args: dict) -> dict:
+    """Apply a finished run to its ticket by the rule for the ticket's status: move to onPass/onFail/
+    onBlocked, count the round for that rule, block with a reason when maxRounds is hit. The ticket keeps
+    the run id it was last applied for, so a late or replayed outcome is a no-op."""
+    config = load_config(workspace)
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    run = tx.conn.execute("SELECT id, status FROM workflow_runs WHERE id = ?", (args["run"],)).fetchone()
+    if run is None:
+        raise AsError("NOT_FOUND", f"Workflow run {args['run']} does not exist.")
+    if run["status"] not in FINISHED_RUN_STATES:
+        raise AsError(TICKET_BUSY, f"Run {run['id']} is {run['status']}; only finished runs are applied.",
+                      data={"key": ticket["key"], "run": run["id"]})
+    if ticket["run_id"] == run["id"]:
+        return {"applied": False, "ticket": _ticket_json(tx.conn, tx.conn.execute(
+            "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
+    rule = config["rulesByStatus"].get(ticket["status"])
+    if rule is None:
+        raise AsError(BOARD_RULE_MISSING, f"Status {ticket['status']!r} has no rule, so the run outcome "
+                                          f"cannot be applied.", data={"key": ticket["key"],
+                                                                       "status": ticket["status"]})
+    outcome = RUN_OUTCOMES[run["status"]]
+    rounds = json.loads(ticket["rounds_json"] or "{}")
+    rule_status_id = rule["when"]["status"]
+    rounds[rule_status_id] = rounds.get(rule_status_id, 0) + 1
+    target, reason = None, None
+    if outcome == "pass":
+        target = rule["onPass"]
+    elif outcome == "fail":
+        target = rule["onFail"]
+    elif "onBlocked" in rule:
+        target = rule["onBlocked"]
+    else:
+        target, reason = BLOCKED_STATUS, f"RUN_BLOCKED:{run['id']}"
+    if target != BLOCKED_STATUS and outcome != "pass" and rule.get("maxRounds") \
+            and rounds[rule_status_id] >= rule["maxRounds"]:
+        target, reason = BLOCKED_STATUS, f"ROUND_LIMIT:{rule_status_id}"
+    now = utcnow()
+    if target == BLOCKED_STATUS:
+        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), ticket["status"], reason, now)
+    else:
+        values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
+    tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
+                    "blocked_reason = ?, updated_at = ? WHERE id = ?",
+                    values + (ticket["id"],))
+    _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", ticket["status"], target,
+                  {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "outcome": outcome,
+                   "rule": rule_status_id, "rounds": rounds[rule_status_id], "to": target,
+                   "reason": reason})
+    return {"applied": True, "outcome": outcome, "rule": rule_status_id,
+            "rounds": rounds[rule_status_id], "reason": reason,
+            "ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone())}
+
+
+def ticket_unblock(tx, workspace: str, args: dict) -> dict:
+    config = load_config(workspace)
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    if ticket["status"] != BLOCKED_STATUS:
+        raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is not blocked.",
+                      data={"key": ticket["key"], "status": ticket["status"]})
+    target = ticket["return_status"] or config["initial"]
+    tx.conn.execute("UPDATE tickets SET status = ?, return_status = NULL, blocked_reason = NULL, "
+                    "updated_at = ? WHERE id = ?", (target, utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.unblocked", "operator", BLOCKED_STATUS, target,
+                  {"ticketId": ticket["id"], "key": ticket["key"], "to": target,
+                   "reason": ticket["blocked_reason"]})
+    return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone())}
+
+
 # ---- read-only queries ------------------------------------------------------------------------------------
 
 def ticket_detail(conn, workspace: str, key: str) -> dict:
@@ -577,7 +776,7 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
 
 def ticket_list(conn, workspace: str, status=None, phase=None) -> dict:
     config = load_config(workspace)
-    if status is not None and status not in config["byId"]:
+    if status is not None and status not in config["byId"] and status != BLOCKED_STATUS:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {status!r} is not on this board.",
                       data={"status": status, "statuses": config_status_ids(config)})
     clauses, params = ["workspace = ?"], [workspace]
@@ -611,6 +810,9 @@ def board_show(conn, workspace: str) -> dict:
             by_status.setdefault(ticket["status"], []).append(_ticket_json(conn, ticket))
         columns = [{"status": s["id"], "kind": s["kind"], "title": s["name"], "count": len(by_status.get(s["id"], [])),
                     "tickets": by_status.get(s["id"], [])} for s in config["statuses"]]
+        if BLOCKED_STATUS in by_status:  # the reserved blocked column appears only when tickets are blocked
+            columns.append({"status": BLOCKED_STATUS, "kind": None, "title": BLOCKED_STATUS,
+                            "count": len(by_status[BLOCKED_STATUS]), "tickets": by_status[BLOCKED_STATUS]})
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
                            ticketCount=len(tickets), columns=columns))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}

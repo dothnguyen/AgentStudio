@@ -1,18 +1,20 @@
-"""`agent-studio ticket add | move | show | list | depend` and `agent-studio board show` (P04-S07).
+"""`agent-studio ticket …` and `agent-studio board …` CLI (P04-S07/S08/S09).
 
-CLI wrappers over the dispatch commands (ticket.add / move / depend / show / list, board.show): human text
-by default, the response envelope with --json, errors as CODE: message on stderr. The workspace comes from
---workspace or the current directory. Nothing here names a status, a role or a host command; the board's
-configuration carries the statuses.
+CLI wrappers over the dispatch commands (ticket add/move/phase/apply/unblock/depend/show/list, board.show,
+phase.*) plus the CLI-local `board rules check`: human text by default, the response envelope with --json,
+errors as CODE: message on stderr. The workspace comes from --workspace or the current directory. Nothing
+here names a status, a role or a host command; the board's configuration carries the statuses.
 """
 from __future__ import annotations
 
-from .protocol import AsError, BAD_REQUEST, envelope
+from . import boardmodel
+from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, envelope
 from .teamcli import _Fail, _call, _write_call
 
-TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase")
-BOARD_ACTIONS = ("show", "phase")
+TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase", "apply", "unblock")
+BOARD_ACTIONS = ("show", "phase", "rules")
 PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
+RULES_ACTIONS = ("check",)
 
 
 def _workspace(ns):
@@ -28,7 +30,7 @@ def _parser(action, group="ticket"):
     p = cli._Parser(prog="agent-studio", add_help=False)
     p.add_argument("--workspace")
     p.add_argument("--json", action="store_true")
-    if group == "board":
+    if group in ("board", "rules"):
         return p
     if group == "phase":
         if action == "add":
@@ -63,6 +65,11 @@ def _parser(action, group="ticket"):
     elif action == "phase":
         p.add_argument("ticket_key")
         p.add_argument("phase")
+    elif action == "apply":
+        p.add_argument("ticket_key")
+        p.add_argument("run")
+    elif action == "unblock":
+        p.add_argument("ticket_key")
     elif action in ("show", "depend"):
         p.add_argument("ticket_key")
         if action == "depend":
@@ -119,6 +126,20 @@ def _list(ns):
         args["phase"] = ns.phase
     data = _call("ticket.list", args)
     return data, lambda d: _render_list(d)
+
+
+def _ticket_apply(ns):
+    data = _write_call("ticket.apply", {"workspace": _workspace(ns), "key": ns.ticket_key, "run": ns.run})
+    t = data["ticket"]
+    if not data.get("applied"):
+        return data, lambda d: f"{t['key']}: run {d['ticket']['runId']} was already applied (no change)"
+    outcome = f"{data['outcome']} -> {t['status']}" + (f"  ({data['reason']})" if data.get("reason") else "")
+    return data, lambda d: f"{t['key']}: {outcome}  [rule {d['rule']}, round {d['rounds']}]"
+
+
+def _ticket_unblock(ns):
+    data = _write_call("ticket.unblock", {"workspace": _workspace(ns), "key": ns.ticket_key})
+    return data, lambda d: f"{d['ticket']['key']}: unblocked -> {d['ticket']['status']}"
 
 
 def _depend(ns):
@@ -193,6 +214,17 @@ def _phase_set_current(ns):
 def _phase_clear_current(ns):
     data = _write_call("phase.clear-current", {"workspace": _workspace(ns)})
     return data, lambda d: f"current phase: {d['currentPhase']['name']} (default)"
+
+
+def _rules_check(ns):
+    workspace = _workspace(ns)
+    config = boardmodel.load_config(workspace)
+    problems = boardmodel.check_rules(workspace, config)
+    if problems:
+        raise AsError(BOARD_CONFIG_INVALID, f"board rules: {len(problems)} problem(s)",
+                      data={"problems": problems})
+    return {"workspace": workspace, "rules": len(config["rules"]), "problems": []}, \
+        lambda d: f"board rules: OK ({d['rules']} rule(s))"
 
 
 def _board_show(ns):
@@ -277,22 +309,27 @@ def _render_board(d) -> str:
     return "\n".join(lines)
 
 
-_HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase}
+_HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
+             "apply": _ticket_apply, "unblock": _ticket_unblock}
 _PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, "edit": _phase_edit,
                    "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,
                    "set-current": _phase_set_current, "clear-current": _phase_clear_current}
+_RULES_HANDLERS = {"check": _rules_check}
 _BOARD_HANDLERS = {"show": _board_show}
 
 
 def run(argv, pretty) -> int:
     """argv is the full argument list: ['ticket', ACTION, ...] or ['board', ACTION, ...] where ACTION may be
-    'phase' followed by a phase action."""
+    'phase' or 'rules' followed by that group's action."""
     from . import cli
     group = argv[0]
     action = argv[1]
     if group == "board" and action == "phase":
         action = argv[2]
         handlers, rest, kind = _PHASE_HANDLERS, argv[3:], "phase"
+    elif group == "board" and action == "rules":
+        action = argv[2]
+        handlers, rest, kind = _RULES_HANDLERS, argv[3:], "rules"
     elif group == "board":
         handlers, rest, kind = _BOARD_HANDLERS, argv[2:], "board"
     else:

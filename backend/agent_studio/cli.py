@@ -84,7 +84,10 @@ USAGE = """agent-studio <command>
   ticket list [--status STATUS] [--phase ID] (--workspace PATH | cwd)   the workspace's tickets (read-only)
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
   ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
+  ticket apply (--workspace PATH | cwd) KEY RUN   apply a finished workflow run's outcome to its ticket
+  ticket unblock (--workspace PATH | cwd) KEY   return a blocked ticket to its recorded status
   board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
+  board rules check (--workspace PATH | cwd)   validate the rules: statuses, roles, workflows, path to done
   board phase add (--workspace PATH | cwd) --id ID --name N [--description D] [--before ID]
                                            add a phase (appended, or inserted before another and renumbered)
   board phase list|clear-current (--workspace PATH | cwd)   the phases with per-status counts / back to default

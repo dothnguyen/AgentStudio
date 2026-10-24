@@ -180,6 +180,8 @@ HANDLERS = {
     "ticket.move": lambda args, tx, ctx: boardmodel.ticket_move(tx, args["workspace"], args),
     "ticket.depend": lambda args, tx, ctx: boardmodel.ticket_depend(tx, args["workspace"], args),
     "ticket.phase": lambda args, tx, ctx: boardmodel.ticket_phase(tx, args["workspace"], args),
+    "ticket.apply": lambda args, tx, ctx: boardmodel.apply_run_outcome(tx, args["workspace"], args),
+    "ticket.unblock": lambda args, tx, ctx: boardmodel.ticket_unblock(tx, args["workspace"], args),
     "phase.add": lambda args, tx, ctx: boardmodel.phase_add(tx, args["workspace"], args),
     "phase.edit": lambda args, tx, ctx: boardmodel.phase_edit(tx, args["workspace"], args),
     "phase.close": lambda args, tx, ctx: boardmodel.phase_close(tx, args["workspace"], args),

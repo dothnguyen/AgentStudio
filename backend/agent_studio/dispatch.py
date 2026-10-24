@@ -215,6 +215,11 @@ def _validate_ticket_phase(args):
             "phase": _slug_arg(args.get("phase"), "phase")}
 
 
+def _validate_ticket_apply(args):
+    return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+            "run": validate_uuid(args.get("run"), "run")}
+
+
 def _validate_ticket_move(args):
     out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
            "to": req_text(args, "to", 64, allow_empty=False), "force": req_bool(args, "force")}
@@ -555,6 +560,8 @@ COMMANDS = {
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),
+    "ticket.apply": _inbox("ticket.apply", _validate_ticket_apply),
+    "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key_args),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
     "board.show": _board_show,

@@ -55,12 +55,12 @@ class NoBoardCode(unittest.TestCase):
         board_commands = sorted(n for n in dispatch.COMMANDS if n.startswith("board."))
         self.assertEqual(board_commands, ["board.resume", "board.show"])
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
-                         ["ticket.add", "ticket.depend", "ticket.list", "ticket.move", "ticket.phase",
-                          "ticket.show"])
+                         ["ticket.add", "ticket.apply", "ticket.depend", "ticket.list", "ticket.move",
+                          "ticket.phase", "ticket.show", "ticket.unblock"])
         self.assertEqual(sorted(n for n in coordinator.HANDLERS if n.startswith(("ticket.", "board.", "phase."))),
                          ["board.resume", "phase.add", "phase.clear-current", "phase.close", "phase.edit",
-                          "phase.remove", "phase.reopen", "phase.set-current", "ticket.add", "ticket.depend",
-                          "ticket.move", "ticket.phase"])
+                          "phase.remove", "phase.reopen", "phase.set-current", "ticket.add", "ticket.apply",
+                          "ticket.depend", "ticket.move", "ticket.phase", "ticket.unblock"])
 
     def test_board_resume_is_still_dispatched_and_validated(self):
         ws = tempfile.mkdtemp()

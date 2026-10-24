@@ -250,14 +250,14 @@ class DispatchTests(BoardCase):
             dispatch._validate_ticket_move({"workspace": ws, "key": "T1", "to": "wip"})
 
     def test_command_table_has_exactly_the_board_commands(self):
-        """S07 added the generic ticket commands; S08 added ticket.phase and the phase.* commands. The P03
-        scheduler and operator commands stay gone."""
+        """S07 added the generic ticket commands; S08 added ticket.phase and phase.*; S09 added
+        ticket.apply/ticket.unblock. The P03 scheduler and operator commands stay gone."""
         for name in ("ticket.add", "ticket.move", "ticket.depend", "ticket.show", "ticket.list",
-                     "ticket.phase", "board.show"):
+                     "ticket.phase", "ticket.apply", "ticket.unblock", "board.show"):
             self.assertIn(name, dispatch.COMMANDS)
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
-                         ["ticket.add", "ticket.depend", "ticket.list", "ticket.move", "ticket.phase",
-                          "ticket.show"])
+                         ["ticket.add", "ticket.apply", "ticket.depend", "ticket.list", "ticket.move",
+                          "ticket.phase", "ticket.show", "ticket.unblock"])
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("phase.")),
                          ["phase.add", "phase.clear-current", "phase.close", "phase.edit", "phase.list",
                           "phase.remove", "phase.reopen", "phase.set-current", "phase.show"])
@@ -331,10 +331,12 @@ class CliTests(BoardCase):
 
 
 class NoNamesInBoardCode(unittest.TestCase):
-    """The board modules name no role, workflow, provider, status id or host command (design contract §D)."""
+    """The board modules name no role, provider, status or host command (design contract §D). The word
+    'workflow' is allowed since S09: it is the rules-schema key (`rules[].workflow`), not a workflow name —
+    the board still cannot hardcode a specific workflow, role or branch."""
 
-    FORBIDDEN = re.compile(r"\b(developer|reviewer|teamlead|qa|codex|claude|agy|opencode|fake|develop|final|tests|"
-                           r"git|workflow|branch|merge|commit)\b", re.I)
+    FORBIDDEN = re.compile(r"\b(developer|reviewer|teamlead|qa|codex|claude|agy|opencode|fake|develop|final|"
+                           r"tests|git|branch|merge|commit)\b", re.I)
 
     def words(self, node):
         skip = set()

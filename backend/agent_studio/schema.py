@@ -489,3 +489,13 @@ MIGRATION_11 = [
     "CREATE INDEX phases_by_workspace ON phases (workspace, position)",
     _check_v11_foreign_keys,
 ]
+
+
+# v12 (P04-S09): outcome-applier bookkeeping on tickets — the run last applied (idempotency after a
+# restart), per-rule round counts, and the blocked ticket's return status and reason.
+MIGRATION_12 = [
+    "ALTER TABLE tickets ADD COLUMN run_id TEXT",
+    "ALTER TABLE tickets ADD COLUMN rounds_json TEXT",
+    "ALTER TABLE tickets ADD COLUMN return_status TEXT",
+    "ALTER TABLE tickets ADD COLUMN blocked_reason TEXT",
+]
