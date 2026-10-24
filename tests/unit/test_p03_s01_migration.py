@@ -1,4 +1,5 @@
-"""P04-S06: migration 10 drops the P03 software-board tables (children first) from every version-9 database."""
+"""P04-S06/S07: migration 10 drops the P03 software-board tables (children first); migration 11 re-creates
+the generic board tables (no status CHECK, phases as data) on every database, fresh or upgraded."""
 import os
 import shutil
 import tempfile
@@ -13,11 +14,13 @@ TEAM = "a" * 8 + "-0000-4000-8000-" + "a" * 12
 AGENT = "b" * 8 + "-0000-4000-8000-" + "b" * 12
 T1 = "c" * 8 + "-0000-4000-8000-" + "c" * 12
 T2 = "d" * 8 + "-0000-4000-8000-" + "d" * 12
-BOARD_TABLES = {"tickets", "ticket_deps", "ticket_events", "board_locks", "board_state"}
+P03_ONLY = {"board_locks"}          # dropped by v10 and never created again
+REUSED = {"tickets", "ticket_deps", "ticket_events", "board_state"}  # re-created by v11 with a new shape
+BOARD_TABLES = P03_ONLY | REUSED
 
 
 def v9_database(path):
-    """A database exactly as version 9 left it: engine rows plus one row in every board table."""
+    """A database exactly as version 9 left it: engine rows plus one row in every P03 board table."""
     conn = state.connect(path, role="coordinator", create=True)
     conn.execute("BEGIN IMMEDIATE")
     conn.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
@@ -50,26 +53,38 @@ def tables(conn):
     return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
 
+def columns(conn, table):
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+
 class BoardTableDrop(unittest.TestCase):
-    def test_v9_database_with_board_rows_migrates_to_v10(self):
+    def test_v9_database_with_board_rows_migrates_to_the_current_version(self):
         path = os.path.join(tempfile.mkdtemp(), "state.db")
         conn = v9_database(path)
         preserved = {table: dump(conn, table, "*") for table in ("teams", "agents")}
         events_before = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
         self.assertEqual(state.current_version(conn), 9)
 
-        self.assertEqual(state.migrate(conn, path), 10)
+        self.assertEqual(state.migrate(conn, path), state.SCHEMA_VERSION)
 
-        self.assertFalse(BOARD_TABLES & tables(conn))
+        # v10 dropped the P03 board (its data is not migrated); v11 created the generic tables in their place.
+        self.assertFalse(P03_ONLY & tables(conn))
+        self.assertTrue(REUSED <= tables(conn))
+        self.assertIn("phases", tables(conn))
+        p03_columns = {"kind", "story_path", "severity", "blocked_reason", "run_id"}
+        self.assertFalse(p03_columns & columns(conn, "tickets"))
+        self.assertTrue({"phase_id", "created_by_member"} <= columns(conn, "tickets"))
         for table, rows in preserved.items():
             self.assertEqual(dump(conn, table, "*"), rows, table)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0], events_before)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0], 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM board_state").fetchone()[0], 0)
         self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
         self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
-        self.assertEqual(state.current_version(conn), 10)
+        self.assertEqual(state.current_version(conn), state.SCHEMA_VERSION)
         state.check_schema(conn)
 
-    def test_fresh_database_has_the_same_schema_and_no_board_tables(self):
+    def test_fresh_database_has_the_same_schema_and_no_p03_artifacts(self):
         d = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, d, True)
         old = v9_database(os.path.join(d, "old.db"))
@@ -82,8 +97,9 @@ class BoardTableDrop(unittest.TestCase):
                 "SELECT name, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'"))
 
         self.assertEqual(schema(fresh), schema(old))
-        self.assertFalse(BOARD_TABLES & tables(fresh))
-        self.assertEqual(state.migrate(old, os.path.join(d, "old.db")), 10)  # migrating twice is a no-op
+        self.assertFalse(P03_ONLY & tables(fresh))
+        self.assertTrue(REUSED <= tables(fresh))
+        self.assertEqual(state.migrate(old, os.path.join(d, "old.db")), state.SCHEMA_VERSION)  # twice is a no-op
 
 
 if __name__ == "__main__":

@@ -9,7 +9,8 @@ import traceback
 
 import copy
 
-from . import workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, teams, teamstatus, tmuxctl
+from . import boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, \
+    teams, teamstatus, tmuxctl
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -161,10 +162,24 @@ STAGE_NAMES = ("developer", "reviewer", "developer_repair", "reviewer_recheck")
 
 STAGE_ID_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 DEFINITION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+TICKET_KEY = re.compile(r"^T-\d{3,}$")
 
 
 def _workspace_arg(args):
     return ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False))
+
+
+def _ticket_key(value, name="key"):
+    if not isinstance(value, str) or not TICKET_KEY.match(value):
+        raise AsError(BAD_REQUEST, f"Argument '{name}' must match T- followed by at least three digits.")
+    return value
+
+
+def _ticket_keys(args, name):
+    value = args.get(name, [])
+    if not isinstance(value, list):
+        raise AsError(BAD_REQUEST, f"Argument '{name}' must be a list.")
+    return [_ticket_key(item, name) for item in value]
 
 
 def _validate_board_resume(args):
@@ -174,6 +189,78 @@ def _validate_board_resume(args):
         raise AsError(BAD_REQUEST, "board.resume needs exactly one of agentId or all: true.")
     workspace = _workspace_arg(args)
     return {"workspace": workspace, "all": all_agents, **({"agentId": validate_uuid(agent, "agentId")} if agent is not None else {})}
+
+
+def _validate_ticket_add(args):
+    out = {"workspace": _workspace_arg(args), "title": req_text(args, "title", 200, allow_empty=False)}
+    body = req_text(args, "body", 32 * 1024, required=False)
+    if body is not None:
+        out["body"] = body
+    out["priority"] = req_int(args, "priority", 0, 1000, 100)
+    return out
+
+
+def _validate_ticket_move(args):
+    out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+           "to": req_text(args, "to", 64, allow_empty=False), "force": req_bool(args, "force")}
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
+def _validate_ticket_depend(args):
+    out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+           "on": _ticket_keys(args, "on"), "remove": _ticket_keys(args, "remove")}
+    if not out["on"] and not out["remove"]:
+        raise AsError(BAD_REQUEST, "ticket.depend needs on or remove.")
+    overlap = sorted(set(out["on"]) & set(out["remove"]))
+    if overlap:
+        raise AsError(BAD_REQUEST, f"ticket.depend got {', '.join(overlap)} in both on and remove.")
+    return out
+
+
+def _validate_ticket_key_args(args):
+    return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key"))}
+
+
+def _validate_ticket_list(args):
+    out = {"workspace": _workspace_arg(args)}
+    status = req_text(args, "status", 64, required=False, allow_empty=False)
+    if status is not None:
+        out["status"] = status
+    return out
+
+
+def _validate_board_show(args):
+    return {"workspace": _workspace_arg(args)}
+
+
+def _ticket_show(args, req):
+    clean = _validate_ticket_key_args(args)
+    conn = _reader()
+    try:
+        return boardmodel.ticket_detail(conn, clean["workspace"], clean["key"])
+    finally:
+        conn.close()
+
+
+def _ticket_list(args, req):
+    clean = _validate_ticket_list(args)
+    conn = _reader()
+    try:
+        return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"))
+    finally:
+        conn.close()
+
+
+def _board_show(args, req):
+    clean = _validate_board_show(args)
+    conn = _reader()
+    try:
+        return boardmodel.board_show(conn, clean["workspace"])
+    finally:
+        conn.close()
 
 
 def _validate_definition_start(args):
@@ -391,6 +478,12 @@ COMMANDS = {
     "workflow.list": _workflow_list,
     "workflow.validate": _workflow_validate,
     "board.resume": _inbox("board.resume", _validate_board_resume),
+    "ticket.add": _inbox("ticket.add", _validate_ticket_add),
+    "ticket.move": _inbox("ticket.move", _validate_ticket_move),
+    "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
+    "ticket.show": _ticket_show,
+    "ticket.list": _ticket_list,
+    "board.show": _board_show,
 }
 
 

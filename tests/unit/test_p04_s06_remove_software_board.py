@@ -48,14 +48,16 @@ class NoBoardCode(unittest.TestCase):
                      "agent_studio.serve", "agent_studio.cli"):
             self.assertTrue(importlib.import_module(name), name)
 
-    def test_dispatch_has_no_ticket_or_board_commands_except_board_resume(self):
+    def test_dispatch_has_only_the_generic_board_commands(self):
+        """S06 removed every P03 board command; S07 added back the generic ticket.add/move/show/list/depend
+        and board.show. The P03 scheduler and operator commands stay gone."""
         self.assertNotIn("debug.ticket_worktree", dispatch.COMMANDS)
-        for name in dispatch.COMMANDS:
-            self.assertFalse(name.startswith("ticket."), name)
-            if name.startswith("board."):
-                self.assertEqual(name, "board.resume", name)
+        board_commands = sorted(n for n in dispatch.COMMANDS if n.startswith("board."))
+        self.assertEqual(board_commands, ["board.resume", "board.show"])
+        self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
+                         ["ticket.add", "ticket.depend", "ticket.list", "ticket.move", "ticket.show"])
         self.assertEqual(sorted(n for n in coordinator.HANDLERS if n.startswith(("ticket.", "board."))),
-                         ["board.resume"])
+                         ["board.resume", "ticket.add", "ticket.depend", "ticket.move"])
 
     def test_board_resume_is_still_dispatched_and_validated(self):
         ws = tempfile.mkdtemp()

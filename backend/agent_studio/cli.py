@@ -12,7 +12,8 @@ import uuid
 
 import os
 
-from . import PROTOCOL, coordinator, dispatch, keepalive, runner, serve, storycli, teamcli, teamdefs, validation, watch, workspace
+from . import PROTOCOL, boardcli, coordinator, dispatch, keepalive, runner, serve, storycli, teamcli, teamdefs, \
+    validation, watch, workspace
 from .protocol import AsError, BAD_REQUEST, MAX_LINE_BYTES, TEAM_NOT_FOUND, dumps, envelope
 from .store import validate_uuid
 
@@ -75,6 +76,14 @@ USAGE = """agent-studio <command>
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
+  ticket add (--workspace PATH | cwd) --title TEXT [--body TEXT] [--priority N]
+                                           add a ticket to the default phase in the board's initial status
+  ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
+                                           move a ticket; finished tickets need --force
+  ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)
+  ticket list [--status STATUS] (--workspace PATH | cwd)   the workspace's tickets (read-only)
+  ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
+  board show (--workspace PATH | cwd)      every status column with its tickets, in configured order (read-only)
   board resume --workspace PATH (--agent ID | --all)
                                            clear an agent's USAGE_LIMIT hold (limit_reached -> idle)
   init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
@@ -316,6 +325,10 @@ def _local_command(cmd, argv, pretty):
         return storycli.run(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
         return _team_command(argv, pretty)
+    if cmd == "ticket" and argv[1:2] and argv[1] in boardcli.TICKET_ACTIONS:
+        return boardcli.run(argv, pretty)
+    if cmd == "board" and argv[1:2] and argv[1] in boardcli.BOARD_ACTIONS:
+        return boardcli.run(argv, pretty)
     if cmd == "init":
         render, run = _render_init, lambda ns: workspace.init(ns.path or os.getcwd(), ns.name)
         opts = ("--name", "--path")

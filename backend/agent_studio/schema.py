@@ -428,3 +428,60 @@ MIGRATION_10 = [
     "DROP TABLE tickets",
     _check_drop_foreign_keys,
 ]
+
+
+def _check_v11_foreign_keys(conn) -> None:
+    bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad:
+        raise RuntimeError(f"migration 11 broke {len(bad)} foreign key(s): {[tuple(r) for r in bad[:5]]}")
+
+
+# v11 (P04-S07): the generic board. Statuses are config, so tickets carry no SQL CHECK on status; phases are
+# data with a protected default created on first use; board_state holds only the current-phase pointer.
+MIGRATION_11 = [
+    f"""CREATE TABLE phases (
+        id {ID},
+        workspace TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        position INTEGER NOT NULL CHECK (position >= 0),
+        status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
+        {TS},
+        UNIQUE (workspace, slug))""",
+    """CREATE TABLE board_state (
+        workspace TEXT PRIMARY KEY,
+        current_phase_id TEXT REFERENCES phases(id),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""",
+    f"""CREATE TABLE tickets (
+        id {ID},
+        workspace TEXT NOT NULL,
+        key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT,
+        phase_id TEXT NOT NULL REFERENCES phases(id),
+        status TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 100 CHECK (priority >= 0),
+        assignee TEXT,
+        lease_until TEXT,
+        created_by_member TEXT,
+        created_by_assignment TEXT,
+        {TS},
+        UNIQUE (workspace, key))""",
+    """CREATE TABLE ticket_deps (
+        ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        blocked_by_ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        PRIMARY KEY (ticket_id, blocked_by_ticket_id), CHECK (ticket_id <> blocked_by_ticket_id))""",
+    """CREATE TABLE ticket_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+        at TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        name TEXT NOT NULL,
+        from_status TEXT,
+        to_status TEXT,
+        payload_json TEXT NOT NULL)""",
+    "CREATE INDEX tickets_by_workspace_status ON tickets (workspace, status)",
+    "CREATE INDEX phases_by_workspace ON phases (workspace, position)",
+    _check_v11_foreign_keys,
+]

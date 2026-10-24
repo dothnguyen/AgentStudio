@@ -1,4 +1,5 @@
-"""P04-S06: the team commands run end to end on a version-10 database that has no board tables."""
+"""P04-S06/S07: the team commands run end to end on the current-schema database; the generic board tables
+sit empty until a board command uses them, and the P03 board commands stay gone."""
 import json
 import os
 import sqlite3
@@ -14,7 +15,8 @@ PAIR = {"version": 1, "description": "pair", "stages": [
     {"id": "look", "role": "reviewer", "permission": "read_only", "maxVisits": 2, "prompt": "Look.\n{{task}}",
      "next": {"pass": "$succeed", "fail": "build"}}]}
 ROLES = {"version": 1, "roles": {"developer": {}, "reviewer": {}}}
-BOARD_TABLES = ("tickets", "ticket_deps", "ticket_events", "board_locks", "board_state")
+P03_ONLY = ("board_locks",)
+BOARD_TABLES = ("tickets", "ticket_deps", "ticket_events", "board_state", "phases")
 
 
 def member(mid, name, role):
@@ -60,11 +62,16 @@ class CleanSlate(unittest.TestCase):
         self.addCleanup(conn.close)
         return conn
 
-    def test_start_status_ask_run_workflow_and_stop_on_a_v10_database(self):
+    def test_start_status_ask_run_workflow_and_stop_on_the_current_schema(self):
+        from agent_studio import state
         conn = self.state_db()
-        self.assertEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0], 10)
+        self.assertEqual(conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],
+                         state.SCHEMA_VERSION)
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        self.assertFalse(set(BOARD_TABLES) & tables, tables)
+        self.assertFalse(set(P03_ONLY) & tables, tables)
+        self.assertTrue(set(BOARD_TABLES) <= tables, tables)  # generic board tables, empty until first use
+        for table in BOARD_TABLES:
+            self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0, table)
 
         self.start()
         rc, out, err = self.human("status", "--team", "alpha")
@@ -83,27 +90,29 @@ class CleanSlate(unittest.TestCase):
 
         rc, out, err = self.human("stop", "--team", "alpha")
         self.assertEqual(rc, 0, err)
-        tables = {r[0] for r in self.state_db().execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'")}
-        self.assertFalse(set(BOARD_TABLES) & tables, tables)
+        conn = self.state_db()
+        for table in BOARD_TABLES:  # team work alone never touches the board
+            self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0, table)
 
-    def test_board_and_ticket_commands_are_gone_but_board_resume_is_routed(self):
+    def test_p03_board_commands_are_gone_but_the_generic_board_is_routed(self):
         for argv in (["board", "run", "--workspace", self.ws], ["board", "pause", "--workspace", self.ws],
-                     ["board", "show", "--workspace", self.ws], ["board", "list"],
-                     ["ticket", "list", "--workspace", self.ws], ["ticket", "create", "--workspace", self.ws,
-                                                                  "--story", "x.md"]):
+                     ["board", "list"], ["ticket", "start", "--workspace", self.ws, "T-001"],
+                     ["ticket", "retry", "--workspace", self.ws, "T-001"]):
             rc, r, p = self.sb.run(*argv)
             self.assertEqual(rc, 1, argv)
-            self.assertIn(r["error"]["code"], ("BAD_REQUEST", "UNKNOWN_COMMAND"), (argv, r))  # no such CLI action
-        for command, args in (("ticket.list", {"workspace": self.ws}), ("board.run", {"workspace": self.ws}),
-                               ("board.show", {"workspace": self.ws}), ("board.list", {}),
+            self.assertIn(r["error"]["code"], ("BAD_REQUEST", "UNKNOWN_COMMAND"), (argv, r))
+        for command, args in (("board.run", {"workspace": self.ws}), ("board.pause", {"workspace": self.ws}),
                                ("debug.ticket_worktree", {"workspace": self.ws, "key": "T-001"})):
             rc, r, p = self.sb.request({"protocol": "agent-studio/v1", "command": command, "args": args})
             self.assertFalse(r["ok"], command)
             self.assertEqual(r["error"]["code"], "UNKNOWN_COMMAND", (command, r))
+        # the generic board is routed; this workspace has no board.json yet, so it answers BOARD_CONFIG_INVALID
+        rc, r, p = self.sb.run("board", "show", "--workspace", self.ws, "--json")
+        self.assertEqual(r["error"]["code"], "BOARD_CONFIG_INVALID", r)
         rc, r, p = self.sb.run("board", "resume", "--workspace", self.ws, "--all")
         self.assertEqual(r["error"]["code"], "TEAM_NOT_RUNNING", r)  # routed and validated; no team runs here
 
 
 if __name__ == "__main__":
     unittest.main()
+

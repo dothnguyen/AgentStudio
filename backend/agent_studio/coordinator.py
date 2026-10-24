@@ -14,8 +14,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, report_rules, \
-    reports, resolve, state, tasks, teams, tmuxctl, workflow
+from . import PROTOCOL, VERSION, boardmodel, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, \
+    report_rules, reports, resolve, state, tasks, teams, tmuxctl, workflow
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
@@ -176,6 +176,9 @@ HANDLERS = {
     "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
     "workflow.retry": lambda args, tx, ctx: workflow.retry(tx, args, ctx),
     "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),
+    "ticket.add": lambda args, tx, ctx: boardmodel.ticket_add(tx, args["workspace"], args),
+    "ticket.move": lambda args, tx, ctx: boardmodel.ticket_move(tx, args["workspace"], args),
+    "ticket.depend": lambda args, tx, ctx: boardmodel.ticket_depend(tx, args["workspace"], args),
     "board.resume": _handle_board_resume,
 }
 MONITOR_INTERVAL_S = 2.0
