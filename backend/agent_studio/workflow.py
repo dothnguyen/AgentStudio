@@ -174,7 +174,7 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
     team = tx.get("team", args["teamId"])
     if team["status"] != "running":
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
-    ws = tasks.run_workspace(team, args.get("workspace"))
+    ws = tasks.run_workspace(tx, team, args.get("workspace"))
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
     first = definition.stages[0]
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)

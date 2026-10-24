@@ -524,7 +524,10 @@ class NoBoard(unittest.TestCase):
                     mods = {a.name for a in node.names}
                 self.assertFalse({m.split(".")[-1] for m in mods} & self.BOARD, (name, mods))
             src = open(path).read()
-            self.assertNotRegex(src, r'"(board|ticket)\.')
+            # story commands send no board or ticket command; teamcli may send the board lifecycle
+            # commands only (P04-S10 run-board / stop-board)
+            banned = r'"(board|ticket)\.' if name == "storycli" else r'"(board|ticket)\.(?!run\b|stop\b)'
+            self.assertNotRegex(src, banned)
 
 
 

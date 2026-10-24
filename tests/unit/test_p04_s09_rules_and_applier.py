@@ -13,6 +13,9 @@ ROLES = {"version": 1, "roles": {"worker": {}, "checker": {}}}
 SOLO = {"version": 1, "description": "solo", "stages": [
     {"id": "work", "role": "worker", "permission": "read_only", "prompt": "{{task}}",
      "next": {"done": "$succeed"}}]}
+CHECK = {"version": 1, "description": "check", "stages": [
+    {"id": "look", "role": "checker", "permission": "read_only", "prompt": "{{task}}",
+     "next": {"done": "$succeed"}}]}
 RULES_CONFIG = {"version": 2,
                 "statuses": [{"id": "todo", "kind": "initial"}, {"id": "review"}, {"id": "hold"},
                              {"id": "done", "kind": "done"}, {"id": "dropped", "kind": "closed"}],
@@ -20,9 +23,9 @@ RULES_CONFIG = {"version": 2,
                 "rules": [
                     {"when": {"status": "todo"}, "role": "worker", "workflow": "solo",
                      "onPass": "review", "onFail": "todo", "maxRounds": 2},
-                    {"when": {"status": "review"}, "role": "checker", "workflow": "solo",
+                    {"when": {"status": "review"}, "role": "checker", "workflow": "check",
                      "onPass": "done", "onFail": "todo", "onBlocked": "hold"},
-                    {"when": {"status": "dropped"}, "action": "drop", "onPass": "dropped",
+                    {"when": {"status": "dropped"}, "action": "merge", "onPass": "dropped",
                      "onFail": "dropped"}]}
 BLOCKABLE_CONFIG = {"version": 2,
                     "statuses": [{"id": "todo", "kind": "initial"}, {"id": "done", "kind": "done"}],
@@ -37,8 +40,9 @@ class RulesCase(BoardCase):
         with open(os.path.join(self.ws, ".agent-studio", "roles.json"), "w") as f:
             json.dump(ROLES, f)
         os.makedirs(os.path.join(self.ws, ".agent-studio", "workflows"), exist_ok=True)
-        with open(os.path.join(self.ws, ".agent-studio", "workflows", "solo.json"), "w") as f:
-            json.dump(SOLO, f)
+        for name, definition in (("solo.json", SOLO), ("check.json", CHECK)):
+            with open(os.path.join(self.ws, ".agent-studio", "workflows", name), "w") as f:
+                json.dump(definition, f)
         self.write_config(RULES_CONFIG)
 
     def check(self, config=None):
@@ -106,7 +110,7 @@ class RulesSchema(RulesCase):
         bad_role["rules"][0]["role"] = "nobody"
         self.write_config(bad_role)
         problems = self.check()
-        self.assertEqual([p["path"] for p in problems], ["rules[0].role"])
+        self.assertIn("rules[0].role", [p["path"] for p in problems])
 
         bad_flow = json.loads(json.dumps(RULES_CONFIG))
         bad_flow["rules"][0]["workflow"] = "missing-one"

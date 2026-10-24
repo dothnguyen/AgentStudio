@@ -35,11 +35,14 @@ FINISHED_RUN_STATES = tuple(RUN_OUTCOMES)
 WORKSPACE_MODES = ("main", "worktree", "none")
 BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
-_TOP_KEYS = ("version", "statuses", "ticketFields", "rules")
+_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch")
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
              "requiresDeps", "workspace", "action", "priority")
+RULE_ACTIONS = ("merge",)
+DEFAULT_LEASE_SECONDS = 120
+DEFAULT_BASE_BRANCH = "main"
 
 
 def _invalid(problems):
@@ -139,6 +142,14 @@ def load_config(workspace: str) -> dict:
     if not isinstance(rules, list):
         problems.append(("rules", "must be a list"))
         rules = []
+    lease_seconds = raw.get("leaseSeconds", DEFAULT_LEASE_SECONDS)
+    if not isinstance(lease_seconds, int) or isinstance(lease_seconds, bool) or lease_seconds < 1:
+        problems.append(("leaseSeconds", f"must be an integer of at least 1"))
+        lease_seconds = DEFAULT_LEASE_SECONDS
+    base_branch = raw.get("baseBranch", DEFAULT_BASE_BRANCH)
+    if not isinstance(base_branch, str) or not SLUG_RE.match(base_branch or ""):
+        problems.append(("baseBranch", "must be a slug (a branch name like 'main')"))
+        base_branch = DEFAULT_BASE_BRANCH
     known = {s["id"] for s in seen}
 
     def rule_status(value, path, required=True):
@@ -199,7 +210,7 @@ def load_config(workspace: str) -> dict:
         if "workspace" in rule and rule["workspace"] not in WORKSPACE_MODES:
             problems.append((f"{path}.workspace", f"must be one of {list(WORKSPACE_MODES)}"))
         if "during" in rule:
-            rule_text(rule["during"], f"{path}.during", 64, slug=True)
+            rule_status(rule["during"], f"{path}.during")
     duplicates = sorted({s for s in rule_statuses if rule_statuses.count(s) > 1})
     for slug in duplicates:
         problems.append(("rules", f"more than one rule for status {slug!r}"))
@@ -209,7 +220,8 @@ def load_config(workspace: str) -> dict:
     return {"version": CONFIG_VERSION, "statuses": seen, "byId": by_id, "initial": initial[0],
             "terminal": frozenset(s["id"] for s in seen if s["kind"] in TERMINAL_KINDS),
             "ticketFields": fields, "rules": rules,
-            "rulesByStatus": {r["when"]["status"]: r for r in rules}}
+            "rulesByStatus": {r["when"]["status"]: r for r in rules},
+            "leaseSeconds": lease_seconds, "baseBranch": base_branch}
 
 
 def config_status_ids(config: dict) -> list:
@@ -650,6 +662,9 @@ def check_rules(workspace: str, config: dict) -> list:
     definitions = {d["name"]: d for d in workflowdef.list_definitions(workspace, BUILTIN_DEFINITIONS_DIR)}
     for i, rule in enumerate(config["rules"]):
         path = f"rules[{i}]"
+        if "action" in rule and rule["action"] not in RULE_ACTIONS:
+            problems.append({"path": f"{path}.action",
+                             "message": f"unknown action {rule['action']!r} (known: {', '.join(RULE_ACTIONS)})"})
         if "role" in rule and rule["role"] not in known_roles:
             problems.append({"path": f"{path}.role", "message": f"role {rule['role']!r} is not defined in "
                                                                 f"{CONFIG_DIR}/roles.json"})
@@ -661,7 +676,12 @@ def check_rules(workspace: str, config: dict) -> list:
                                             f"{CONFIG_DIR}/workflows or the built-ins"})
             else:
                 try:
-                    workflowdef.load(workspace, rule["workflow"], BUILTIN_DEFINITIONS_DIR)
+                    loaded = workflowdef.load(workspace, rule["workflow"], BUILTIN_DEFINITIONS_DIR)
+                    used = {st.role for st in loaded.stages if st.type == "agent"}
+                    if "role" in rule and rule["role"] not in used:
+                        problems.append({"path": f"{path}.workflow",
+                                         "message": f"must use the rule's role {rule['role']!r} "
+                                                    f"(it uses {sorted(used)})"})
                 except AsError as e:
                     problems.append({"path": f"{path}.workflow", "message": f"cannot be bound: {e.message}"})
     if config["rules"]:
@@ -684,10 +704,11 @@ def check_rules(workspace: str, config: dict) -> list:
 
 # ---- outcome applier --------------------------------------------------------------------------------------
 
-def apply_run_outcome(tx, workspace: str, args: dict) -> dict:
-    """Apply a finished run to its ticket by the rule for the ticket's status: move to onPass/onFail/
-    onBlocked, count the round for that rule, block with a reason when maxRounds is hit. The ticket keeps
-    the run id it was last applied for, so a late or replayed outcome is a no-op."""
+def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict:
+    """Apply a finished run to its ticket by the rule for the ticket's status (or the claiming rule the
+    scheduler passes): move to onPass/onFail/onBlocked, count the round for that rule, block with a reason
+    when maxRounds is hit, and release the claim. The ticket keeps the run id it was last applied for, so a
+    late or replayed outcome is a no-op."""
     config = load_config(workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])
     run = tx.conn.execute("SELECT id, status FROM workflow_runs WHERE id = ?", (args["run"],)).fetchone()
@@ -699,7 +720,7 @@ def apply_run_outcome(tx, workspace: str, args: dict) -> dict:
     if ticket["run_id"] == run["id"]:
         return {"applied": False, "ticket": _ticket_json(tx.conn, tx.conn.execute(
             "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
-    rule = config["rulesByStatus"].get(ticket["status"])
+    rule = rule or config["rulesByStatus"].get(ticket["status"])
     if rule is None:
         raise AsError(BOARD_RULE_MISSING, f"Status {ticket['status']!r} has no rule, so the run outcome "
                                           f"cannot be applied.", data={"key": ticket["key"],
@@ -726,7 +747,8 @@ def apply_run_outcome(tx, workspace: str, args: dict) -> dict:
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
     tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
-                    "blocked_reason = ?, updated_at = ? WHERE id = ?",
+                    "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
+                    "lease_until = NULL WHERE id = ?",
                     values + (ticket["id"],))
     _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", ticket["status"], target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "outcome": outcome,
@@ -752,6 +774,37 @@ def ticket_unblock(tx, workspace: str, args: dict) -> dict:
                    "reason": ticket["blocked_reason"]})
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone())}
+
+
+# ---- worktree registration (design contract §F) ------------------------------------------------------------
+
+def registered_worktree(conn_or_tx, team_workspace: str, path: str) -> str:
+    """A requested run workspace is accepted only when it is a worktree this board created and a claimed
+    ticket (one a member holds) is registered at; every other path is WORKTREE_NOT_REGISTERED."""
+    from . import worktrees
+    canonical = os.path.realpath(path)
+    conn = getattr(conn_or_tx, "conn", conn_or_tx)
+    row = conn.execute("SELECT 1 FROM tickets WHERE workspace = ? AND worktree_path = ? "
+                       "AND assignee IS NOT NULL LIMIT 1", (team_workspace, canonical)).fetchone()
+    listed = any(item["path"] == canonical
+                 for item in worktrees.list_registered(team_workspace))
+    if row is None or not listed:
+        raise AsError("WORKTREE_NOT_REGISTERED", "Workspace is not a registered live ticket worktree.",
+                      data={"workspace": canonical})
+    return canonical
+
+
+def release_claim(tx, ticket: dict, reason: str, to_status=None) -> None:
+    """Give a claim back without applying anything (a start failure, or lease recovery in S11)."""
+    values = [utcnow(), ticket["id"]]
+    sets = "assignee = NULL, lease_until = NULL, active_run_id = NULL, updated_at = ?"
+    if to_status is not None and to_status != ticket["status"]:
+        sets += ", status = ?"
+        values.insert(1, to_status)
+    tx.conn.execute(f"UPDATE tickets SET {sets} WHERE id = ?", values)
+    _ticket_event(tx.conn, ticket["id"], "ticket.claim_released", "coordinator", ticket["status"],
+                  to_status if to_status is not None else ticket["status"],
+                  {"ticketId": ticket["id"], "key": ticket["key"], "reason": reason})
 
 
 # ---- read-only queries ------------------------------------------------------------------------------------

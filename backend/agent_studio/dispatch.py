@@ -259,6 +259,10 @@ def _validate_board_show(args):
     return {"workspace": _workspace_arg(args)}
 
 
+def _validate_board_run(args):
+    return {"workspace": _workspace_arg(args), "teamId": validate_uuid(args.get("teamId"), "teamId")}
+
+
 def _validate_phase_add(args):
     out = {"workspace": _workspace_arg(args), "id": _slug_arg(args.get("id"), "id"),
            "name": req_text(args, "name", 80, allow_empty=False)}
@@ -565,6 +569,8 @@ COMMANDS = {
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,
     "board.show": _board_show,
+    "board.run": _inbox("board.run", _validate_board_run),
+    "board.stop": _inbox("board.stop", _validate_board_show),
     "phase.add": _inbox("phase.add", _validate_phase_add),
     "phase.edit": _inbox("phase.edit", _validate_phase_edit),
     "phase.close": _inbox("phase.close", _validate_phase_ref),

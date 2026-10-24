@@ -362,7 +362,9 @@ class Isolation(unittest.TestCase):
                                   "bug" + "file"}, names)
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                self.assertFalse(node.value.startswith(("board.", "ticket.")), node.value)
+                # the board lifecycle commands (P04-S10 run-board / stop-board) are the exception
+                allowed = node.value in ("board.run", "board.stop")
+                self.assertFalse(node.value.startswith(("board.", "ticket.")) and not allowed, node.value)
 
 
 if __name__ == "__main__":

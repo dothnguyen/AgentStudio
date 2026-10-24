@@ -44,6 +44,9 @@ USAGE = """agent-studio <command>
                                            ask one free member to do something
   team run-workflow [--team T] NAME [--bind ROLE=MEMBER ...] [--wait] (TEXT | --text-file PATH|-)
                                            one-off workflow with roles bound to members (no board)
+  team run-board [--team T]               bind the running team to the workspace board and start claiming
+                                           (rules check must pass; one team runs a board at a time)
+  team stop-board [--team T]              stop claiming tickets; running work finishes untouched
   team workflows|check NAME [--bind ROLE=MEMBER ...]   workflow definitions / validate one against the team
   team retry [--workflow ID]               run the stuck stage of the team's running or paused workflow again
   team blocked                             members waiting for a decision, and how to free them

@@ -250,10 +250,11 @@ class DispatchTests(BoardCase):
             dispatch._validate_ticket_move({"workspace": ws, "key": "T1", "to": "wip"})
 
     def test_command_table_has_exactly_the_board_commands(self):
-        """S07 added the generic ticket commands; S08 added ticket.phase and phase.*; S09 added
-        ticket.apply/ticket.unblock. The P03 scheduler and operator commands stay gone."""
+        """S07 added the generic ticket commands; S08 ticket.phase and phase.*; S09 ticket.apply/unblock;
+        S10 board.run/board.stop. The P03 scheduler and operator commands stay gone."""
         for name in ("ticket.add", "ticket.move", "ticket.depend", "ticket.show", "ticket.list",
-                     "ticket.phase", "ticket.apply", "ticket.unblock", "board.show"):
+                     "ticket.phase", "ticket.apply", "ticket.unblock", "board.show", "board.run",
+                     "board.stop"):
             self.assertIn(name, dispatch.COMMANDS)
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
                          ["ticket.add", "ticket.apply", "ticket.depend", "ticket.list", "ticket.move",
@@ -261,7 +262,7 @@ class DispatchTests(BoardCase):
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("phase.")),
                          ["phase.add", "phase.clear-current", "phase.close", "phase.edit", "phase.list",
                           "phase.remove", "phase.reopen", "phase.set-current", "phase.show"])
-        for name in ("ticket.start", "ticket.retry", "ticket.cancel", "ticket.create", "board.run", "board.pause"):
+        for name in ("ticket.start", "ticket.retry", "ticket.cancel", "ticket.create", "board.pause"):
             self.assertNotIn(name, dispatch.COMMANDS)
 
 
@@ -331,12 +332,13 @@ class CliTests(BoardCase):
 
 
 class NoNamesInBoardCode(unittest.TestCase):
-    """The board modules name no role, provider, status or host command (design contract §D). The word
-    'workflow' is allowed since S09: it is the rules-schema key (`rules[].workflow`), not a workflow name —
-    the board still cannot hardcode a specific workflow, role or branch."""
+    """The board modules name no role, provider, status or host command (design contract §D). The words
+    'workflow', 'branch' and 'merge' are allowed since S09/S10: they are rules-schema keys
+    (`rules[].workflow`, the top-level `baseBranch`, the `merge` action) — the board still cannot hardcode
+    a specific workflow, role, branch name or host command."""
 
     FORBIDDEN = re.compile(r"\b(developer|reviewer|teamlead|qa|codex|claude|agy|opencode|fake|develop|final|"
-                           r"tests|git|branch|merge|commit)\b", re.I)
+                           r"tests|git|commit)\b", re.I)
 
     def words(self, node):
         skip = set()

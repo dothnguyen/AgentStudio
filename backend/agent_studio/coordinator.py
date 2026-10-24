@@ -14,8 +14,8 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, boardmodel, crashpoints, envresolve, fixtures, inbox, paths, procid, reconcile, \
-    report_rules, reports, resolve, state, tasks, teams, tmuxctl, workflow
+from . import PROTOCOL, VERSION, boardmodel, boardsched, crashpoints, envresolve, fixtures, inbox, paths, \
+    procid, reconcile, report_rules, reports, resolve, state, tasks, teams, tmuxctl, workflow
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
 
@@ -189,6 +189,8 @@ HANDLERS = {
     "phase.remove": lambda args, tx, ctx: boardmodel.phase_remove(tx, args["workspace"], args),
     "phase.set-current": lambda args, tx, ctx: boardmodel.phase_set_current(tx, args["workspace"], args),
     "phase.clear-current": lambda args, tx, ctx: boardmodel.phase_clear_current(tx, args["workspace"], args),
+    "board.run": lambda args, tx, ctx: boardsched.bind_team(tx, args["workspace"], args["teamId"]),
+    "board.stop": lambda args, tx, ctx: boardsched.stop_board(tx, args["workspace"]),
     "board.resume": _handle_board_resume,
 }
 MONITOR_INTERVAL_S = 2.0
@@ -310,6 +312,7 @@ def run(enable_debug: bool = False) -> int:
             reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
+            boardsched.tick(store, ctx)
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:

@@ -95,19 +95,24 @@ class CleanSlate(unittest.TestCase):
             self.assertEqual(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0, table)
 
     def test_p03_board_commands_are_gone_but_the_generic_board_is_routed(self):
-        for argv in (["board", "run", "--workspace", self.ws], ["board", "pause", "--workspace", self.ws],
-                     ["board", "list"], ["ticket", "start", "--workspace", self.ws, "T-001"],
+        for argv in (["board", "pause", "--workspace", self.ws], ["board", "list"],
+                     ["ticket", "start", "--workspace", self.ws, "T-001"],
                      ["ticket", "retry", "--workspace", self.ws, "T-001"]):
             rc, r, p = self.sb.run(*argv)
             self.assertEqual(rc, 1, argv)
             self.assertIn(r["error"]["code"], ("BAD_REQUEST", "UNKNOWN_COMMAND"), (argv, r))
-        for command, args in (("board.run", {"workspace": self.ws}), ("board.pause", {"workspace": self.ws}),
+        for command, args in (("board.pause", {"workspace": self.ws}),
                                ("debug.ticket_worktree", {"workspace": self.ws, "key": "T-001"})):
             rc, r, p = self.sb.request({"protocol": "agent-studio/v1", "command": command, "args": args})
             self.assertFalse(r["ok"], command)
             self.assertEqual(r["error"]["code"], "UNKNOWN_COMMAND", (command, r))
         # the generic board is routed; this workspace has no board.json yet, so it answers BOARD_CONFIG_INVALID
         rc, r, p = self.sb.run("board", "show", "--workspace", self.ws, "--json")
+        self.assertEqual(r["error"]["code"], "BOARD_CONFIG_INVALID", r)
+        rc, r, p = self.sb.request({"protocol": "agent-studio/v1", "command": "board.run",
+                                    "idempotencyKey": "s06cl-board-run-0001",
+                                    "args": {"workspace": self.ws,
+                                             "teamId": "1" * 8 + "-0000-4000-8000-" + "1" * 12}})
         self.assertEqual(r["error"]["code"], "BOARD_CONFIG_INVALID", r)
         rc, r, p = self.sb.run("board", "resume", "--workspace", self.ws, "--all")
         self.assertEqual(r["error"]["code"], "TEAM_NOT_RUNNING", r)  # routed and validated; no team runs here

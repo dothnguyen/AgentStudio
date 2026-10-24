@@ -11,7 +11,8 @@ import uuid
 from . import PROTOCOL, dispatch, teams, watch
 from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_NOT_RUNNING, envelope
 
-ACTIONS = ("ask", "run-workflow", "workflows", "check", "retry", "blocked", "resolve")
+ACTIONS = ("ask", "run-workflow", "workflows", "check", "retry", "blocked", "resolve", "run-board",
+           "stop-board")
 NOT_FOUND = "NOT_FOUND"
 POLICIES = ("read_only", "workspace_write")
 STUCK = ("waiting_input", "reconciling")
@@ -67,6 +68,8 @@ def _parser(action):
         p.add_argument("--member")
         p.add_argument("--assignment")
         p.add_argument("--action", dest="resolve_action")
+    elif action in ("run-board", "stop-board"):
+        pass  # --team / --workspace / --json only
     return p
 
 
@@ -354,8 +357,25 @@ def _resolve(ns):
     return data, lambda d: f"{name}: assignment {assignment} resolved with {ns.resolve_action}"
 
 
+def _run_board(ns):
+    from . import cli
+    team, _members = _running_team(ns, "run-board")
+    ws = cli._team_workspace(ns)
+    data = _write_call("board.run", {"workspace": ws, "teamId": team["id"]})
+    return data, lambda d: (f"board {ws} running (team {team['teamDefId'] or team['id']}, "
+                            f"{d['rules']} rule(s)); stop with agent-studio team stop-board")
+
+
+def _stop_board(ns):
+    from . import cli
+    ws = cli._team_workspace(ns)
+    data = _write_call("board.stop", {"workspace": ws})
+    return data, lambda d: f"board {ws} stopped (running work finishes; no new claims)"
+
+
 _HANDLERS = {"ask": _ask, "run-workflow": _run_workflow, "workflows": _workflows, "check": _check,
-             "retry": _retry, "blocked": _blocked, "resolve": _resolve}
+             "retry": _retry, "blocked": _blocked, "resolve": _resolve, "run-board": _run_board,
+             "stop-board": _stop_board}
 
 
 def run(argv, pretty) -> int:

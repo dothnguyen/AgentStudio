@@ -499,3 +499,14 @@ MIGRATION_12 = [
     "ALTER TABLE tickets ADD COLUMN return_status TEXT",
     "ALTER TABLE tickets ADD COLUMN blocked_reason TEXT",
 ]
+
+
+# v13 (P04-S10): the scheduler — board binding (which team runs it, and whether it claims), the run a
+# ticket currently holds, and the worktree isolation columns.
+MIGRATION_13 = [
+    "ALTER TABLE board_state ADD COLUMN team_id TEXT",
+    "ALTER TABLE board_state ADD COLUMN run_status TEXT NOT NULL DEFAULT 'stopped'",
+    "ALTER TABLE tickets ADD COLUMN active_run_id TEXT",
+    "ALTER TABLE tickets ADD COLUMN branch TEXT",
+    "ALTER TABLE tickets ADD COLUMN worktree_path TEXT",
+]
