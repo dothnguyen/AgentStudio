@@ -74,8 +74,8 @@ def _call(command: str, args: dict, write: bool, assignment: str, agent: str, re
     if write:
         # a retried tools/call re-sends the same JSON-RPC request id, so the same idempotency key: the
         # coordinator returns the first result instead of writing twice
-        req["idempotencyKey"] = f"mcp-{uuid.uuid5(uuid.NAMESPACE_URL,
-                                                  _ids(request_id, assignment, agent, args)).hex}"
+        digest = uuid.uuid5(uuid.NAMESPACE_URL, _ids(request_id, assignment, agent, args)).hex
+        req["idempotencyKey"] = "mcp-" + digest
     req["timeoutMs"] = dispatch.DEFAULT_TIMEOUT_MS
     resp = dispatch.handle_request(req, require_id=False)
     if not resp.get("ok"):

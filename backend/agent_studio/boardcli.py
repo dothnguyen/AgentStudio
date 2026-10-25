@@ -19,10 +19,7 @@ RULES_ACTIONS = ("check",)
 
 def _workspace(ns):
     from . import cli
-    if not ns.workspace:
-        raise AsError(BAD_REQUEST, "give --workspace PATH (or run from a workspace)",
-                      remediation="the board is configured per workspace, in .agent-studio/board.json")
-    return cli._team_workspace(ns)
+    return cli._team_workspace(ns)   # --workspace, else the workspace found at or above the current directory
 
 
 def _parser(action, group="ticket"):

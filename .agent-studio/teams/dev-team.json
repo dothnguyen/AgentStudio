@@ -1,0 +1,37 @@
+{
+  "id": "dev-team",
+  "name": "Agent Studio Dev Team",
+  "members": [
+    {
+      "id": "lead",
+      "name": "lead",
+      "role": "TeamLead",
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "reasoning": "medium"
+    },
+    {
+      "id": "dev",
+      "name": "dev",
+      "role": "Developer",
+      "provider": "claude",
+      "model": "claude-sonnet-5-5",
+      "reasoning": "medium"
+    },
+    {
+      "id": "qa",
+      "name": "qa",
+      "role": "QA",
+      "provider": "codex",
+      "model": "gpt-6-luna"
+    },
+    {
+      "id": "po",
+      "name": "po",
+      "role": "ProductOwner",
+      "provider": "claude",
+      "model": "claude-sonnet-5-5",
+      "reasoning": "medium"
+    }
+  ]
+}

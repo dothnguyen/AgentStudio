@@ -1,5 +1,6 @@
 """P04-S12: the board MCP server protocol, the agent ticket-add rules, idempotency, and canAddTickets."""
 import json
+import shutil
 import os
 import tempfile
 import unittest
@@ -259,6 +260,58 @@ class TeamDefs(unittest.TestCase):
         with open(os.path.join(self.ws, ".agent-studio", "teams", fid + ".json")) as f:
             data = json.load(f)
         self.assertNotIn("canAddTickets", data["members"][1])
+
+
+class AdapterMcpArgs(unittest.TestCase):
+    """The provider CLIs must be allowed to call the board tools, and Codex must get a real args array."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="as-mcp-ad-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.prompt = os.path.join(self.tmp, "prompt.txt")
+        open(self.prompt, "w").close()
+
+    def inp(self, provider, mcp, policy="workspace_write"):
+        from agent_studio.providers.base import AssignmentInput
+        return AssignmentInput(assignment_id="a" * 8, agent_id="b" * 8, provider_id=provider, attempt=1,
+                               workspace=self.tmp, prompt_path=self.prompt, role_instructions="x", policy=policy,
+                               deadline_s=60, output_budget_bytes=1 << 20, mcp_tickets=mcp)
+
+    def prepare(self, provider, mcp, policy="workspace_write"):
+        from agent_studio import providers
+        from unittest import mock
+        adapter = providers.get(provider)
+        with mock.patch.object(type(adapter), "executable", return_value="/bin/true"), \
+                mock.patch.object(type(adapter), "validate_settings", return_value=None, create=True):
+            return adapter._prepare(self.inp(provider, mcp, policy), {})
+
+    def test_claude_allowlists_exactly_the_board_tools_when_enabled(self):
+        for policy in ("read_only", "workspace_write"):
+            argv = self.prepare("claude", True, policy).argv
+            allowed = argv[argv.index("--allowedTools") + 1].split(",")
+            for tool in ("ticket_add", "ticket_list", "ticket_show", "phase_list", "board_show"):
+                self.assertIn("mcp__agent-studio__" + tool, allowed)
+            self.assertEqual(argv.count("--allowedTools"), 1)
+            self.assertIn("--strict-mcp-config", argv)
+            self.assertIn("--mcp-config", argv)
+
+    def test_claude_unchanged_when_disabled(self):
+        argv = self.prepare("claude", False).argv
+        self.assertNotIn("--mcp-config", argv)
+        self.assertFalse([a for a in argv if "mcp__" in a])
+
+    def test_codex_args_is_one_toml_array_and_values_are_escaped(self):
+        argv = self.prepare("codex", True).argv
+        overrides = [argv[i + 1] for i, a in enumerate(argv) if a == "-c"]
+        args = [o for o in overrides if o.startswith("mcp_servers.agent-studio.args")]
+        self.assertEqual(len(args), 1)
+        self.assertTrue(args[0].startswith("mcp_servers.agent-studio.args=["), args[0])
+        self.assertEqual(json.loads(args[0].split("=", 1)[1])[-1], "mcp")
+        self.assertFalse([o for o in overrides if ".args.0" in o])
+
+    def test_codex_unchanged_when_disabled(self):
+        argv = self.prepare("codex", False).argv
+        self.assertFalse([a for a in argv if "agent-studio" in a])
 
 
 if __name__ == "__main__":

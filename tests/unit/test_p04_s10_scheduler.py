@@ -14,7 +14,7 @@ from tests.unit.test_p04_s09_rules_and_applier import SOLO
 ROLES = {"version": 1, "roles": {"worker": {}}}
 
 
-def board_config(**rule_extra):
+def rules_board_json(**rule_extra):
     return {"version": 2,
             "statuses": [{"id": "build", "kind": "initial"}, {"id": "in-progress"},
                          {"id": "done", "kind": "done"}],
@@ -33,7 +33,7 @@ class SchedCase(unittest.TestCase):
             json.dump(ROLES, f)
         with open(os.path.join(cfg, "workflows", "solo.json"), "w") as f:
             json.dump(SOLO, f)
-        self.write_board(board_config())  # write_board also commits: a run needs a clean tree
+        self.write_board(rules_board_json())  # write_board also commits: a run needs a clean tree
         self.conn, self.store = fresh()
         self.ctx = {"stateDir": tempfile.mkdtemp(), "debug": True}
         with self.store.transaction() as tx:
@@ -95,7 +95,7 @@ class Binding(SchedCase):
     def test_run_board_binds_and_rules_check_gates_it(self):
         got = self.bind()
         self.assertEqual((got["board"]["status"], got["board"]["teamId"]), ("running", self.team))
-        bad = board_config()
+        bad = rules_board_json()
         bad["rules"][0]["role"] = "nobody"
         self.write_board(bad)
         with self.assertRaises(AsError) as caught:
@@ -179,7 +179,7 @@ class TickRules(SchedCase):
         self.assertEqual(self.ticket("T-001")["status"], "done")
 
     def test_requires_deps(self):
-        self.write_board(board_config(requiresDeps=True))
+        self.write_board(rules_board_json(requiresDeps=True))
         self.add_ticket("dep")
         self.add_ticket("waiting")
         with self.store.transaction() as tx:
@@ -193,7 +193,7 @@ class TickRules(SchedCase):
         self.assertIsNotNone(self.ticket("T-002")["active_run_id"])
 
     def test_cap(self):
-        self.write_board(board_config(cap=1))
+        self.write_board(rules_board_json(cap=1))
         self.add_ticket("one")
         self.add_ticket("two")
         self.tick()

@@ -25,6 +25,7 @@ NEVER = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions
          "Bash", "--add-dir")
 REASONING = ("low", "medium", "high", "xhigh", "max")
 READ_TOOLS = "Read,Grep,Glob"
+MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_list", "ticket_show", "phase_list", "board_show")]
 COMMON = ["--print", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
           "--strict-mcp-config",             # only MCP servers we pass (none)
           "--permission-prompts", "none",    # nothing can wait on a prompt: anything that would ask is denied
@@ -203,6 +204,10 @@ class ClaudeAdapter(Adapter):
         else:
             argv, banned = [exe] + COMMON + POLICY_FLAGS[inp.policy], NEVER
         if mcp_path:
+            # `dontAsk` / `--permission-prompts none` deny anything not allowlisted, so the board tools must be
+            # named; only these five, only for assignments that enabled the server.
+            i = argv.index("--allowedTools")
+            argv[i + 1] = ",".join([argv[i + 1]] + MCP_TOOLS)
             argv += ["--mcp-config", mcp_path]
         if any(a in banned for a in argv):
             raise AsError("BAD_ADAPTER", "refusing a permission-bypass flag or a code-running tool")
