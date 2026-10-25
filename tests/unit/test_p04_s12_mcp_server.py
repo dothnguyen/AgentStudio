@@ -309,6 +309,7 @@ class AdapterMcpArgs(unittest.TestCase):
         self.assertTrue(args[0].startswith("mcp_servers.agent-studio.args=["), args[0])
         self.assertEqual(json.loads(args[0].split("=", 1)[1])[-1], "mcp")
         self.assertFalse([o for o in overrides if ".args.0" in o])
+        self.assertIn('mcp_servers.agent-studio.default_tools_approval_mode="approve"', overrides)
 
     def test_codex_unchanged_when_disabled(self):
         argv = self.prepare("codex", False).argv

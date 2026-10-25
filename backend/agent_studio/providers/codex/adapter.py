@@ -147,6 +147,7 @@ class CodexAdapter(Adapter):
             # backslashes. `args.0=` would be a table key, not an array element, so args is one array.
             argv += ["-c", "mcp_servers.agent-studio.command=" + json.dumps(launch["command"])]
             argv += ["-c", "mcp_servers.agent-studio.args=" + json.dumps(launch["args"])]
+            argv += ["-c", 'mcp_servers.agent-studio.default_tools_approval_mode="approve"']
             for key, value in server.items():
                 argv += ["-c", f"mcp_servers.agent-studio.env.{key}=" + json.dumps(value)]
             extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
