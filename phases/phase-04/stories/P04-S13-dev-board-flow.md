@@ -14,11 +14,14 @@ The generic board can run a real development flow (backlog → unpack → refine
 4. **`agentTicketStatus`** (board key): tickets added by agents over MCP land in this status (default: the initial status); it must be a configured, non-terminal status. The rules check accepts a path to done that starts at either entry point.
 5. **`ticket_update`** MCP tool (and `ticket.update` command): an agent with `canAddTickets` replaces or appends to the body of the ticket its own assignment is working (`FORBIDDEN` for any other ticket, an inactive assignment or a member without the flag), with a `ticket.updated` event. This is how the refine stage writes the implementation plan the developer receives as its task.
 
+6. **Main-checkout rules leave the tree clean.** A rule with `workspace: main` (every run starts only on a clean tree) has its output committed on pass (`ticket.committed`) or stashed otherwise (`ticket.stashed`, recoverable with `git stash list`), so planning documents written by an agent reach the base branch and a failed run cannot block the board.
+
 ## Done when
 - [x] A worktree change is committed when the outcome is applied; nothing new means no commit; non-worktree rules are untouched. Test: unit with a real worktree.
 - [x] A failed run's findings and a priority bump reach the ticket, a pass changes neither, the failed ticket sorts first, the body cap holds. Test: unit.
 - [x] Agent tickets land in `agentTicketStatus`, operator tickets in the initial status; invalid values are refused; the rules check accepts the agent entry point. Test: unit.
 - [x] `ticket_update` works only for the claimed ticket of an active, allowed assignment and writes an event; the tool is listed and allowlisted for Claude. Test: unit.
+- [x] A `workspace: main` run's files are committed on pass and stashed on any other outcome; clean trees and other modes are untouched. Test: unit with a real repo.
 - [x] This project's `board.json` with the six rules passes `board rules check`. Evidence below.
 - [ ] A real run of the flow with real providers on a throwaway ticket (operator).
 

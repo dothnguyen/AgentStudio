@@ -254,7 +254,9 @@ def _render_detail(d) -> str:
         lines.append("events:")
         for e in d["events"]:
             arrow = f"{e['from']} -> {e['to']}" if e.get("to") else e["to"]
-            lines.append(f"  {e['id']: >4}  {e['at']}  {e['actor']}  {e['name']}  {arrow}")
+            why = (e.get("payload") or {}).get("reason") or (e.get("payload") or {}).get("message")
+            lines.append(f"  {e['id']: >4}  {e['at']}  {e['actor']}  {e['name']}  {arrow}"
+                         + (f"  [{why}]" if why else ""))
     lines.append("statuses: " + ", ".join(d["statuses"]))
     return "\n".join(lines)
 

@@ -215,7 +215,7 @@ class SettleMain(unittest.TestCase):
         self.repo = tests.helpers.make_repo()
         self.addCleanup(tests.helpers.reset_repo, self.repo)
         subprocess.run(["git", "-C", self.repo, "add", "-A"], check=True)
-        subprocess.run(["git", "-C", self.repo, "commit", "-qm", "base"], check=True)
+        subprocess.run(["git", "-C", self.repo, "commit", "--allow-empty", "-qm", "base"], check=True)
         self.notes = []
         self.orig = boardsched._ticket_event_note
         boardsched._ticket_event_note = lambda tx, t, name, payload: self.notes.append(name)

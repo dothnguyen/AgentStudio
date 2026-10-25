@@ -11,6 +11,7 @@ P03 scheduler it replaces): it may drive the engine and the retained worktree he
 """
 from __future__ import annotations
 
+import json
 import os
 
 from . import boardmodel, gitws, tasks, worktrees
@@ -409,9 +410,14 @@ def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) 
             if head.returncode != 0 or head.stdout.decode().strip() != base:
                 hold = "MAIN_CHECKOUT_WRONG_BRANCH"
     if hold:
-        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_held", "coordinator", ticket["status"],
-                                 ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
-                                                    "reason": hold if isinstance(hold, str) else "MAIN_CHECKOUT_BUSY"})
+        reason = hold if isinstance(hold, str) else "MAIN_CHECKOUT_BUSY"
+        last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
+                               "ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
+        if last is None or last["name"] != "ticket.merge_held" or \
+                json.loads(last["payload_json"]).get("reason") != reason:  # one event per hold, not one per tick
+            boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_held", "coordinator", ticket["status"],
+                                     ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                                        "reason": reason})
         return False
     result = gitws.run(workspace, "merge", "--squash", ticket["branch"], check=False)
     if result.returncode != 0:
