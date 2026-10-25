@@ -72,6 +72,27 @@ State lives in `${XDG_STATE_HOME:-~/.local/state}/agent-studio` (directory `0700
 
 Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login`, or `inherit`.
 
+## Workspaces (init, workspace list, workspace.init, workspace.list)
+
+- CLI: `agent-studio init [--name NAME] [--path PATH] [--json]` (path defaults to the current directory) and
+  `agent-studio workspace list [--json]`.
+- serve/request: `{"protocol":"agent-studio/v1","id":1,"command":"workspace.list","args":{}}` and
+  `{"protocol":"agent-studio/v1","id":2,"command":"workspace.init","args":{"path":"/home/me/proj","name":"Optional"}}`.
+  Over serve, `path` is required. Pass an absolute WSL path: a relative path resolves against the `serve`
+  process's working directory.
+- Results: list → `{"workspaces":[{"id","name","path","missing","exists"}]}` in registry order (`exists` = the
+  folder's `.agent-studio/workspace.json` is still there). Init → `{"id","name","path","existed"}` (`path` is the
+  resolved real path; `existed: true` when it was already initialised).
+- Default name: the folder name (`basename` of the resolved path, `/` for the root). An empty `name` means the
+  default. On an already-initialised folder the name is ignored and nothing is rewritten.
+- Errors (all `BAD_REQUEST`): `Missing required argument 'path'.`, `Argument 'path' must not be empty.`,
+  `Argument 'path' must be a string.`, `Argument 'name' must be a string.`,
+  `--path <path> is not an existing directory` (same text as the CLI; nothing is created),
+  `<marker> is not valid JSON: ...` / `<marker> must be a JSON object with string id and name` for a broken
+  `workspace.json`, and `workspaces.json is unreadable: ...`. Neither command raises a `WORKSPACE_*` code;
+  `WORKSPACE_NOT_FOUND` comes only from workspace resolution in other commands.
+- These files are not in `state.db`, so the commands run without the coordinator and need no `idempotencyKey`.
+
 ## Run a team and watch it (inside WSL)
 
 ```bash

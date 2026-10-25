@@ -99,5 +99,6 @@ def list_workspaces() -> dict:
         p = i.get("path")
         entry = {"id": i.get("id"), "name": i.get("name"), "path": p}
         entry["missing"] = not (isinstance(p, str) and os.path.isfile(_marker(p)))
+        entry["exists"] = not entry["missing"]
         out.append(entry)
     return {"workspaces": out}

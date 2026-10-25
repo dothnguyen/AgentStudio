@@ -10,7 +10,7 @@ import traceback
 import copy
 
 from . import boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, \
-    teams, teamstatus, tmuxctl
+    teams, teamstatus, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -533,6 +533,16 @@ def _team_attach(args, req):
     return teams.attach_info(team, tmux)
 
 
+def _workspace_list(args, req):
+    return workspace.list_workspaces()
+
+
+def _workspace_init(args, req):
+    path = req_text(args, "path", 4096, allow_empty=False)
+    name = req_text(args, "name", 1024, required=False)
+    return workspace.init(path, name or None)
+
+
 def _reader():
     sd = paths.ensure_state_dir()
     conn = state.connect(state.db_path(sd), role="reader")
@@ -570,6 +580,8 @@ def _events_after(args, req):
 COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
+    "workspace.list": _workspace_list,
+    "workspace.init": _workspace_init,
     "coordinator.start": _coordinator_start,
     "coordinator.stop": _coordinator_stop,
     "snapshot": _snapshot,

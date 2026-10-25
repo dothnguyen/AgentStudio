@@ -170,9 +170,9 @@ class ListAndCliTests(Base):
                             str, False)
         self.assertEqual((code, err.getvalue()), (1, "X: m\ndo it\n"))
 
-    def test_not_dispatch_commands(self):
-        for key in dispatch.COMMANDS:
-            self.assertFalse(key == "init" or key.startswith("workspace"), key)
+    def test_workspace_dispatch_commands(self):
+        keys = sorted(k for k in dispatch.COMMANDS if k == "init" or k.startswith("workspace"))
+        self.assertEqual(keys, ["workspace.init", "workspace.list"])
 
 
 if __name__ == "__main__":

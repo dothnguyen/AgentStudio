@@ -339,7 +339,7 @@ def _team_status_command(argv, pretty):
 
 
 def _local_command(cmd, argv, pretty):
-    """init / workspace list run in the CLI process (not dispatch commands). Returns None if not ours."""
+    """init / workspace list run in the CLI process (serve/request use dispatch workspace.init / workspace.list, same functions). Returns None if not ours."""
     if cmd == "team" and argv[1:2] == ["status"]:
         return _team_status_command(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in teamcli.ACTIONS:
