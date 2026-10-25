@@ -120,7 +120,13 @@ export function CreateWorkspaceDialog(props: CreateWorkspaceDialogProps) {
         ref={dialogRef}
         onKeyDown={onKeyDown}
       >
-        <h2 id={headingId}>Create workspace</h2>
+        <div className="dialog-heading">
+          <div className="dialog-icon" aria-hidden="true">＋</div>
+          <div>
+            <h2 id={headingId}>Create workspace</h2>
+            <p>Add a project folder to Agent Studio.</p>
+          </div>
+        </div>
         <form onSubmit={(event) => void submit(event)}>
           <label htmlFor={`${headingId}-folder`}>Folder</label>
           <div className="folder-control">
@@ -164,7 +170,12 @@ export function CreateWorkspaceDialog(props: CreateWorkspaceDialogProps) {
               )}
             </div>
           )}
-          {creating && <p role="status">Creating workspace…</p>}
+          {creating && (
+            <p role="status" className="dialog-progress">
+              <span className="spinner spinner-small" aria-hidden="true" />
+              Creating workspace…
+            </p>
+          )}
           <div className="dialog-actions">
             <button type="button" disabled={creating} onClick={props.onCancel}>
               Cancel

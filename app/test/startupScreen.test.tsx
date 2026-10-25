@@ -41,7 +41,10 @@ function expectConnecting(r: ReturnType<typeof setup>) {
 
 describe('StartupScreen', () => {
   it('connecting shows the text and a spinner and no buttons', () => {
-    expectConnecting(setup());
+    const result = setup();
+    expectConnecting(result);
+    expect(result.container.querySelector('main')?.classList.contains('app-shell')).toBe(true);
+    expect(result.container.querySelector('.connecting-state')).toBeTruthy();
   });
 
   it('explicit connecting payload shows the connecting view', () => {
@@ -62,6 +65,7 @@ describe('StartupScreen', () => {
     expect(r.queryByText(/create workspace/i)).toBeNull();
     expect(r.queryByRole('list')).toBeNull();
     expect(r.container.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
+    expect(r.container.querySelector('.connection-panel')).toBeTruthy();
   });
 
   it('lost after connected is titled Connection lost', () => {

@@ -25,6 +25,17 @@ function fakeApi(overrides: Partial<WorkspacesApi> = {}): WorkspacesApi {
 const created: InitResult = { id: 'p', name: 'Project', path: '/home/me/project', existed: false };
 
 describe('CreateWorkspaceDialog', () => {
+  it('renders the compact dark-dialog structure without changing its accessible name', () => {
+    const result = render(
+      <CreateWorkspaceDialog api={fakeApi()} onCancel={vi.fn()} onCreated={vi.fn()} />,
+    );
+    const dialog = result.getByRole('dialog', { name: 'Create workspace' });
+    expect(dialog.classList.contains('create-workspace-dialog')).toBe(true);
+    expect(dialog.closest('.modal-overlay')).toBeTruthy();
+    expect(result.getByText('Add a project folder to Agent Studio.')).toBeTruthy();
+    expect(result.container.querySelector('.dialog-icon')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('requires a folder and sends typed WSL path with optional name omitted', async () => {
     const create = vi.fn(async () => ({ ok: true as const, data: created }));
     const result = render(<CreateWorkspaceDialog api={fakeApi({ create })} onCancel={vi.fn()} onCreated={vi.fn()} />);

@@ -28,6 +28,52 @@ describe('Electron project wiring', () => {
     expect(JSON.parse(read('package.json')).dependencies ?? {}).toEqual({});
   });
 
+  it('defines the dark workbench palette, focus treatment, and reduced-motion fallback', () => {
+    const styles = read('src/renderer/styles.css');
+    expect(styles).toContain('--bg: #181818');
+    expect(styles).toContain('--surface: #1f1f1f');
+    expect(styles).toContain('--accent: #0e639c');
+    expect(styles).toContain(':focus-visible');
+    expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(styles).toContain('width: min(720px, 100%)');
+    expect(styles).toContain('width: min(520px, 100%)');
+    expect(styles).toContain('outline: 2px solid var(--focus)');
+  });
+
+  it('keeps missing-folder status visible at narrow window widths', () => {
+    const styles = read('src/renderer/styles.css');
+    expect(styles).not.toMatch(/@media \(max-width: 560px\)[\s\S]*?\.badge-missing\s*\{\s*display:\s*none/);
+  });
+
+  it('keeps key text and primary controls above WCAG AA contrast', () => {
+    const styles = read('src/renderer/styles.css');
+    const token = (name: string) => {
+      const match = styles.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`));
+      expect(match, `missing color token ${name}`).toBeTruthy();
+      return match![1];
+    };
+    const luminance = (hex: string) => {
+      const channels = hex.slice(1).match(/.{2}/g)!.map((channel) => parseInt(channel, 16) / 255);
+      const linear = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    };
+    const contrast = (foreground: string, background: string) => {
+      const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+
+    expect(contrast(token('--text'), token('--bg'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('--text-muted'), token('--surface'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#ffffff', token('--accent'))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('applies visible keyboard focus and disables motion under reduced-motion preference', () => {
+    const styles = read('src/renderer/styles.css');
+    expect(styles).toMatch(/button:focus-visible[\s\S]*?outline:\s*2px solid var\(--focus\)/);
+    expect(styles).toMatch(/\.ws-row:focus-visible\s*\{[^}]*border-color:\s*var\(--focus\)/);
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-duration:\s*0\.01ms !important[\s\S]*?transition-duration:\s*0\.01ms !important/);
+  });
+
   it('opens a local renderer window and starts the serve client from main', () => {
     const main = read('src/main/main.ts');
     expect(main).toContain('new BrowserWindow(buildWindowOptions(preloadPath))');

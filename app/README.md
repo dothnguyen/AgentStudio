@@ -28,6 +28,10 @@ npm start
 A window titled "Agent Studio" opens. The console logs `[serve] connecting`, then `[serve] connected`
 (or `[serve] lost: <reason>`).
 
+The startup window uses a compact dark workbench layout. It supports keyboard navigation throughout,
+shows visible focus outlines, and disables nonessential loading animation when the operating system's
+reduced-motion preference is enabled.
+
 ## Test
 
 ```

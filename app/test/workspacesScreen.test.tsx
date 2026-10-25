@@ -11,6 +11,7 @@ import {
   LIST_TITLE,
   LOADING_TEXT,
   MISSING_BADGE,
+  PRODUCT_SUBTITLE,
   WorkspacesScreen,
   toLoadResult,
 } from '../src/renderer/WorkspacesScreen';
@@ -101,6 +102,18 @@ describe('WorkspacesScreen', () => {
     expect(buttons[0].classList.contains('primary')).toBe(true);
     expect(result.container.querySelector('[data-action="refresh"]')).toBeNull();
     expect(result.container.querySelector('ul')).toBeNull();
+  });
+
+  it('uses the shared product identity and illustrated workspace states', async () => {
+    const loading = deferred<unknown>();
+    const pending = render(<WorkspacesScreen api={fakeWorkspaces(loading).api} />);
+    expect(pending.getByText('Agent Studio').classList.contains('product-name')).toBe(true);
+    expect(pending.getByText(PRODUCT_SUBTITLE)).toBeTruthy();
+    expect(pending.container.querySelector('[data-view="loading"] .spinner')?.getAttribute('aria-hidden')).toBe('true');
+    pending.unmount();
+
+    const empty = await mount(fakeWorkspaces(ok()).api);
+    expect(empty.container.querySelector('[data-view="empty"] .empty-folder svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('both empty and list Create buttons open the dialog', async () => {
@@ -342,10 +355,13 @@ describe('WorkspacesScreen', () => {
     expect(rows.map((row) => row.dataset.id)).toEqual(['a', 'b']);
     expect(rows.map((row) => row.querySelector('.ws-name')?.textContent)).toEqual(['Alpha', 'Beta']);
     expect(rows.map((row) => row.querySelector('.ws-path')?.textContent)).toEqual(['/home/me/a', '/mnt/c/b']);
+    expect(rows.map((row) => row.querySelector('.ws-path')?.getAttribute('title'))).toEqual(['/home/me/a', '/mnt/c/b']);
+    expect(rows.every((row) => row.querySelector('.folder-icon')?.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(rows.every((row) => row.querySelector('.row-chevron')?.getAttribute('aria-hidden') === 'true')).toBe(true);
     expect(rows[0].querySelector('[data-role="missing-badge"]')).toBeNull();
     expect(rows[1].querySelector('[data-role="missing-badge"]')?.textContent).toBe(MISSING_BADGE);
-    expect(result.getByRole('button', { name: 'Create workspace' }).classList.contains('secondary')).toBe(true);
-    expect(result.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+    expect(result.getByRole('button', { name: 'Create workspace' }).classList.contains('primary')).toBe(true);
+    expect(result.getByRole('button', { name: 'Refresh' }).classList.contains('secondary')).toBe(true);
   });
 
   it('refresh reloads the list and disables Refresh while loading', async () => {

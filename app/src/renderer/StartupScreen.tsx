@@ -18,28 +18,34 @@ function ConnectionLostView(props: { status: ConnectionStatus; title: string; on
     retryRef.current?.focus();
   }, []);
   return (
-    <section aria-labelledby="connection-title">
-      <h1 id="connection-title">{title}</h1>
-      <p role="alert">{status.error ?? NO_REASON}</p>
-      <button type="button" ref={retryRef} onClick={onRetry}>
-        Retry
-      </button>
-      <section aria-labelledby="diagnostics-title">
-        <h2 id="diagnostics-title">Diagnostics</h2>
-        <dl>
-          <dt>Command</dt>
-          <dd>
-            <code>{status.command ?? NOT_STARTED}</code>
-          </dd>
-          <dt>Distro</dt>
-          <dd>{status.distro ?? (status.command === null ? DISTRO_UNKNOWN : DISTRO_DEFAULT)}</dd>
-          <dt>Last error</dt>
-          <dd>
-            <code>{status.error ?? 'None'}</code>
-          </dd>
-        </dl>
+    <div className="connection-shell">
+      <div className="connection-brand" aria-hidden="true">AS</div>
+      <section className="connection-panel" aria-labelledby="connection-title">
+        <div className="state-icon error-icon" aria-hidden="true">!</div>
+        <div className="state-content">
+          <h1 id="connection-title">{title}</h1>
+          <p role="alert">{status.error ?? NO_REASON}</p>
+          <button type="button" ref={retryRef} onClick={onRetry}>
+            Retry
+          </button>
+        </div>
+        <section className="diagnostics" aria-labelledby="diagnostics-title">
+          <h2 id="diagnostics-title">Diagnostics</h2>
+          <dl>
+            <dt>Command</dt>
+            <dd>
+              <code>{status.command ?? NOT_STARTED}</code>
+            </dd>
+            <dt>Distro</dt>
+            <dd>{status.distro ?? (status.command === null ? DISTRO_UNKNOWN : DISTRO_DEFAULT)}</dd>
+            <dt>Last error</dt>
+            <dd>
+              <code>{status.error ?? 'None'}</code>
+            </dd>
+          </dl>
+        </section>
       </section>
-    </section>
+    </div>
   );
 }
 
@@ -48,9 +54,10 @@ export function StartupScreen(props: { connection: ConnectionApi; onRetry: () =>
   const seenConnected = useRef(false);
   if (status.state === 'connected') seenConnected.current = true;
   return (
-    <main aria-busy={status.state === 'connecting'}>
+    <main className="app-shell" aria-busy={status.state === 'connecting'}>
       {status.state === 'connecting' && (
-        <div role="status" aria-live="polite">
+        <div className="connecting-state" role="status" aria-live="polite">
+          <div className="connection-brand" aria-hidden="true">AS</div>
           <span className="spinner" aria-hidden="true"></span>
           <p>{CONNECTING_TEXT}</p>
         </div>
