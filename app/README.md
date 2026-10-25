@@ -57,3 +57,31 @@ with a message naming the setting.
 
 `connecting`, `connected`, `lost`. When the child dies, pending requests are rejected and the state
 becomes `lost`. Nothing is re-sent or restarted automatically; `retry()` starts a new child.
+
+## Live check (Windows + WSL)
+
+Proves the real boundary: the app's main-process client starts the real `wsl.exe --exec agent-studio serve`
+and issues `workspace.list`, headless (no Electron window).
+
+Prerequisites: the backend is installed in WSL, and `npm ci` has been run on Windows (PowerShell).
+
+```powershell
+cd C:\Works\Projects\AgentStudio\app
+npm ci
+npm run live-check -- [--distro <name>] [--entry <path>] [--repo-wsl <path>] [--out <file>] [--keep]
+```
+
+Steps:
+
+- setup: creates a throwaway `/tmp/agent-studio-live-*` state in WSL, removed afterwards unless `--keep` is given.
+- connect: starts `serve` with that `XDG_STATE_HOME` (forwarded through `WSLENV`).
+- temp-state: `health` must report the temp state dir before anything is written.
+- clean-list: `workspace.list` on a clean state is empty.
+- init / list-after-init: `agent-studio init` in WSL, then `workspace.list` returns that workspace.
+- kill-serve: killing `serve` gives state `lost` with `serve exited (code ...`.
+- no-auto-reconnect: requests fail with `NOT_CONNECTED` while lost.
+- retry: Retry reconnects and returns the same list.
+- wsl-missing / distro-missing / not-installed / distinct: each failure mode gives its own reason string.
+
+It never starts the coordinator. The default evidence file is `scripts/windows/app-live-check-evidence.json`.
+If the repository path has a space or another character outside `SAFE_ARG`, pass `--repo-wsl`.

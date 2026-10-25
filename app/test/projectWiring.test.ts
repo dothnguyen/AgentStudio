@@ -14,6 +14,7 @@ describe('Electron project wiring', () => {
       typecheck: 'tsc -p tsconfig.json --noEmit',
       start: 'npm run build && electron .',
       test: 'vitest run',
+      'live-check': 'npm run build && node dist/live/liveCheck.js',
     });
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(fs.existsSync(path.join(appDir, 'package-lock.json'))).toBe(true);
@@ -37,11 +38,12 @@ describe('Electron project wiring', () => {
   });
 
   it('spawns only wsl.exe with argv and piped stdio, with shell disabled', () => {
-    const main = read('src/main/main.ts');
+    const main = read('src/main/connection.ts');
     expect(main).toMatch(/cpSpawn\(cmd, args, \{\s*stdio: \['pipe', 'pipe', 'pipe'\],\s*windowsHide: true,\s*shell: false,?\s*\}\)/);
     expect(main).not.toMatch(/\b(?:exec|execSync)\s*\(/);
     expect(main).not.toContain('shell: true');
-    expect(main).toContain("const spawnFn: SpawnFn");
+    expect(main).toContain('export const realSpawn: SpawnFn');
+    expect(read('src/main/main.ts')).toContain('spawn: realSpawn');
   });
 
   it('documents the distro configuration and Windows run commands', () => {
