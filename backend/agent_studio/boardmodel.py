@@ -538,7 +538,7 @@ def ticket_activity(conn, row, config=None) -> dict:
     out = {"state": "not started"}
     rule = (config or {}).get("rulesByStatus", {}).get(status)
     if rule is not None:
-        out["waitingFor"] = rule["role"]
+        out["waitingFor"] = rule.get("role") or "coordinator"
     last = conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT 1",
                         (row["id"],)).fetchone()
     if last is not None and last["name"] == "ticket.claim_released":

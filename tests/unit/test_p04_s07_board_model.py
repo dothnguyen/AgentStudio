@@ -183,6 +183,16 @@ class TicketTests(BoardCase):
         self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "open")
         self.assertEqual([event["name"] for event in self.events("T-001")], ["ticket.created"])
 
+    def test_move_to_coordinator_merge_status_reports_activity(self):
+        self.write_config({"version": 2, "statuses": [
+            {"id": "open", "kind": "initial"}, {"id": "merge"}, {"id": "done", "kind": "done"}],
+            "ticketFields": [], "rules": [
+                {"when": {"status": "merge"}, "action": "merge", "onPass": "done", "onFail": "open"}]})
+        self.add("ready to merge")
+        moved = self.move("T-001", "merge")
+        self.assertEqual(moved["ticket"]["activity"],
+                         {"state": "not started", "waitingFor": "coordinator"})
+
     def test_closed_is_terminal_too(self):
         self.write_config(CONFIG_B)
         self.add("a")
