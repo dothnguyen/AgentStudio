@@ -10,14 +10,22 @@ describe('Electron project wiring', () => {
     const pkg = JSON.parse(read('package.json'));
     expect(pkg.main).toBe('dist/main/main.js');
     expect(pkg.scripts).toEqual({
-      build: 'tsc -p tsconfig.json',
-      typecheck: 'tsc -p tsconfig.json --noEmit',
+      build: 'tsc -p tsconfig.json && vite build',
+      typecheck: 'tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit',
       start: 'npm run build && electron .',
       test: 'vitest run',
       'live-check': 'npm run build && node dist/live/liveCheck.js',
     });
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(fs.existsSync(path.join(appDir, 'package-lock.json'))).toBe(true);
+  });
+
+  it('vite builds the renderer for file:// loading', () => {
+    const vite = read('vite.config.ts');
+    expect(vite).toContain("base: './'");
+    expect(vite).toContain("root: 'src/renderer'");
+    expect(vite).toContain("outDir: '../../dist/renderer'");
+    expect(JSON.parse(read('package.json')).dependencies ?? {}).toEqual({});
   });
 
   it('opens a local renderer window and starts the serve client from main', () => {
@@ -27,7 +35,8 @@ describe('Electron project wiring', () => {
     expect(main).toContain('registerIpc({');
     expect(main).toContain('forwardState(client,');
     expect(main).toContain('win.loadFile(indexPath)');
-    expect(main).toContain("path.join(app.getAppPath(), 'renderer', 'index.html')");
+    expect(main).toContain("path.join(app.getAppPath(), 'dist', 'renderer', 'index.html')");
+    expect(main).toContain('retryOnReload(win.webContents, client)');
     expect(main).toContain('void client.start()');
     expect(main).toContain("console.log(`[serve] ${s.state}");
   });

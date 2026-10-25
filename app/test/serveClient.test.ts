@@ -389,3 +389,60 @@ describe('loss and retry', () => {
     expect(spawn.calls).toHaveLength(0);
   });
 });
+
+describe('diagnostics', () => {
+  it('diagnostics report the distro and the command after spawning', async () => {
+    const { client, child } = setup();
+    await connect(client, child);
+    expect(client.diagnostics).toEqual({
+      distro: 'Ubuntu',
+      command: 'wsl.exe -d Ubuntu --exec /home/me/.local/bin/agent-studio serve',
+    });
+  });
+
+  it('diagnostics are empty when prepare fails', async () => {
+    const { client } = setup(async () => {
+      throw new Error('x');
+    });
+    await client.start();
+    expect(client.diagnostics).toEqual({ distro: null, command: null });
+  });
+
+  it('diagnostics retain the prepared distro when command construction fails', async () => {
+    const { client, spawn } = setup(async () => target({ distro: 'Invalid Distro' }));
+    await client.start();
+    expect(client.diagnostics).toEqual({ distro: 'Invalid Distro', command: null });
+    expect(spawn.calls).toHaveLength(0);
+  });
+
+  it('diagnostics without a distro omit -d', async () => {
+    const { client, child } = setup(async () => target({ distro: null }));
+    await connect(client, child);
+    expect(client.diagnostics).toEqual({
+      distro: null,
+      command: 'wsl.exe --exec /home/me/.local/bin/agent-studio serve',
+    });
+  });
+
+  it('retry clears prior diagnostics before reconnecting', async () => {
+    let prepares = 0;
+    let release!: (value: ConnectTarget) => void;
+    const waiting = new Promise<ConnectTarget>((resolve) => { release = resolve; });
+    const { client, child } = setup(() => {
+      prepares += 1;
+      return prepares === 1 ? Promise.resolve(target()) : waiting;
+    });
+    await connect(client, child);
+    expect(client.diagnostics.command).not.toBeNull();
+
+    child.exit(1);
+    await flush();
+    expect(client.state).toBe('lost');
+
+    const retrying = client.retry();
+    expect(client.diagnostics).toEqual({ distro: null, command: null });
+    release(target({ distro: 'Invalid Distro' }));
+    await retrying;
+    expect(client.diagnostics).toEqual({ distro: 'Invalid Distro', command: null });
+  });
+});

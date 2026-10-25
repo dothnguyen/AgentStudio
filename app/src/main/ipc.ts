@@ -1,4 +1,4 @@
-import type { CreateArgs, Result } from '../shared/api';
+import type { ConnectionPayload, CreateArgs, Result } from '../shared/api';
 import { ServeError, type ConnectionState, type ServeResponse, type StateChange } from './serveClient';
 import { WslPathError, toWslPath } from './wslPath';
 
@@ -14,6 +14,7 @@ export interface ServeLike {
   readonly state: ConnectionState;
   readonly lastError: string | null;
   readonly distro: string | null;
+  readonly diagnostics: { distro: string | null; command: string | null };
   request(command: string, args?: Record<string, unknown>): Promise<ServeResponse>;
   on(event: 'state', listener: (s: StateChange) => void): unknown;
   off(event: 'state', listener: (s: StateChange) => void): unknown;
@@ -95,12 +96,12 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle(CHANNELS.connectionGet, (_e, ...args) => {
     if (args.length !== 0) throw new Error('connection.get takes no arguments.');
-    return { state: client.state, error: client.lastError };
+    return { state: client.state, error: client.lastError, ...client.diagnostics };
   });
 }
 
-export function forwardState(client: ServeLike, send: (channel: string, payload: StateChange) => void): () => void {
-  const l = (s: StateChange) => send(CHANNELS.connectionState, { state: s.state, error: s.error });
+export function forwardState(client: ServeLike, send: (channel: string, payload: ConnectionPayload) => void): () => void {
+  const l = (s: StateChange) => send(CHANNELS.connectionState, { state: s.state, error: s.error, ...client.diagnostics });
   client.on('state', l);
   return () => {
     client.off('state', l);

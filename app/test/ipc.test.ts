@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNELS, forwardState, pickedPath, registerIpc, type ServeLike } from '../src/main/ipc';
+import type { ConnectionPayload } from '../src/shared/api';
 import { ServeError, type StateChange } from '../src/main/serveClient';
 
 type Handler = (e: unknown, ...a: unknown[]) => unknown;
@@ -12,6 +13,7 @@ function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unkn
   const client: ServeLike = {
     state: 'ready' as StateChange['state'],
     lastError: null,
+    diagnostics: { distro: 'Ubuntu', command: 'wsl.exe -d Ubuntu --exec /e serve' },
     distro: over.distro === undefined ? 'Ubuntu' : over.distro,
     async request(command, args) {
       calls.push([command, args]);
@@ -152,7 +154,7 @@ describe('registerIpc', () => {
 
   it('connection:get returns the state and throws with arguments', () => {
     const s = setup();
-    expect(s.call(CHANNELS.connectionGet)).toEqual({ state: 'ready', error: null });
+    expect(s.call(CHANNELS.connectionGet)).toEqual({ state: 'ready', error: null, distro: 'Ubuntu', command: 'wsl.exe -d Ubuntu --exec /e serve' });
     expect(() => s.call(CHANNELS.connectionGet, 1)).toThrow('connection.get takes no arguments.');
   });
 });
@@ -160,10 +162,10 @@ describe('registerIpc', () => {
 describe('forwardState and pickedPath', () => {
   it('forwards state changes and stops after the returned off', () => {
     const s = setup();
-    const sent: Array<[string, StateChange]> = [];
+    const sent: Array<[string, ConnectionPayload]> = [];
     const stop = forwardState(s.client, (c, p) => sent.push([c, p]));
     s.listeners[0]({ state: 'ready' as StateChange['state'], error: null });
-    expect(sent).toEqual([[CHANNELS.connectionState, { state: 'ready', error: null }]]);
+    expect(sent).toEqual([[CHANNELS.connectionState, { state: 'ready', error: null, distro: 'Ubuntu', command: 'wsl.exe -d Ubuntu --exec /e serve' }]]);
     stop();
     expect(s.listeners).toHaveLength(0);
   });

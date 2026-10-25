@@ -4,5 +4,6 @@
     "rootDir": "src", "outDir": "dist", "strict": true, "esModuleInterop": true,
     "skipLibCheck": true, "sourceMap": true, "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/renderer"]
 }

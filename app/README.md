@@ -35,6 +35,8 @@ npm test
 npm run typecheck
 ```
 
+`npm run build` also runs `vite build` into `dist/renderer/`.
+
 Both work on Windows or in WSL. In WSL skip the Electron binary: `ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci`.
 `node_modules` is platform-specific; re-run `npm ci` when you switch between Windows and WSL.
 
@@ -57,6 +59,11 @@ with a message naming the setting.
 
 `connecting`, `connected`, `lost`. When the child dies, pending requests are rejected and the state
 becomes `lost`. Nothing is re-sent or restarted automatically; `retry()` starts a new child.
+
+The window shows Connecting, or Connection lost / Could not connect with the reason, Retry and
+diagnostics (command, distro, last error). Retry reloads the window; main sees the reload
+(`did-finish-load` after the first load) and, if the state is `lost`, calls `retry()`. The preload API
+stays at the four calls of the brief.
 
 ## Live check (Windows + WSL)
 

@@ -1,5 +1,9 @@
 import type { StateChange } from '../main/serveClient';
 
+export interface ConnectionPayload extends StateChange {
+  distro: string | null;
+  command: string | null;
+}
 export interface ApiError {
   code: string;
   message: string;
@@ -33,5 +37,5 @@ export interface AgentStudioApi {
     create(args: CreateArgs): Promise<Result<InitResult>>;
     pickFolder(): Promise<Result<string | null>>;
   };
-  connection: { onChange(cb: (s: StateChange) => void): () => void };
+  connection: { onChange(cb: (s: ConnectionPayload) => void): () => void };
 }

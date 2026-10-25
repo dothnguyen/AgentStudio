@@ -57,9 +57,16 @@ describe('window options', () => {
   });
 
   it('index.html carries the CSP and no remote or inline content', () => {
-    const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
     expect(html).toContain(`content="${CSP}"`);
-    for (const s of ['http://', 'https://', '<script', 'style=']) expect(html).not.toContain(s);
+    for (const s of ['http://', 'https://', 'style=']) expect(html).not.toContain(s);
+    const tags = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
+    expect(tags.length).toBe(1);
+    for (const m of tags) {
+      expect(m[0]).toContain('type="module"');
+      expect(m[0]).toContain('src="./');
+      expect(m[1]).toBe('');
+    }
   });
 
   it('allows only the index url for navigation', () => {

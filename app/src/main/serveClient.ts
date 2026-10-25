@@ -63,6 +63,8 @@ export class ServeClient extends EventEmitter {
   private stopped = false;
   private _state: ConnectionState = 'connecting';
   private _lastError: string | null = null;
+  private _diagDistro: string | null = null;
+  private _diagCommand: string | null = null;
 
   constructor(private opts: ServeClientOptions) {
     super();
@@ -74,6 +76,10 @@ export class ServeClient extends EventEmitter {
 
   get lastError(): string | null {
     return this._lastError;
+  }
+
+  get diagnostics(): { distro: string | null; command: string | null } {
+    return { distro: this._diagDistro, command: this._diagCommand };
   }
 
   get distro(): string | null {
@@ -120,6 +126,8 @@ export class ServeClient extends EventEmitter {
   }
 
   private async run(): Promise<void> {
+    this._diagDistro = null;
+    this._diagCommand = null;
     this.setState('connecting', null);
     let target: ConnectTarget;
     try {
@@ -130,6 +138,7 @@ export class ServeClient extends EventEmitter {
     }
     if (this.stopped) return;
     this.target = target;
+    this._diagDistro = target.distro;
 
     let args: string[];
     try {
@@ -139,6 +148,7 @@ export class ServeClient extends EventEmitter {
       return;
     }
 
+    this._diagCommand = ['wsl.exe', ...args].join(' ');
     this.generation++;
     const gen = this.generation;
     const child = this.opts.spawn('wsl.exe', args);

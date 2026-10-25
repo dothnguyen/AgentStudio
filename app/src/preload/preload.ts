@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRenderer, IpcRendererEvent } from 'electron';
-import type { AgentStudioApi, CreateArgs } from '../shared/api';
-import type { StateChange } from '../main/serveClient';
+import type { AgentStudioApi, ConnectionPayload, CreateArgs } from '../shared/api';
 
 // A sandboxed preload may only require('electron'), so these are duplicated from main/ipc.ts (a test keeps them equal).
 export const PRELOAD_CHANNELS = {
@@ -25,14 +24,14 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       onChange: (cb) => {
         let active = true;
         let pushed = false;
-        const listener = (_event: IpcRendererEvent, s: StateChange) => {
+        const listener = (_event: IpcRendererEvent, s: ConnectionPayload) => {
           if (!active) return;
           pushed = true;
           cb(s);
         };
         ipc.on(PRELOAD_CHANNELS.connectionState, listener);
         void ipc.invoke(PRELOAD_CHANNELS.connectionGet).then(
-          (s: StateChange) => {
+          (s: ConnectionPayload) => {
             if (active && !pushed) cb(s);
           },
           () => {},
