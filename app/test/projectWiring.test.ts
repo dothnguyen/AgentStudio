@@ -22,7 +22,10 @@ describe('Electron project wiring', () => {
 
   it('opens a local renderer window and starts the serve client from main', () => {
     const main = read('src/main/main.ts');
-    expect(main).toContain('new BrowserWindow(buildWindowOptions())');
+    expect(main).toContain('new BrowserWindow(buildWindowOptions(preloadPath))');
+    expect(main).toContain("path.join(__dirname, '..', 'preload', 'preload.js')");
+    expect(main).toContain('registerIpc({');
+    expect(main).toContain('forwardState(client,');
     expect(main).toContain('win.loadFile(indexPath)');
     expect(main).toContain("path.join(app.getAppPath(), 'renderer', 'index.html')");
     expect(main).toContain('void client.start()');

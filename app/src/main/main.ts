@@ -1,7 +1,8 @@
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session } from 'electron';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { makePrepare, realSpawn } from './connection';
+import { forwardState, pickedPath, registerIpc } from './ipc';
 import { ServeClient, type StateChange } from './serveClient';
 import { buildWindowOptions, isAllowedNavigation } from './windowOptions';
 
@@ -10,7 +11,8 @@ app.whenReady().then(() => {
 
   const indexPath = path.join(app.getAppPath(), 'renderer', 'index.html');
   const indexUrl = pathToFileURL(indexPath).href;
-  const win = new BrowserWindow(buildWindowOptions());
+  const preloadPath = path.join(__dirname, '..', 'preload', 'preload.js');
+  const win = new BrowserWindow(buildWindowOptions(preloadPath));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e, url) => {
     if (!isAllowedNavigation(url, indexUrl)) e.preventDefault();
@@ -20,6 +22,15 @@ app.whenReady().then(() => {
   const configPath = path.join(app.getPath('userData'), 'config.json');
   const client = new ServeClient({ spawn: realSpawn, prepare: makePrepare(realSpawn, process.env, configPath) });
   client.on('state', (s: StateChange) => console.log(`[serve] ${s.state}${s.error ? ': ' + s.error : ''}`));
+  registerIpc({
+    ipcMain,
+    client,
+    showFolderDialog: async () =>
+      pickedPath(await dialog.showOpenDialog(win, { title: 'Choose a workspace folder', properties: ['openDirectory'] })),
+  });
+  forwardState(client, (channel, payload) => {
+    if (!win.isDestroyed()) win.webContents.send(channel, payload);
+  });
   void client.start();
 
   app.on('window-all-closed', () => {

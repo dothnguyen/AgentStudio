@@ -76,6 +76,10 @@ export class ServeClient extends EventEmitter {
     return this._lastError;
   }
 
+  get distro(): string | null {
+    return this.target?.distro ?? null;
+  }
+
   start(): Promise<void> {
     if (this.stopped) return Promise.resolve();
     if (this.starting) return this.starting;

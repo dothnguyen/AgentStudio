@@ -5,7 +5,7 @@ import { CSP, buildWindowOptions, isAllowedNavigation } from '../src/main/window
 
 describe('window options', () => {
   it('returns the fixed window configuration', () => {
-    expect(buildWindowOptions()).toEqual({
+    expect(buildWindowOptions('/x/preload.js')).toEqual({
       width: 1100,
       height: 750,
       minWidth: 640,
@@ -13,6 +13,7 @@ describe('window options', () => {
       title: 'Agent Studio',
       autoHideMenuBar: true,
       webPreferences: {
+        preload: '/x/preload.js',
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -27,7 +28,7 @@ describe('window options', () => {
   });
 
   it('locks down webPreferences', () => {
-    const wp = buildWindowOptions().webPreferences!;
+    const wp = buildWindowOptions('/x/preload.js').webPreferences!;
     expect(wp.nodeIntegration).toBe(false);
     expect(wp.contextIsolation).toBe(true);
     expect(wp.sandbox).toBe(true);
@@ -36,7 +37,7 @@ describe('window options', () => {
     expect(wp.webviewTag).toBe(false);
     expect(wp.nodeIntegrationInWorker).toBe(false);
     expect(wp.nodeIntegrationInSubFrames).toBe(false);
-    expect('preload' in wp).toBe(false);
+    expect(wp.preload).toBe('/x/preload.js');
   });
 
   it('has a strict CSP', () => {
