@@ -1,10 +1,10 @@
 version: 1
-description: Board stage unpack-ready. The ProductOwner turns a feature ticket into stories added to the board (via the board MCP tools).
+description: Board stage unpack-ready. The ProductOwner turns a feature ticket into story files under phases/phase-NN/stories and one board ticket per story (via the board MCP tools).
 maxSteps: 4
 stages:
   - id: unpack
     role: ProductOwner
-    permission: read_only
+    permission: workspace_write
     maxVisits: 1
     promptFile: workflows/prompts/board-unpack.md
     next: { pass: $succeed, fail: $fail }

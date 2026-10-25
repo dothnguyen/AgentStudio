@@ -108,7 +108,7 @@
       },
       "role": "ProductOwner",
       "workflow": "board-unpack",
-      "workspace": "none",
+      "workspace": "main",
       "onPass": "done",
       "onFail": "backlog",
       "maxRounds": 2

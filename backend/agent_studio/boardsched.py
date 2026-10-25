@@ -113,6 +113,7 @@ def _apply_finished(tx, workspace: str) -> int:
             continue
         rule = _claiming_rule(tx, workspace, ticket)
         _commit_worktree(tx, ticket, rule)
+        _settle_main(tx, workspace, ticket, rule, run["status"])
         boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]}, rule=rule)
         applied += 1
     return applied
@@ -133,6 +134,28 @@ def _commit_worktree(tx, ticket: dict, rule) -> None:
     if result.get("commit"):
         _ticket_event_note(tx, ticket, "ticket.committed", {"commit": result["commit"],
                                                             "rule": rule["when"]["status"]})
+
+
+def _settle_main(tx, workspace: str, ticket: dict, rule, run_status: str) -> None:
+    """A rule that works in the main checkout (`workspace: main`) must leave it clean, because every run starts
+    only on a clean tree. The checkout was clean when the run started (the claim required it), so what is
+    dirty now is the agent's output: a passing run's files are committed on the current branch (planning
+    documents, for example); any other outcome's files are stashed (recoverable with `git stash list`), so one
+    failed run cannot block the whole board."""
+    if not rule or rule.get("workspace") != "main" or worktrees.is_clean(workspace):
+        return
+    try:
+        if run_status == "succeeded":
+            result = worktrees.commit_round(workspace, f"{ticket['key']}: {rule['when']['status']}")
+            _ticket_event_note(tx, ticket, "ticket.committed", {"commit": result.get("commit"),
+                                                                "rule": rule["when"]["status"], "branch": "main"})
+        else:
+            gitws.run(workspace, "stash", "push", "--include-untracked", "-m",
+                      f"agent-studio {ticket['key']} {rule['when']['status']} ({run_status})")
+            _ticket_event_note(tx, ticket, "ticket.stashed", {"rule": rule["when"]["status"],
+                                                              "run": run_status})
+    except AsError as e:
+        _ticket_event_note(tx, ticket, "ticket.commit_failed", {"code": e.code, "message": e.message})
 
 
 def _usage_limited(tx, run_id: str) -> bool:

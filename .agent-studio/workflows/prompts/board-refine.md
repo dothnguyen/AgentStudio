@@ -1,6 +1,6 @@
 REFINE ONE STORY so that a developer on a less capable model can implement it without having to reason about design. TASK is the story (the ticket you are working; its key is on the first line).
 
-Read the story, then the code it touches, and verify every path, function name and signature you mention. Then replace the ticket body with the refined story using the board tool `ticket_update` (mode "replace"; use the key from TASK). Keep the original goal and acceptance criteria at the top, then add:
+Read the story (if the ticket body has a `Story file:` line, read that file too: it holds the full story), then the code it touches, and verify every path, function name and signature you mention. Then replace the ticket body with the refined story using the board tool `ticket_update` (mode "replace"; use the key from TASK). Keep the original goal, acceptance criteria and any `Story file:` line at the top, then add:
 1. Exact files to create or change, and for each: the functions or classes to add or change, with signatures and the behaviour of each step, in the order to do them.
 2. Data shapes, error cases and edge cases, with the exact values or messages expected.
 3. The tests to add: file names, test names, the input and the expected result of each, one per acceptance criterion at least.

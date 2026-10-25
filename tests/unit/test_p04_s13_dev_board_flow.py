@@ -208,5 +208,54 @@ class CommitWorktree(ApplierCase):
             boardsched._ticket_event_note = orig
 
 
+class SettleMain(unittest.TestCase):
+    """A `workspace: main` rule leaves the main checkout clean: commit on pass, stash otherwise."""
+
+    def setUp(self):
+        self.repo = tests.helpers.make_repo()
+        self.addCleanup(tests.helpers.reset_repo, self.repo)
+        subprocess.run(["git", "-C", self.repo, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", self.repo, "commit", "-qm", "base"], check=True)
+        self.notes = []
+        self.orig = boardsched._ticket_event_note
+        boardsched._ticket_event_note = lambda tx, t, name, payload: self.notes.append(name)
+        self.addCleanup(setattr, boardsched, "_ticket_event_note", self.orig)
+        self.rule = {"workspace": "main", "when": {"status": "unpack-ready"}}
+        self.ticket = {"key": "T-001"}
+
+    def git(self, *a):
+        return subprocess.run(["git", "-C", self.repo] + list(a), check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def write(self):
+        os.makedirs(os.path.join(self.repo, "phases", "phase-05", "stories"), exist_ok=True)
+        with open(os.path.join(self.repo, "phases", "phase-05", "stories", "P05-S01-x.md"), "w") as f:
+            f.write("# story\n")
+
+    def test_pass_commits_the_planning_files(self):
+        self.write()
+        boardsched._settle_main(None, self.repo, self.ticket, self.rule, "succeeded")
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(self.git("log", "-1", "--format=%s"), "T-001: unpack-ready")
+        self.assertIn("phases/phase-05/stories/P05-S01-x.md", self.git("show", "--name-only", "--format=", "HEAD"))
+        self.assertEqual(self.notes, ["ticket.committed"])
+
+    def test_failure_stashes_so_the_board_is_not_blocked_and_nothing_is_lost(self):
+        self.write()
+        boardsched._settle_main(None, self.repo, self.ticket, self.rule, "failed")
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.assertIn("agent-studio T-001 unpack-ready (failed)", self.git("stash", "list"))
+        self.assertEqual(self.git("log", "-1", "--format=%s"), "base")
+        self.assertEqual(self.notes, ["ticket.stashed"])
+
+    def test_clean_tree_and_other_modes_do_nothing(self):
+        boardsched._settle_main(None, self.repo, self.ticket, self.rule, "succeeded")
+        self.write()
+        boardsched._settle_main(None, self.repo, self.ticket, dict(self.rule, workspace="none"), "succeeded")
+        boardsched._settle_main(None, self.repo, self.ticket, None, "succeeded")
+        self.assertNotEqual(self.git("status", "--porcelain"), "")
+        self.assertEqual(self.notes, [])
+
+
 if __name__ == "__main__":
     unittest.main()
