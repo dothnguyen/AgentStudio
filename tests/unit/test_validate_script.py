@@ -75,7 +75,7 @@ class NodePackages(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="as-node-")
         self.addCleanup(__import__("shutil").rmtree, self.root, True)
-        for name, scripts in (("app", {"test": "x", "typecheck": "y", "start": "z"}), ("tools", {}),
+        for name, scripts in (("app", {"test": "x", "typecheck": "y", "build": "z", "start": "w"}), ("tools", {}),
                               ("node_modules", {"test": "x"})):
             os.makedirs(os.path.join(self.root, name))
             with open(os.path.join(self.root, name, "package.json"), "w") as f:
@@ -97,16 +97,24 @@ class NodePackages(unittest.TestCase):
                 mock.patch.object(validate, "run_step", side_effect=fake):
             return validate.run_node_package(name, self.root), calls
 
-    def test_installs_when_needed_then_runs_test_and_typecheck(self):
+    def test_installs_when_needed_then_runs_test_typecheck_and_build(self):
         ok, calls = self.run_pkg("app")
         self.assertTrue(ok)
         self.assertEqual([c[0] for c in calls], [["install", "--no-audit", "--no-fund"], ["test"],
-                                                 ["run", "typecheck"]])
+                                                 ["run", "typecheck"], ["run", "build"]])
         os.makedirs(os.path.join(self.root, "app", "node_modules"))
         with open(os.path.join(self.root, "app", "package-lock.json"), "w") as f:
             f.write("{}")
         ok, calls = self.run_pkg("app")
-        self.assertEqual([c[0] for c in calls], [["test"], ["run", "typecheck"]])
+        self.assertEqual([c[0] for c in calls], [["test"], ["run", "typecheck"], ["run", "build"]])
+
+    def test_build_failure_fails_package_validation(self):
+        os.makedirs(os.path.join(self.root, "app", "node_modules"))
+        def result(argv, cwd=None):
+            return (1, "build failed") if argv == ["/usr/bin/npm", "run", "build"] else (0, "ok")
+        with mock.patch.object(validate.shutil, "which", return_value="/usr/bin/npm"), \
+                mock.patch.object(validate, "run_step", side_effect=result):
+            self.assertFalse(validate.run_node_package("app", self.root))
 
     def test_lockfile_means_npm_ci_and_a_failed_install_stops_the_rest(self):
         with open(os.path.join(self.root, "app", "package-lock.json"), "w") as f:

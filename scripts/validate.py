@@ -8,7 +8,8 @@
 
 Node packages: a top-level directory with a package.json (the Electron app under app/, for example) is also
 checked by --touched when the change touches it, and always by --all: `npm ci` when node_modules is missing, then
-`npm test` and `npm run typecheck` for the scripts the package defines. A missing npm is a failure, not a skip.
+`npm test`, `npm run typecheck`, and `npm run build` for the scripts the package defines. A missing npm is a failure,
+not a skip.
 
 VALIDATE_WORKERS sets the parallelism (default 4); each integration module uses its own isolated sandbox.
 Exit 0 only when everything that ran passed. Passing steps print a summary line, failing steps print their output."""
@@ -85,7 +86,7 @@ def node_packages(porcelain=None, root=None) -> list:
 
 
 def run_node_package(name: str, root=None) -> bool:
-    """npm ci (when node_modules is missing), then the package's `test` and `typecheck` scripts, if it has them."""
+    """npm ci (when node_modules is missing), then the package's test, typecheck, and build scripts, if present."""
     root = root or ROOT
     pkg = os.path.join(root, name)
     print(f"===== node package {name}/", flush=True)
@@ -103,7 +104,7 @@ def run_node_package(name: str, root=None) -> bool:
         lock = os.path.exists(os.path.join(pkg, "package-lock.json"))
         steps.append((f"{name}: npm {'ci' if lock else 'install'}",
                       [npm, "ci" if lock else "install", "--no-audit", "--no-fund"]))
-    for script in ("test", "typecheck"):
+    for script in ("test", "typecheck", "build"):
         if script in scripts:
             steps.append((f"{name}: npm {'test' if script == 'test' else 'run ' + script}",
                           [npm, "test"] if script == "test" else [npm, "run", script]))
@@ -114,7 +115,7 @@ def run_node_package(name: str, root=None) -> bool:
         if code != 0 and title.endswith(("ci", "install")):
             break  # nothing else can run without dependencies
     if not steps:
-        print(f"{name}/ has no test or typecheck script; nothing to run\n", flush=True)
+        print(f"{name}/ has no test, typecheck, or build script; nothing to run\n", flush=True)
     return ok
 
 

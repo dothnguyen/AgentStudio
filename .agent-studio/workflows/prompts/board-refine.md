@@ -7,7 +7,7 @@ Stories this one depends on may not be built yet, and you must not wait for them
 2. Data shapes, error cases and edge cases, with the exact values or messages expected.
 3. The tests to add: file names, test names, the input and the expected result of each, one per acceptance criterion at least.
 4. Commands to run to check the work (the project's test commands) and anything the developer must not touch.
-5. A "Done when" checklist in two parts. "Automated": items the workflow can verify by running tests (unit, integration, `npm test`, `npm run typecheck`), each naming the test that proves it. "Operator checks": anything that needs a person on a real machine (launching the app on Windows, a live run with real providers). The board cannot do those, so keep them out of the automated list and never make them a condition for the story to pass.
+5. A "Done when" checklist in two parts. "Automated": items the workflow can verify by running tests (unit, integration, `npm test`, `npm run typecheck`, `npm run build`), each naming the test or command that proves it. "Operator checks": anything that needs a person on a real machine (launching the app on Windows, a live run with real providers). The board cannot do those, so keep them out of the automated list and never make them a condition for the story to pass.
 Be concrete and complete; do not leave design decisions open. Do not edit files and do not write the implementation itself.
 
 Verdict "pass" once the ticket body is updated. Verdict "fail" only when the story cannot be refined without a decision from the operator (put each question in findings; do not update the ticket).
