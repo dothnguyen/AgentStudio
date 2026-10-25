@@ -48,6 +48,10 @@ class Env(unittest.TestCase):
     def setUp(self):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="as-s05-"))
         self.addCleanup(shutil.rmtree, self.root, True)
+        self.state = os.path.join(self.root, "state")
+        patcher = mock.patch.dict(os.environ, {"XDG_STATE_HOME": self.state})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.ws = os.path.join(self.root, "proj")
         os.makedirs(os.path.join(self.ws, "phases", "p", "stories"))
         open(os.path.join(self.ws, STORY), "w").write("# s\n")
@@ -55,10 +59,6 @@ class Env(unittest.TestCase):
         workspace.init(self.ws)
         teamdefs.save(self.ws, {"id": "alpha", "name": "Alpha", "members": [
             {"id": "ryan", "name": "Ryan", "role": "developer", "provider": "fake"}]})
-        self.state = os.path.join(self.root, "state")
-        patcher = mock.patch.dict(os.environ, {"XDG_STATE_HOME": self.state})
-        patcher.start()
-        self.addCleanup(patcher.stop)
         self.git_calls, self.git_out = [], {}
         self.answers = []            # agent answers, popped in order
         self.tests_ok, self.dirty = True, ""
@@ -477,12 +477,22 @@ class Attach(unittest.TestCase):
     def setUp(self):
         self.root = os.path.realpath(tempfile.mkdtemp(prefix="as-s05a-"))
         self.addCleanup(shutil.rmtree, self.root, True)
+        self.state = os.path.join(self.root, "state")
+        patcher = mock.patch.dict(os.environ, {"XDG_STATE_HOME": self.state})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         from agent_studio import teamdefs, workspace
         self.ws = os.path.join(self.root, "proj")
         os.makedirs(self.ws)
         workspace.init(self.ws)
         teamdefs.save(self.ws, {"id": "alpha", "name": "Alpha", "members": [
             {"id": "ryan", "name": "Ryan", "role": "developer", "provider": "fake"}]})
+
+    def test_fixture_workspace_registry_is_isolated(self):
+        registry = os.path.join(self.state, "agent-studio", "workspaces.json")
+        with open(registry, encoding="utf-8") as f:
+            entries = json.load(f)["workspaces"]
+        self.assertEqual([entry["path"] for entry in entries], [self.ws])
 
     def test_definition_id_resolves_to_the_running_team(self):
         fake = Fake(team_attach={"argv": ["/bin/true"], "wsl": "x"})
