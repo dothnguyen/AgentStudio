@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ApiError, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
+import type { ApiError, InitResult, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
+import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 
 export const LOADING_TEXT = 'Loading workspaces…';
 export const EMPTY_TITLE = 'No workspaces yet';
@@ -7,6 +8,7 @@ export const EMPTY_TEXT = 'A workspace is a project folder Agent Studio works in
 export const LIST_TITLE = 'Workspaces';
 export const ERROR_TITLE = 'Could not load workspaces';
 export const BAD_RESPONSE_MESSAGE = 'workspace.list returned no workspaces array.';
+export const CREATED_WORKSPACE_MISSING_MESSAGE = 'workspace.list did not return the created workspace.';
 export const MISSING_BADGE = 'folder missing';
 
 export function missingMessage(w: Workspace): string {
@@ -74,13 +76,14 @@ function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w
   );
 }
 
-export function WorkspacesScreen(props: { api: WorkspacesApi; onCreate?: () => void }) {
+export function WorkspacesScreen(props: { api: WorkspacesApi }) {
   const { api } = props;
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Workspace | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const seq = useRef(0);
   const active = useRef(true);
 
@@ -114,7 +117,48 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; onCreate?: () => v
     };
   }, [reload]);
 
-  const create = () => props.onCreate?.();
+  const refreshAfterCreate = useCallback(
+    async (created: InitResult): Promise<void> => {
+      setDialogOpen(false);
+      const my = ++seq.current;
+      setRefreshing(true);
+      let r: Result<WorkspaceList>;
+      try {
+        r = toLoadResult(await api.list());
+      } catch (e) {
+        r = {
+          ok: false,
+          error: { code: 'INTERNAL', message: e instanceof Error ? e.message : String(e), retryable: false },
+        };
+      }
+      if (!active.current || my !== seq.current) return;
+      setRefreshing(false);
+      setNotice(null);
+      if (!r.ok) {
+        setLoad({ kind: 'error', error: r.error });
+        return;
+      }
+      const match =
+        r.data.workspaces.find((workspace) => workspace.id === created.id) ??
+        r.data.workspaces.find((workspace) => workspace.path === created.path);
+      if (match === undefined) {
+        setLoad({
+          kind: 'error',
+          error: { code: 'BAD_RESPONSE', message: CREATED_WORKSPACE_MISSING_MESSAGE, retryable: false },
+        });
+        return;
+      }
+      setLoad({ kind: 'ready', workspaces: r.data.workspaces });
+      setSelected(match);
+    },
+    [api],
+  );
+
+  const openCreateDialog = () => {
+    ++seq.current;
+    setRefreshing(false);
+    setDialogOpen(true);
+  };
 
   if (load.kind === 'loading') {
     return (
@@ -153,15 +197,26 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; onCreate?: () => v
     );
   }
 
+  const dialog = dialogOpen ? (
+    <CreateWorkspaceDialog
+      api={api}
+      onCancel={() => setDialogOpen(false)}
+      onCreated={(created) => void refreshAfterCreate(created)}
+    />
+  ) : null;
+
   if (load.workspaces.length === 0) {
     return (
-      <section data-view="empty" className="empty">
-        <h1>{EMPTY_TITLE}</h1>
-        <p>{EMPTY_TEXT}</p>
-        <button type="button" className="primary" data-action="create" onClick={create}>
-          Create workspace
-        </button>
-      </section>
+      <>
+        <section data-view="empty" className="empty">
+          <h1>{EMPTY_TITLE}</h1>
+          <p>{EMPTY_TEXT}</p>
+          <button type="button" className="primary" data-action="create" onClick={openCreateDialog}>
+            Create workspace
+          </button>
+        </section>
+        {dialog}
+      </>
     );
   }
 
@@ -175,35 +230,38 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; onCreate?: () => v
   };
 
   return (
-    <section data-view="list">
-      <h1>{LIST_TITLE}</h1>
-      <div className="toolbar">
-        <button type="button" className="secondary" data-action="create" onClick={create}>
-          Create workspace
-        </button>
-        <button
-          type="button"
-          data-action="refresh"
-          disabled={refreshing}
-          onClick={() => {
-            if (!refreshing) void reload(false);
-          }}
-        >
-          Refresh
-        </button>
-      </div>
-      {notice && (
-        <p role="alert" data-role="notice">
-          {notice}
-        </p>
-      )}
-      <ul aria-label="Workspaces">
-        {load.workspaces.map((w) => (
-          <li key={w.id}>
-            <WorkspaceRow w={w} focusOnMount={focusId === w.id} onSelect={onSelect} />
-          </li>
-        ))}
-      </ul>
-    </section>
+    <>
+      <section data-view="list">
+        <h1>{LIST_TITLE}</h1>
+        <div className="toolbar">
+          <button type="button" className="secondary" data-action="create" onClick={openCreateDialog}>
+            Create workspace
+          </button>
+          <button
+            type="button"
+            data-action="refresh"
+            disabled={refreshing}
+            onClick={() => {
+              if (!refreshing) void reload(false);
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+        {notice && (
+          <p role="alert" data-role="notice">
+            {notice}
+          </p>
+        )}
+        <ul aria-label="Workspaces">
+          {load.workspaces.map((w) => (
+            <li key={w.id}>
+              <WorkspaceRow w={w} focusOnMount={focusId === w.id} onSelect={onSelect} />
+            </li>
+          ))}
+        </ul>
+      </section>
+      {dialog}
+    </>
   );
 }

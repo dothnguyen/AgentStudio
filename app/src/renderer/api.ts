@@ -17,7 +17,11 @@ declare global {
       connection: {
         onChange(cb: (s: Partial<ConnectionStatus> & { state: ConnectionState }) => void): () => void;
       };
-      workspaces?: { list(): Promise<Result<WorkspaceList>> };
+      workspaces?: {
+        list(): Promise<Result<WorkspaceList>>;
+        create(args: CreateArgs): Promise<Result<InitResult>>;
+        pickFolder(): Promise<Result<string | null>>;
+      };
     };
   }
 }
@@ -39,14 +43,30 @@ export interface Workspace {
 export interface WorkspaceList {
   workspaces: Workspace[];
 }
+export interface CreateArgs {
+  path: string;
+  name?: string;
+}
+export interface InitResult {
+  id: string;
+  name: string;
+  path: string;
+  existed: boolean;
+}
 export interface WorkspacesApi {
   list(): Promise<Result<WorkspaceList>>;
+  create(args: CreateArgs): Promise<Result<InitResult>>;
+  pickFolder(): Promise<Result<string | null>>;
 }
 
 export function getWorkspacesApi(): WorkspacesApi {
   const real = window.agentStudio?.workspaces;
   if (!real) throw new Error('Agent Studio preload API is missing (window.agentStudio.workspaces).');
-  return { list: () => real.list() };
+  return {
+    list: () => real.list(),
+    create: (args) => real.create(args),
+    pickFolder: () => real.pickFolder(),
+  };
 }
 
 export function getConnectionApi(): ConnectionApi {
