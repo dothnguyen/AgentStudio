@@ -671,6 +671,10 @@ def ticket_move(tx, workspace: str, args: dict) -> dict:
     if to == ticket["status"]:
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is already in status {to!r}.",
                       data={"key": ticket["key"], "from": ticket["status"], "to": to})
+    if ticket["assignee"] is not None:
+        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; its status cannot change.",
+                      data={"key": ticket["key"], "assignee": ticket["assignee"]},
+                      remediation="wait for the current run to finish, or use ticket retry to release a stuck claim")
     if ticket["status"] in config["terminal"] and not args.get("force"):
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is in the terminal status "
                                                  f"{ticket['status']!r}; moving it needs --force.",

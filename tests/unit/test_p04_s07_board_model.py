@@ -173,6 +173,16 @@ class TicketTests(BoardCase):
                           ("ticket.moved", "open", "finished", "operator"),
                           ("ticket.moved", "finished", "wip", "operator")])
 
+    def test_claimed_ticket_cannot_move_to_another_status(self):
+        self.add("claimed")
+        assignee = "f" * 8 + "-0000-4000-8000-" + "f" * 12
+        self.conn.execute("UPDATE tickets SET assignee = ? WHERE key = 'T-001'", (assignee,))
+        with self.assertRaises(AsError) as caught:
+            self.move("T-001", "wip")
+        self.assertEqual(caught.exception.code, "TICKET_BUSY")
+        self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "open")
+        self.assertEqual([event["name"] for event in self.events("T-001")], ["ticket.created"])
+
     def test_closed_is_terminal_too(self):
         self.write_config(CONFIG_B)
         self.add("a")
