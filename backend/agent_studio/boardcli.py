@@ -67,6 +67,7 @@ def _parser(action, group="ticket"):
         p.add_argument("run")
     elif action == "unblock":
         p.add_argument("ticket_key")
+        p.add_argument("--to")
     elif action == "retry":
         p.add_argument("ticket_key")
     elif action in ("show", "depend"):
@@ -137,7 +138,10 @@ def _ticket_apply(ns):
 
 
 def _ticket_unblock(ns):
-    data = _write_call("ticket.unblock", {"workspace": _workspace(ns), "key": ns.ticket_key})
+    args = {"workspace": _workspace(ns), "key": ns.ticket_key}
+    if ns.to:
+        args["to"] = ns.to
+    data = _write_call("ticket.unblock", args)
     return data, lambda d: f"{d['ticket']['key']}: unblocked -> {d['ticket']['status']}"
 
 

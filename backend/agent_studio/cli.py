@@ -89,7 +89,8 @@ USAGE = """agent-studio <command>
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
   ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
   ticket apply (--workspace PATH | cwd) KEY RUN   apply a finished workflow run's outcome to its ticket
-  ticket unblock (--workspace PATH | cwd) KEY   return a blocked ticket to its recorded status
+  ticket unblock (--workspace PATH | cwd) KEY [--to STATUS]   return a blocked ticket to its recorded status
+                                           (or to STATUS); starts a fresh round budget
   ticket retry (--workspace PATH | cwd) KEY   clear a stuck claim: release it and cancel its run
   board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
   board rules check (--workspace PATH | cwd)   validate the rules: statuses, roles, workflows, path to done

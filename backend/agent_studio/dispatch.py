@@ -248,6 +248,14 @@ def _validate_ticket_apply(args):
             "run": validate_uuid(args.get("run"), "run")}
 
 
+def _validate_ticket_unblock(args):
+    out = _validate_ticket_key_args(args)
+    to = req_text(args, "to", 64, required=False, allow_empty=False)
+    if to is not None:
+        out["to"] = to
+    return out
+
+
 def _validate_ticket_retry(args):
     return _validate_ticket_key_args(args)
 
@@ -610,7 +618,7 @@ COMMANDS = {
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),
     "ticket.apply": _inbox("ticket.apply", _validate_ticket_apply),
-    "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_key_args),
+    "ticket.unblock": _inbox("ticket.unblock", _validate_ticket_unblock),
     "ticket.retry": _inbox("ticket.retry", _validate_ticket_retry),
     "ticket.show": _ticket_show,
     "ticket.list": _ticket_list,

@@ -87,6 +87,53 @@ class FailureHandoff(ApplierCase):
         self.assertEqual(c.exception.code, "BOARD_CONFIG_INVALID")
 
 
+class UnblockResetsRounds(ApplierCase):
+    def setUp(self):
+        super().setUp()
+        self.write_config(FLOW)
+        self.add("work")
+        self.move("T-001", "qa-ready")
+        for _ in range(3):
+            self.apply("T-001", self.failed())
+            row = self.conn.execute("SELECT status FROM tickets WHERE key='T-001'").fetchone()
+            if row["status"] == "dev-ready":
+                self.move("T-001", "qa-ready")
+        self.assertEqual(self.row()["status"], "blocked")
+
+    def failed(self):
+        return self.make_run("failed")
+
+    def row(self):
+        return self.conn.execute("SELECT status, rounds_json, return_status, blocked_reason FROM tickets "
+                                 "WHERE key = 'T-001'").fetchone()
+
+    def unblock(self, **args):
+        with self.store.transaction() as tx:
+            return boardmodel.ticket_unblock(tx, self.ws, dict({"key": "T-001"}, **args))
+
+    def test_unblock_to_a_chosen_status_resets_the_round_budget(self):
+        self.assertEqual(json.loads(self.row()["rounds_json"]), {"qa-ready": 3})
+        self.assertEqual(self.unblock(to="dev-ready")["ticket"]["status"], "dev-ready")
+        row = self.row()
+        self.assertEqual((row["rounds_json"], row["return_status"], row["blocked_reason"]), (None, None, None))
+        self.move("T-001", "qa-ready")
+        self.apply("T-001", self.failed())            # the first failure after the reset is not a block
+        self.assertEqual(self.row()["status"], "dev-ready")
+
+    def test_default_target_is_the_recorded_status_and_bad_targets_are_refused(self):
+        with self.assertRaises(AsError) as c:
+            self.unblock(to="done")
+        self.assertEqual(c.exception.code, "BOARD_STATUS_UNKNOWN")
+        with self.assertRaises(AsError):
+            self.unblock(to="nowhere")
+        self.assertEqual(self.unblock()["ticket"]["status"], "qa-ready")
+
+    def test_operator_move_out_of_blocked_also_resets(self):
+        self.move("T-001", "dev-ready")
+        row = self.row()
+        self.assertEqual((row["rounds_json"], row["return_status"], row["blocked_reason"]), (None, None, None))
+
+
 class RulesCheckEntryPoints(ApplierCase):
     def test_path_to_done_may_start_at_the_agent_status(self):
         cfg = {"version": 2, "agentTicketStatus": "review",

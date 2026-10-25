@@ -642,6 +642,9 @@ def ticket_move(tx, workspace: str, args: dict) -> dict:
                                                  f"{ticket['status']!r}; moving it needs --force.",
                       data={"key": ticket["key"], "from": ticket["status"], "to": to},
                       remediation="pass --force to move a finished ticket explicitly")
+    if ticket["status"] == BLOCKED_STATUS:  # an operator's move out of blocked also starts a fresh round budget
+        tx.conn.execute("UPDATE tickets SET return_status = NULL, blocked_reason = NULL, rounds_json = NULL "
+                        "WHERE id = ?", (ticket["id"],))
     tx.conn.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?", (to, utcnow(), ticket["id"]))
     _ticket_event(tx.conn, ticket["id"], "ticket.moved", "operator", ticket["status"], to,
                   {"ticketId": ticket["id"], "key": ticket["key"], "from": ticket["status"], "to": to,
@@ -899,12 +902,16 @@ def ticket_unblock(tx, workspace: str, args: dict) -> dict:
     if ticket["status"] != BLOCKED_STATUS:
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is not blocked.",
                       data={"key": ticket["key"], "status": ticket["status"]})
-    target = ticket["return_status"] or config["initial"]
+    target = args.get("to") or ticket["return_status"] or config["initial"]
+    if target not in config["byId"] or target in config["terminal"]:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Status {target!r} is not a working status on this board.",
+                      data={"key": ticket["key"], "status": target, "statuses": config_status_ids(config)})
+    # an operator's decision starts a fresh round budget (the limit that blocked the ticket is not carried over)
     tx.conn.execute("UPDATE tickets SET status = ?, return_status = NULL, blocked_reason = NULL, "
-                    "updated_at = ? WHERE id = ?", (target, utcnow(), ticket["id"]))
+                    "rounds_json = NULL, updated_at = ? WHERE id = ?", (target, utcnow(), ticket["id"]))
     _ticket_event(tx.conn, ticket["id"], "ticket.unblocked", "operator", BLOCKED_STATUS, target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "to": target,
-                   "reason": ticket["blocked_reason"]})
+                   "reason": ticket["blocked_reason"], "roundsReset": True})
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone())}
 

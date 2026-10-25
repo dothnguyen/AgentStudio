@@ -6,6 +6,10 @@
                              (git status), run in parallel. `team commit` uses this.
     validate.py --all        the unit suite, then every integration module, in parallel.
 
+Node packages: a top-level directory with a package.json (the Electron app under app/, for example) is also
+checked by --touched when the change touches it, and always by --all: `npm ci` when node_modules is missing, then
+`npm test` and `npm run typecheck` for the scripts the package defines. A missing npm is a failure, not a skip.
+
 VALIDATE_WORKERS sets the parallelism (default 4); each integration module uses its own isolated sandbox.
 Exit 0 only when everything that ran passed. Passing steps print a summary line, failing steps print their output."""
 import concurrent.futures
@@ -13,6 +17,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -65,11 +70,59 @@ def parse_mode(argv: list) -> str:
     return modes[0]
 
 
-def run_step(argv: list):
+def node_packages(porcelain=None, root=None) -> list:
+    """Top-level directories that hold a package.json; with porcelain text, only those the change touches."""
+    root = root or ROOT
+    found = []
+    for manifest in sorted(glob.glob(os.path.join(root, "*", "package.json"))):
+        name = os.path.basename(os.path.dirname(manifest))
+        if name == "node_modules":
+            continue
+        if porcelain is None or any(
+                line[3:].split(" -> ")[-1].strip().strip('"').startswith(name + "/") for line in porcelain.splitlines()):
+            found.append(name)
+    return found
+
+
+def run_node_package(name: str, root=None) -> bool:
+    """npm ci (when node_modules is missing), then the package's `test` and `typecheck` scripts, if it has them."""
+    root = root or ROOT
+    pkg = os.path.join(root, name)
+    print(f"===== node package {name}/", flush=True)
+    npm = shutil.which("npm")
+    if not npm:
+        return report(f"{name}: npm", 1, "npm was not found on PATH: install Node.js in this environment so the "
+                                         f"{name}/ tests can run")
+    try:
+        with open(os.path.join(pkg, "package.json"), encoding="utf-8") as f:
+            scripts = json.load(f).get("scripts") or {}
+    except (OSError, ValueError, AttributeError) as e:
+        return report(f"{name}: package.json", 1, f"cannot read {name}/package.json: {e}")
+    steps = []
+    if not os.path.isdir(os.path.join(pkg, "node_modules")):
+        lock = os.path.exists(os.path.join(pkg, "package-lock.json"))
+        steps.append((f"{name}: npm {'ci' if lock else 'install'}",
+                      [npm, "ci" if lock else "install", "--no-audit", "--no-fund"]))
+    for script in ("test", "typecheck"):
+        if script in scripts:
+            steps.append((f"{name}: npm {'test' if script == 'test' else 'run ' + script}",
+                          [npm, "test"] if script == "test" else [npm, "run", script]))
+    ok = True
+    for title, argv in steps:
+        code, text = run_step(argv, cwd=pkg)
+        ok = report(title, code, text) and ok
+        if code != 0 and title.endswith(("ci", "install")):
+            break  # nothing else can run without dependencies
+    if not steps:
+        print(f"{name}/ has no test or typecheck script; nothing to run\n", flush=True)
+    return ok
+
+
+def run_step(argv: list, cwd=None):
     """(exit code, output) of one step: own process group, output to a file rather than a pipe, so a test that
     leaves a background process behind (a coordinator, tmux) cannot keep this step waiting."""
     with tempfile.TemporaryFile() as out:
-        p = subprocess.Popen(argv, cwd=ROOT, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+        p = subprocess.Popen(argv, cwd=cwd or ROOT, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
                              start_new_session=True)
         try:
             code = p.wait()
@@ -108,15 +161,18 @@ def main(argv: list) -> int:
     if mode == "--unit":
         return 0 if ok else 1
     if mode == "--all":
-        mods = all_integration_modules()
+        mods, packages = all_integration_modules(), node_packages()
     else:
         status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT,
                                 stdout=subprocess.PIPE, text=True).stdout
-        mods = integration_modules(status + branch_changes())
+        changes = status + branch_changes()
+        mods, packages = integration_modules(changes), node_packages(changes)
     if mods:
         ok = run_integration(mods) and ok
     else:
         print("===== integration tests: none changed, not run\n")
+    for name in packages:
+        ok = run_node_package(name) and ok
     return 0 if ok else 1
 
 
