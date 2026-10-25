@@ -113,6 +113,15 @@ class Binding(SchedCase):
             boardsched.stop_board(tx, self.ws)
         self.assertEqual(self.bind(other)["board"]["teamId"], other)
 
+    def test_a_stopped_teams_binding_is_taken_over_by_a_new_team(self):
+        self.bind()
+        with self.store.transaction() as tx:
+            tx.transition("team", self.team, "stopping")
+            tx.transition("team", self.team, "stopped")
+            fresh_team = tx.create("team", {"name": "n", "workspace": self.ws})
+            tx.transition("team", fresh_team, "running")
+        self.assertEqual(self.bind(fresh_team)["board"]["teamId"], fresh_team)
+
     def test_stop_board_stops_claims_but_applies_finished_runs(self):
         ticket = self.add_ticket()
         self.tick()

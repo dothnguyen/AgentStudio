@@ -49,8 +49,10 @@ def bind_team(tx, workspace: str, team_id: str) -> dict:
     boardmodel.ensure_board(tx, workspace)
     row = _board_row(tx.conn, workspace)
     if row["team_id"] is not None and row["team_id"] != team_id and row["run_status"] == "running":
-        raise AsError(BOARD_ALREADY_RUNNING, f"Team {row['team_id']} already runs this board.",
-                      data={"teamId": row["team_id"]})
+        bound = _team(tx.conn, row["team_id"])
+        if bound is not None and bound["status"] == "running":  # a stopped team's binding is stale: take it over
+            raise AsError(BOARD_ALREADY_RUNNING, f"Team {row['team_id']} already runs this board.",
+                          data={"teamId": row["team_id"]})
     tx.conn.execute("UPDATE board_state SET team_id = ?, run_status = 'running', updated_at = ? "
                     "WHERE workspace = ?", (team_id, utcnow(), workspace))
     return {"board": {"workspace": workspace, "status": "running", "teamId": team_id},

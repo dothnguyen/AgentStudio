@@ -319,12 +319,18 @@ def run(enable_debug: bool = False) -> int:
     procid.write_json_atomic(_p(sd, RUNTIME_FILE), dict(runtime, startupReconciliation=startup))
     _log(f"startup reconciliation: {json.dumps(startup, default=str)[:2000]}")
     next_monitor = 0.0
+    last_tick_errors = ["[]"]
     while not stop_flag["stop"]:
         try:
             reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
-            boardsched.tick(store, ctx)
+            tick = boardsched.tick(store, ctx)
+            seen = json.dumps(tick["errors"], sort_keys=True, default=str)
+            if seen != last_tick_errors[0]:  # log a board problem once, not on every pass
+                last_tick_errors[0] = seen
+                for err in tick["errors"]:
+                    _log(f"board scheduler: {err.get('code')} in {err.get('workspace')}: {err.get('message')}")
             teams.redeliver(store, sd)
             teams.dispatch_claims(store, sd)
             if time.monotonic() >= next_monitor:
