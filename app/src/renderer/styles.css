@@ -43,3 +43,12 @@ button:focus-visible {
   outline: 3px solid #1a73e8;
   outline-offset: 2px;
 }
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+ul[aria-label="Workspaces"] { list-style: none; padding: 0; width: min(640px, 100%); }
+.ws-row { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; padding: 8px 12px; margin-bottom: 6px; }
+.ws-path { font-family: ui-monospace, monospace; color: #555; overflow-wrap: anywhere; }
+.badge-missing { font-size: 12px; padding: 2px 6px; border-radius: 8px; background: #fde2e1; color: #8a1c14; }
+.primary { font-weight: 600; }
+.link { background: none; border: none; color: #1a73e8; text-decoration: underline; cursor: pointer; }
+.empty { text-align: center; }

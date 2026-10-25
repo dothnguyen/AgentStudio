@@ -1,15 +1,16 @@
 import './styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { getConnectionApi } from './api';
-import { CONNECTED_TEXT, StartupScreen } from './StartupScreen';
+import { getConnectionApi, getWorkspacesApi } from './api';
+import { StartupScreen } from './StartupScreen';
+import { WorkspacesScreen } from './WorkspacesScreen';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <StartupScreen
       connection={getConnectionApi()}
       onRetry={() => window.location.reload()}
-      connectedView={<p>{CONNECTED_TEXT}</p>}
+      connectedView={<WorkspacesScreen api={getWorkspacesApi()} />}
     />
   </StrictMode>,
 );
