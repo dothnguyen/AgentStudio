@@ -1,4 +1,5 @@
-"""opencode adapter. Placeholder until P00-S11 verifies the installed CLI; see CONTRACT.md."""
-from ..base import NotImplementedAdapter
+"""opencode adapter (P00-S11). Verified against the installed CLI v2.1.4; see CONTRACT.md for the
+recorded capability gap (no injectable run-scoped permission configuration -> both policies refused)."""
+from .adapter import OpenCodeAdapter
 
-ADAPTER = NotImplementedAdapter("opencode", "P00-S11")
+ADAPTER = OpenCodeAdapter()

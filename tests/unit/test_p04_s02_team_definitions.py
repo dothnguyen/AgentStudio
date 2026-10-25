@@ -175,10 +175,10 @@ class ValidateTests(Base):
 
     def test_model_rejected_for_known_provider_without_model_selection(self):
         from backend.agent_studio import providers
-        self.assertFalse(providers.get("opencode").model_selectable())
+        self.assertFalse(providers.get("agy").model_selectable())  # opencode is implemented (P00-S11)
         self.roles()
         got = self.problems({"id": "t", "name": "T", "members": [
-            {"id": "a", "name": "A", "role": "developer", "provider": "opencode", "model": "gpt-5"}]})
+            {"id": "a", "name": "A", "role": "developer", "provider": "agy", "model": "gpt-5"}]})
         self.assertEqual(got, {"members[0].model"})
 
     def test_validate_team_error_lists_problems(self):

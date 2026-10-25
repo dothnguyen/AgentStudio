@@ -14,7 +14,7 @@ Read [PRD.md](../../../PRD.md) and the [P00 implementation contract](../architec
 | [S08](./P00-S08-codex-adapter.md) | Codex adapter + per-agent model/reasoning + workspace roles/skills | S04, S05 | Done |
 | [S09](./P00-S09-claude-adapter.md) | Claude Code adapter | S04, S05 | Done |
 | [S10](./P00-S10-agy-adapter.md) | Antigravity CLI adapter | S04, S05 | To Do |
-| [S11](./P00-S11-opencode-adapter.md) | OpenCode adapter | S04, S05 | To Do |
+| [S11](./P00-S11-opencode-adapter.md) | OpenCode adapter | S04, S05 | Blocked (adapter implemented; no injectable run-scoped permission config in opencode v2.1.4 — see the story and CONTRACT.md) |
 | [S12](./P00-S12-live-gate.md) | Real two-provider live gate | S01–S07 + any two of S08–S11 | Done |
 
 S08–S11 are independent peers and may proceed in parallel with S06–S07. Start with the two providers installed and authenticated on the target machine.

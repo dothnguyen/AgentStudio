@@ -53,11 +53,14 @@ class Settings(unittest.TestCase):
             self.assertEqual(cm.exception.code, "SETTING_UNSUPPORTED")
 
     def test_placeholders_refuse_any_setting(self):
-        for pid in ("agy", "opencode"):
-            a = providers.get(pid)
-            a.validate_settings(None, None)
-            with self.assertRaises(AsError):
-                a.validate_settings("some-model", None)
+        a = providers.get("agy")  # opencode is implemented (P00-S11); agy is the remaining placeholder
+        a.validate_settings(None, None)
+        with self.assertRaises(AsError):
+            a.validate_settings("some-model", None)
+        # opencode selects models but refuses reasoning until a variant scheme is verified
+        providers.get("opencode").validate_settings("opencode-go/glm-5.3", None)
+        with self.assertRaises(AsError):
+            providers.get("opencode").validate_settings("opencode-go/glm-5.3", "high")
             with self.assertRaises(AsError):
                 a.validate_settings(None, "high")
 
