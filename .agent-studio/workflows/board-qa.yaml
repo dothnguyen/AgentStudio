@@ -1,0 +1,21 @@
+version: 1
+description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria, the touched tests run, QA gives the verdict.
+maxSteps: 8
+stages:
+  - id: qa_tests
+    role: QA
+    permission: workspace_write
+    maxVisits: 1
+    promptFile: workflows/prompts/board-qa-tests.md
+    next: { done: tests }
+  - id: tests
+    type: validation
+    maxVisits: 1
+    next: { pass: qa, fail: qa }
+  - id: qa
+    role: QA
+    permission: read_only
+    maxVisits: 1
+    passRequires: [tests]
+    promptFile: workflows/prompts/board-qa.md
+    next: { pass: $succeed, fail: $fail }

@@ -1,0 +1,212 @@
+"""P04-S13: what a development board needs from the generic board: findings travel with the ticket, failed
+tickets jump their queue, agent-made tickets land in a configurable status, an agent writes the ticket it is
+working, and the coordinator commits ticket worktrees."""
+import json
+import unittest
+import os
+import shutil
+import subprocess
+
+import tests.helpers  # noqa: F401
+from agent_studio import boardmodel, boardsched
+from agent_studio.protocol import AsError
+from tests.unit.test_p04_s09_rules_and_applier import ApplierCase, RULES_CONFIG
+from tests.unit.test_p04_s12_mcp_server import ServerCase
+
+FLOW = {"version": 2,
+        "agentTicketStatus": "refine-ready",
+        "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "refine-ready"}, {"id": "dev-ready"},
+                     {"id": "qa-ready"}, {"id": "done", "kind": "done"}, {"id": "close", "kind": "closed"}],
+        "ticketFields": [],
+        "rules": [{"when": {"status": "qa-ready"}, "role": "worker", "workflow": "solo", "onPass": "done",
+                   "onFail": "dev-ready", "onFailPriority": 0, "maxRounds": 3}]}
+
+
+class FailureHandoff(ApplierCase):
+    def finished_run(self, status, findings=None):
+        run = self.make_run(status)
+        if findings is not None:
+            with self.store.transaction() as tx:
+                tx.create("stage_attempt", {"team_id": self.team, "workflow_run_id": run, "stage": "qa",
+                                            "attempt": 1, "verdict_json": {"verdict": "fail",
+                                                                           "findings": findings}})
+        return run
+
+    def setUp(self):
+        super().setUp()
+        self.write_config(FLOW)
+        self.ticket = self.add("work", body="original brief")
+        self.move("T-001", "qa-ready")
+
+    def body_priority(self):
+        row = self.conn.execute("SELECT body, priority, status FROM tickets WHERE key = 'T-001'").fetchone()
+        return row["body"], row["priority"], row["status"]
+
+    def test_fail_returns_to_the_previous_status_first_in_line_with_findings(self):
+        self.apply("T-001", self.finished_run("failed", ["missing test for empty input", "typo in CLI help"]))
+        body, priority, status = self.body_priority()
+        self.assertEqual((status, priority), ("dev-ready", 0))
+        self.assertTrue(body.startswith("original brief"))
+        self.assertIn("## Findings from qa-ready, round 1", body)
+        self.assertIn("- missing test for empty input", body)
+        self.assertIn("- typo in CLI help", body)
+
+    def test_pass_changes_neither_priority_nor_body(self):
+        self.apply("T-001", self.finished_run("succeeded"))
+        self.assertEqual(self.body_priority(), ("original brief", 100, "done"))
+
+    def test_failed_ticket_is_picked_before_an_older_one_in_the_same_status(self):
+        self.add("older")
+        self.move("T-002", "dev-ready")
+        self.apply("T-001", self.finished_run("failed", ["x"]))
+        rows = self.conn.execute("SELECT key FROM tickets WHERE status = 'dev-ready' ORDER BY priority, "
+                                 "created_at, key").fetchall()
+        self.assertEqual([r["key"] for r in rows], ["T-001", "T-002"])
+
+    def test_blocked_by_round_limit_keeps_priority(self):
+        for _ in range(3):
+            self.apply("T-001", self.finished_run("failed", ["again"]))
+            self.move("T-001", "qa-ready") if self.body_priority()[2] == "dev-ready" else None
+        self.assertEqual(self.body_priority()[2], "blocked")
+
+    def test_body_stays_under_the_cap(self):
+        with self.store.transaction() as tx:
+            for i in range(40):
+                boardmodel.append_body(tx, self.ticket["id"], f"note {i} " + "x" * 2000)
+        body = self.body_priority()[0]
+        self.assertLessEqual(len(body), boardmodel.BODY_LIMIT)
+        self.assertTrue(body.startswith("original brief"))
+        self.assertIn("note 39", body)
+
+    def test_on_fail_priority_must_be_a_non_negative_integer(self):
+        bad = json.loads(json.dumps(FLOW))
+        bad["rules"][0]["onFailPriority"] = -1
+        self.write_config(bad)
+        with self.assertRaises(AsError) as c:
+            boardmodel.load_config(self.ws)
+        self.assertEqual(c.exception.code, "BOARD_CONFIG_INVALID")
+
+
+class RulesCheckEntryPoints(ApplierCase):
+    def test_path_to_done_may_start_at_the_agent_status(self):
+        cfg = {"version": 2, "agentTicketStatus": "review",
+               "statuses": [{"id": "todo", "kind": "initial"}, {"id": "review"}, {"id": "done", "kind": "done"}],
+               "ticketFields": [],
+               "rules": [{"when": {"status": "review"}, "role": "checker", "workflow": "check",
+                          "onPass": "done", "onFail": "review"}]}
+        self.write_config(cfg)
+        self.assertEqual(self.check(boardmodel.load_config(self.ws)), [])
+        del cfg["agentTicketStatus"]
+        self.write_config(cfg)
+        problems = self.check(boardmodel.load_config(self.ws))
+        self.assertEqual([p["path"] for p in problems], ["rules"])
+
+
+class AgentStatusAndUpdate(ServerCase):
+    def setUp(self):
+        super().setUp()
+        cfg = json.loads(json.dumps(FLOW))
+        cfg["rules"] = []
+        with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
+            json.dump(cfg, f)
+
+    def test_agent_tickets_land_in_the_configured_status_and_operator_tickets_in_initial(self):
+        got = self.add(self.asg_ok)
+        self.assertEqual(got["ticket"]["status"], "refine-ready")
+        with self.store.transaction() as tx:
+            mine = boardmodel.ticket_add(tx, self.ws, {"title": "by hand", "priority": 100})
+        self.assertEqual(mine["ticket"]["status"], "backlog")
+
+    def test_agent_status_defaults_to_initial_and_cannot_be_terminal(self):
+        for value, ok in (("done", False), ("close", False), ("nope", False), ("dev-ready", True)):
+            cfg = json.loads(json.dumps(FLOW))
+            cfg["agentTicketStatus"] = value
+            cfg["rules"] = []
+            with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
+                json.dump(cfg, f)
+            if ok:
+                self.assertEqual(boardmodel.load_config(self.ws)["agentStatus"], value)
+            else:
+                with self.assertRaises(AsError):
+                    boardmodel.load_config(self.ws)
+        cfg = json.loads(json.dumps(FLOW))
+        del cfg["agentTicketStatus"]
+        cfg["rules"] = []
+        with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
+            json.dump(cfg, f)
+        self.assertEqual(boardmodel.load_config(self.ws)["agentStatus"], "backlog")
+
+    def claim(self, key, agent):
+        self.conn.execute("UPDATE tickets SET assignee = ? WHERE key = ?", (agent, key))
+        self.conn.commit()
+
+    def update(self, assignment, key, body, mode=None):
+        args = {"assignment": assignment, "key": key, "body": body}
+        if mode:
+            args["mode"] = mode
+        with self.store.transaction() as tx:
+            return boardmodel.mcp_ticket_update(tx, self.ws, args)
+
+    def test_agent_updates_only_the_ticket_it_is_working(self):
+        with self.store.transaction() as tx:
+            boardmodel.ticket_add(tx, self.ws, {"title": "mine", "priority": 100, "body": "brief"})
+            boardmodel.ticket_add(tx, self.ws, {"title": "other", "priority": 100})
+        self.claim("T-001", self.allowed)
+        got = self.update(self.asg_ok, "T-001", "refined spec")
+        self.assertEqual(got["ticket"]["body"], "refined spec")
+        got = self.update(self.asg_ok, "T-001", "extra section", mode="append")
+        self.assertEqual(got["ticket"]["body"], "refined spec\n\nextra section")
+        for assignment, key in ((self.asg_ok, "T-002"), (self.asg_no, "T-001"), (self.asg_done, "T-001")):
+            with self.assertRaises(AsError) as c:
+                self.update(assignment, key, "nope")
+            self.assertEqual(c.exception.code, "FORBIDDEN")
+        names = [e["name"] for e in self.conn.execute(
+            "SELECT name FROM ticket_events WHERE ticket_id = (SELECT id FROM tickets WHERE key='T-001')")]
+        self.assertEqual(names.count("ticket.updated"), 2)
+
+    def test_tool_and_validator(self):
+        from agent_studio import dispatch
+        with self.assertRaises(AsError):
+            dispatch._validate_ticket_update({"workspace": self.ws, "key": "T-001", "assignment": str(self.asg_ok),
+                                              "body": "x", "mode": "wipe"})
+        with self.assertRaises(AsError):
+            dispatch._validate_ticket_update({"workspace": self.ws, "key": "T-001", "body": "x"})
+        got = self.rpc("tools/call", {"name": "ticket_update", "arguments": {"key": "T-001", "body": ""}})
+        self.assertEqual(got["error"]["code"] if "error" in got else got["result"]["code"], "BAD_REQUEST")
+
+
+class CommitWorktree(ApplierCase):
+    def git(self, *a, cwd=None):
+        return subprocess.run(["git", "-C", cwd or self.repo] + list(a), check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def test_uncommitted_worktree_changes_are_committed_when_the_outcome_is_applied(self):
+        self.repo = tests.helpers.make_repo()
+        self.addCleanup(tests.helpers.reset_repo, self.repo)
+        wt = self.repo + "-wt"
+        self.addCleanup(shutil.rmtree, wt, True)
+        self.git("add", "-A")
+        self.git("commit", "--allow-empty", "-qm", "base")
+        self.git("worktree", "add", "-q", "-b", "t-1", wt)
+        with open(os.path.join(wt, "new.txt"), "w") as f:
+            f.write("work\n")
+        ticket = {"key": "T-001", "worktree_path": wt, "id": "x"}
+        notes = []
+        orig = boardsched._ticket_event_note
+        boardsched._ticket_event_note = lambda tx, t, name, payload: notes.append((name, payload))
+        try:
+            rule = {"workspace": "worktree", "when": {"status": "dev-ready"}}
+            boardsched._commit_worktree(None, ticket, rule)
+            self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+            self.assertEqual(self.git("log", "-1", "--format=%s", cwd=wt), "T-001: dev-ready")
+            self.assertEqual(notes[0][0], "ticket.committed")
+            boardsched._commit_worktree(None, ticket, rule)          # nothing new: no second commit
+            self.assertEqual(len(notes), 1)
+            boardsched._commit_worktree(None, ticket, {"workspace": "main", "when": {"status": "x"}})
+            boardsched._commit_worktree(None, dict(ticket, worktree_path=None), rule)
+        finally:
+            boardsched._ticket_event_note = orig
+
+
+if __name__ == "__main__":
+    unittest.main()

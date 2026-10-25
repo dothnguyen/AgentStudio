@@ -1,0 +1,10 @@
+version: 1
+description: Board stage review-ready. The TeamLead reviews the code of the ticket branch (code only; tests are not run).
+maxSteps: 4
+stages:
+  - id: review
+    role: TeamLead
+    permission: read_only
+    maxVisits: 1
+    promptFile: workflows/prompts/board-review.md
+    next: { pass: $succeed, fail: $fail }

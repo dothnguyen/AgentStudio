@@ -228,6 +228,16 @@ def _validate_ticket_add(args):
     return out
 
 
+def _validate_ticket_update(args):
+    # only the MCP server sends this (an assignment is required); there is no operator CLI for it
+    mode = args.get("mode", "replace")
+    if mode not in ("replace", "append"):
+        raise AsError(BAD_REQUEST, "mode must be replace or append.")
+    return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+            "assignment": validate_uuid(args.get("assignment"), "assignment"),
+            "body": req_text(args, "body", boardmodel.BODY_LIMIT, allow_empty=False), "mode": mode}
+
+
 def _validate_ticket_phase(args):
     return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
             "phase": _slug_arg(args.get("phase"), "phase")}
@@ -583,6 +593,7 @@ COMMANDS = {
     "workflow.validate": _workflow_validate,
     "board.resume": _inbox("board.resume", _validate_board_resume),
     "ticket.add": _inbox("ticket.add", _validate_ticket_add),
+    "ticket.update": _inbox("ticket.update", _validate_ticket_update),
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),

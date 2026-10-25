@@ -95,6 +95,14 @@
         "phases/phase-04/stories/P04-S10-scheduler-and-run-board.md"
       ],
       "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S13-dev-board-flow.md",
+      "title": "What a development board needs",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S12-board-mcp-server.md"
+      ],
+      "priority": 3
     }
   ],
   "questions": []

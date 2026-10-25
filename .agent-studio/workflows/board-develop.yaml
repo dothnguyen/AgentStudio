@@ -1,0 +1,14 @@
+version: 1
+description: Board stage dev-ready. The Developer implements the ticket in its worktree; the touched tests run; failures go back to the Developer.
+maxSteps: 12
+stages:
+  - id: develop
+    role: Developer
+    permission: workspace_write
+    maxVisits: 4
+    promptFile: workflows/prompts/board-develop.md
+    next: { done: tests }
+  - id: tests
+    type: validation
+    maxVisits: 4
+    next: { pass: $succeed, fail: develop }

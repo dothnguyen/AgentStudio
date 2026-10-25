@@ -25,7 +25,7 @@ NEVER = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions
          "Bash", "--add-dir")
 REASONING = ("low", "medium", "high", "xhigh", "max")
 READ_TOOLS = "Read,Grep,Glob"
-MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_list", "ticket_show", "phase_list", "board_show")]
+MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list", "board_show")]
 COMMON = ["--print", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
           "--strict-mcp-config",             # only MCP servers we pass (none)
           "--permission-prompts", "none",    # nothing can wait on a prompt: anything that would ask is denied

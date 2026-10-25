@@ -41,6 +41,7 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | | [P04-S10](./stories/P04-S10-scheduler-and-run-board.md) | Scheduler, `team run-board` / `stop-board`, caps, deps, workspace modes, `merge` action |
 | | [P04-S11](./stories/P04-S11-recovery-limits-and-live-gate.md) | Lease recovery, usage limits, `board resume`, docs, live gate |
 | D Agents use the board | [P04-S12](./stories/P04-S12-board-mcp-server.md) | `agent-studio mcp` stdio MCP server: agents add and list tickets and phases; spike first |
+| | [P04-S13](./stories/P04-S13-dev-board-flow.md) | Worktree commits, findings handoff, `onFailPriority`, `agentTicketStatus`, `ticket_update` |
 
 Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in parallel) → S10 → S11, and S12 after S08 (best after S10). S01–S05 give the new team and replace `team.py`; S06 is the clean slate; S07–S11 build the generic board with the new team.
 

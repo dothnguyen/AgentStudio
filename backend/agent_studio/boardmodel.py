@@ -36,14 +36,15 @@ FINISHED_RUN_STATES = tuple(RUN_OUTCOMES)
 WORKSPACE_MODES = ("main", "worktree", "none")
 BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
-_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch")
+_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
-             "requiresDeps", "workspace", "action", "priority")
+             "requiresDeps", "workspace", "action", "priority", "onFailPriority")
 RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
+BODY_LIMIT = 32 * 1024         # a ticket body is the next agent's task text, so it is capped
 MCP_TICKET_CAP = 10            # per assignment, unless the call says otherwise (§G)
 ACTIVE_ASSIGNMENT_STATES = ("queued", "claimed", "running", "waiting_input", "reconciling")
 
@@ -205,7 +206,7 @@ def load_config(workspace: str) -> dict:
             rule_text(rule["workflow"], f"{path}.workflow", 64, slug=True)
         if "action" in rule:
             rule_text(rule["action"], f"{path}.action", 64)
-        for key, minimum in (("maxRounds", 1), ("cap", 1), ("priority", 0)):
+        for key, minimum in (("maxRounds", 1), ("cap", 1), ("priority", 0), ("onFailPriority", 0)):
             if key in rule:
                 rule_int(rule[key], f"{path}.{key}", minimum)
         if "requiresDeps" in rule and not isinstance(rule["requiresDeps"], bool):
@@ -214,6 +215,12 @@ def load_config(workspace: str) -> dict:
             problems.append((f"{path}.workspace", f"must be one of {list(WORKSPACE_MODES)}"))
         if "during" in rule:
             rule_status(rule["during"], f"{path}.during")
+    agent_status = raw.get("agentTicketStatus")
+    if agent_status is not None:
+        rule_status(agent_status, "agentTicketStatus")
+        entry = next((s for s in seen if s["id"] == agent_status), None)
+        if entry is not None and entry["kind"] in TERMINAL_KINDS:
+            problems.append(("agentTicketStatus", "must not be a done or closed status"))
     duplicates = sorted({s for s in rule_statuses if rule_statuses.count(s) > 1})
     for slug in duplicates:
         problems.append(("rules", f"more than one rule for status {slug!r}"))
@@ -224,7 +231,8 @@ def load_config(workspace: str) -> dict:
             "terminal": frozenset(s["id"] for s in seen if s["kind"] in TERMINAL_KINDS),
             "ticketFields": fields, "rules": rules,
             "rulesByStatus": {r["when"]["status"]: r for r in rules},
-            "leaseSeconds": lease_seconds, "baseBranch": base_branch}
+            "leaseSeconds": lease_seconds, "baseBranch": base_branch,
+            "agentStatus": agent_status or initial[0]}
 
 
 def config_status_ids(config: dict) -> list:
@@ -559,7 +567,7 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     ensure_board(tx, workspace)
     phase = _target_phase(tx, workspace, args["phase"]) if args.get("phase") \
         else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
-    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100),
+    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), status=config["agentStatus"],
                                            createdByMember=member_id, createdByAssignment=assignment_id))
     deps = []
     for key in list(dict.fromkeys(args.get("dependsOn") or [])):
@@ -581,7 +589,7 @@ def ticket_add(tx, workspace: str, args: dict) -> dict:
         phase = _target_phase(tx, workspace, args["phase"])
     else:
         phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
-    ident, key, status = new_id(), next_key(tx.conn, workspace), config["initial"]
+    ident, key, status = new_id(), next_key(tx.conn, workspace), args.get("status") or config["initial"]
     now = utcnow()
     tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, status, priority, assignee, "
                     "lease_until, created_by_member, created_by_assignment, created_at, updated_at) "
@@ -745,7 +753,8 @@ def check_rules(workspace: str, config: dict) -> list:
         for rule in config["rules"]:
             targets = [rule["onPass"], rule["onFail"]] + ([rule["onBlocked"]] if "onBlocked" in rule else [])
             edges.setdefault(rule["when"]["status"], set()).update(t for t in targets if t)
-        reachable, pending = set(), [config["initial"]]
+        # tickets enter at the initial status (the operator moves them on) and at the agent status
+        reachable, pending = set(), [config["initial"], config["agentStatus"]]
         while pending:
             current = pending.pop()
             if current in reachable:
@@ -809,6 +818,13 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
                     "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
                     "lease_until = NULL WHERE id = ?",
                     values + (ticket["id"],))
+    if outcome != "pass":
+        findings = _run_findings(tx.conn, run["id"])
+        if findings:  # the next agent only sees the ticket, so a failed run's findings travel in its body
+            append_body(tx, ticket["id"], f"## Findings from {rule_status_id}, round {rounds[rule_status_id]}\n"
+                        + "\n".join(f"- {f}" for f in findings))
+        if "onFailPriority" in rule and target != BLOCKED_STATUS:
+            bump_priority(tx, ticket["id"], rule["onFailPriority"])
     _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", ticket["status"], target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "outcome": outcome,
                    "rule": rule_status_id, "rounds": rounds[rule_status_id], "to": target,
@@ -816,6 +832,64 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
     return {"applied": True, "outcome": outcome, "rule": rule_status_id,
             "rounds": rounds[rule_status_id], "reason": reason,
             "ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone())}
+
+
+def _run_findings(conn, run_id: str) -> list:
+    """The findings of the last verdict a workflow run produced (stage attempts keep them as JSON)."""
+    rows = conn.execute("SELECT verdict_json FROM stage_attempts WHERE workflow_run_id = ? AND "
+                        "verdict_json IS NOT NULL ORDER BY updated_at DESC, attempt DESC", (run_id,)).fetchall()
+    for row in rows:
+        try:
+            verdict = json.loads(row["verdict_json"]) if isinstance(row["verdict_json"], str) else row["verdict_json"]
+        except ValueError:
+            continue
+        found = (verdict or {}).get("findings")
+        if isinstance(found, list) and found:
+            return [str(f)[:2000] for f in found][:20]
+    return []
+
+
+def append_body(tx, ticket_id: str, text: str) -> None:
+    """Append a section to a ticket body, keeping the head (the original brief) when the cap is hit."""
+    row = tx.conn.execute("SELECT body FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
+    body = ((row["body"] or "").rstrip() + "\n\n" if row and row["body"] else "") + text.strip()
+    if len(body) > BODY_LIMIT:
+        head = (row["body"] or "")[: BODY_LIMIT // 2]
+        body = head + "\n\n[... older notes trimmed ...]\n\n" + text.strip()[: BODY_LIMIT // 2 - 100]
+    tx.conn.execute("UPDATE tickets SET body = ?, updated_at = ? WHERE id = ?", (body, utcnow(), ticket_id))
+
+
+def bump_priority(tx, ticket_id: str, value: int) -> None:
+    """Lower numbers are claimed first; a failed ticket goes to the front of the queue it returns to."""
+    tx.conn.execute("UPDATE tickets SET priority = ?, updated_at = ? WHERE id = ?", (value, utcnow(), ticket_id))
+
+
+def mcp_ticket_update(tx, workspace: str, args: dict) -> dict:
+    """An agent updates the body of the ticket its own assignment is working (replace or append). The
+    assignment must be active, its member must have canAddTickets, and the ticket must be claimed by that
+    agent, so an agent can only write to the ticket it was given."""
+    row = tx.conn.execute(
+        "SELECT a.id, a.agent_id, a.status, ag.can_add_tickets, ag.member_id FROM assignments a "
+        "JOIN agents ag ON ag.id = a.agent_id WHERE a.id = ?", (args["assignment"],)).fetchone()
+    if row is None or row["status"] not in ACTIVE_ASSIGNMENT_STATES or not row["can_add_tickets"]:
+        raise AsError(FORBIDDEN, "The assignment is not active or its member may not update tickets "
+                                 "(canAddTickets).", data={"assignment": args["assignment"]})
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    if ticket["assignee"] != row["agent_id"]:
+        raise AsError(FORBIDDEN, f"Ticket {ticket['key']} is not the ticket this assignment is working.",
+                      data={"key": ticket["key"]})
+    text = args["body"].strip()
+    if args.get("mode") == "append":
+        append_body(tx, ticket["id"], text)
+    else:
+        tx.conn.execute("UPDATE tickets SET body = ?, updated_at = ? WHERE id = ?",
+                        (text[:BODY_LIMIT], utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.updated", "agent", ticket["status"], ticket["status"],
+                  {"ticketId": ticket["id"], "key": ticket["key"], "mode": args.get("mode") or "replace",
+                   "memberId": row["member_id"] or row["agent_id"], "assignment": args["assignment"],
+                   "chars": len(text)})
+    return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone())}
 
 

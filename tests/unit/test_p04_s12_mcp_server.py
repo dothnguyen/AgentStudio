@@ -75,7 +75,8 @@ class Protocol(ServerCase):
         self.assertEqual(got["result"]["protocolVersion"], "2024-11-05")
         listed = self.rpc("tools/list")
         names = [t["name"] for t in listed["result"]["tools"]]
-        self.assertEqual(names, ["ticket_add", "ticket_list", "ticket_show", "phase_list", "board_show"])
+        self.assertEqual(names, ["ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list",
+                                 "board_show"])
         self.assertEqual(self.rpc("ping")["result"], {})
         self.assertIsNone(self.rpc("notifications/initialized"))
 
@@ -289,7 +290,7 @@ class AdapterMcpArgs(unittest.TestCase):
         for policy in ("read_only", "workspace_write"):
             argv = self.prepare("claude", True, policy).argv
             allowed = argv[argv.index("--allowedTools") + 1].split(",")
-            for tool in ("ticket_add", "ticket_list", "ticket_show", "phase_list", "board_show"):
+            for tool in ("ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list", "board_show"):
                 self.assertIn("mcp__agent-studio__" + tool, allowed)
             self.assertEqual(argv.count("--allowedTools"), 1)
             self.assertIn("--strict-mcp-config", argv)

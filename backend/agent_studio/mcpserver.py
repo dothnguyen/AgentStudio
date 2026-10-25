@@ -29,6 +29,14 @@ TOOLS = [
          "phase": {"type": "string", "description": "phase slug; the default phase when omitted"},
          "dependsOn": {"type": "array", "items": {"type": "string"}}},
          "required": ["title"]}},
+    {"name": "ticket_update",
+     "description": "Write to the body of the ticket you are working (the ticket in your task): replace it "
+                    "with the refined text, or append a section. The next agent receives this body as its task.",
+     "inputSchema": {"type": "object", "properties": {
+         "key": {"type": "string", "description": "the ticket key from your task, e.g. T-004"},
+         "body": {"type": "string"},
+         "mode": {"type": "string", "enum": ["replace", "append"], "description": "default replace"}},
+         "required": ["key", "body"]}},
     {"name": "ticket_list",
      "description": "List the workspace's tickets, optionally by status or phase.",
      "inputSchema": {"type": "object", "properties": {
@@ -105,6 +113,14 @@ def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: st
                            "phase": t["phase"], "createdBy": {"memberId": t.get("createdByMember"),
                                                               "assignmentId": t.get("createdByAssignment")}},
                 "dependsOn": data.get("dependsOn") or []}
+    if name == "ticket_update":
+        if not isinstance(args.get("key"), str) or not isinstance(args.get("body"), str) or not args["body"].strip():
+            raise AsError(BAD_REQUEST, "ticket_update needs a key and a non-empty body.")
+        data = _call("ticket.update", dict(args, assignment=assignment, workspace=workspace), write=True,
+                     assignment=assignment, agent=agent, request_id=request_id)
+        t = data["ticket"]
+        return {"content": [{"type": "text", "text": f"updated {t['key']} ({len(t.get('body') or '')} characters)"}],
+                "ticket": {"key": t["key"], "status": t["status"]}}
     if name == "ticket_list":
         data = _call("ticket.list", dict(args, workspace=workspace), write=False,
                      assignment=assignment, agent=agent)

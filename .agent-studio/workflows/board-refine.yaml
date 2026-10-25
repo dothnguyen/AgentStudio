@@ -1,0 +1,10 @@
+version: 1
+description: Board stage refine-ready. The TeamLead writes a detailed implementation plan into the ticket so a weaker model can implement it.
+maxSteps: 4
+stages:
+  - id: refine
+    role: TeamLead
+    permission: read_only
+    maxVisits: 1
+    promptFile: workflows/prompts/board-refine.md
+    next: { pass: $succeed, fail: $fail }

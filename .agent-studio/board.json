@@ -1,12 +1,117 @@
 {
   "version": 2,
+  "baseBranch": "main",
+  "leaseSeconds": 300,
+  "agentTicketStatus": "refine-ready",
   "statuses": [
-    {"id": "todo", "kind": "initial", "name": "To do"},
-    {"id": "doing"},
-    {"id": "review"},
-    {"id": "done", "kind": "done"},
-    {"id": "cancelled", "kind": "closed"}
+    {
+      "id": "backlog",
+      "kind": "initial",
+      "name": "Backlog"
+    },
+    {
+      "id": "unpack-ready",
+      "name": "Unpack ready"
+    },
+    {
+      "id": "refine-ready",
+      "name": "Refine ready"
+    },
+    {
+      "id": "dev-ready",
+      "name": "Dev ready"
+    },
+    {
+      "id": "qa-ready",
+      "name": "QA ready"
+    },
+    {
+      "id": "review-ready",
+      "name": "Review ready"
+    },
+    {
+      "id": "merge-ready",
+      "name": "Merge ready"
+    },
+    {
+      "id": "done",
+      "kind": "done",
+      "name": "Done"
+    },
+    {
+      "id": "close",
+      "kind": "closed",
+      "name": "Close"
+    }
   ],
   "ticketFields": [],
-  "rules": []
+  "rules": [
+    {
+      "when": {
+        "status": "merge-ready"
+      },
+      "action": "merge",
+      "onPass": "done",
+      "onFail": "dev-ready",
+      "onFailPriority": 0
+    },
+    {
+      "when": {
+        "status": "review-ready"
+      },
+      "role": "TeamLead",
+      "workflow": "board-review",
+      "workspace": "worktree",
+      "onPass": "merge-ready",
+      "onFail": "qa-ready",
+      "onFailPriority": 0,
+      "maxRounds": 3
+    },
+    {
+      "when": {
+        "status": "qa-ready"
+      },
+      "role": "QA",
+      "workflow": "board-qa",
+      "workspace": "worktree",
+      "onPass": "review-ready",
+      "onFail": "dev-ready",
+      "onFailPriority": 0,
+      "maxRounds": 3
+    },
+    {
+      "when": {
+        "status": "dev-ready"
+      },
+      "role": "Developer",
+      "workflow": "board-develop",
+      "workspace": "worktree",
+      "onPass": "qa-ready",
+      "onFail": "dev-ready",
+      "maxRounds": 3,
+      "requiresDeps": true
+    },
+    {
+      "when": {
+        "status": "refine-ready"
+      },
+      "role": "TeamLead",
+      "workflow": "board-refine",
+      "workspace": "none",
+      "onPass": "dev-ready",
+      "onFail": "backlog",
+      "maxRounds": 2
+    },
+    {
+      "when": {
+        "status": "unpack-ready"
+      },
+      "role": "ProductOwner",
+      "workflow": "board-unpack",
+      "workspace": "none",
+      "onPass": "done",
+      "onFail": "backlog",
+      "maxRounds": 2
+    }
+  ]
 }

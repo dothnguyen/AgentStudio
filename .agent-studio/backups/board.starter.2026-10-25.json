@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "statuses": [
+    {"id": "todo", "kind": "initial", "name": "To do"},
+    {"id": "doing"},
+    {"id": "review"},
+    {"id": "done", "kind": "done"},
+    {"id": "cancelled", "kind": "closed"}
+  ],
+  "ticketFields": [],
+  "rules": []
+}

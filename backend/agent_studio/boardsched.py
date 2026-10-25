@@ -11,6 +11,8 @@ P03 scheduler it replaces): it may drive the engine and the retained worktree he
 """
 from __future__ import annotations
 
+import os
+
 from . import boardmodel, gitws, tasks, worktrees
 from .protocol import AsError, BOARD_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .state import utcnow
@@ -110,9 +112,27 @@ def _apply_finished(tx, workspace: str) -> int:
             applied += 1
             continue
         rule = _claiming_rule(tx, workspace, ticket)
+        _commit_worktree(tx, ticket, rule)
         boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]}, rule=rule)
         applied += 1
     return applied
+
+
+def _commit_worktree(tx, ticket: dict, rule) -> None:
+    """Whatever an agent changed in the ticket worktree is committed on the ticket branch before the outcome
+    is applied: the next stage needs a clean worktree to start a run, and the merge takes the branch's
+    commits (an uncommitted change would be lost when the worktree is removed)."""
+    path = ticket.get("worktree_path")
+    if not path or not rule or rule.get("workspace") != "worktree" or not os.path.isdir(path):
+        return
+    try:
+        result = worktrees.commit_round(path, f"{ticket['key']}: {rule['when']['status']}")
+    except AsError as e:
+        _ticket_event_note(tx, ticket, "ticket.commit_failed", {"code": e.code, "message": e.message})
+        return
+    if result.get("commit"):
+        _ticket_event_note(tx, ticket, "ticket.committed", {"commit": result["commit"],
+                                                            "rule": rule["when"]["status"]})
 
 
 def _usage_limited(tx, run_id: str) -> bool:
@@ -395,6 +415,9 @@ def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) 
 
 def _move_by_rule(tx, workspace: str, ticket: dict, rule: dict, target_key: str, reason: str) -> None:
     _set_status(tx, ticket, rule[target_key])
+    boardmodel.append_body(tx, ticket["id"], f"## {reason}")
+    if "onFailPriority" in rule:
+        boardmodel.bump_priority(tx, ticket["id"], rule["onFailPriority"])
     boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_conflict", "coordinator", ticket["status"],
                              rule[target_key], {"ticketId": ticket["id"], "key": ticket["key"],
                                                 "reason": reason, "to": rule[target_key]})
