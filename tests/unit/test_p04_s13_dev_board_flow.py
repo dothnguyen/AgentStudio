@@ -222,6 +222,42 @@ class AgentStatusAndUpdate(ServerCase):
         self.assertEqual(got["error"]["code"] if "error" in got else got["result"]["code"], "BAD_REQUEST")
 
 
+class TicketActivity(ApplierCase):
+    def setUp(self):
+        super().setUp()
+        self.write_config(FLOW)
+        self.add("work")
+
+    def activity(self):
+        from agent_studio import boardcli
+        t = boardmodel.ticket_detail(self.conn, self.ws, "T-001")["ticket"]
+        return t["activity"], boardcli.activity_text(t)
+
+    def test_not_started_working_blocked_and_finished(self):
+        self.move("T-001", "qa-ready")
+        activity, text = self.activity()
+        self.assertEqual((activity["state"], activity["waitingFor"]), ("not started", "worker"))
+        self.assertEqual(text, "not started (waiting for worker)")
+        with self.store.transaction() as tx:
+            agent = {"id": tx.create("agent", {"team_id": self.team, "ordinal": 0, "provider_id": "fake",
+                                               "role": "QA", "display_name": "qa"}), "display_name": "qa"}
+            tx.conn.execute("UPDATE tickets SET assignee = ? WHERE key = 'T-001'", (agent["id"],))
+        activity, text = self.activity()
+        self.assertEqual(activity["state"], "working")
+        self.assertEqual(text, "working: " + agent["display_name"])
+        with self.store.transaction() as tx:
+            tx.conn.execute("UPDATE tickets SET assignee = NULL WHERE key = 'T-001'")
+        self.move("T-001", "done")
+        self.assertEqual(self.activity()[0]["state"], "finished")
+
+    def test_a_failed_start_is_shown_as_a_note(self):
+        self.move("T-001", "qa-ready")
+        row = self.conn.execute("SELECT id FROM tickets WHERE key = 'T-001'").fetchone()
+        boardmodel._ticket_event(self.conn, row["id"], "ticket.claim_released", "coordinator", "qa-ready",
+                                 "qa-ready", {"reason": "start_failed:WORKSPACE_DIRTY"})
+        self.assertEqual(self.activity()[1], "not started (waiting for worker) [start_failed:WORKSPACE_DIRTY]")
+
+
 class CommitWorktree(ApplierCase):
     def git(self, *a, cwd=None):
         return subprocess.run(["git", "-C", cwd or self.repo] + list(a), check=True, capture_output=True,

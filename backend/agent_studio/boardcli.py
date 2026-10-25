@@ -243,10 +243,28 @@ def _board_show(ns):
 # ---- human rendering --------------------------------------------------------------------------------------
 
 
+def activity_text(t) -> str:
+    """One short phrase for a ticket's activity: working (who), not started, finished, blocked."""
+    a = t.get("activity") or {}
+    state = a.get("state")
+    if state == "working":
+        return "working: " + (a.get("agent") or a.get("role") or "agent")
+    if state == "not started":
+        text = "not started" + (f" (waiting for {a['waitingFor']})" if a.get("waitingFor") else "")
+        return text + (f" [{a['note']}]" if a.get("note") else "")
+    if state == "blocked":
+        return "blocked" + (f" [{a['note']}]" if a.get("note") else "")
+    return state or ""
+
+
 def _render_detail(d) -> str:
     t = d["ticket"]
     lines = [f"{t['key']}  {t['status']}  priority {t['priority']}  phase {t['phase']} ({t.get('phaseName')})",
              f"title: {t['title']}"]
+    a = t.get("activity") or {}
+    lines.append("activity: " + activity_text(t)
+                 + (f"  workflow {a['workflow']}  run {a['run']}" if a.get("state") == "working" and a.get("run")
+                    else ""))
     if t.get("body"):
         lines.append("body:")
         lines.extend("  " + line for line in t["body"].splitlines())
@@ -270,8 +288,8 @@ def _render_list(d) -> str:
         scope = "".join(f" in {part} {value}" for part, value in (("status", d["status"]), ("phase", d["phase"]))
                         if value)
         return "no tickets" + scope
-    return "\n".join(f"{t['key']}  P{t['priority']:<4}  {t['status']:<10}  {t['phase']:<10}  {t['title']}"
-                     for t in d["tickets"])
+    return "\n".join(f"{t['key']}  P{t['priority']:<4}  {t['status']:<10}  {t['phase']:<10}  "
+                     f"{activity_text(t):<22}  {t['title']}" for t in d["tickets"])
 
 
 def _phase_header(p, current=None) -> str:
@@ -315,7 +333,7 @@ def _render_board(d) -> str:
             kind = f" [{column['kind']}]" if column["kind"] else ""
             lines.append(f"  {column['title']} ({column['count']}){kind}")
             for t in column["tickets"]:
-                lines.append(f"    {t['key']}  P{t['priority']:<4}  {t['title']}")
+                lines.append(f"    {t['key']}  P{t['priority']:<4}  {t['title']}  <{activity_text(t)}>")
     return "\n".join(lines)
 
 

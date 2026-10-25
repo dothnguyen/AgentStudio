@@ -506,11 +506,45 @@ def get_ticket(conn, workspace: str, key: str) -> dict:
     return dict(row)
 
 
-def _ticket_json(conn, row) -> dict:
+def _ticket_json(conn, row, config=None) -> dict:
     out = _row_to_json(row)
     phase = conn.execute("SELECT slug, name FROM phases WHERE id = ?", (row["phase_id"],)).fetchone()
     out["phase"] = phase["slug"] if phase else None
     out["phaseName"] = phase["name"] if phase else None
+    out["activity"] = ticket_activity(conn, row, config)
+    return out
+
+
+def ticket_activity(conn, row, config=None) -> dict:
+    """What the agents are doing with a ticket: `working` (claimed, with who), `not started` (waiting for the
+    next agent, or parked with no rule; a failed start is reported in `note`), `finished` (done or closed),
+    or `blocked`. Derived from the claim, the board rules and the latest ticket event; nothing is stored."""
+    if config is None:
+        try:
+            config = load_config(row["workspace"])
+        except AsError:
+            config = None
+    status = row["status"]
+    if status == BLOCKED_STATUS:
+        return {"state": "blocked", "note": row["blocked_reason"]}
+    if row["assignee"] is not None:
+        agent = conn.execute("SELECT role, display_name FROM agents WHERE id = ?", (row["assignee"],)).fetchone()
+        rule = (config or {}).get("rulesByStatus", {}).get(status)
+        return {"state": "working", "agent": agent["display_name"] if agent else None,
+                "role": agent["role"] if agent else None, "run": row["active_run_id"],
+                "leaseUntil": row["lease_until"], "workflow": rule.get("workflow") if rule else None}
+    if config is not None and status in config["terminal"]:
+        return {"state": "finished"}
+    out = {"state": "not started"}
+    rule = (config or {}).get("rulesByStatus", {}).get(status)
+    if rule is not None:
+        out["waitingFor"] = rule["role"]
+    last = conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT 1",
+                        (row["id"],)).fetchone()
+    if last is not None and last["name"] == "ticket.claim_released":
+        reason = (json.loads(last["payload_json"]) or {}).get("reason")
+        if reason:
+            out["note"] = reason
     return out
 
 
@@ -959,7 +993,7 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
     events = conn.execute("SELECT * FROM (SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT ?) "
                           "ORDER BY id", (ticket["id"], EVENTS_SHOWN)).fetchall()
     return {"workspace": workspace, "ticket": _ticket_json(conn, conn.execute(
-        "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone()),
+        "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone(), config),
         "dependsOn": deps, "dependents": dependents,
         "events": [{"id": e["id"], "at": e["at"], "actor": e["actor"], "name": e["name"],
                     "from": e["from_status"], "to": e["to_status"], "payload": json.loads(e["payload_json"])}
@@ -982,7 +1016,7 @@ def ticket_list(conn, workspace: str, status=None, phase=None) -> dict:
     rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
                         " ORDER BY priority, created_at, key", params).fetchall()
     return {"workspace": workspace, "statuses": config_status_ids(config), "status": status, "phase": phase,
-            "tickets": [_ticket_json(conn, r) for r in rows]}
+            "tickets": [_ticket_json(conn, r, config) for r in rows]}
 
 
 def board_show(conn, workspace: str) -> dict:
@@ -1000,7 +1034,7 @@ def board_show(conn, workspace: str) -> dict:
                                "ORDER BY priority, created_at, key", (row["id"],)).fetchall() if row["id"] else []
         by_status = {}
         for ticket in tickets:
-            by_status.setdefault(ticket["status"], []).append(_ticket_json(conn, ticket))
+            by_status.setdefault(ticket["status"], []).append(_ticket_json(conn, ticket, config))
         columns = [{"status": s["id"], "kind": s["kind"], "title": s["name"], "count": len(by_status.get(s["id"], [])),
                     "tickets": by_status.get(s["id"], [])} for s in config["statuses"]]
         if BLOCKED_STATUS in by_status:  # the reserved blocked column appears only when tickets are blocked
