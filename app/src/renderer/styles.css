@@ -408,7 +408,7 @@ code,
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 16px;
   min-width: 0;
 }
@@ -425,7 +425,7 @@ code,
 
 .dashboard-summary { min-width: 0; margin-bottom: 16px; }
 
-.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; min-width: 0; }
 
 .summary-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; background: var(--surface); overflow-wrap: anywhere; }
 
@@ -456,6 +456,9 @@ code,
   gap: 4px 10px;
   padding: 6px 0;
 }
+
+.dashboard-panel table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.dashboard-panel th, .dashboard-panel td { min-width: 0; overflow-wrap: anywhere; }
 
 .team-list .team-row { display: block; padding: 11px; }
 
@@ -1113,9 +1116,17 @@ ul[aria-label="Workspaces"] {
   .diagnostics dd:not(:last-child) { margin-bottom: 7px; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-panel-activity { grid-column: auto; }
+}
+
+@media (max-width: 900px) {
+  .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .workspace-content { padding: 20px 16px; }
 }
 
 @media (max-width: 400px) {

@@ -126,8 +126,8 @@ function DashboardOverview(props: DashboardHomeProps) {
       </header>
       <SummaryMetrics teams={teams} board={boardSection} />
       <div className="dashboard-grid">
-        <TeamsPanel section={teams} onNavigate={props.onNavigate} />
         <BoardPanel section={boardSection} onNavigate={(sectionId) => props.onNavigate(sectionId as SectionId)} />
+        <TeamsPanel section={teams} onNavigate={props.onNavigate} />
         <ActivityPanel section={activity} />
       </div>
     </div>

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus, DashboardApi, Result } from '../src/renderer/api';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
-import { boardFixture, deferred, readyApi, workspaceA } from './dashboardFixtures';
+import { activityFixture, boardFixture, deferred, readyApi, teamsFixture, workspaceA } from './dashboardFixtures';
 
 afterEach(cleanup);
 
@@ -24,8 +24,8 @@ describe('dashboard accessibility', () => {
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
     expect(result.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
     const h2 = result.getAllByRole('heading', { level: 2 }).map((node) => node.textContent);
-    expect(h2).toEqual(['Team status', 'Board status', 'Recent activity']);
-    for (const name of ['Team status', 'Board status', 'Recent activity']) {
+    expect(h2).toEqual(['Board status', 'Team status', 'Recent activity']);
+    for (const name of ['Board status', 'Team status', 'Recent activity']) {
       expect(result.getByRole('region', { name })).toBeTruthy();
     }
     expect(result.getAllByRole('main')).toHaveLength(1);
@@ -114,7 +114,7 @@ describe('dashboard accessibility', () => {
     expect(within(region).getAllByRole('group').map((g) => g.querySelector('.summary-label')!.textContent))
       .toEqual(['Running teams', 'Active assignments', 'Open tickets', 'Completed tickets']);
     expect(result.getAllByRole('heading', { level: 2 }).map((node) => node.textContent))
-      .toEqual(['Team status', 'Board status', 'Recent activity']);
+      .toEqual(['Board status', 'Team status', 'Recent activity']);
     expect(region.querySelector('button, a, input, [tabindex]')).toBeNull();
   });
 
@@ -160,5 +160,136 @@ describe('dashboard accessibility', () => {
     await act(async () => {});
     expect(result.queryAllByRole('alert')).toHaveLength(0);
     expect(result.container.querySelector('.dashboard-refresh-note')).toBeNull();
+  });
+
+  it('panels_follow_visual_order_board_team_activity', async () => {
+    const result = shell(readyApi('x').api);
+    await act(async () => {});
+    const grid = result.container.querySelector('.dashboard-grid')!;
+    const kids = Array.from(grid.children);
+    expect(kids[0].className).toContain('dashboard-panel-board');
+    expect(kids[1].className).toContain('dashboard-panel-teams');
+    expect(kids[2].className).toContain('dashboard-panel-activity');
+    const region = result.getByRole('region', { name: 'Workspace summary' });
+    expect(region.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keyboard_order_matches_visual_order', async () => {
+    const result = shell(readyApi('x').api);
+    await act(async () => {});
+    const board = within(result.getByRole('region', { name: 'Board status' }));
+    const team = within(result.getByRole('region', { name: 'Team status' }));
+    const ordered = [
+      result.getByRole('button', { name: /^Current workspace: / }),
+      result.getByRole('button', { name: 'Home' }),
+      result.getByRole('button', { name: 'Teams' }),
+      result.getByRole('button', { name: 'Boards' }),
+      result.getByRole('button', { name: 'Configuration' }),
+      result.getByRole('button', { name: 'Switch workspace' }),
+      result.getByRole('button', { name: 'Refresh' }),
+      board.getByRole('button', { name: 'View board' }),
+      team.getByRole('button', { name: 'View teams' }),
+    ];
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      expect(ordered[index].compareDocumentPosition(ordered[index + 1]) & Node.DOCUMENT_POSITION_FOLLOWING, String(index)).toBeTruthy();
+    }
+    for (const button of Array.from(result.container.querySelectorAll('button'))) {
+      expect(button).toBeInstanceOf(HTMLButtonElement);
+      expect(button.getAttribute('type')).toBe('button');
+    }
+    expect(Array.from(result.container.querySelectorAll('[tabindex]')).every((n) => Number(n.getAttribute('tabindex')) <= 0)).toBe(true);
+  });
+
+  it('retry_buttons_follow_panel_order_and_take_focus', async () => {
+    const failure = (message: string) => async () => ({
+      ok: false as const,
+      error: { code: 'BROKEN', message, retryable: true },
+    });
+    const result = shell({ teams: failure('a'), board: failure('b'), activity: failure('c') } as unknown as DashboardApi);
+    await act(async () => {});
+    const retries = result.getAllByRole('button', { name: 'Retry' });
+    expect(retries).toHaveLength(3);
+    expect(retries.map((r) => r.closest('section')!.querySelector('h2')!.textContent))
+      .toEqual(['Board status', 'Team status', 'Recent activity']);
+    for (const retry of retries) {
+      retry.focus();
+      expect(document.activeElement).toBe(retry);
+    }
+  });
+
+  it('every_state_keeps_one_h1_and_three_panel_h2s', async () => {
+    const ok = <T,>(data: T) => vi.fn(async () => ({ ok: true as const, data }));
+    const fail = (code: string, retryable: boolean) => vi.fn(async () => ({
+      ok: false as const,
+      error: { code, message: 'broke', retryable },
+    }));
+    const states: Record<string, unknown> = {
+      loading: { teams: () => new Promise(() => {}), board: () => new Promise(() => {}), activity: () => new Promise(() => {}) },
+      error: { teams: fail('BROKEN', true), board: fail('BROKEN', true), activity: fail('BROKEN', true) },
+      empty: {
+        teams: ok({ ...teamsFixture('e'), teams: [] }),
+        board: ok({ ...boardFixture('e'), columns: [], tickets: [], totals: { active: 0, blocked: 0, done: 0 } }),
+        activity: ok({ ...activityFixture('e'), entries: [], head: 0 }),
+      },
+      unavailable: {
+        teams: ok(teamsFixture('u')),
+        board: fail('BOARD_CONFIG_INVALID', false),
+        activity: ok(activityFixture('u')),
+      },
+    };
+    for (const [name, api] of Object.entries(states)) {
+      const result = shell(api as DashboardApi);
+      await act(async () => {});
+      expect(result.getAllByRole('heading', { level: 1 }).map((n) => n.textContent), name).toEqual(['Workspace overview']);
+      expect(result.getAllByRole('heading', { level: 2 }).map((n) => n.textContent), name)
+        .toEqual(['Board status', 'Team status', 'Recent activity']);
+      expect(result.getAllByRole('main'), name).toHaveLength(1);
+      expect(result.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+      if (name === 'unavailable') {
+        const board = within(result.getByRole('region', { name: 'Board status' }));
+        expect(board.getByText('No board configured for this workspace')).toBeTruthy();
+        expect(board.queryByRole('button', { name: 'Retry' })).toBeNull();
+      }
+      if (name === 'empty') expect(result.queryAllByRole('alert')).toHaveLength(0);
+      result.unmount();
+    }
+  });
+
+  it('long_strings_stay_whole_and_accessible', async () => {
+    const workspace = { ...workspaceA, name: 'W'.repeat(180), path: '/mnt/c/' + 'very-long-segment/'.repeat(12) };
+    const phase = 'Phase-' + 'x'.repeat(150);
+    const ticket = 'z'.repeat(200);
+    const teamName = 'Team-' + 'y'.repeat(150);
+    const summary = 'Event ' + 'e'.repeat(200);
+    const board = boardFixture('l');
+    board.currentPhase = { ...board.currentPhase!, name: phase };
+    board.tickets[0] = { ...board.tickets[0], title: ticket };
+    const teams = teamsFixture('l');
+    teams.teams[0] = { ...teams.teams[0], name: teamName };
+    const activity = activityFixture('l');
+    activity.entries[0] = { ...activity.entries[0], summary };
+    const api = {
+      teams: vi.fn(async () => ({ ok: true, data: teams })),
+      board: vi.fn(async () => ({ ok: true, data: board })),
+      activity: vi.fn(async () => ({ ok: true, data: activity })),
+    } as unknown as DashboardApi;
+    const result = render(
+      <WorkspaceShell workspace={workspace} dashboard={api} connection={connected} onSwitchWorkspace={vi.fn()} />,
+    );
+    await act(async () => {});
+    const c = result.container;
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    const name = c.querySelector('.dashboard-workspace-name')!;
+    expect(name.textContent).toBe(workspace.name);
+    expect(name.getAttribute('title')).toBe(workspace.name);
+    expect(c.querySelector('.dashboard-path')!.textContent).toBe(workspace.path);
+    expect(c.querySelector('.workspace-name')!.getAttribute('title')).toBe(workspace.name);
+    expect(c.querySelector('.workspace-path')!.getAttribute('title')).toBe(workspace.path);
+    const boardText = result.getByRole('region', { name: 'Board status' }).textContent!;
+    expect(boardText).toContain(phase);
+    expect(boardText).toContain(ticket);
+    expect(result.getByRole('region', { name: 'Team status' }).textContent).toContain(teamName);
+    const act2 = result.getByRole('region', { name: 'Recent activity' });
+    expect(act2.textContent!.includes(summary) || act2.querySelector(`[title="${summary}"]`) !== null).toBe(true);
   });
 });

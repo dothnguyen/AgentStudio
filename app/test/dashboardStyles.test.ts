@@ -29,12 +29,12 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('dashboard styles', () => {
-  it('uses a two-column minmax grid and one column at 900px', () => {
+  it('home_grid_puts_wide_board_beside_team_and_stacks_at_1080px', () => {
     const flat = squash(css);
-    expect(flat).toContain('.dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }');
+    expect(flat).toContain('.dashboard-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; min-width: 0; }');
     expect(flat).toContain('.dashboard-panel { min-width: 0;');
     expect(flat).toContain('.dashboard-panel-activity { grid-column: 1 / -1; }');
-    expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.dashboard-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \.dashboard-panel-activity \{ grid-column: auto; \} \}/);
+    expect(flat).toMatch(/@media \(max-width: 1080px\) \{ \.dashboard-grid \{ grid-template-columns: minmax\(0, 1fr\); \} \.dashboard-panel-activity \{ grid-column: auto; \} \}/);
     expect(flat).toMatch(/\.dashboard-actions \{[^}]*flex-wrap: wrap/);
   });
 
@@ -77,12 +77,18 @@ describe('dashboard styles', () => {
       ['white on --accent', '#ffffff', readToken('--accent')],
       ['--danger on error surface', readToken('--danger'), '#241f1f'],
       ['warning text on warning surface', '#d7ba7d', '#29271d'],
+      ['--text-muted on --surface-raised', readToken('--text-muted'), readToken('--surface-raised')],
+      ['--text-muted on --bg', readToken('--text-muted'), readToken('--bg')],
+      ['breadcrumb current on --bg', '#4daafc', readToken('--bg')],
+      ['active nav text', readToken('--text-bright'), '#04395e'],
     ];
     for (const [label, foreground, background] of pairs) {
       expect(contrastRatio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
     }
     expect(css).toContain('#241f1f');
     expect(css).toContain('#29271d');
+    expect(css).toContain('#04395e');
+    expect(css).toContain('#4daafc');
   });
 
   it('limits monospace styling to paths keys ids and code', () => {
@@ -112,7 +118,8 @@ describe('dashboard styles', () => {
 
   it('summary_cards_wrap_without_horizontal_scroll', () => {
     const flat = squash(css);
-    expect(flat).toContain('.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));');
+    expect(flat).toContain('.summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));');
+    expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.summary-cards \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \} \}/);
     expect(flat).toContain('.summary-card { min-width: 0;');
     expect(/\.summary-card \{[^}]*\}/.exec(flat)![0]).toContain('overflow-wrap: anywhere');
     const rules = css.split('}').filter((rule) => rule.split('{')[0].includes('summary-'));
@@ -156,5 +163,40 @@ describe('dashboard styles', () => {
     const narrow = flat.slice(flat.indexOf('@media (max-width: 560px)'));
     expect(narrow).toContain('.dashboard-refresh-note { text-align: left; }');
     expect(flat).toMatch(/\.refresh-button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\)/);
+  });
+
+  it('narrow_window_reduces_content_padding', () => {
+    expect(squash(css)).toMatch(/@media \(max-width: 700px\) \{ \.workspace-content \{ padding: 20px 16px; \} \}/);
+  });
+
+  it('long_header_text_and_timestamps_wrap', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.dashboard-actions time \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toContain('.dashboard-panel th, .dashboard-panel td { min-width: 0; overflow-wrap: anywhere; }');
+    expect(flat).toContain('.dashboard-panel table { width: 100%; table-layout: fixed; border-collapse: collapse; }');
+    expect(flat).toMatch(/\.dashboard-workspace-name \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toMatch(/\.dashboard-path \{[^}]*overflow-wrap: anywhere/);
+  });
+
+  it('dashboard_rules_have_no_wide_fixed_widths_or_nowrap', () => {
+    const rules = css.split('}').map((rule) => {
+      const parts = rule.split('{');
+      return { selector: parts[parts.length - 2]?.trim() ?? '', body: parts[parts.length - 1] };
+    }).filter((rule) => /dashboard|summary-|team-|board-|activity-/.test(rule.selector));
+    expect(rules.length).toBeGreaterThan(10);
+    for (const rule of rules) {
+      const body = rule.body.replace(/(minmax|min)\([^;]*\)/g, '');
+      for (const match of body.matchAll(/(?<![\w-])(?:min-)?width:\s*(\d+)px/g)) {
+        expect(Number(match[1]), rule.selector).toBeLessThanOrEqual(360);
+      }
+      if (!rule.selector.includes('activity-')) expect(rule.body, rule.selector).not.toMatch(/white-space:\s*nowrap/);
+    }
+  });
+
+  it('focus_outline_is_never_removed', () => {
+    const flat = squash(css);
+    expect(css).not.toMatch(/outline:\s*(none|0)\s*;/);
+    expect(flat).toContain('button:focus-visible');
+    expect(flat).toMatch(/button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
   });
 });
