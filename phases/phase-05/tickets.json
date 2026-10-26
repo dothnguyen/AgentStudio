@@ -1,0 +1,12 @@
+{
+  "stories": [
+    {"path":"phases/phase-05/stories/P05-S01-shell-and-header.md","title":"Compact workspace shell and overview header","dependsOn":[],"priority":1},
+    {"path":"phases/phase-05/stories/P05-S02-summary-metrics.md","title":"Four real-data summary metrics","dependsOn":["phases/phase-05/stories/P05-S01-shell-and-header.md"],"priority":2},
+    {"path":"phases/phase-05/stories/P05-S03-board-status.md","title":"Board status panel with phase progress","dependsOn":["phases/phase-05/stories/P05-S01-shell-and-header.md"],"priority":3},
+    {"path":"phases/phase-05/stories/P05-S04-team-status.md","title":"Team status and aggregate presence panel","dependsOn":["phases/phase-05/stories/P05-S01-shell-and-header.md"],"priority":4},
+    {"path":"phases/phase-05/stories/P05-S05-activity-feed.md","title":"Compact recent activity feed","dependsOn":["phases/phase-05/stories/P05-S01-shell-and-header.md"],"priority":5},
+    {"path":"phases/phase-05/stories/P05-S06-refresh-coordination.md","title":"Truthful dashboard refresh coordination","dependsOn":["phases/phase-05/stories/P05-S02-summary-metrics.md","phases/phase-05/stories/P05-S03-board-status.md","phases/phase-05/stories/P05-S04-team-status.md","phases/phase-05/stories/P05-S05-activity-feed.md"],"priority":6},
+    {"path":"phases/phase-05/stories/P05-S07-responsive-accessibility.md","title":"Responsive and accessibility finish","dependsOn":["phases/phase-05/stories/P05-S02-summary-metrics.md","phases/phase-05/stories/P05-S03-board-status.md","phases/phase-05/stories/P05-S04-team-status.md","phases/phase-05/stories/P05-S05-activity-feed.md","phases/phase-05/stories/P05-S06-refresh-coordination.md"],"priority":7}
+  ],
+  "questions": []
+}
