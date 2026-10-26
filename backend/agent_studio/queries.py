@@ -1,15 +1,37 @@
-"""Read-only queries: snapshot and events.after. Each runs in one read transaction (consistent WAL snapshot)."""
+"""Read-only queries: snapshot, events.after, and activity.recent.
+
+Each runs in one read transaction (consistent WAL snapshot).
+"""
 from __future__ import annotations
 
 import json
 from typing import Optional
 
 from . import schema
-from .protocol import AsError
+from .protocol import AsError, BAD_REQUEST
 from .state import SCHEMA_VERSION, db_id, utcnow
 
 CURSOR_INVALID = "CURSOR_INVALID"
 SECTION_LIMIT = 1000
+RECENT_ACTIVITY_DEFAULT_LIMIT = 15
+RECENT_ACTIVITY_MAX_LIMIT = 20
+
+RECENT_EVENT_NAMES = frozenset({
+    "team.running",
+    "team.stopped",
+    "assignment.succeeded",
+    "assignment.waiting_input",
+    "assignment.failed",
+    "workflow_run.succeeded",
+    "workflow_run.failed",
+    "workflow_run.paused",
+})
+
+RECENT_TICKET_EVENT_NAMES = frozenset({
+    "ticket.moved",
+    "ticket.outcome_applied",
+    "ticket.merged",
+})
 
 SECTIONS = (("teams", "team"), ("agents", "agent"), ("tasks", "task"), ("workflowRuns", "workflow_run"),
             ("stageAttempts", "stage_attempt"), ("assignments", "assignment"))
@@ -42,6 +64,85 @@ def _read(conn, fn):
 def head(conn) -> int:
     row = conn.execute("SELECT MAX(seq) FROM events").fetchone()
     return int(row[0] or 0)
+
+
+def recent_activity(conn, workspace: str, limit: int = RECENT_ACTIVITY_DEFAULT_LIMIT) -> dict:
+    def run():
+        if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= RECENT_ACTIVITY_MAX_LIMIT):
+            raise AsError(BAD_REQUEST, "Argument 'limit' must be an integer between 1 and 20.")
+
+        top = head(conn)
+        event_names = sorted(RECENT_EVENT_NAMES)
+        event_rows = conn.execute(
+            f"""SELECT e.seq, e.at, e.name, e.team_id, e.assignment_id, e.workflow_run_id,
+                       t.name AS team_name
+                FROM events e
+                JOIN teams t ON t.id = e.team_id
+                WHERE t.workspace = ? AND e.name IN ({', '.join('?' * len(event_names))})
+                ORDER BY e.at DESC, e.seq DESC
+                LIMIT ?""",
+            [workspace, *event_names, limit],
+        ).fetchall()
+
+        ticket_event_names = sorted(RECENT_TICKET_EVENT_NAMES)
+        ticket_rows = conn.execute(
+            f"""SELECT te.id, te.at, te.name, te.from_status, te.to_status,
+                       ti.id AS ticket_id, ti.key AS ticket_key
+                FROM ticket_events te
+                JOIN tickets ti ON ti.id = te.ticket_id
+                WHERE ti.workspace = ?
+                  AND te.name IN ({', '.join('?' * len(ticket_event_names))})
+                  AND (te.name = 'ticket.merged'
+                       OR (te.from_status IS NOT NULL AND te.to_status IS NOT NULL
+                           AND te.from_status <> te.to_status))
+                ORDER BY te.at DESC, te.id DESC
+                LIMIT ?""",
+            [workspace, *ticket_event_names, limit],
+        ).fetchall()
+
+        entries = []
+        for row in event_rows:
+            name = row["name"]
+            if name.startswith("team."):
+                kind = "team"
+                subject = {"type": kind, "id": row["team_id"], "label": row["team_name"]}
+                summary = f"Team {row['team_name']} {'started' if name == 'team.running' else 'stopped'}"
+            elif name.startswith("assignment."):
+                kind = "assignment"
+                subject = {"type": kind, "id": row["assignment_id"]}
+                summary = {
+                    "assignment.succeeded": "Assignment completed",
+                    "assignment.waiting_input": "Assignment needs attention",
+                    "assignment.failed": "Assignment failed",
+                }[name]
+            else:
+                kind = "workflow"
+                subject = {"type": kind, "id": row["workflow_run_id"]}
+                summary = {
+                    "workflow_run.succeeded": "Workflow finished",
+                    "workflow_run.failed": "Workflow failed",
+                    "workflow_run.paused": "Workflow needs attention",
+                }[name]
+            entries.append((row["at"], 1, row["seq"], {
+                "id": f"event:{row['seq']}", "at": row["at"], "kind": kind, "name": name,
+                "summary": summary, "subject": subject,
+            }))
+
+        for row in ticket_rows:
+            name = row["name"]
+            summary = (f"Ticket {row['ticket_key']} merged" if name == "ticket.merged" else
+                       f"Ticket {row['ticket_key']} moved from {row['from_status']} to {row['to_status']}")
+            entries.append((row["at"], 0, row["id"], {
+                "id": f"ticket-event:{row['id']}", "at": row["at"], "kind": "ticket", "name": name,
+                "summary": summary,
+                "subject": {"type": "ticket", "id": row["ticket_id"], "label": row["ticket_key"]},
+            }))
+
+        entries.sort(key=lambda entry: entry[:3], reverse=True)
+        return {"workspace": workspace, "dbId": db_id(conn), "head": top,
+                "entries": [entry[3] for entry in entries[:limit]]}
+
+    return _read(conn, run)
 
 
 def snapshot(conn, team_id: Optional[str] = None, include_stopped: bool = False) -> dict:

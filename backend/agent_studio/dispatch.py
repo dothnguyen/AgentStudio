@@ -612,6 +612,16 @@ def _events_after(args, req):
         conn.close()
 
 
+def _activity_recent(args, req):
+    workspace_path = ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False))
+    limit = req_int(args, "limit", 1, queries.RECENT_ACTIVITY_MAX_LIMIT, queries.RECENT_ACTIVITY_DEFAULT_LIMIT)
+    conn = _reader()
+    try:
+        return queries.recent_activity(conn, workspace_path, limit=limit)
+    finally:
+        conn.close()
+
+
 COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
@@ -621,6 +631,7 @@ COMMANDS = {
     "coordinator.stop": _coordinator_stop,
     "snapshot": _snapshot,
     "events.after": _events_after,
+    "activity.recent": _activity_recent,
     "debug.echo": _inbox("debug.echo", _validate_echo),
     "debug.fixture": _inbox("debug.fixture", _validate_fixture),
     "debug.assign": _inbox("debug.assign", _validate_debug_assign),
