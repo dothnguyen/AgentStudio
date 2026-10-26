@@ -42,6 +42,16 @@ The team and the board stay independent: the coordinator is only the glue betwee
 | | [P04-S11](./stories/P04-S11-recovery-limits-and-live-gate.md) | Lease recovery, usage limits, `board resume`, docs, live gate |
 | D Agents use the board | [P04-S12](./stories/P04-S12-board-mcp-server.md) | `agent-studio mcp` stdio MCP server: agents add and list tickets and phases; spike first |
 | | [P04-S13](./stories/P04-S13-dev-board-flow.md) | Worktree commits, findings handoff, `onFailPriority`, `agentTicketStatus`, `ticket_update` |
+| E Workspace home (T-014) | [P04-S14](./stories/P04-S14-workspace-shell-and-navigation.md) | Workspace shell, navigation and destination placeholders (T-015) |
+| | [P04-S15](./stories/P04-S15-backend-team-list.md) | Read-only `team.list` (T-016) |
+| | [P04-S16](./stories/P04-S16-backend-board-summary.md) | Read-only `board.summary` (T-017) |
+| | [P04-S17](./stories/P04-S17-backend-recent-activity.md) | Bounded, safe `activity.recent` (T-018) |
+| | [P04-S18](./stories/P04-S18-dashboard-ipc-contract.md) | Dashboard shared types, preload and IPC (T-019) |
+| | [P04-S19](./stories/P04-S19-dashboard-frame-and-team-panel.md) | Dashboard frame, refresh protocol, team panel (T-020) |
+| | [P04-S20](./stories/P04-S20-dashboard-board-panel.md) | Board status panel (T-021) |
+| | [P04-S21](./stories/P04-S21-dashboard-activity-panel.md) | Recent activity panel (T-022) |
+| | [P04-S22](./stories/P04-S22-dashboard-composition-and-accessibility.md) | Composition, responsive layout, accessibility (T-023) |
+| | [P04-S23](./stories/P04-S23-workspace-home-live-gate.md) | Workspace home live gate on Windows + WSL (T-024) |
 
 Order: S01 → S02 → S03 → S04 → S05 → S06 → S07 → (S08, S09 in parallel) → S10 → S11, and S12 after S08 (best after S10). S01–S05 give the new team and replace `team.py`; S06 is the clean slate; S07–S11 build the generic board with the new team.
 

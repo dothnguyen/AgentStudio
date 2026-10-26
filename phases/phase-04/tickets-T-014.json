@@ -1,0 +1,81 @@
+{
+  "stories": [
+    {
+      "path": "phases/phase-04/stories/P04-S14-workspace-shell-and-navigation.md",
+      "title": "Workspace shell, navigation and destination placeholders",
+      "dependsOn": [],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S15-backend-team-list.md",
+      "title": "Backend: read-only team.list",
+      "dependsOn": [],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S16-backend-board-summary.md",
+      "title": "Backend: read-only board.summary",
+      "dependsOn": [],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S17-backend-recent-activity.md",
+      "title": "Backend: bounded, safe activity.recent",
+      "dependsOn": [],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S18-dashboard-ipc-contract.md",
+      "title": "Dashboard read API: shared types, preload and IPC",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S15-backend-team-list.md",
+        "phases/phase-04/stories/P04-S16-backend-board-summary.md",
+        "phases/phase-04/stories/P04-S17-backend-recent-activity.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S19-dashboard-frame-and-team-panel.md",
+      "title": "Dashboard frame, refresh protocol and team status panel",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S14-workspace-shell-and-navigation.md",
+        "phases/phase-04/stories/P04-S18-dashboard-ipc-contract.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S20-dashboard-board-panel.md",
+      "title": "Dashboard board status panel",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S19-dashboard-frame-and-team-panel.md"
+      ],
+      "priority": 4
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S21-dashboard-activity-panel.md",
+      "title": "Dashboard recent activity panel",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S19-dashboard-frame-and-team-panel.md"
+      ],
+      "priority": 4
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S22-dashboard-composition-and-accessibility.md",
+      "title": "Dashboard composition, responsive layout and accessibility",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S20-dashboard-board-panel.md",
+        "phases/phase-04/stories/P04-S21-dashboard-activity-panel.md"
+      ],
+      "priority": 4
+    },
+    {
+      "path": "phases/phase-04/stories/P04-S23-workspace-home-live-gate.md",
+      "title": "Workspace home live gate (Windows + WSL)",
+      "dependsOn": [
+        "phases/phase-04/stories/P04-S22-dashboard-composition-and-accessibility.md"
+      ],
+      "priority": 5
+    }
+  ],
+  "questions": []
+}
