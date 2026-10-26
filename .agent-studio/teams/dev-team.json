@@ -37,8 +37,8 @@
       "id": "po",
       "name": "po",
       "role": "ProductOwner",
-      "provider": "claude",
-      "model": "claude-opus-5-5",
+      "provider": "codex",
+      "model": "gpt-6-sol",
       "reasoning": "medium",
       "canAddTickets": true
     }
