@@ -276,7 +276,10 @@ def _render_detail(d) -> str:
         lines.append("events:")
         for e in d["events"]:
             arrow = f"{e['from']} -> {e['to']}" if e.get("to") else e["to"]
-            why = (e.get("payload") or {}).get("reason") or (e.get("payload") or {}).get("message")
+            payload = e.get("payload") or {}
+            why = payload.get("reason") or payload.get("message")
+            if payload.get("entries"):
+                why = f"{why} in {payload.get('workspace')}: " + "; ".join(payload["entries"][:5])
             lines.append(f"  {e['id']: >4}  {e['at']}  {e['actor']}  {e['name']}  {arrow}"
                          + (f"  [{why}]" if why else ""))
     lines.append("statuses: " + ", ".join(d["statuses"]))

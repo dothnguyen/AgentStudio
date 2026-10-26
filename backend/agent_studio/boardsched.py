@@ -364,8 +364,15 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
         return started["workflowRunId"]
     except AsError as e:
         boardmodel.release_claim(tx, boardmodel.get_ticket(tx.conn, workspace, ticket["key"]),
-                                 f"start_failed:{e.code}", to_status=rule["when"]["status"])
+                                 f"start_failed:{e.code}", to_status=rule["when"]["status"],
+                                 detail={"workspace": run_workspace, **_start_detail(e)})
         return None
+
+
+def _start_detail(e) -> dict:
+    """Where a failed start looked and what it found (the dirty paths), so the ticket events say what to fix."""
+    data = getattr(e, "data", None) or {}
+    return {"entries": data["entries"][:10]} if data.get("entries") else {}
 
 
 def _task_text(ticket: dict) -> str:
