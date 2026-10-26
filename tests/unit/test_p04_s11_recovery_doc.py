@@ -86,40 +86,39 @@ class RecoveryCase(unittest.TestCase):
                 tx.transition("workflow_run", run, status)
         return run
 
-    def claim(self, run, lease_in_past=True):
+    def claim(self, run=None, lease_in_past=True):
         lease = "2000-01-01T00:00:00.000Z" if lease_in_past else "2099-01-01T00:00:00.000Z"
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, active_run_id = ?, "
                             "status = 'in-progress' WHERE key = 'T-001'", (self.worker, lease, run))
 
-    def test_lease_expiry_releases_once_and_returns_the_ticket(self):
-        run = self.make_run("running")
-        self.claim(run)
+    def test_pending_claim_lease_expiry_releases_once_and_returns_the_ticket(self):
+        self.claim()
         self.make_unavailable()
         out = self.tick()
         self.assertEqual(out["errors"], [])
         ticket = self.ticket()
         self.assertEqual((ticket["status"], ticket["assignee"], ticket["active_run_id"]),
                          ("build", None, None))
-        self.assertEqual(ticket["run_id"], run)  # the cancelled run is never re-applied
-        run_status = self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0]
-        self.assertEqual(run_status, "cancelled")
+        self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
         self.assertEqual(names, ["ticket.created", "ticket.claim_released", "ticket.lease_expired"])
         again = self.tick()  # exactly once: nothing more to release
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
                          names)
 
-    def test_unexpired_lease_and_paused_run_wait(self):
+    def test_started_run_is_not_released_when_claim_lease_is_expired(self):
         run = self.make_run("paused")
-        self.claim(run, lease_in_past=False)
+        self.claim(run)
         self.make_unavailable()
         self.tick()
         ticket = self.ticket()
-        self.assertEqual((ticket["status"], ticket["assignee"]), ("in-progress", self.worker))
-        self.conn.execute("UPDATE tickets SET lease_until = '2000-01-01T00:00:00.000Z' WHERE key = 'T-001'")
-        self.tick()  # now the lease has expired: release
-        self.assertEqual((self.ticket()["status"], self.ticket()["active_run_id"]), ("build", None))
+        self.assertEqual((ticket["status"], ticket["assignee"], ticket["active_run_id"]),
+                         ("in-progress", self.worker, run))
+        self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
+                                           (run,)).fetchone()[0], "paused")
+        self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
+                         ["ticket.created"])
 
     def test_usage_limit_releases_without_a_round(self):
         run = self.make_run("failed")

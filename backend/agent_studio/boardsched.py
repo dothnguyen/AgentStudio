@@ -19,10 +19,9 @@ from .protocol import AsError, BOARD_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .state import utcnow
 
 ACTIVE_ASSIGNMENT = ("queued", "claimed", "running", "waiting_input", "reconciling")
-# runs the tick applies by itself; a paused run waits for the operator (assignment resolve) or, once its
-# lease expires, for the recovery pass to release the claim
+# Runs the tick applies by itself. A paused run waits for the operator; assignment/process reconciliation
+# handles a runner that disappears after a workflow has started.
 APPLY_RUN_STATES = ("succeeded", "failed", "cancelled")
-UNSETTLED_RUN_STATES = ("queued", "running", "paused")
 
 
 def _board_row(conn, workspace):
@@ -181,33 +180,22 @@ def _release_with_run(tx, workspace: str, ticket: dict, reason: str, to_status=N
 # ---- crash recovery ---------------------------------------------------------------------------------------
 
 def _recover(tx, workspace: str, ctx: dict) -> dict:
-    """Lease expiry and orphan worktrees. A claim whose lease has expired while its run is unsettled
-    (queued, running or paused — a coordinator or runner death) is released exactly once, its run
-    cancelled, and the ticket returns to its rule's status. Worktrees the board created that no ticket
-    references any more are removed."""
+    """Lease expiry and orphan worktrees.
+
+    A lease protects only the gap between claiming a ticket and successfully starting its workflow. Once
+    ``active_run_id`` is recorded, assignment/process reconciliation owns crash detection and the workflow
+    may legitimately run longer than ``leaseSeconds``. An expired pending claim is released exactly once
+    and returned to its rule's status. Worktrees the board created that no ticket references are removed.
+    """
     out = {"released": 0, "worktrees": 0}
     now = utcnow()
     rows = tx.conn.execute(
         "SELECT * FROM tickets WHERE workspace = ? AND assignee IS NOT NULL AND lease_until IS NOT NULL "
-        "AND lease_until < ?", (workspace, now)).fetchall()
+        "AND active_run_id IS NULL AND lease_until < ?", (workspace, now)).fetchall()
     for row in rows:
         ticket = dict(row)
-        status = None
-        if ticket["active_run_id"]:
-            run = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
-                                  (ticket["active_run_id"],)).fetchone()
-            status = run["status"] if run is not None else None
-        if status not in UNSETTLED_RUN_STATES and status is not None:
-            continue  # settled after all: the normal apply pass owns it
-        if ticket["active_run_id"]:
-            try:
-                _cancel_run(tx, ticket["active_run_id"], ctx)
-            except AsError:
-                pass  # already terminal; nothing to settle
         boardmodel.release_claim(tx, ticket, "lease_expired", to_status=_return_status(tx, workspace, ticket))
-        tx.conn.execute("UPDATE tickets SET run_id = ? WHERE id = ?",
-                        (ticket["active_run_id"], ticket["id"]))
-        _ticket_event_note(tx, ticket, "ticket.lease_expired", {"run": ticket["active_run_id"]})
+        _ticket_event_note(tx, ticket, "ticket.lease_expired", {"run": None})
         out["released"] += 1
     referenced = {r[0] for r in tx.conn.execute(
         "SELECT worktree_path FROM tickets WHERE workspace = ? AND worktree_path IS NOT NULL", (workspace,))}
@@ -355,7 +343,9 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
         if run_workspace != workspace:
             start_args["workspace"] = run_workspace
         started = _start(tx, start_args, ctx)
-        tx.conn.execute("UPDATE tickets SET active_run_id = ?, updated_at = ? WHERE id = ?",
+        # The lease covers claim -> start only. Clearing it here prevents a legitimate long-running agent or
+        # validation stage from being mistaken for an abandoned pre-start claim.
+        tx.conn.execute("UPDATE tickets SET active_run_id = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
                         (started["workflowRunId"], utcnow(), ticket["id"]))
         boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.claimed", "coordinator", rule["when"]["status"],
                                  status, {"ticketId": ticket["id"], "key": ticket["key"],

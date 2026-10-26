@@ -146,7 +146,7 @@ class TickRules(SchedCase):
         row = self.ticket("T-001")
         self.assertEqual((row["status"], row["assignee"]), ("in-progress", self.worker))
         self.assertIsNotNone(row["active_run_id"])
-        self.assertIsNotNone(row["lease_until"])
+        self.assertIsNone(row["lease_until"])  # the claim lease ends once the workflow has started
         run = self.conn.execute("SELECT id, status FROM workflow_runs WHERE id = ?",
                                 (row["active_run_id"],)).fetchone()
         self.assertEqual(run["status"], "running")

@@ -84,8 +84,8 @@ claims tickets by its rules; `team stop-board` stops claiming while running work
 | `PHASE_CLOSED` | a closed phase cannot be set current or receive tickets | `board phase reopen --workspace <ws> ID` first |
 | `PHASE_NOT_EMPTY` | removing a phase that still holds tickets needs a target | `board phase remove --workspace <ws> ID --move-to OTHER` (an open phase) |
 | ticket `blocked` (`!ROUND_LIMIT:<status>` or `!RUN_BLOCKED:<run>`) | a round limit was hit, or a run ended in a way with no `onBlocked` target | read the findings (`ticket show`), fix the cause, then `agent-studio ticket unblock --workspace <ws> <KEY>` (or raise `maxRounds` first) |
-| ticket back in its queue, event `ticket.lease_expired` | its lease expired while the run was unsettled — a coordinator or runner death; the claim was released once and the run cancelled | nothing: the board claims it again. A late report of the cancelled run is ignored |
-| ticket claimed for long, nothing happens | the run is stuck (paused, runner gone) and the lease has not expired | `agent-studio ticket retry --workspace <ws> <KEY>` releases the claim and cancels the run, or wait for the lease |
+| ticket back in its queue, event `ticket.lease_expired` | the claim did not successfully start a workflow before its lease expired; it was released once | nothing: the board claims it again; inspect coordinator errors if it repeats |
+| ticket claimed for long, nothing happens | the started workflow is paused, waiting for input, or reconciling a lost runner | inspect `workflow show`; resolve the assignment, or `agent-studio ticket retry --workspace <ws> <KEY>` to release the claim and cancel the run |
 | agent `limit_reached`, event `board.limit_reached`, ticket released without a round | the provider reported `USAGE_LIMIT`; the member takes no work until reset | wait for the reset time, then `agent-studio board resume --workspace <ws> --member NAME` (or `--agent ID` / `--all`) |
 | `MAIN_CHECKOUT_DIRTY` / `MAIN_CHECKOUT_WRONG_BRANCH` (`ticket.merge_held` events) | the coordinator-only merge waits: the main checkout is dirty or not on `baseBranch` | `git -C <ws> status --porcelain`, commit or stash, `git -C <ws> switch <baseBranch>`; the merge happens on the next pass |
 | `MERGE_CONFLICT` (event `ticket.merge_conflict`, ticket back to the rule's `onFail`) | the ticket branch no longer merges into the base branch; nothing was committed and nothing left dirty | the fixing round starts from the conflict (`rules[].onFail` carries it), or move the ticket and resolve by hand |
@@ -98,8 +98,8 @@ claims tickets by its rules; `team stop-board` stops claiming while running work
   rules and every `merge` action hold until it is clean again, on `baseBranch`.
 - **Worktrees.** They live under the WSL state directory (`~/.local/state/agent-studio/worktrees/...`). Never move
   them or create them by hand; never put a worktree root on `/mnt/c`.
-- **`leaseSeconds`.** A claim whose lease expires while its run is still unsettled is released and its run
-  cancelled — exactly once. Set `leaseSeconds` comfortably above your longest expected run.
+- **`leaseSeconds`.** This bounds only the claim-to-workflow-start gap. A successful start clears the lease;
+  long agent and validation stages are governed by their workflow deadlines and process reconciliation.
 - **Changing the current phase** never interrupts running work: it finishes and its outcome is applied; only new
   claims use the new phase. Closing or removing the current phase falls back to the default phase.
 - **Aborting a merge.** After a squash merge never use `git merge --abort`; the coordinator already ran

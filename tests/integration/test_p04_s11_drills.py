@@ -151,15 +151,23 @@ class RunnerKilled(DrillCase):
         pid = self.wait_for(self._runner_pid, 60, "runner process")
         os.kill(pid, signal.SIGKILL)
 
-        # the short lease expires with the run unsettled: the claim is released exactly once, the run
-        # cancelled, and the board claims the ticket again and finishes it
-        self.wait_status("T-001", ("done",), timeout=180)
+        # Assignment reconciliation, not the ticket's pre-start lease, owns a runner that disappears after
+        # workflow start. The uncertain run pauses for an operator instead of discarding possible work.
+        conn = self.db()
+        paused = self.wait_for(
+            lambda: (lambda row: row if row and row["status"] == "paused" else None)(
+                conn.execute("SELECT status, transition_reason FROM workflow_runs WHERE id = ?", (run,)).fetchone()),
+            timeout=60, message="runner-gone workflow to pause")
+        self.assertIn("reconciling", paused["transition_reason"])
+        ticket = self.ticket("T-001")
+        self.assertEqual((ticket["status"], ticket["activeRunId"], ticket["leaseUntil"]),
+                         ("in-progress", run, None))
         names = [e["name"] for e in self.events("T-001")]
-        self.assertEqual(names.count("ticket.lease_expired"), 1, names)
-        status = self.db().execute("SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0]
-        self.assertEqual(status, "cancelled")
-        outcome = [e for e in self.events("T-001") if e["name"] == "ticket.outcome_applied"]
-        self.assertEqual(len(outcome), 1, names)
+        self.assertNotIn("ticket.lease_expired", names)
+        diagnostic = conn.execute(
+            "SELECT diagnostic_code FROM assignments WHERE task_id = "
+            "(SELECT task_id FROM workflow_runs WHERE id = ?) ORDER BY created_at DESC LIMIT 1", (run,)).fetchone()[0]
+        self.assertEqual(diagnostic, "RUNNER_GONE")
 
     def _runner_pid(self):
         row = self.db().execute(
