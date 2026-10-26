@@ -186,7 +186,7 @@ export function registerIpc(deps: IpcDeps): void {
 
   registerDashboardHandler<DashboardTeams>(CHANNELS.dashboardTeams, 'dashboard.teams', 'team.list', {});
   registerDashboardHandler<DashboardBoard>(CHANNELS.dashboardBoard, 'dashboard.board', 'board.summary', { limit: 5 });
-  registerDashboardHandler<DashboardActivity>(CHANNELS.dashboardActivity, 'dashboard.activity', 'activity.recent', { limit: 15 });
+  registerDashboardHandler<DashboardActivity>(CHANNELS.dashboardActivity, 'dashboard.activity', 'activity.recent', { limit: 15, kinds: ['ticket'] });
 
   ipcMain.handle(CHANNELS.connectionGet, (_e, ...args) => {
     if (args.length !== 0) throw new Error('connection.get takes no arguments.');

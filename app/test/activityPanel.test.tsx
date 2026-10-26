@@ -24,12 +24,11 @@ function activity(entries: DashboardActivity['entries']): DashboardActivity {
 }
 
 function entry(index: number): DashboardActivity['entries'][number] {
-  const kinds: DashboardActivity['entries'][number]['kind'][] = ['team', 'assignment', 'workflow', 'ticket'];
   return {
-    id: `event:${index}`,
+    id: `ticket-event:${index}`,
     at: `2026-01-${String(index).padStart(2, '0')}T01:02:03.000Z`,
-    kind: kinds[(index - 1) % kinds.length],
-    name: `internal name ${index}`,
+    kind: 'ticket',
+    name: 'ticket.moved',
     summary: `Summary ${index}`,
     subject: { type: 'ticket', id: `T-${index}`, label: `Ticket ${index}` },
   };
@@ -48,7 +47,7 @@ describe('ActivityPanel', () => {
         .toEqual(entries.slice(0, 15).map((item) => item.summary));
       expect(result.queryByText('Summary 16')).toBeNull();
       expect(body.slice(0, 4).map((row) => within(row).getAllByRole('cell')[1].textContent))
-        .toEqual(['team', 'assignment', 'workflow', 'ticket']);
+        .toEqual(['ticket', 'ticket', 'ticket', 'ticket']);
       expect(Array.from(result.container.querySelectorAll('time')).map((node) => node.getAttribute('datetime')))
         .toEqual(entries.slice(0, 15).map((item) => item.at));
 
@@ -141,12 +140,12 @@ describe('ActivityPanel', () => {
     const cells = within(row).getAllByRole('cell');
     expect(cells).toHaveLength(3);
     expect(cells[0].textContent).toBe('Summary 1');
-    expect(cells[1].querySelector('.status-badge')!.textContent).toBe('team');
+    expect(cells[1].querySelector('.status-badge')!.textContent).toBe('ticket');
     expect(cells[2].querySelector('time[datetime="2026-01-01T01:02:03.000Z"]')).toBeTruthy();
   });
 
-  it('renders every activity kind as a visible badge', () => {
-    const entries = [1, 2, 3, 4].map(entry);
+  it('renders any kind the API returns as a visible badge (forward compatibility)', () => {
+    const entries = (['team', 'assignment', 'workflow', 'ticket'] as const).map((kind, i) => ({ ...entry(i + 1), kind }));
     const result = render(<ActivityPanel section={section('ready', activity(entries), null, vi.fn())} />);
     expect(Array.from(result.container.querySelectorAll('.status-badge')).map((node) => node.textContent))
       .toEqual(['team', 'assignment', 'workflow', 'ticket']);

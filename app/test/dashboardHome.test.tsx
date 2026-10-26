@@ -35,8 +35,8 @@ const recentActivity: DashboardActivity = {
   ...emptyActivity,
   head: 1,
   entries: [{
-    id: 'event:1', at: '2026-01-02T03:04:05.000Z', kind: 'team', name: 'created',
-    summary: 'Build team was created', subject: { type: 'team', id: 'build', label: 'Build team' },
+    id: 'ticket-event:1', at: '2026-01-02T03:04:05.000Z', kind: 'ticket', name: 'ticket.moved',
+    summary: 'Ticket T-001 moved from open to done', subject: { type: 'ticket', id: 'ticket-1', label: 'T-001' },
   }],
 };
 
@@ -242,7 +242,7 @@ describe('DashboardHome', () => {
 
     expect(fake.activity).toHaveBeenCalledTimes(1);
     expect(fake.activity).toHaveBeenCalledWith('workspace-a');
-    expect(result.getByText('Build team was created')).toBeTruthy();
+    expect(result.getByText('Ticket T-001 moved from open to done')).toBeTruthy();
   });
 
   it('activity failure leaves Teams and Board visible and its retry is isolated', async () => {
@@ -414,7 +414,7 @@ describe('DashboardHome', () => {
 });
 
 describe('DashboardHome composition', () => {
-  const messages = { teams: 'Alpha running team', board: 'Alpha phase', activity: 'Alpha team happened' };
+  const messages = { teams: 'Alpha running team', board: 'Alpha phase', activity: 'Alpha ticket T-1 moved' };
 
   it.each(['teams', 'board', 'activity'] as const)(
     'keeps sibling panels ready and retries only a failed %s panel',
@@ -504,7 +504,7 @@ describe('DashboardHome composition', () => {
     expect(result.container.textContent).toContain('Beta running team');
     expect(result.container.textContent).not.toContain('Alpha running team');
     expect(result.container.textContent).not.toContain('Alpha phase');
-    expect(result.container.textContent).not.toContain('Alpha team happened');
+    expect(result.container.textContent).not.toContain('Alpha ticket T-1 moved');
   });
 
   it('replaces a connected dashboard with the startup retry view on connection loss', async () => {
@@ -770,7 +770,7 @@ describe('DashboardHome refresh coordination', () => {
       aA.resolve({ ok: true, data: activityFixture('Alpha') });
     });
     expect(timeEl(result)).toBeNull();
-    for (const text of ['Alpha running team', 'Alpha phase', 'Alpha team happened']) {
+    for (const text of ['Alpha running team', 'Alpha phase', 'Alpha ticket T-1 moved']) {
       expect(result.container.textContent).not.toContain(text);
     }
     now.mockReturnValue(6000);

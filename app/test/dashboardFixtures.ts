@@ -64,17 +64,16 @@ export function boardFixture(label: string): DashboardBoard {
 }
 
 export function activityFixture(label: string): DashboardActivity {
-  const kinds = ['team', 'assignment', 'workflow', 'ticket'] as const;
   return {
     workspace: label,
     dbId: 'db',
     head: 4,
-    entries: kinds.map((kind, index) => ({
-      id: `${label}:${kind}`,
+    entries: [0, 1, 2, 3].map((index) => ({
+      id: `${label}:ticket-event:${index + 1}`,
       at: `2026-01-0${index + 1}T01:02:03.000Z`,
-      kind,
-      name: kind,
-      summary: `${label} ${kind} happened`,
+      kind: 'ticket' as const,
+      name: 'ticket.moved',
+      summary: `${label} ticket T-${index + 1} moved`,
     })),
   };
 }

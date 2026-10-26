@@ -615,9 +615,13 @@ def _events_after(args, req):
 def _activity_recent(args, req):
     workspace_path = ops.canonical_workspace(req_text(args, "workspace", 4096, allow_empty=False))
     limit = req_int(args, "limit", 1, queries.RECENT_ACTIVITY_MAX_LIMIT, queries.RECENT_ACTIVITY_DEFAULT_LIMIT)
+    kinds = args.get("kinds")
+    queries.validate_activity_kinds(kinds)
     conn = _reader()
     try:
-        return queries.recent_activity(conn, workspace_path, limit=limit)
+        if kinds is None:
+            return queries.recent_activity(conn, workspace_path, limit=limit)
+        return queries.recent_activity(conn, workspace_path, limit=limit, kinds=kinds)
     finally:
         conn.close()
 

@@ -33,6 +33,18 @@ RECENT_TICKET_EVENT_NAMES = frozenset({
     "ticket.merged",
 })
 
+RECENT_ACTIVITY_KINDS = ("team", "assignment", "workflow", "ticket")
+
+# Event-name prefix in the `events` table for each non-ticket kind.
+RECENT_EVENT_KIND_PREFIXES = {
+    "team": "team.",
+    "assignment": "assignment.",
+    "workflow": "workflow_run.",
+}
+
+RECENT_ACTIVITY_KINDS_MESSAGE = ("Argument 'kinds' must be a non-empty list drawn from "
+                                 "team, assignment, workflow, ticket.")
+
 SECTIONS = (("teams", "team"), ("agents", "agent"), ("tasks", "task"), ("workflowRuns", "workflow_run"),
             ("stageAttempts", "stage_attempt"), ("assignments", "assignment"))
 
@@ -66,14 +78,27 @@ def head(conn) -> int:
     return int(row[0] or 0)
 
 
-def recent_activity(conn, workspace: str, limit: int = RECENT_ACTIVITY_DEFAULT_LIMIT) -> dict:
+def validate_activity_kinds(kinds) -> frozenset:
+    if kinds is None:
+        return frozenset(RECENT_ACTIVITY_KINDS)
+    if not isinstance(kinds, list) or not kinds:
+        raise AsError(BAD_REQUEST, RECENT_ACTIVITY_KINDS_MESSAGE)
+    for kind in kinds:
+        if not (isinstance(kind, str) and kind in RECENT_ACTIVITY_KINDS):
+            raise AsError(BAD_REQUEST, RECENT_ACTIVITY_KINDS_MESSAGE)
+    return frozenset(kinds)
+
+
+def recent_activity(conn, workspace: str, limit: int = RECENT_ACTIVITY_DEFAULT_LIMIT, kinds=None) -> dict:
     def run():
         if isinstance(limit, bool) or not isinstance(limit, int) or not (1 <= limit <= RECENT_ACTIVITY_MAX_LIMIT):
             raise AsError(BAD_REQUEST, "Argument 'limit' must be an integer between 1 and 20.")
 
+        selected = validate_activity_kinds(kinds)
         top = head(conn)
-        event_names = sorted(RECENT_EVENT_NAMES)
-        event_rows = conn.execute(
+        event_names = sorted(name for name in RECENT_EVENT_NAMES
+                             if any(name.startswith(RECENT_EVENT_KIND_PREFIXES[k]) for k in selected if k != "ticket"))
+        event_rows = [] if not event_names else conn.execute(
             f"""SELECT e.seq, e.at, e.name, e.team_id, e.assignment_id, e.workflow_run_id,
                        t.name AS team_name
                 FROM events e
@@ -85,7 +110,7 @@ def recent_activity(conn, workspace: str, limit: int = RECENT_ACTIVITY_DEFAULT_L
         ).fetchall()
 
         ticket_event_names = sorted(RECENT_TICKET_EVENT_NAMES)
-        ticket_rows = conn.execute(
+        ticket_rows = [] if "ticket" not in selected else conn.execute(
             f"""SELECT te.id, te.at, te.name, te.from_status, te.to_status,
                        ti.id AS ticket_id, ti.key AS ticket_key
                 FROM ticket_events te

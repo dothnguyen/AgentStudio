@@ -56,11 +56,11 @@ describe('registerIpc', () => {
     dbId: 'db-a',
     head: 4,
     entries: [{
-      id: 'event:4',
+      id: 'ticket-event:4',
       at: '2026-10-26T00:00:00Z',
       kind: 'ticket',
-      name: 'ticket.updated',
-      summary: 'Updated T-019',
+      name: 'ticket.moved',
+      summary: 'Ticket T-019 moved from open to done',
     }],
   };
 
@@ -76,7 +76,7 @@ describe('registerIpc', () => {
   it.each([
     [CHANNELS.dashboardTeams, 'team.list', {}],
     [CHANNELS.dashboardBoard, 'board.summary', { limit: 5 }],
-    [CHANNELS.dashboardActivity, 'activity.recent', { limit: 15 }],
+    [CHANNELS.dashboardActivity, 'activity.recent', { limit: 15, kinds: ['ticket'] }],
   ])('dashboard resolves workspace and sends %s', async (channel, target, extra) => {
     const payload = target === 'activity.recent'
       ? activityPayload

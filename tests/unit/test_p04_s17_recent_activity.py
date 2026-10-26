@@ -221,5 +221,104 @@ class RecentActivityTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, expected_code)
 
 
+    def test_ticket_kind_returns_ticket_entries_even_when_newer_events_fill_limit(self):
+        ids = self._base_entities()
+        ticket = self._ticket(self.workspace, "T-010")
+        ticket_ids = [self._ticket_event(ticket, "ticket.moved", f"2026-05-01T00:00:{i:02d}.000Z", "open", "done")
+                      for i in range(5)]
+        for i in range(20):
+            entity, name = ("assignment", "assignment.succeeded") if i % 2 == 0 else ("workflow_run", "workflow_run.failed")
+            self._global_event(ids, entity, name, f"2026-06-01T00:00:{i:02d}.000Z")
+        mixed = queries.recent_activity(self.conn, self.workspace)
+        self.assertEqual(len(mixed["entries"]), 15)
+        self.assertFalse([e for e in mixed["entries"] if e["kind"] == "ticket"])
+
+        result = queries.recent_activity(self.conn, self.workspace, kinds=["ticket"])
+        self.assertEqual([e["id"] for e in result["entries"]], [f"ticket-event:{i}" for i in reversed(ticket_ids)])
+        for entry in result["entries"]:
+            self.assertEqual(entry["kind"], "ticket")
+            self.assertEqual(entry["summary"], "Ticket T-010 moved from open to done")
+        self.assertEqual(result["head"], self.conn.execute("SELECT MAX(seq) FROM events").fetchone()[0])
+        self.assertEqual(result["workspace"], self.workspace)
+        self.assertEqual(result["dbId"], state.db_id(self.conn))
+
+        limited = queries.recent_activity(self.conn, self.workspace, 3, kinds=["ticket"])
+        self.assertEqual([e["id"] for e in limited["entries"]],
+                         [f"ticket-event:{i}" for i in reversed(ticket_ids[-3:])])
+
+    def test_kinds_subsets_filter_entries_and_all_kinds_equals_default(self):
+        ids = self._base_entities()
+        for n, name in enumerate(sorted(queries.RECENT_EVENT_NAMES)):
+            entity = "workflow_run" if name.startswith("workflow_run.") else name.split(".")[0]
+            self._global_event(ids, entity, name, f"2026-07-01T00:00:{n:02d}.000Z")
+        ticket = self._ticket(self.workspace, "T-011")
+        self._ticket_event(ticket, "ticket.moved", "2026-07-01T00:01:00.000Z", "open", "doing")
+        self._ticket_event(ticket, "ticket.merged", "2026-07-01T00:02:00.000Z")
+
+        team = queries.recent_activity(self.conn, self.workspace, 20, kinds=["team"])
+        self.assertEqual({e["name"] for e in team["entries"]}, {"team.running", "team.stopped"})
+        both = queries.recent_activity(self.conn, self.workspace, 20, kinds=["assignment", "workflow"])
+        self.assertEqual({e["kind"] for e in both["entries"]}, {"assignment", "workflow"})
+        self.assertEqual(len(both["entries"]), 6)
+        tickets = queries.recent_activity(self.conn, self.workspace, 20, kinds=["ticket", "ticket"])
+        self.assertEqual([e["kind"] for e in tickets["entries"]], ["ticket", "ticket"])
+        default = queries.recent_activity(self.conn, self.workspace, 20)
+        self.assertEqual(len(default["entries"]), 10)
+        self.assertEqual(queries.recent_activity(self.conn, self.workspace, 20,
+                                                 kinds=list(queries.RECENT_ACTIVITY_KINDS)), default)
+
+    def test_kinds_skips_queries_for_unrequested_tables(self):
+        ids = self._base_entities()
+        self._global_event(ids, "team", "team.running", "2026-07-01T00:00:00.000Z")
+        ticket = self._ticket(self.workspace, "T-012")
+        self._ticket_event(ticket, "ticket.moved", "2026-07-01T00:00:01.000Z", "open", "done")
+
+        def traced(kinds):
+            statements = []
+            self.conn.set_trace_callback(statements.append)
+            try:
+                queries.recent_activity(self.conn, self.workspace, kinds=kinds)
+            finally:
+                self.conn.set_trace_callback(None)
+            return statements
+
+        statements = traced(["ticket"])
+        self.assertFalse(any("FROM events e" in s for s in statements))
+        self.assertTrue(any("FROM ticket_events te" in s for s in statements))
+        statements = traced(["team"])
+        self.assertTrue(any("FROM events e" in s for s in statements))
+        self.assertFalse(any("FROM ticket_events te" in s for s in statements))
+
+    def test_recent_activity_rejects_invalid_kinds(self):
+        for kinds in ([], ["bogus"], "ticket", ["ticket", 1], [["ticket"]], {}, ["Ticket"], [None]):
+            with self.assertRaises(AsError) as caught:
+                queries.recent_activity(self.conn, self.workspace, kinds=kinds)
+            self.assertEqual((caught.exception.code, caught.exception.message),
+                             (BAD_REQUEST, queries.RECENT_ACTIVITY_KINDS_MESSAGE))
+        self.assertEqual(queries.validate_activity_kinds(None),
+                         frozenset({"team", "assignment", "workflow", "ticket"}))
+
+    def test_activity_recent_dispatch_validates_and_forwards_kinds(self):
+        ws = self.workspace
+        reader = mock.Mock()
+        reader.close = mock.Mock()
+        with mock.patch.object(dispatch, "_reader", return_value=reader), \
+                mock.patch.object(queries, "recent_activity", return_value={"entries": []}) as recent:
+            dispatch.COMMANDS["activity.recent"]({"workspace": ws, "kinds": ["ticket"]}, {})
+            recent.assert_called_with(reader, ws, limit=15, kinds=["ticket"])
+            dispatch.COMMANDS["activity.recent"]({"workspace": ws, "limit": 5, "kinds": ["team", "ticket"]}, {})
+            recent.assert_called_with(reader, ws, limit=5, kinds=["team", "ticket"])
+            dispatch.COMMANDS["activity.recent"]({"workspace": ws, "kinds": None}, {})
+            recent.assert_called_with(reader, ws, limit=15)
+        for kinds in ([], ["bogus"], "ticket", {}, [1]):
+            with mock.patch.object(dispatch, "_reader", side_effect=AssertionError("reader opened")), \
+                    mock.patch.object(queries, "recent_activity") as recent:
+                with self.assertRaises(AsError) as caught:
+                    dispatch.COMMANDS["activity.recent"]({"workspace": ws, "kinds": kinds}, {})
+                recent.assert_not_called()
+            self.assertEqual((caught.exception.code, caught.exception.message),
+                             (BAD_REQUEST, queries.RECENT_ACTIVITY_KINDS_MESSAGE))
+
+
 if __name__ == "__main__":
     unittest.main()
