@@ -1047,3 +1047,48 @@ def board_show(conn, workspace: str) -> dict:
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
                            ticketCount=len(tickets), columns=columns))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}
+
+
+def board_summary(conn, workspace: str, limit: int = 5) -> dict:
+    """A compact, read-only view of the effective current phase for dashboard consumers."""
+    config = load_config(workspace)
+    current = effective_current_phase(conn, workspace)
+    counts = _phase_counts(conn, current["id"], config) if current["id"] is not None else {}
+    columns = [{"status": status["id"], "kind": status["kind"], "title": status["name"],
+                "count": counts.get(status["id"], 0)} for status in config["statuses"]]
+    blocked = counts.get(BLOCKED_STATUS, 0)
+    if blocked:
+        columns.append({"status": BLOCKED_STATUS, "kind": None, "title": BLOCKED_STATUS, "count": blocked})
+
+    tickets = []
+    active = 0
+    if current["id"] is not None:
+        active = conn.execute(
+            "SELECT COUNT(*) FROM tickets WHERE phase_id = ? AND assignee IS NOT NULL AND status <> ?",
+            (current["id"], BLOCKED_STATUS)).fetchone()[0]
+        terminal = sorted(config["terminal"])
+        terminal_placeholders = ", ".join("?" for _ in terminal)
+        rows = conn.execute(
+            "SELECT * FROM tickets WHERE phase_id = ? AND "
+            f"(status = ? OR (assignee IS NOT NULL AND status NOT IN ({terminal_placeholders}))) "
+            "ORDER BY priority, created_at, key LIMIT ?",
+            (current["id"], BLOCKED_STATUS, *terminal, limit)).fetchall()
+        for row in rows:
+            activity = ticket_activity(conn, row, config)
+            if activity["state"] not in ("working", "blocked"):
+                continue
+            compact_activity = {"state": activity["state"]}
+            if activity["state"] == "working":
+                for field in ("agent", "role"):
+                    if activity.get(field) is not None:
+                        compact_activity[field] = activity[field]
+            tickets.append({"key": row["key"], "title": row["title"], "status": row["status"],
+                            "priority": row["priority"], "phase": current["slug"],
+                            "activity": compact_activity})
+
+    done = sum(counts.get(status["id"], 0) for status in config["statuses"]
+               if status["kind"] in TERMINAL_KINDS)
+    return {"workspace": workspace,
+            "currentPhase": {key: current[key] for key in ("slug", "name", "status")},
+            "columns": columns, "totals": {"active": active, "blocked": blocked, "done": done},
+            "tickets": tickets}
