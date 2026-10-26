@@ -77,7 +77,7 @@ describe('dashboard accessibility', () => {
     }
   });
 
-  it('renders dashboard collections with list semantics and machine-readable time', async () => {
+  it('renders dashboard collections with list and table semantics and machine-readable time', async () => {
     const result = shell(readyApi('x').api);
     await act(async () => {});
 
@@ -87,9 +87,9 @@ describe('dashboard accessibility', () => {
     const board = within(result.getByRole('region', { name: 'Board status' }));
     expect(board.getAllByRole('list').length).toBeGreaterThanOrEqual(2);
     const activityRegion = result.getByRole('region', { name: 'Recent activity' });
-    const ordered = activityRegion.querySelector('ol');
-    expect(ordered).toBeTruthy();
-    expect(within(activityRegion).getAllByRole('listitem')).toHaveLength(4);
+    expect(within(activityRegion).getByRole('table', { name: 'Recent activity' })).toBeTruthy();
+    expect(within(activityRegion).getAllByRole('columnheader').map((node) => node.textContent)).toEqual(['Event', 'Type', 'Time']);
+    expect(within(activityRegion).getAllByRole('row')).toHaveLength(5);
     const times = Array.from(activityRegion.querySelectorAll('time[datetime]'));
     expect(times.map((node) => node.getAttribute('datetime'))).toEqual([
       '2026-01-01T01:02:03.000Z', '2026-01-02T01:02:03.000Z', '2026-01-03T01:02:03.000Z', '2026-01-04T01:02:03.000Z',

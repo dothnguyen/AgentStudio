@@ -469,6 +469,15 @@ code,
 
 .panel-error p { overflow-wrap: anywhere; }
 
+.activity-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.activity-table th,
+.activity-table td { padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.activity-table th { color: var(--text-muted); font-size: 11px; font-weight: 600; }
+.activity-table .activity-col-type { width: 22%; }
+.activity-table .activity-col-time { width: 30%; }
+.activity-table .status-badge { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+.activity-time { color: var(--text-muted); font-size: 11px; }
+
 .team-list {
   display: grid;
   gap: 8px;

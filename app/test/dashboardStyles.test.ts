@@ -123,6 +123,22 @@ describe('dashboard styles', () => {
     }
   });
 
+  it('activity_table_fits_narrow_widths_without_clipping', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.activity-table { width: 100%; table-layout: fixed; border-collapse: collapse; }');
+    expect(flat).toMatch(/\.activity-table th, \.activity-table td \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toContain('.activity-table .activity-col-type { width: 22%; }');
+    expect(flat).toContain('.activity-table .activity-col-time { width: 30%; }');
+    const rules = css.split('}').filter((rule) => rule.split('{')[0].includes('activity-'));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      expect(rule).not.toMatch(/overflow-x:\s*hidden/);
+      expect(rule).not.toMatch(/text-overflow:\s*ellipsis/);
+      expect(rule).not.toMatch(/white-space:\s*nowrap/);
+      expect(rule).not.toMatch(/(^|[\s;])(min-|max-)?width:\s*\d+px/);
+    }
+  });
+
   it('wraps team cards and long names at narrow widths', () => {
     const flat = squash(css);
     expect(flat).toMatch(/\.team-heading \{[^}]*flex-wrap: wrap/);

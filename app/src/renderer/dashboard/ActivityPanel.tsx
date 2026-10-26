@@ -10,6 +10,14 @@ export function formatActivityTime(at: string): string {
   return Number.isNaN(date.getTime()) ? at : date.toLocaleString();
 }
 
+export const ACTIVITY_DISPLAY_LIMIT = 15;
+
+export function activityScopeText(shown: number, returned: number): string {
+  if (shown < returned) return `Showing ${shown} of ${returned} returned events, newest first`;
+  if (shown === 1) return '1 recent event, newest first';
+  return `${shown} recent events, newest first`;
+}
+
 export function ActivityPanel(props: ActivityPanelProps) {
   const { section } = props;
   return (
@@ -27,19 +35,31 @@ export function ActivityPanel(props: ActivityPanelProps) {
       )}
       {section.state === 'ready' && section.data !== null && (
         section.data.entries.length === 0 ? (
-          <p>No recent activity</p>
+          <p className="panel-empty">No recent activity</p>
         ) : (
-          <ol aria-label="Recent activity">
-            {section.data.entries.slice(0, 15).map((entry) => (
-              <li key={entry.id}>
-                <span>{entry.summary}</span>
-                {' '}
-                <span className="status-badge">{entry.kind}</span>
-                {' '}
-                <time dateTime={entry.at}>{formatActivityTime(entry.at)}</time>
-              </li>
-            ))}
-          </ol>
+          <>
+            <p className="panel-note activity-scope">
+              {activityScopeText(Math.min(section.data.entries.length, ACTIVITY_DISPLAY_LIMIT), section.data.entries.length)}
+            </p>
+            <table className="activity-table" aria-label="Recent activity">
+              <thead>
+                <tr>
+                  <th scope="col" className="activity-col-event">Event</th>
+                  <th scope="col" className="activity-col-type">Type</th>
+                  <th scope="col" className="activity-col-time">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {section.data.entries.slice(0, ACTIVITY_DISPLAY_LIMIT).map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="activity-event">{entry.summary}</td>
+                    <td className="activity-type"><span className="status-badge">{entry.kind}</span></td>
+                    <td className="activity-time"><time dateTime={entry.at}>{formatActivityTime(entry.at)}</time></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )
       )}
     </section>
