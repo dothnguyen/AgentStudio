@@ -92,6 +92,18 @@ def _team_status(args, req):
         conn.close()
 
 
+def _team_list(args, req):
+    unknown = sorted(set(args) - {"workspace"})
+    if unknown:
+        raise AsError(BAD_REQUEST, f"team.list got unknown argument(s): {', '.join(unknown)}.")
+    workspace_path = _workspace_arg(args)
+    conn = _reader()
+    try:
+        return teamstatus.workspace_teams(conn, workspace_path)
+    finally:
+        conn.close()
+
+
 def _validate_fake_options(opts):
     if not isinstance(opts, dict):
         raise AsError(BAD_REQUEST, "fake options must be an object.")
@@ -600,6 +612,7 @@ COMMANDS = {
     "team.start": _inbox("team.start", _validate_team_start),
     "team.stop": _inbox("team.stop", _validate_team_stop),
     "team.attach": _team_attach,
+    "team.list": _team_list,
     "team.status": _team_status,
     "task.direct": _inbox("task.direct", _validate_task_direct),
     "task.show": _task_show,

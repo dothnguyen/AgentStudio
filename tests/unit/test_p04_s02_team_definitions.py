@@ -310,7 +310,7 @@ class CliTests(Base):
         self.assertIn("members[0].provider", err)
 
     def test_not_dispatch_commands(self):
-        for a in teamdefs_actions():
+        for a in (action for action in teamdefs_actions() if action != "list"):
             self.assertNotIn(f"team.{a}", dispatch.COMMANDS)
         usage = cli.USAGE.replace("team list|show|validate", "team list team show team validate")
         for a in teamdefs_actions():
