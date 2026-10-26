@@ -73,6 +73,32 @@ class AppLiveHelperTest(unittest.TestCase):
     def test_find_serve_pids_skips_other_uid(self):
         self.assertEqual(helper.find_serve_pids("/tmp/S", self.make_proc(), uid=os.getuid() + 1), [])
 
+    def test_serve_pids_reports_state_scoped_count(self):
+        self.assertEqual(helper.serve_pids("/tmp/S", self.make_proc()), {"pids": [11], "count": 1})
+
+    def test_main_serve_pids_prints_one_json_line(self):
+        with patch.object(helper, "serve_pids", return_value={"pids": [11], "count": 1}):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = helper.main(["serve-pids", "--state", "/tmp/S"])
+        self.assertEqual(rc, 0)
+        lines = buf.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0]), {"pids": [11], "count": 1})
+
+    def test_serve_pids_with_no_match_reports_zero(self):
+        self.assertEqual(helper.serve_pids("/tmp/S-none", self.make_proc()), {"pids": [], "count": 0})
+
+    def test_main_serve_pids_oserror_prints_error_and_exits_2(self):
+        with patch.object(helper, "serve_pids", side_effect=OSError("no proc")):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = helper.main(["serve-pids", "--state", "/tmp/S"])
+        self.assertEqual(rc, 2)
+        lines = buf.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0]), {"error": "no proc"})
+
     def test_kill_serve_with_no_match(self):
         self.assertEqual(helper.kill_serve("/tmp/S-none", self.make_proc()), {"killed": []})
 

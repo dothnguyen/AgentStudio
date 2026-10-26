@@ -64,6 +64,12 @@ def find_serve_pids(state: str, proc_root: str = "/proc", uid: int | None = None
     return sorted(found)
 
 
+def serve_pids(state: str, proc_root: str = "/proc") -> dict:
+    """Return the current user's serve processes for this exact XDG state root."""
+    pids = find_serve_pids(state, proc_root)
+    return {"pids": pids, "count": len(pids)}
+
+
 def kill_serve(state: str, proc_root: str = "/proc") -> dict:
     pids = find_serve_pids(state, proc_root)
     for pid in pids:
@@ -88,6 +94,7 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("setup")
     sub.add_parser("kill-serve").add_argument("--state", required=True)
+    sub.add_parser("serve-pids").add_argument("--state", required=True)
     sub.add_parser("cleanup").add_argument("--root", required=True)
     args = parser.parse_args(argv)
     try:
@@ -95,6 +102,8 @@ def main(argv: list[str]) -> int:
             result = setup()
         elif args.cmd == "kill-serve":
             result = kill_serve(args.state)
+        elif args.cmd == "serve-pids":
+            result = serve_pids(args.state)
         else:
             result = cleanup(args.root)
     except (ValueError, OSError) as e:
