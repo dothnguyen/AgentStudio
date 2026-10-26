@@ -532,3 +532,73 @@ describe('DashboardHome composition', () => {
     expect(document.activeElement).toBe(result.getByRole('button', { name: 'Retry' }));
   });
 });
+
+describe('DashboardHome summary metrics', () => {
+  function renderHome(api: DashboardApi) {
+    return render(<DashboardHome workspace={workspaceA} dashboard={api} connection={connected} onNavigate={vi.fn()} />);
+  }
+
+  it('summary_uses_existing_section_results_without_extra_requests', async () => {
+    const fake = readyApi('Alpha');
+    const result = renderHome(fake.api);
+    await act(async () => {});
+    expect(within(result.getByRole('group', { name: 'Running teams' })).getByText('1')).toBeTruthy();
+    expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('2')).toBeTruthy();
+    expect(within(result.getByRole('group', { name: 'Completed tickets' })).getByText('0')).toBeTruthy();
+    for (const fn of [fake.teams, fake.board, fake.activity]) {
+      expect(fn).toHaveBeenCalledTimes(1);
+      expect(fn).toHaveBeenCalledWith(workspaceA.id);
+    }
+    expect(Object.keys(fake.api).sort()).toEqual(['activity', 'board', 'teams']);
+  });
+
+  it('summary_partial_error_keeps_successful_cards', async () => {
+    const fake = readyApi('Alpha');
+    fake.board.mockImplementationOnce(async () => ({ ok: false, error: { code: 'BROKEN', message: 'panel failed', retryable: true } }));
+    const result = renderHome(fake.api);
+    await act(async () => {});
+    expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('Unavailable: board could not be loaded')).toBeTruthy();
+    expect(within(result.getByRole('group', { name: 'Running teams' })).getByText('1')).toBeTruthy();
+    fireEvent.click(within(result.getByRole('region', { name: 'Board status' })).getByRole('button', { name: 'Retry' }));
+    await act(async () => {});
+    expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('2')).toBeTruthy();
+    expect(fake.teams).toHaveBeenCalledTimes(1);
+    expect(fake.board).toHaveBeenCalledTimes(2);
+  });
+
+  it('summary_shows_loading_until_sections_resolve', async () => {
+    const t = deferred<Result<DashboardTeams>>();
+    const b = deferred<Result<DashboardBoard>>();
+    const fake = readyApi('Alpha');
+    fake.teams.mockImplementation(() => t.promise);
+    fake.board.mockImplementation(() => b.promise);
+    const result = renderHome(fake.api);
+    await act(async () => {});
+    const names = ['Running teams', 'Active assignments', 'Open tickets', 'Completed tickets'];
+    for (const name of names) expect(result.getByRole('group', { name }).textContent).toContain('Loading…');
+    await act(async () => t.resolve({ ok: true, data: teamsFixture('Alpha') }));
+    expect(within(result.getByRole('group', { name: 'Running teams' })).getByText('1')).toBeTruthy();
+    expect(result.getByRole('group', { name: 'Open tickets' }).textContent).toContain('Loading…');
+  });
+
+  it('summary_marks_truncated_teams', async () => {
+    const fake = readyApi('Alpha');
+    fake.teams.mockImplementation(async () => ({ ok: true, data: { ...teamsFixture('Alpha'), truncated: true } }));
+    const result = renderHome(fake.api);
+    await act(async () => {});
+    const running = result.getByRole('group', { name: 'Running teams' });
+    expect(within(running).getByText('1+')).toBeTruthy();
+    expect(running.textContent).toContain('Partial');
+  });
+
+  it('summary_refresh_reloads_each_section_once', async () => {
+    const fake = readyApi('Alpha');
+    const result = renderHome(fake.api);
+    await act(async () => {});
+    fireEvent.click(result.getByRole('button', { name: /Refresh/ }));
+    await act(async () => {});
+    for (const fn of [fake.teams, fake.board, fake.activity]) expect(fn).toHaveBeenCalledTimes(2);
+    expect(within(result.getByRole('group', { name: 'Running teams' })).getByText('1')).toBeTruthy();
+    expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('2')).toBeTruthy();
+  });
+});

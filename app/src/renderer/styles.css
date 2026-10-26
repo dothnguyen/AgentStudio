@@ -412,6 +412,21 @@ code,
 }
 
 .dashboard-panel-activity { grid-column: 1 / -1; }
+
+.dashboard-summary { min-width: 0; margin-bottom: 16px; }
+
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+
+.summary-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; background: var(--surface); overflow-wrap: anywhere; }
+
+.summary-card-partial { border-left-color: var(--warning); }
+.summary-card-error { border-left-color: var(--danger); }
+
+.summary-label { color: var(--text-muted); font-size: 11px; }
+.summary-value { margin: 4px 0; color: var(--text-bright); font-size: 22px; font-weight: 600; }
+.summary-scope,
+.summary-status { color: var(--text-muted); font-size: 11px; }
+
 .dashboard-panel h2 { margin-bottom: 13px; }
 .dashboard-panel li,
 .dashboard-panel p,

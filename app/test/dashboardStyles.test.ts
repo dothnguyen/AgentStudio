@@ -97,4 +97,17 @@ describe('dashboard styles', () => {
       expect(names).not.toMatch(/\.dashboard-panel|\bh[1-6]\b|button|\.status-badge/);
     }
   });
+
+  it('summary_cards_wrap_without_horizontal_scroll', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));');
+    expect(flat).toContain('.summary-card { min-width: 0;');
+    expect(/\.summary-card \{[^}]*\}/.exec(flat)![0]).toContain('overflow-wrap: anywhere');
+    const rules = css.split('}').filter((rule) => rule.split('{')[0].includes('summary-'));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      expect(rule).not.toMatch(/overflow-x:\s*hidden/);
+      expect(rule.replace(/minmax\([^;]*\)/g, '')).not.toMatch(/(^|[\s;])(min-|max-)?width:\s*\d+px/);
+    }
+  });
 });

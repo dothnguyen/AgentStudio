@@ -96,5 +96,15 @@ describe('dashboard accessibility', () => {
     ]);
     expect(result.container.textContent).not.toMatch(/[{}]|"workspace"/);
   });
-});
 
+  it('summary_cards_are_static_and_labelled', async () => {
+    const result = shell(readyApi('x').api);
+    await act(async () => {});
+    const region = result.getByRole('region', { name: 'Workspace summary' });
+    expect(within(region).getAllByRole('group').map((g) => g.querySelector('.summary-label')!.textContent))
+      .toEqual(['Running teams', 'Active assignments', 'Open tickets', 'Completed tickets']);
+    expect(result.getAllByRole('heading', { level: 2 }).map((node) => node.textContent))
+      .toEqual(['Team status', 'Board status', 'Recent activity']);
+    expect(region.querySelector('button, a, input, [tabindex]')).toBeNull();
+  });
+});

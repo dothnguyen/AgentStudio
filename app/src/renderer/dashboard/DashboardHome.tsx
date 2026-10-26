@@ -5,6 +5,7 @@ import { ShellIcon } from '../shell/ShellIcon';
 import type { SectionId } from '../shell/navModel';
 import { ActivityPanel } from './ActivityPanel';
 import { BoardPanel } from './BoardPanel';
+import { SummaryMetrics } from './SummaryMetrics';
 import { TeamsPanel } from './TeamsPanel';
 import { useDashboardSection } from './useDashboardSection';
 
@@ -72,6 +73,7 @@ export function DashboardHome(props: {
           )}
         </div>
       </header>
+      <SummaryMetrics teams={teams} board={boardSection} />
       <div className="dashboard-grid">
         <TeamsPanel section={teams} onNavigate={props.onNavigate} />
         <BoardPanel section={boardSection} onNavigate={(sectionId) => props.onNavigate(sectionId as SectionId)} />
