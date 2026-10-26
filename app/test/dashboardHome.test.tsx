@@ -70,13 +70,96 @@ afterEach(() => {
 });
 
 describe('DashboardHome', () => {
+  it('renders breadcrumb and overview heading', async () => {
+    const fake = fakeDashboard();
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    const nav = result.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(nav.textContent).toBe('WorkspaceHome');
+    expect(nav.querySelector('li[aria-current="page"]')?.textContent).toBe('Home');
+    const h1 = result.getAllByRole('heading', { level: 1 });
+    expect(h1).toHaveLength(1);
+    expect(h1[0].textContent).toBe('Workspace overview');
+  });
+
+  it('connection badge keeps exact wording with an aria-hidden dot', async () => {
+    const fake = fakeDashboard();
+    const states: Array<[ConnectionStatus['state'], string]> = [
+      ['connecting', CONNECTING_TEXT], ['connected', CONNECTED_TEXT], ['lost', LOST_TITLE],
+    ];
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    for (const [state, text] of states) {
+      result.rerender(
+        <DashboardHome workspace={workspace} dashboard={fake.api} connection={{ ...connected, state }} onNavigate={vi.fn()} />,
+      );
+      const badge = result.container.querySelector('.connection-badge')!;
+      expect(badge.classList.contains(`connection-${state}`)).toBe(true);
+      expect(badge.textContent).toBe(text);
+      expect(badge.querySelector('.status-dot')?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('refresh button keeps its accessible name with an icon', async () => {
+    const fake = fakeDashboard();
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    const button = result.getByRole('button', { name: 'Refresh' });
+    expect(button.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    await act(async () => { fireEvent.click(button); });
+    expect(fake.teams).toHaveBeenCalledTimes(2);
+    expect(fake.board).toHaveBeenCalledTimes(2);
+    expect(fake.activity).toHaveBeenCalledTimes(2);
+  });
+
+  it('long and markup-like workspace identity stays literal with full text', async () => {
+    const fake = fakeDashboard();
+    const odd = { ...workspace, name: '<b>x</b>'.repeat(20), path: '/very/long/'.repeat(30) };
+    const result = render(<DashboardHome workspace={odd} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    const name = result.container.querySelector('.dashboard-workspace-name')!;
+    expect(name.textContent).toBe(odd.name);
+    expect(name.getAttribute('title')).toBe(odd.name);
+    const path = result.container.querySelector('code.dashboard-path')!;
+    expect(path.textContent).toBe(odd.path);
+    expect(path.getAttribute('title')).toBe(odd.path);
+    expect(result.container.querySelector('b')).toBeNull();
+  });
+
+  it('header stays visible while every section is loading', () => {
+    const pending = vi.fn(() => new Promise<never>(() => {}));
+    const api = { teams: pending, board: pending, activity: pending } as unknown as DashboardApi;
+    const result = render(<DashboardHome workspace={workspace} dashboard={api} connection={connected} onNavigate={vi.fn()} />);
+    expect(result.getByRole('heading', { level: 1, name: 'Workspace overview' })).toBeTruthy();
+    expect(result.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
+    expect(result.getByText(CONNECTED_TEXT)).toBeTruthy();
+    expect(result.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+    expect(result.getAllByRole('status')).toHaveLength(3);
+    expect(result.container.textContent).not.toContain('Last updated');
+  });
+
+  it('header stays visible when every section fails', async () => {
+    const failed = vi.fn(async () => ({ ok: false, error: { code: 'BROKEN', message: 'x failed', retryable: true } }));
+    const api = { teams: failed, board: failed, activity: failed } as unknown as DashboardApi;
+    const result = render(<DashboardHome workspace={workspace} dashboard={api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    expect(result.getByRole('heading', { level: 1, name: 'Workspace overview' })).toBeTruthy();
+    expect(result.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+    expect(result.getByText(CONNECTED_TEXT)).toBeTruthy();
+    expect(result.getAllByRole('alert')).toHaveLength(3);
+    expect(result.getAllByRole('button', { name: 'Retry' })).toHaveLength(3);
+  });
+
   it('opens_home_with_one_teams_request', async () => {
     const fake = fakeDashboard();
     const result = render(<WorkspaceShell workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={vi.fn()} />);
     await act(async () => {});
 
-    const heading = result.getByRole('heading', { level: 1, name: workspace.name });
+    const heading = result.getByRole('heading', { level: 1, name: 'Workspace overview' });
     expect(heading).toBeTruthy();
+    const name = result.container.querySelector('.dashboard-workspace-name');
+    expect(name?.textContent).toBe(workspace.name);
+    expect(name?.getAttribute('title')).toBe(workspace.name);
     const path = result.getAllByText(workspace.path).find((node) => node.tagName === 'CODE');
     expect(path?.getAttribute('title')).toBe(workspace.path);
     expect(result.getByText(CONNECTED_TEXT)).toBeTruthy();
@@ -127,7 +210,7 @@ describe('DashboardHome', () => {
     const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
     await act(async () => {});
 
-    expect(result.getByRole('heading', { level: 1, name: workspace.name })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Workspace overview' })).toBeTruthy();
     expect(result.getByRole('region', { name: 'Board status' })).toBeTruthy();
     expect(result.getByRole('region', { name: 'Recent activity' })).toBeTruthy();
     fireEvent.click(within(result.getByRole('region', { name: 'Team status' })).getByRole('button', { name: 'Retry' }));
@@ -439,7 +522,7 @@ describe('DashboardHome composition', () => {
     );
     await act(async () => conn.emit(connected));
     await act(async () => {});
-    expect(result.getByRole('heading', { level: 1, name: 'Alpha' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Workspace overview' })).toBeTruthy();
 
     await act(async () => conn.emit({ state: 'lost', error: 'serve exited', distro: 'Ubuntu', command: 'serve' }));
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe(LOST_TITLE);

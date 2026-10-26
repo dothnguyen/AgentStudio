@@ -21,6 +21,8 @@ describe('dashboard accessibility', () => {
     await act(async () => {});
 
     expect(result.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(result.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
     const h2 = result.getAllByRole('heading', { level: 2 }).map((node) => node.textContent);
     expect(h2).toEqual(['Team status', 'Board status', 'Recent activity']);
     for (const name of ['Team status', 'Board status', 'Recent activity']) {

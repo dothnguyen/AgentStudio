@@ -47,6 +47,20 @@ describe('dashboard styles', () => {
     for (const rule of dashboardRules) expect(rule).not.toMatch(/overflow-x:\s*hidden/);
   });
 
+  it('keeps the compact shell and header reachable at narrow widths', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.workspace-sidebar \{[^}]*overflow-y: auto/);
+    const sidebarRule = /\.workspace-sidebar \{[^}]*\}/.exec(flat)![0];
+    expect(sidebarRule).not.toContain('overflow: hidden');
+    expect(flat).toMatch(/\.switch-workspace \{[^}]*margin-top: auto/);
+    expect(flat).toMatch(/\.dashboard-header \{[^}]*flex-wrap: wrap/);
+    expect(flat).toMatch(/\.breadcrumb ol \{[^}]*flex-wrap: wrap/);
+    expect(flat).toMatch(/\.dashboard-workspace-name \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toMatch(/\.workspace-name, \.workspace-path \{[^}]*text-overflow: ellipsis/);
+    expect(flat).toMatch(/\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*box-shadow: inset 3px 0/);
+    expect(flat).toMatch(/button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\)/);
+  });
+
   it('disables motion when reduced motion is requested', () => {
     const flat = squash(css);
     const block = flat.slice(flat.indexOf('@media (prefers-reduced-motion: reduce)'));

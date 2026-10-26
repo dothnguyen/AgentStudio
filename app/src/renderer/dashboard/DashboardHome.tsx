@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../StartupScreen';
+import { ShellIcon } from '../shell/ShellIcon';
 import type { SectionId } from '../shell/navModel';
 import { ActivityPanel } from './ActivityPanel';
 import { BoardPanel } from './BoardPanel';
@@ -42,17 +43,28 @@ export function DashboardHome(props: {
     <div className="dashboard-home">
       <header className="dashboard-header">
         <div className="dashboard-title">
-          <h1>{props.workspace.name}</h1>
+          <nav className="breadcrumb" aria-label="Breadcrumb">
+            <ol>
+              <li>Workspace</li>
+              <li aria-current="page">Home</li>
+            </ol>
+          </nav>
+          <h1>Workspace overview</h1>
+          <p className="dashboard-workspace-name" title={props.workspace.name}>{props.workspace.name}</p>
           <code className="dashboard-path" title={props.workspace.path}>{props.workspace.path}</code>
         </div>
         <div className="dashboard-actions">
-          <span className={`status-badge connection-badge connection-${props.connection.state}`}>{connectionText}</span>
+          <span className={`status-badge connection-badge connection-${props.connection.state}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {connectionText}
+          </span>
           <button
             type="button"
             className="refresh-button"
             aria-busy={busy}
             onClick={() => { void refreshAll(); }}
           >
+            <ShellIcon name="refresh" />
             Refresh
           </button>
           {latest !== null && (

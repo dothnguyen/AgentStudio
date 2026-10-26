@@ -176,7 +176,8 @@ describe('WorkspacesScreen', () => {
     expect(result.queryByRole('dialog')).toBeNull();
     expect(fake.list).toHaveBeenCalledTimes(2);
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Beta');
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
     expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/b');
     expect(result.queryByRole('button', { name: 'Back' })).toBeNull();
@@ -203,7 +204,8 @@ describe('WorkspacesScreen', () => {
     await act(async () => refresh.resolve(ok(ws('a', 'Alpha', '/a'), added)));
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Beta');
   });
 
   it('ignores a post-create refresh result after unmount', async () => {
@@ -449,7 +451,8 @@ describe('WorkspacesScreen', () => {
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Alpha');
     expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/a');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Alpha');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Alpha');
     expect(result.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
   });
 

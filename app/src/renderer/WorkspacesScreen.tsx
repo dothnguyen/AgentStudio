@@ -13,7 +13,7 @@ export const CREATED_WORKSPACE_MISSING_MESSAGE = 'workspace.list did not return 
 export const MISSING_BADGE = 'folder missing';
 export const PRODUCT_SUBTITLE = 'Coordinate coding agents across your workspaces.';
 
-function StudioMark() {
+export function StudioMark() {
   return (
     <svg className="studio-mark" viewBox="0 0 32 32" aria-hidden="true">
       <path d="M7.5 8.5h7l2 2h8v13h-17z" />

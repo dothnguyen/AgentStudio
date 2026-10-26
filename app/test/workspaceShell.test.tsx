@@ -266,4 +266,65 @@ describe('WorkspaceShell', () => {
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
     expect(currentButtons(result.container)).toEqual([result.getByRole('button', { name: 'Home' })]);
   });
+
+  it('renders brand, workspace label and selector with full accessible text', () => {
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
+    const sidebar = result.getByRole('complementary', { name: 'Workspace sidebar' });
+    expect(within(sidebar).getByText('Agent Studio')).toBeTruthy();
+    expect(within(sidebar).getByText('Workspace')).toBeTruthy();
+    expect(result.getByRole('button', {
+      name: 'Current workspace: A very long workspace name (/home/me/a/very/long/path). Choose another workspace',
+    })).toBeTruthy();
+    expect(result.container.querySelector('.workspace-name')?.getAttribute('title')).toBe(workspace.name);
+    expect(result.container.querySelector('.workspace-path')?.getAttribute('title')).toBe(workspace.path);
+  });
+
+  it('workspace selector calls only onSwitchWorkspace', () => {
+    const onSwitchWorkspace = vi.fn();
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={onSwitchWorkspace} />);
+    fireEvent.click(result.container.querySelector('.workspace-selector')!);
+    expect(onSwitchWorkspace).toHaveBeenCalledTimes(1);
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(currentButtons(result.container)).toEqual([result.getByRole('button', { name: 'Home' })]);
+  });
+
+  it('nav buttons show an aria-hidden icon and their label', () => {
+    const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
+    const buttons = result.container.querySelectorAll('nav button');
+    expect(buttons).toHaveLength(5);
+    buttons.forEach((button, index) => {
+      expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
+      expect(button.textContent).toBe(items[index].label);
+    });
+  });
+
+  it('sidebar controls are native buttons in visual order with no tabindex', () => {
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
+    const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
+    expect(buttons).toHaveLength(6);
+    expect(buttons[0].className).toContain('workspace-selector');
+    expect(buttons.slice(1, 5).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'Boards', 'Configuration']);
+    expect(buttons[5].className).toContain('switch-workspace');
+    for (const button of buttons) {
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.type).toBe('button');
+      expect(button.getAttribute('tabindex')).toBeNull();
+    }
+  });
+
+  it('Switch workspace is the last sidebar control', () => {
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
+    const buttons = result.container.querySelectorAll('aside button');
+    const last = buttons[buttons.length - 1];
+    expect(result.getByRole('button', { name: 'Switch workspace' })).toBe(last);
+    expect(last.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it('keeps one main, the Workspace nav and the sidebar landmark', () => {
+    const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
+    expect(result.getAllByRole('main')).toHaveLength(1);
+    expect(result.getByRole('navigation', { name: 'Workspace' })).toBeTruthy();
+    expect(result.getByRole('complementary', { name: 'Workspace sidebar' })).toBeTruthy();
+  });
 });
