@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { getConnectionApi, getWorkspacesApi, type ConnectionStatus, type CreateArgs } from '../src/renderer/api';
+import {
+  getConnectionApi,
+  getDashboardApi,
+  getWorkspacesApi,
+  type ConnectionStatus,
+  type CreateArgs,
+  type DashboardActivity,
+} from '../src/renderer/api';
 
 describe('getConnectionApi', () => {
   it('getConnectionApi throws when the preload API is missing', () => {
@@ -73,5 +80,50 @@ describe('getWorkspacesApi', () => {
     const api = getWorkspacesApi();
     expect(api).not.toBe(workspaces);
     expect(Object.keys(api).sort()).toEqual(['create', 'list', 'pickFolder']);
+  });
+});
+
+describe('getDashboardApi', () => {
+  it('throws when the preload dashboard API is missing', () => {
+    window.agentStudio = { connection: { onChange: () => () => {} } };
+    expect(() => getDashboardApi()).toThrow('Agent Studio preload API is missing (window.agentStudio.dashboard).');
+  });
+
+  it('forwards teams board and activity and preserves Results', async () => {
+    const teamsResult = { ok: true as const, data: { workspace: '/a', teams: [], truncated: false } };
+    const boardResult = { ok: true as const, data: { workspace: '/a', columns: [], tickets: [], totals: { active: 0, blocked: 0, done: 0 }, currentPhase: { slug: 'p', name: 'P', status: 'open' as const } } };
+    const activityData: DashboardActivity = {
+      workspace: '/a',
+      dbId: 'db-a',
+      head: 4,
+      entries: [{
+        id: 'ticket-event:4',
+        at: '2026-10-26T00:00:00Z',
+        kind: 'ticket',
+        name: 'ticket.moved',
+        summary: 'Ticket T-019 moved to done',
+        subject: { type: 'ticket', id: 'ticket-id', label: 'T-019' },
+      }],
+    };
+    const activityResult = { ok: true as const, data: activityData };
+    const teams = vi.fn(async () => teamsResult);
+    const board = vi.fn(async () => boardResult);
+    const activity = vi.fn(async () => activityResult);
+    window.agentStudio = { connection: { onChange: () => () => {} }, dashboard: { teams, board, activity } };
+    const api = getDashboardApi();
+    expect(await api.teams('ws-a')).toEqual(teamsResult);
+    expect(await api.board('ws-b')).toEqual(boardResult);
+    expect(await api.activity('ws-c')).toEqual(activityResult);
+    expect(teams).toHaveBeenCalledWith('ws-a');
+    expect(board).toHaveBeenCalledWith('ws-b');
+    expect(activity).toHaveBeenCalledWith('ws-c');
+  });
+
+  it('returns its own narrow forwarding object', () => {
+    const dashboard = { teams: vi.fn(), board: vi.fn(), activity: vi.fn(), extraPreloadMethod: vi.fn() };
+    window.agentStudio = { connection: { onChange: () => () => {} }, dashboard };
+    const api = getDashboardApi();
+    expect(api).not.toBe(dashboard);
+    expect(Object.keys(api).sort()).toEqual(['activity', 'board', 'teams']);
   });
 });

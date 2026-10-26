@@ -18,13 +18,27 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 }
 
 describe('preload', () => {
-  it('exposes exactly the four calls on window.agentStudio', () => {
+  it('exposes exactly the fixed calls on window.agentStudio', () => {
     expect(Object.keys(exposed)).toEqual(['agentStudio']);
     const api = exposed.agentStudio as Record<string, Record<string, unknown>>;
-    expect(Object.keys(api).sort()).toEqual(['connection', 'workspaces']);
+    expect(Object.keys(api).sort()).toEqual(['connection', 'dashboard', 'workspaces']);
     expect(Object.keys(api.workspaces).sort()).toEqual(['create', 'list', 'pickFolder']);
+    expect(Object.keys(api.dashboard).sort()).toEqual(['activity', 'board', 'teams']);
     expect(Object.keys(api.connection)).toEqual(['onChange']);
     for (const k of ['invoke', 'send', 'on', 'ipcRenderer']) expect(k in api).toBe(false);
+  });
+
+  it('dashboard calls forward one workspace id on their fixed channels', () => {
+    const f = fakeIpc();
+    const dashboard = buildApi(f.ipc).dashboard as Record<string, (...a: unknown[]) => unknown>;
+    dashboard.teams('ws-1', 'extra');
+    dashboard.board('ws-2', 'extra');
+    dashboard.activity('ws-3', 'extra');
+    expect(f.invoke.mock.calls).toEqual([
+      [CHANNELS.dashboardTeams, 'ws-1'],
+      [CHANNELS.dashboardBoard, 'ws-2'],
+      [CHANNELS.dashboardActivity, 'ws-3'],
+    ]);
   });
 
   it('channel strings equal the main process constants', () => {

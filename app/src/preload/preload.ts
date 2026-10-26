@@ -9,6 +9,9 @@ export const PRELOAD_CHANNELS = {
   pickFolder: 'workspaces:pickFolder',
   connectionGet: 'connection:get',
   connectionState: 'connection:state',
+  dashboardTeams: 'dashboard:teams',
+  dashboardBoard: 'dashboard:board',
+  dashboardActivity: 'dashboard:activity',
 } as const;
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'on' | 'removeListener'>;
@@ -19,6 +22,11 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       list: () => ipc.invoke(PRELOAD_CHANNELS.list),
       create: (args: CreateArgs) => ipc.invoke(PRELOAD_CHANNELS.create, args),
       pickFolder: () => ipc.invoke(PRELOAD_CHANNELS.pickFolder),
+    },
+    dashboard: {
+      teams: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardTeams, id),
+      board: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardBoard, id),
+      activity: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardActivity, id),
     },
     connection: {
       onChange: (cb) => {

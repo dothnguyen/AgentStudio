@@ -1,4 +1,12 @@
-import type { ConnectionPayload, CreateArgs, Result } from '../shared/api';
+import type {
+  ConnectionPayload,
+  CreateArgs,
+  DashboardActivity,
+  DashboardBoard,
+  DashboardTeams,
+  Result,
+  WorkspaceList,
+} from '../shared/api';
 import { ServeError, type ConnectionState, type ServeResponse, type StateChange } from './serveClient';
 import { WslPathError, toWslPath } from './wslPath';
 
@@ -8,6 +16,9 @@ export const CHANNELS = {
   pickFolder: 'workspaces:pickFolder',
   connectionGet: 'connection:get',
   connectionState: 'connection:state',
+  dashboardTeams: 'dashboard:teams',
+  dashboardBoard: 'dashboard:board',
+  dashboardActivity: 'dashboard:activity',
 } as const;
 
 export interface ServeLike {
@@ -57,6 +68,65 @@ function isCreateArgs(v: unknown): v is CreateArgs {
   return typeof o.path === 'string' && (o.name === undefined || typeof o.name === 'string');
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+async function resolveWorkspacePath(client: ServeLike, workspaceId: string): Promise<Result<string>> {
+  try {
+    const result = fromResponse<WorkspaceList>(await client.request('workspace.list', {}));
+    if (!result.ok) return result;
+    const data = result.data as unknown;
+    if (typeof data !== 'object' || data === null || !Array.isArray((data as { workspaces?: unknown }).workspaces)) {
+      return {
+        ok: false,
+        error: {
+          code: 'BAD_RESPONSE',
+          message: 'workspace.list returned no workspaces array.',
+          retryable: false,
+        },
+      };
+    }
+    const workspaces = (data as { workspaces: unknown[] }).workspaces;
+    const entry = workspaces.find(
+      (candidate) => typeof candidate === 'object' && candidate !== null && (candidate as { id?: unknown }).id === workspaceId,
+    ) as Record<string, unknown> | undefined;
+    if (!entry) {
+      return {
+        ok: false,
+        error: {
+          code: 'WORKSPACE_NOT_FOUND',
+          message: `Workspace id '${workspaceId}' is not registered.`,
+          retryable: false,
+        },
+      };
+    }
+    if (entry.exists === false || entry.missing === true) {
+      return {
+        ok: false,
+        error: {
+          code: 'WORKSPACE_MISSING',
+          message: `Workspace '${String(entry.name)}' is registered but its folder is missing.`,
+          retryable: false,
+        },
+      };
+    }
+    if (!isNonEmptyString(entry.path)) {
+      return {
+        ok: false,
+        error: {
+          code: 'BAD_RESPONSE',
+          message: 'workspace.list returned an invalid workspace entry.',
+          retryable: false,
+        },
+      };
+    }
+    return { ok: true, data: entry.path };
+  } catch (e) {
+    return fromError(e);
+  }
+}
+
 export function registerIpc(deps: IpcDeps): void {
   const { ipcMain, client, showFolderDialog } = deps;
 
@@ -93,6 +163,30 @@ export function registerIpc(deps: IpcDeps): void {
       return fromError(e);
     }
   });
+
+  const registerDashboardHandler = <T>(
+    channel: string,
+    label: string,
+    command: string,
+    extraArgs: Record<string, unknown>,
+  ) => {
+    ipcMain.handle(channel, async (_e, ...args) => {
+      if (args.length !== 1 || !isNonEmptyString(args[0])) {
+        return badArgs(`${label} expects one non-empty workspace id string.`);
+      }
+      const workspace = await resolveWorkspacePath(client, args[0]);
+      if (!workspace.ok) return workspace;
+      try {
+        return fromResponse<T>(await client.request(command, { workspace: workspace.data, ...extraArgs }));
+      } catch (e) {
+        return fromError(e);
+      }
+    });
+  };
+
+  registerDashboardHandler<DashboardTeams>(CHANNELS.dashboardTeams, 'dashboard.teams', 'team.list', {});
+  registerDashboardHandler<DashboardBoard>(CHANNELS.dashboardBoard, 'dashboard.board', 'board.summary', { limit: 5 });
+  registerDashboardHandler<DashboardActivity>(CHANNELS.dashboardActivity, 'dashboard.activity', 'activity.recent', { limit: 15 });
 
   ipcMain.handle(CHANNELS.connectionGet, (_e, ...args) => {
     if (args.length !== 0) throw new Error('connection.get takes no arguments.');

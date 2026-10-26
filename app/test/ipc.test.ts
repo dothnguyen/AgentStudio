@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNELS, forwardState, pickedPath, registerIpc, type ServeLike } from '../src/main/ipc';
-import type { ConnectionPayload } from '../src/shared/api';
+import type { ConnectionPayload, DashboardActivity } from '../src/shared/api';
 import { ServeError, type StateChange } from '../src/main/serveClient';
 
 type Handler = (e: unknown, ...a: unknown[]) => unknown;
 
-function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unknown; picked: string | null }> = {}) {
+function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unknown; picked: string | null; replies: Record<string, unknown>; failures: Record<string, unknown> }> = {}) {
   const handlers = new Map<string, Handler>();
   const calls: Array<[string, unknown]> = [];
   const listeners: Array<(s: StateChange) => void> = [];
@@ -17,8 +17,8 @@ function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unkn
     distro: over.distro === undefined ? 'Ubuntu' : over.distro,
     async request(command, args) {
       calls.push([command, args]);
-      if (over.fail) throw over.fail;
-      return (over.reply ?? { protocol: 1, id: '1', ok: true, data: { x: 1 } }) as never;
+      if (over.fail || over.failures?.[command]) throw (over.fail ?? over.failures?.[command]);
+      return (over.replies?.[command] ?? over.reply ?? { protocol: 1, id: '1', ok: true, data: { x: 1 } }) as never;
     },
     on: (_e, l) => void listeners.push(l),
     off: (_e, l) => void listeners.splice(listeners.indexOf(l), 1),
@@ -36,11 +36,121 @@ function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unkn
 }
 
 describe('registerIpc', () => {
-  it('registers exactly the four invoke channels', () => {
+  it('registers exactly the seven invoke channels', () => {
     const { handlers } = setup();
     expect([...handlers.keys()].sort()).toEqual(
-      [CHANNELS.list, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet].sort(),
+      [CHANNELS.list, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet, CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity].sort(),
     );
+  });
+
+  const ok = (data: unknown) => ({ protocol: 1, id: '1', ok: true, data });
+  const ws = (overrides: Record<string, unknown> = {}) => ({ id: 'workspace-a', name: 'A', path: '/work/a', missing: false, exists: true, ...overrides });
+  const dashboardCalls = [
+    [CHANNELS.dashboardTeams, 'dashboard.teams', {}],
+    [CHANNELS.dashboardBoard, 'dashboard.board', {}],
+    [CHANNELS.dashboardActivity, 'dashboard.activity', {}],
+  ] as const;
+  const targetCommandFor = (channel: string) => channel === CHANNELS.dashboardBoard ? 'board.summary' : channel === CHANNELS.dashboardActivity ? 'activity.recent' : 'team.list';
+  const activityPayload: DashboardActivity = {
+    workspace: '/work/a',
+    dbId: 'db-a',
+    head: 4,
+    entries: [{
+      id: 'event:4',
+      at: '2026-10-26T00:00:00Z',
+      kind: 'ticket',
+      name: 'ticket.updated',
+      summary: 'Updated T-019',
+    }],
+  };
+
+  it.each(dashboardCalls.flatMap(([channel, label]) => [
+    [channel, label, []], [channel, label, ['a', 'b']], [channel, label, [1]], [channel, label, [null]],
+    [channel, label, [false]], [channel, label, [{}]], [channel, label, ['']], [channel, label, ['  ']],
+  ]))('dashboard %s rejects invalid arguments %j without serve calls', async (channel, label, args) => {
+    const s = setup();
+    expect(await s.call(channel, ...(args as unknown[]))).toEqual({ ok: false, error: { code: 'BAD_ARGS', message: `${label} expects one non-empty workspace id string.`, retryable: false } });
+    expect(s.calls).toEqual([]);
+  });
+
+  it.each([
+    [CHANNELS.dashboardTeams, 'team.list', {}],
+    [CHANNELS.dashboardBoard, 'board.summary', { limit: 5 }],
+    [CHANNELS.dashboardActivity, 'activity.recent', { limit: 15 }],
+  ])('dashboard resolves workspace and sends %s', async (channel, target, extra) => {
+    const payload = target === 'activity.recent'
+      ? activityPayload
+      : { value: 'unchanged' };
+    const s = setup({ replies: { 'workspace.list': ok({ workspaces: [ws()] }), [target]: ok(payload) } });
+    expect(await s.call(channel, 'workspace-a')).toEqual({ ok: true, data: payload });
+    expect(s.calls).toEqual([['workspace.list', {}], [target, { workspace: '/work/a', ...extra }]]);
+  });
+
+  it('dashboard lookup preserves a valid workspace id without trimming it', async () => {
+    const s = setup({ replies: { 'workspace.list': ok({ workspaces: [ws({ id: ' workspace-a ' })] }), 'team.list': ok({ teams: [] }) } });
+    expect(await s.call(CHANNELS.dashboardTeams, ' workspace-a ')).toEqual({ ok: true, data: { teams: [] } });
+    expect(s.calls).toEqual([['workspace.list', {}], ['team.list', { workspace: '/work/a' }]]);
+  });
+
+  it('dashboard lookup rejects unknown and missing workspaces locally', async () => {
+    const unknown = setup({ replies: { 'workspace.list': ok({ workspaces: [] }) } });
+    expect(await unknown.call(CHANNELS.dashboardTeams, 'other')).toEqual({ ok: false, error: { code: 'WORKSPACE_NOT_FOUND', message: "Workspace id 'other' is not registered.", retryable: false } });
+    expect(unknown.calls).toEqual([['workspace.list', {}]]);
+    for (const flags of [{ exists: false }, { missing: true }]) {
+      const missing = setup({ replies: { 'workspace.list': ok({ workspaces: [ws(flags)] }) } });
+      expect(await missing.call(CHANNELS.dashboardTeams, 'workspace-a')).toEqual({ ok: false, error: { code: 'WORKSPACE_MISSING', message: "Workspace 'A' is registered but its folder is missing.", retryable: false } });
+      expect(missing.calls).toEqual([['workspace.list', {}]]);
+    }
+  });
+
+  it.each([null, {}, { workspaces: {} }, ...[undefined, null, 1, '', '  '].map((path) => ({ workspaces: [ws({ path })] }))])('dashboard lookup rejects malformed workspace.list data %j', async (data) => {
+    const s = setup({ replies: { 'workspace.list': ok(data) } });
+    const r = await s.call(CHANNELS.dashboardBoard, 'workspace-a') as { error: unknown };
+    expect(r).toEqual({ ok: false, error: { code: 'BAD_RESPONSE', message: data && typeof data === 'object' && Array.isArray((data as { workspaces?: unknown }).workspaces) ? 'workspace.list returned an invalid workspace entry.' : 'workspace.list returned no workspaces array.', retryable: false } });
+    expect(s.calls).toEqual([['workspace.list', {}]]);
+  });
+
+  it.each([
+    ...dashboardCalls.map(([channel, ,]) => [channel, 'workspace.list'] as const),
+    ...dashboardCalls.map(([channel]) => [channel, targetCommandFor(channel)] as const),
+  ])('dashboard preserves backend errors on %s at %s stage', async (channel, command) => {
+    const error = { code: 'BAD_REQUEST', message: 'backend failure', retryable: false, remediation: 'fix' };
+    const target = dashboardCalls.find(([c]) => c === channel)![2];
+    const targetCommand = targetCommandFor(channel);
+    const s = setup({ replies: { 'workspace.list': command === 'workspace.list' ? { protocol: 1, id: '1', ok: false, error } : ok({ workspaces: [ws()] }), [targetCommand]: command === targetCommand ? { protocol: 1, id: '1', ok: false, error } : ok({}) } });
+    const r = await s.call(channel, 'workspace-a') as { error: unknown };
+    expect(r.error).toBe(error);
+    expect(s.calls.map(([c]) => c)).toEqual(command === 'workspace.list' ? ['workspace.list'] : ['workspace.list', targetCommand]);
+  });
+
+  it.each([
+    ...dashboardCalls.map(([channel]) => [channel, 'workspace.list'] as const),
+    ...dashboardCalls.map(([channel]) => [channel, targetCommandFor(channel)] as const),
+  ])('dashboard transport errors are retryable on %s at %s stage', async (channel, command) => {
+    const s = setup({
+      failures: { [command]: new ServeError('NOT_CONNECTED', 'nope') },
+      replies: { 'workspace.list': ok({ workspaces: [ws()] }) },
+    });
+    expect(await s.call(channel, 'workspace-a')).toEqual({ ok: false, error: { code: 'NOT_CONNECTED', message: 'nope', retryable: true } });
+    expect(s.calls.map(([c]) => c)).toEqual(command === 'workspace.list' ? ['workspace.list'] : ['workspace.list', targetCommandFor(channel)]);
+  });
+
+  it.each([
+    ...dashboardCalls.map(([channel]) => [channel, 'workspace.list'] as const),
+    ...dashboardCalls.map(([channel]) => [channel, targetCommandFor(channel)] as const),
+  ])('dashboard maps ordinary exceptions to non-retryable INTERNAL on %s at %s stage', async (channel, command) => {
+    const s = setup({
+      failures: { [command]: new Error('unexpected failure') },
+      replies: { 'workspace.list': ok({ workspaces: [ws()] }) },
+    });
+    expect(await s.call(channel, 'workspace-a')).toEqual({ ok: false, error: { code: 'INTERNAL', message: 'unexpected failure', retryable: false } });
+    expect(s.calls.map(([c]) => c)).toEqual(command === 'workspace.list' ? ['workspace.list'] : ['workspace.list', targetCommandFor(channel)]);
+  });
+
+  it('dashboard handlers use only the read command allowlist', async () => {
+    const s = setup({ reply: ok({ workspaces: [ws()] }) });
+    for (const channel of [CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity]) await s.call(channel, 'workspace-a');
+    expect([...new Set(s.calls.map(([command]) => command))].sort()).toEqual(['activity.recent', 'board.summary', 'team.list', 'workspace.list']);
   });
 
   it('list returns the data as is and sends workspace.list', async () => {
