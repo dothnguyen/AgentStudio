@@ -338,6 +338,8 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
                                 (created["branch"], created["path"], utcnow(), ticket["id"]))
                 ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
             run_workspace = ticket["worktree_path"]
+            if rule.get("syncBase"):
+                _sync_base(tx, ticket, config)
         start_args = {"teamId": team["id"], "definition": rule["workflow"],
                       "text": _task_text(ticket), "bindings": {rule["role"]: member["id"]}}
         if run_workspace != workspace:
@@ -357,6 +359,27 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
                                  f"start_failed:{e.code}", to_status=rule["when"]["status"],
                                  detail={"workspace": run_workspace, **_start_detail(e)})
         return None
+
+
+def _sync_base(tx, ticket: dict, config: dict) -> None:
+    """Bring the base branch into the ticket worktree before the next round; conflicts are committed with
+    their markers, listed in the ticket body and left for that round."""
+    base = config["baseBranch"]
+    try:
+        synced = worktrees.sync_base(ticket["worktree_path"], base)
+    except AsError as e:
+        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.sync_failed", "coordinator", ticket["status"],
+                                 ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                                    "reason": e.code})
+        return
+    if synced["conflicts"]:
+        boardmodel.append_body(tx, ticket["id"], f"## Merge conflicts with {base}\n"
+                               f"The branch was merged with {base} and these files still contain conflict markers "
+                               f"(<<<<<<<, =======, >>>>>>>). Resolve them, keeping both sides' intent, before "
+                               f"anything else:\n" + "\n".join(f"- {f}" for f in synced["conflicts"]))
+        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.sync_conflicts", "coordinator", ticket["status"],
+                                 ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                                    "files": synced["conflicts"]})
 
 
 def _start_detail(e) -> dict:

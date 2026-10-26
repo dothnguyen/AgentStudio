@@ -89,7 +89,8 @@
       "onPass": "qa-ready",
       "onFail": "dev-ready",
       "maxRounds": 6,
-      "requiresDeps": true
+      "requiresDeps": true,
+      "syncBase": true
     },
     {
       "when": {

@@ -40,7 +40,7 @@ _TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "ba
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
-             "requiresDeps", "workspace", "action", "priority", "onFailPriority")
+             "requiresDeps", "workspace", "action", "priority", "onFailPriority", "syncBase")
 RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
@@ -215,6 +215,8 @@ def load_config(workspace: str) -> dict:
             problems.append((f"{path}.workspace", f"must be one of {list(WORKSPACE_MODES)}"))
         if "during" in rule:
             rule_status(rule["during"], f"{path}.during")
+        if "syncBase" in rule and (not isinstance(rule["syncBase"], bool) or rule.get("workspace") != "worktree"):
+            problems.append((f"{path}.syncBase", 'must be true or false, and only on a rule with workspace "worktree"'))
     agent_status = raw.get("agentTicketStatus")
     if agent_status is not None:
         rule_status(agent_status, "agentTicketStatus")

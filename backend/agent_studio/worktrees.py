@@ -113,6 +113,25 @@ def commit_round(path: str, message: str) -> dict:
     return {"commit": commit}
 
 
+def sync_base(path: str, base_branch: str) -> dict:
+    """Merge the base branch into a ticket worktree so the branch is not behind it.
+
+    A clean merge is committed by git. A conflicting merge is committed with its conflict markers so the
+    tree is clean again and the next agent that works the ticket can resolve them by editing files: the result lists the files."""
+    path = os.path.realpath(path)
+    result = gitws.run(path, "merge", "--no-edit", base_branch, check=False)
+    if result.returncode == 0:
+        return {"conflicts": []}
+    raw = gitws.run(path, "diff", "--name-only", "--diff-filter=U", check=False).stdout
+    files = [line for line in raw.decode("utf-8", "replace").splitlines() if line]
+    if not files:  # failed for another reason: leave the worktree as it was
+        gitws.run(path, "merge", "--abort", check=False)
+        return {"conflicts": [], "error": (result.stderr or result.stdout).decode("utf-8", "replace")[-300:]}
+    gitws.run(path, "add", "-A")
+    gitws.run(path, "commit", "-m", f"Merge {base_branch} (conflicts left to resolve)")
+    return {"conflicts": files}
+
+
 def branch_diff(workspace: str, base_branch: str, branch: str, out_dir: str) -> dict:
     workspace, out_dir = os.path.realpath(workspace), os.path.realpath(out_dir)
     merge_base = gitws.run(workspace, "merge-base", base_branch, branch).stdout.decode().strip()

@@ -291,6 +291,66 @@ class CommitWorktree(ApplierCase):
             boardsched._ticket_event_note = orig
 
 
+class SyncBase(unittest.TestCase):
+    def git(self, *a, cwd=None):
+        return subprocess.run(["git", "-C", cwd or self.repo] + list(a), check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def put(self, root, name, text):
+        with open(os.path.join(root, name), "w") as f:
+            f.write(text)
+
+    def setUp(self):
+        self.repo = tests.helpers.make_repo()
+        self.addCleanup(tests.helpers.reset_repo, self.repo)
+        self.base = self.git("symbolic-ref", "--short", "HEAD")
+        self.put(self.repo, "shared.txt", "one\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.wt = self.repo + "-wt"
+        self.addCleanup(shutil.rmtree, self.wt, True)
+        self.git("worktree", "add", "-q", "-b", "t-1", self.wt)
+
+    def test_clean_merge_and_up_to_date(self):
+        self.put(self.repo, "other.txt", "x\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "main moves")
+        from agent_studio import worktrees
+        self.assertEqual(worktrees.sync_base(self.wt, self.base), {"conflicts": []})
+        self.assertTrue(os.path.exists(os.path.join(self.wt, "other.txt")))
+        self.assertEqual(worktrees.sync_base(self.wt, self.base), {"conflicts": []})
+
+    def test_conflicts_are_committed_with_markers_and_listed(self):
+        self.put(self.repo, "shared.txt", "main\n")
+        self.git("commit", "-qam", "main edit")
+        self.put(self.wt, "shared.txt", "branch\n")
+        self.git("commit", "-qam", "branch edit", cwd=self.wt)
+        from agent_studio import worktrees
+        self.assertEqual(worktrees.sync_base(self.wt, self.base), {"conflicts": ["shared.txt"]})
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.wt), "")
+        with open(os.path.join(self.wt, "shared.txt")) as f:
+            self.assertIn("<<<<<<<", f.read())
+
+    def test_syncbase_needs_a_worktree_rule(self):
+        import tempfile
+        root = tempfile.mkdtemp(prefix="as-sync-")
+        self.addCleanup(shutil.rmtree, root, True)
+        os.makedirs(os.path.join(root, ".agent-studio"))
+        rule = {"when": {"status": "a"}, "role": "R", "workflow": "w", "onPass": "b", "onFail": "a",
+                "workspace": "main", "syncBase": True}
+        config = {"version": 2, "statuses": [{"id": "a", "name": "A", "kind": "initial"}, {"id": "b", "name": "B", "kind": "done"}],
+                  "ticketFields": [], "rules": [rule]}
+        path = os.path.join(root, ".agent-studio", "board.json")
+        with open(path, "w") as f:
+            json.dump(config, f)
+        with self.assertRaises(AsError):
+            boardmodel.load_config(root)
+        rule["workspace"] = "worktree"
+        with open(path, "w") as f:
+            json.dump(config, f)
+        self.assertTrue(boardmodel.load_config(root)["rulesByStatus"]["a"]["syncBase"])
+
+
 class SettleMain(unittest.TestCase):
     """A `workspace: main` rule leaves the main checkout clean: commit on pass, stash otherwise."""
 
