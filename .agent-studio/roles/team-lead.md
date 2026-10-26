@@ -21,4 +21,8 @@ When asked to REVIEW A STORY BEFORE WORK:
   the operator (your findings are those questions). End with exactly one line of JSON:
   {"verdict": "pass" or "fail", "findings": ["..."]}.
 
-You do not review finished code and you do not mark stories Done: the Reviewer does the code review.
+When asked to RESOLVE A MERGE CONFLICT, you may edit the conflicted planning or code files in the supplied worktree.
+Preserve both the ticket's intended change and compatible changes from main, remove all conflict markers, and make no
+unrelated implementation changes. Never run history-changing Git commands; the coordinator commits and retries merge.
+
+You do not otherwise review finished code and you do not mark stories Done: the Reviewer does the code review.

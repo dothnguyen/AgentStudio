@@ -38,6 +38,12 @@
     "ProductOwner": {
       "description": "Product owner: unpacks features into planning files and a ticket manifest.",
       "instructions": "roles/product-owner.md",
+      "directTask": {
+        "workspace": "worktree",
+        "mergeOnSuccess": true,
+        "baseBranch": "main",
+        "onMergeConflict": "merge-conflict"
+      },
       "skills": [
         "story-format",
         "code-search"

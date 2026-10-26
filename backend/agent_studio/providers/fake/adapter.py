@@ -77,7 +77,7 @@ class FakeAdapter(Adapter):
             argv += ["--mcp"]
             extra_env["AGENT_STUDIO_MCP_COMMAND"] = json.dumps([launch["command"]] + launch["args"])
             extra_env.update(launch["env"])  # the server subprocess inherits our capped env
-            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.mcp_workspace or inp.workspace))
         return Prepared(argv=argv, env_allowlist=BASE_ENV, stdin_path=inp.prompt_path, cwd=inp.workspace,
                         extra_env=extra_env)
 

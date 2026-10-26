@@ -298,6 +298,26 @@ class Roles(unittest.TestCase):
                 roles.context_for(self.ws, "R")
             self.assertEqual(cm.exception.code, "ROLES_CONFIG_INVALID")
 
+    def test_direct_task_worktree_policy_is_validated_and_defaults_to_main(self):
+        self.write("roles.json", json.dumps({"version": 1, "roles": {"R": {
+            "directTask": {"workspace": "worktree", "mergeOnSuccess": True, "baseBranch": "main",
+                           "onMergeConflict": "merge-conflict"}}}}))
+        self.assertEqual(roles.direct_task_config(self.ws, "R"),
+                         {"workspace": "worktree", "mergeOnSuccess": True, "baseBranch": "main",
+                          "onMergeConflict": "merge-conflict"})
+        self.assertEqual(roles.direct_task_config(self.ws, "Missing"),
+                         {"workspace": "main", "mergeOnSuccess": False, "baseBranch": "main",
+                          "onMergeConflict": None})
+        for policy in ({"workspace": "somewhere"},
+                       {"workspace": "main", "mergeOnSuccess": True},
+                       {"workspace": "worktree", "mergeOnSuccess": "yes"},
+                       {"workspace": "worktree", "baseBranch": "../bad"},
+                       {"workspace": "worktree", "onMergeConflict": "Bad Status"}):
+            self.write("roles.json", json.dumps({"version": 1, "roles": {"R": {"directTask": policy}}}))
+            with self.assertRaises(AsError) as cm:
+                roles.load_config(self.ws)
+            self.assertEqual(cm.exception.code, "ROLES_CONFIG_INVALID")
+
     def test_limits(self):
         self.write("roles/big.md", "x" * (roles.LIMITS["instructions"] + 500))
         for i in range(4):

@@ -1,0 +1,10 @@
+version: 1
+description: Resolve a failed merge in the preserved ticket worktree, then return it to its merge action.
+maxSteps: 4
+stages:
+  - id: resolve
+    role: TeamLead
+    permission: workspace_write
+    maxVisits: 1
+    promptFile: workflows/prompts/board-resolve-merge.md
+    next: { pass: $succeed, fail: $fail }

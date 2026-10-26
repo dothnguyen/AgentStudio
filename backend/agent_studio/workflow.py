@@ -296,7 +296,8 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
     request = tasks.build_request(agent, tx.get("task", wf["task_id"])["workspace"],
                                   {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"),
                                    "workflowRunId": wf_id, "stage": stage,
-                                   "expectsVerdict": st.kind == "verdict"})
+                                   "expectsVerdict": st.kind == "verdict",
+                                   "mcpWorkspace": tx.get("team", wf["team_id"])["workspace"]})
     stage_opts = provider_options or (config.get("debugStageOptions") or {}).get(stage)
     if isinstance(stage_opts, list):   # debug only: one option set per visit, the last one repeats
         stage_opts = stage_opts[min(visit, len(stage_opts)) - 1] if stage_opts else None

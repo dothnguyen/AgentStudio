@@ -28,6 +28,8 @@ ROLES_CONFIG_INVALID = "ROLES_CONFIG_INVALID"
 CONFIG_DIR = ".agent-studio"
 SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 ROLE_FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$")
+BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
+DIRECT_TASK_KEYS = {"workspace", "mergeOnSuccess", "baseBranch", "onMergeConflict"}
 LIMITS = {"description": 2000, "instructions": 16 * 1024, "skill": 32 * 1024, "total": 96 * 1024}
 
 
@@ -69,7 +71,39 @@ def load_config(workspace: str) -> Optional[dict]:
         if not isinstance(skills, list) or not all(isinstance(x, str) and SKILL_RE.match(x) for x in skills):
             raise AsError(ROLES_CONFIG_INVALID, f"roles.{name}.skills must be a list of skill folder names "
                                                 "(lowercase letters, digits, '.', '_', '-').")
+        direct = spec.get("directTask")
+        if direct is not None:
+            if not isinstance(direct, dict) or set(direct) - DIRECT_TASK_KEYS:
+                raise AsError(ROLES_CONFIG_INVALID, f"roles.{name}.directTask must contain only workspace, "
+                                                    "mergeOnSuccess, baseBranch and onMergeConflict.")
+            if direct.get("workspace") not in ("main", "worktree"):
+                raise AsError(ROLES_CONFIG_INVALID, f"roles.{name}.directTask.workspace must be main or worktree.")
+            if "mergeOnSuccess" in direct and not isinstance(direct["mergeOnSuccess"], bool):
+                raise AsError(ROLES_CONFIG_INVALID,
+                              f"roles.{name}.directTask.mergeOnSuccess must be true or false.")
+            if direct.get("mergeOnSuccess") and direct.get("workspace") != "worktree":
+                raise AsError(ROLES_CONFIG_INVALID,
+                              f"roles.{name}.directTask.mergeOnSuccess requires workspace worktree.")
+            base_branch = direct.get("baseBranch", "main")
+            if not isinstance(base_branch, str) or not BRANCH_RE.match(base_branch) or ".." in base_branch:
+                raise AsError(ROLES_CONFIG_INVALID,
+                              f"roles.{name}.directTask.baseBranch must be a safe Git branch name.")
+            conflict_status = direct.get("onMergeConflict")
+            if conflict_status is not None and (not isinstance(conflict_status, str)
+                                                or not SKILL_RE.match(conflict_status)):
+                raise AsError(ROLES_CONFIG_INVALID,
+                              f"roles.{name}.directTask.onMergeConflict must be a status slug.")
     return raw
+
+
+def direct_task_config(workspace: str, role: str) -> dict:
+    """Return the role's one-off task isolation policy, with backwards-compatible main-checkout defaults."""
+    spec = ((load_config(workspace) or {}).get("roles") or {}).get(role) or {}
+    configured = spec.get("directTask") or {}
+    return {"workspace": configured.get("workspace", "main"),
+            "mergeOnSuccess": bool(configured.get("mergeOnSuccess", False)),
+            "baseBranch": configured.get("baseBranch", "main"),
+            "onMergeConflict": configured.get("onMergeConflict")}
 
 
 def context_for(workspace: str, role: str) -> dict:

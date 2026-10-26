@@ -40,7 +40,8 @@ _TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "ba
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
-             "requiresDeps", "workspace", "action", "priority", "onFailPriority", "syncBase")
+             "requiresDeps", "workspace", "action", "priority", "onFailPriority", "syncBase",
+             "createdTicketStatus", "onPassCreatedTickets")
 RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
@@ -217,6 +218,21 @@ def load_config(workspace: str) -> dict:
             rule_status(rule["during"], f"{path}.during")
         if "syncBase" in rule and (not isinstance(rule["syncBase"], bool) or rule.get("workspace") != "worktree"):
             problems.append((f"{path}.syncBase", 'must be true or false, and only on a rule with workspace "worktree"'))
+        if "createdTicketStatus" in rule:
+            rule_status(rule["createdTicketStatus"], f"{path}.createdTicketStatus")
+            if has_action:
+                problems.append((f"{path}.createdTicketStatus", "is only valid on an agent workflow rule"))
+        if "onPassCreatedTickets" in rule:
+            policy = rule["onPassCreatedTickets"]
+            if not isinstance(policy, dict) or set(policy) != {"from", "to"}:
+                problems.append((f"{path}.onPassCreatedTickets", 'must be {"from": STATUS, "to": STATUS}'))
+            else:
+                rule_status(policy.get("from"), f"{path}.onPassCreatedTickets.from")
+                rule_status(policy.get("to"), f"{path}.onPassCreatedTickets.to")
+                if policy.get("from") == policy.get("to"):
+                    problems.append((f"{path}.onPassCreatedTickets", "from and to must be different statuses"))
+            if not has_action:
+                problems.append((f"{path}.onPassCreatedTickets", "is only valid on an action rule"))
     agent_status = raw.get("agentTicketStatus")
     if agent_status is not None:
         rule_status(agent_status, "agentTicketStatus")
@@ -569,15 +585,17 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     """A ticket added by an agent through the MCP server (design contract §G).
 
     The call rides the normal command path and names the assignment it belongs to. The coordinator checks
-    that the assignment is active and its member may add tickets, records `createdBy`, puts the ticket in
-    the board's initial status and the requested phase (default when omitted), enforces a per-assignment
-    cap and a duplicate check against open tickets, and links dependencies. The server sends the same
-    idempotency key for a retried call, so the coordinator's receipt deduplicates it."""
-    config = load_config(workspace)
+    that the assignment is active and its member may add tickets, resolves the team's canonical board
+    workspace, records `createdBy`, puts the ticket in the claiming rule's configured status (falling back
+    to the board default) and requested phase, enforces a per-assignment cap and duplicate check, and links
+    dependencies. The server sends the same idempotency key for a retried call, so the coordinator's receipt
+    deduplicates it."""
     assignment_id = args["assignment"]
     row = tx.conn.execute(
-        "SELECT a.id, a.agent_id, a.status, a.team_id, ag.can_add_tickets, ag.member_id, ag.team_id AS agent_team "
-        "FROM assignments a JOIN agents ag ON ag.id = a.agent_id WHERE a.id = ?",
+        "SELECT a.id, a.agent_id, a.status, a.team_id, ag.can_add_tickets, ag.member_id, "
+        "ag.team_id AS agent_team, tm.workspace AS team_workspace "
+        "FROM assignments a JOIN agents ag ON ag.id = a.agent_id "
+        "JOIN teams tm ON tm.id = a.team_id WHERE a.id = ?",
         (assignment_id,)).fetchone()
     if row is None or row["status"] not in ACTIVE_ASSIGNMENT_STATES:
         raise AsError(FORBIDDEN, "The assignment is not active; tickets cannot be added through it.",
@@ -585,6 +603,11 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     if not row["can_add_tickets"]:
         raise AsError(FORBIDDEN, "This member may not add tickets (canAddTickets is not enabled).",
                       data={"assignment": assignment_id})
+    # An assignment may execute in a ticket worktree, but board state is always keyed by the team's canonical
+    # workspace. Keeping those two paths separate lets planning agents use isolated worktrees without creating a
+    # second, accidental board for the worktree path.
+    workspace = row["team_workspace"]
+    config = load_config(workspace)
     member_id = row["member_id"] or row["agent_id"]
     existing = tx.conn.execute("SELECT COUNT(*) FROM tickets WHERE created_by_assignment = ?",
                                (assignment_id,)).fetchone()[0]
@@ -603,7 +626,17 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     ensure_board(tx, workspace)
     phase = _target_phase(tx, workspace, args["phase"]) if args.get("phase") \
         else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
-    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), status=config["agentStatus"],
+    created_status = config["agentStatus"]
+    parent = tx.conn.execute(
+        "SELECT t.status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
+        "JOIN tickets t ON t.active_run_id = wr.id "
+        "WHERE sa.assignment_id = ? AND t.workspace = ? LIMIT 1", (assignment_id, workspace)).fetchone()
+    if parent is not None:
+        parent_rule = next((r for r in config["rules"] if r.get("during") == parent["status"]), None) \
+            or config["rulesByStatus"].get(parent["status"])
+        if parent_rule is not None:
+            created_status = parent_rule.get("createdTicketStatus", created_status)
+    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), status=created_status,
                                            createdByMember=member_id, createdByAssignment=assignment_id))
     deps = []
     for key in list(dict.fromkeys(args.get("dependsOn") or [])):

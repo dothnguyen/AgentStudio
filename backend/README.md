@@ -139,7 +139,11 @@ Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Re
                                                             "model": "gpt-5.1-codex", "reasoning": "high"}]}
 .agent-studio/roles.json         {"version": 1, "roles": {"Developer": {"description": "Implements features",
                                                                        "instructions": "roles/developer.md",
-                                                                       "skills": ["python-testing"]}}}
+                                                                       "skills": ["python-testing"],
+                                                                       "directTask": {"workspace": "worktree",
+                                                                         "mergeOnSuccess": true,
+                                                                         "baseBranch": "main",
+                                                                         "onMergeConflict": "merge-conflict"}}}}
 .agent-studio/roles/<Role>.md    instructions (used directly when roles.json does not list the role)
 .agent-studio/skills/<name>/SKILL.md
 ```
@@ -149,6 +153,16 @@ tasks and workflow stages), frozen when the assignment is created. Paths cannot 
 capped (16 KiB instructions, 32 KiB per skill, 96 KiB total) with warnings in the `team.start` / `task.direct`
 receipts. The provider still reads its own native files (e.g. `AGENTS.md`) as usual. Provider details:
 `agent_studio/providers/<id>/CONTRACT.md`.
+
+`directTask` is an optional per-role policy for one-off `team ask` / `task direct` work. With `workspace: worktree`,
+the coordinator creates a unique task branch and runs the agent there while MCP board tools continue to target the
+team's canonical workspace. With `mergeOnSuccess: true`, a successful final report makes the coordinator commit the
+worktree, squash-merge it into `baseBranch`, record `task.worktree_created` / `task.worktree_merged`, and remove the
+worktree. A merge conflict or dirty/wrong-branch main checkout fails the task and preserves the branch and worktree.
+When `onMergeConflict` names a board status, an actual Git conflict also creates a priority-zero recovery ticket in
+the current phase, registered to that branch/worktree. A board rule can assign that status to a conflict-resolution
+workflow and return it to the appropriate merge action after resolution.
+The task's permission is unchanged: pass `--policy workspace_write` when the agent must edit files.
 
 ## Run the Developer → Reviewer workflow
 
@@ -182,18 +196,21 @@ agent-studio team stop-board --team <teamId>                   # stop claiming; 
 agent-studio board show --workspace ~/work/project --pretty    # phases (current marked) with status columns
 ```
 
-The rules decide who works which status and what happens on pass/fail/blocked; `ticket apply KEY RUN` feeds a
-finished workflow run through them (the board's scheduler does this itself for its claims). Recovery: see
+The rules decide who works which status and what happens on pass/fail/blocked; agent rules may set
+`createdTicketStatus`, while action rules may set `onPassCreatedTickets: {from, to}` to hold tickets created by a
+workflow and promote them only after its follow-up action succeeds. `ticket apply KEY RUN` feeds a finished workflow
+run through the rules (the board's scheduler does this itself for its claims). Recovery: see
 [RECOVERY.md](RECOVERY.md), section "The generic board (P04)".
 
 **Agents adding tickets over MCP.** A member with `"canAddTickets": true` in `teams/<id>.json` gets a per-assignment
 MCP server (`agent-studio mcp`, stdio JSON-RPC, standard library only) when the board works one of its tickets: the
 Claude adapter adds `--mcp-config <per-assignment file>` to its usual `--strict-mcp-config` (so *only* this server is
 visible), the Codex adapter passes the equivalent `mcp_servers.agent-studio.*` config overrides. The server exposes
-five tools — `ticket_add`, `ticket_list`, `ticket_show`, `phase_list`, `board_show` — and every call rides the same
+six tools — `ticket_add`, `ticket_update`, `ticket_list`, `ticket_show`, `phase_list`, `board_show` — and every call rides the same
 validated command path as the CLI: agents never touch the database, and the coordinator stays the only writer.
 `ticket_add` from an agent is checked by the coordinator: the assignment must be active and its member allowed
-(`FORBIDDEN`), the ticket lands in the board's initial status and the requested phase (default when omitted), the
+(`FORBIDDEN`); a worktree assignment still targets the team's canonical board; the ticket lands in the claiming
+rule's `createdTicketStatus`, falling back to `agentTicketStatus`, and the requested phase (default when omitted). The
 assignment can add at most 10 tickets (`TICKET_CAP_REACHED`), an open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.

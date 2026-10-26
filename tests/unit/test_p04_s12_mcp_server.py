@@ -116,6 +116,13 @@ class TicketAddRules(ServerCase):
                           ticket["createdByAssignment"]), ("open", "default", "allowed", self.asg_ok))
         self.assertEqual(got["dependsOn"], [])
 
+    def test_worktree_caller_still_writes_to_the_teams_canonical_board(self):
+        with self.store.transaction() as tx:
+            got = boardmodel.mcp_ticket_add(
+                tx, self.ws + "-ticket-worktree",
+                {"title": "canonical board", "priority": 100, "assignment": self.asg_ok})
+        self.assertEqual(got["ticket"]["workspace"], self.ws)
+
     def test_phase_and_dependencies(self):
         with self.store.transaction() as tx:
             boardmodel.phase_add(tx, self.ws, {"id": "later", "name": "Later"})
@@ -314,6 +321,18 @@ class AdapterMcpArgs(unittest.TestCase):
     def test_codex_unchanged_when_disabled(self):
         argv = self.prepare("codex", False).argv
         self.assertFalse([a for a in argv if "agent-studio" in a])
+
+    def test_mcp_uses_canonical_board_workspace_while_process_uses_worktree(self):
+        from agent_studio import providers
+        from unittest import mock
+        inp = self.inp("codex", True)
+        inp.mcp_workspace = self.tmp + "-main"
+        adapter = providers.get("codex")
+        with mock.patch.object(type(adapter), "executable", return_value="/bin/true"), \
+                mock.patch.object(type(adapter), "validate_settings", return_value=None, create=True):
+            prepared = adapter._prepare(inp, {})
+        self.assertEqual(prepared.cwd, self.tmp)
+        self.assertEqual(prepared.extra_env["AGENT_STUDIO_WORKSPACE"], self.tmp + "-main")
 
 
 if __name__ == "__main__":

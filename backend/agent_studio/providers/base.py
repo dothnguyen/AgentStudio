@@ -52,6 +52,7 @@ class AssignmentInput:
     options: dict = field(default_factory=dict)  # provider-specific, validated by the adapter
     expects_verdict: bool = False                # reviewer stages: read a verdict from the final message
     mcp_tickets: bool = False                    # start the board MCP server for this assignment (P04-S12)
+    mcp_workspace: Optional[str] = None           # canonical board workspace when execution uses a worktree
 
 
 @dataclass

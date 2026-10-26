@@ -351,6 +351,31 @@ class SyncBase(unittest.TestCase):
         self.assertTrue(boardmodel.load_config(root)["rulesByStatus"]["a"]["syncBase"])
 
 
+class CommitLeftovers(CommitWorktree):
+    def test_dirty_worktree_is_committed_before_the_next_run(self):
+        self.repo = tests.helpers.make_repo()
+        self.addCleanup(tests.helpers.reset_repo, self.repo)
+        wt = self.repo + "-wt2"
+        self.addCleanup(shutil.rmtree, wt, True)
+        self.git("add", "-A")
+        self.git("commit", "--allow-empty", "-qm", "base")
+        self.git("worktree", "add", "-q", "-b", "t-2", wt)
+        with open(os.path.join(wt, "left.txt"), "w") as f:
+            f.write("half done\n")
+        notes = []
+        orig = boardsched._ticket_event_note
+        boardsched._ticket_event_note = lambda tx, t, name, payload: notes.append((name, payload))
+        try:
+            rule = {"workspace": "worktree", "when": {"status": "dev-ready"}}
+            boardsched._commit_leftovers(None, {"key": "T-002", "worktree_path": wt}, rule)
+            self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+            self.assertEqual(notes[0][1]["reason"], "leftovers")
+            boardsched._commit_leftovers(None, {"key": "T-002", "worktree_path": wt}, rule)
+            self.assertEqual(len(notes), 1)
+        finally:
+            boardsched._ticket_event_note = orig
+
+
 class SettleMain(unittest.TestCase):
     """A `workspace: main` rule leaves the main checkout clean: commit on pass, stash otherwise."""
 

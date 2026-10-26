@@ -142,7 +142,8 @@ class CodexAdapter(Adapter):
         extra_env = {}
         if inp.mcp_tickets:  # the Agent Studio board server, as config overrides (P04-S12)
             launch = mcp_launch()
-            server = dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+            mcp_workspace = inp.mcp_workspace or inp.workspace
+            server = dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, mcp_workspace))
             # -c values are TOML; a JSON string / array of strings is valid TOML, and escapes quotes and
             # backslashes. `args.0=` would be a table key, not an array element, so args is one array.
             argv += ["-c", "mcp_servers.agent-studio.command=" + json.dumps(launch["command"])]
@@ -150,7 +151,7 @@ class CodexAdapter(Adapter):
             argv += ["-c", 'mcp_servers.agent-studio.default_tools_approval_mode="approve"']
             for key, value in server.items():
                 argv += ["-c", f"mcp_servers.agent-studio.env.{key}=" + json.dumps(value)]
-            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, mcp_workspace))
         argv.append("-")  # the prompt comes from stdin (the private prompt file), never the command line
         return Prepared(argv=argv, env_allowlist=ENV, stdin_path=inp.prompt_path, cwd=inp.workspace,
                         extra_env=extra_env)

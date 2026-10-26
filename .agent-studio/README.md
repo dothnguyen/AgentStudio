@@ -67,6 +67,12 @@ From Windows Terminal, `agent-studio team attach --team <id> --print` gives a re
    run the same `team unpack` again; the product owner revises the files. Repeat until you are happy.
 4. Commit the plan: `git add -A && git commit -m "Plan: feature X"`.
 
+One-off requests to the ProductOwner also run in an isolated worktree because of the role's `directTask` policy.
+Use `agent-studio team ask --member po --wait "..."` for board-only work such as creating tickets, or add
+`--policy workspace_write` when the request edits planning files. On success the coordinator commits and merges the
+task branch into `main`. A Git conflict creates a priority-zero `merge-conflict` ticket in the current phase; the
+TeamLead picks it up in the preserved worktree, resolves the conflict, and the coordinator retries the merge.
+
 ## Workflow 2 - develop one story (configurable workflow, P01)
 
 ```bash

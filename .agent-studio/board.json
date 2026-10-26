@@ -30,8 +30,20 @@
       "name": "Review ready"
     },
     {
+      "id": "plan-merge-ready",
+      "name": "Plan merge ready"
+    },
+    {
+      "id": "plan-merge-conflict",
+      "name": "Plan merge conflict"
+    },
+    {
       "id": "merge-ready",
       "name": "Merge ready"
+    },
+    {
+      "id": "merge-conflict",
+      "name": "Merge conflict"
     },
     {
       "id": "done",
@@ -52,8 +64,47 @@
       },
       "action": "merge",
       "onPass": "done",
-      "onFail": "dev-ready",
+      "onFail": "merge-conflict",
       "onFailPriority": 0
+    },
+    {
+      "when": {
+        "status": "plan-merge-ready"
+      },
+      "action": "merge",
+      "onPass": "done",
+      "onFail": "plan-merge-conflict",
+      "onFailPriority": 0,
+      "onPassCreatedTickets": {
+        "from": "backlog",
+        "to": "refine-ready"
+      }
+    },
+    {
+      "when": {
+        "status": "merge-conflict"
+      },
+      "role": "TeamLead",
+      "workflow": "board-resolve-merge",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "merge-ready",
+      "onFail": "merge-conflict",
+      "maxRounds": 3,
+      "priority": 0
+    },
+    {
+      "when": {
+        "status": "plan-merge-conflict"
+      },
+      "role": "TeamLead",
+      "workflow": "board-resolve-merge",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "plan-merge-ready",
+      "onFail": "plan-merge-conflict",
+      "maxRounds": 3,
+      "priority": 0
     },
     {
       "when": {
@@ -98,7 +149,7 @@
       },
       "role": "TeamLead",
       "workflow": "board-refine",
-      "workspace": "none",
+      "workspace": "worktree",
       "onPass": "dev-ready",
       "onFail": "backlog",
       "maxRounds": 2
@@ -109,8 +160,9 @@
       },
       "role": "ProductOwner",
       "workflow": "board-unpack",
-      "workspace": "main",
-      "onPass": "done",
+      "workspace": "worktree",
+      "createdTicketStatus": "backlog",
+      "onPass": "plan-merge-ready",
       "onFail": "backlog",
       "maxRounds": 2
     }

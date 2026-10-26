@@ -306,7 +306,8 @@ def run(enable_debug: bool = False) -> int:
     ctx = {"debug": enable_debug, "stateDir": sd, "tmux": tmux}
     crashpoints.configure(enable_debug, sd)
     startup = {"at": state.utcnow()}
-    for name, step in (("reports", lambda: reports.apply_pending(store, report_rules.apply)),
+    apply_report = lambda tx, report: report_rules.apply(tx, report, ctx)
+    for name, step in (("reports", lambda: reports.apply_pending(store, apply_report)),
                        ("panes", lambda: teams.monitor(store, tmux)),
                        ("assignments", lambda: reconcile.tick(store, ctx)),
                        ("orphanSessions", lambda: reconcile.orphan_sessions(store, tmux))):
@@ -322,7 +323,7 @@ def run(enable_debug: bool = False) -> int:
     last_tick_errors = ["[]"]
     while not stop_flag["stop"]:
         try:
-            reports.apply_pending(store, report_rules.apply)  # first, so commands see the latest outcomes
+            reports.apply_pending(store, apply_report)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
             tick = boardsched.tick(store, ctx)

@@ -3,12 +3,13 @@ command's transaction, so the receipt, rows, and events commit together."""
 from __future__ import annotations
 
 import os
+import json
 from typing import Optional
 
-from . import providers
+from . import providers, roles, worktrees
 from .protocol import AsError, BAD_REQUEST
 from .runner import CANCEL_MARKER, request_path, run_dir
-from .store import NOT_FOUND, Tx
+from .store import NOT_FOUND, Tx, new_id
 
 AGENT_BUSY = "AGENT_BUSY"
 AGENT_UNAVAILABLE = "AGENT_UNAVAILABLE"
@@ -76,7 +77,15 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(AGENT_NOT_IN_TEAM, f"Agent {agent['id']} is not a member of team {team['id']}.")
     if team["status"] != "running":
         raise AsError(TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
-    ws = run_workspace(tx, team, args.get("workspace"))
+    direct_policy = roles.direct_task_config(team["workspace"], agent["role"])
+    auto_worktree = args.get("workspace") is None and direct_policy["workspace"] == "worktree"
+    ws = team["workspace"] if auto_worktree else run_workspace(tx, team, args.get("workspace"))
+    if auto_worktree and direct_policy.get("onMergeConflict"):
+        from . import boardmodel
+        board = boardmodel.load_config(team["workspace"])
+        if direct_policy["onMergeConflict"] not in board["byId"]:
+            raise AsError("ROLES_CONFIG_INVALID", f"Role {agent['role']!r} sends direct-task merge conflicts to "
+                                                   f"unknown board status {direct_policy['onMergeConflict']!r}.")
     if agent["availability"] != "idle" or agent["pane_state"] != "alive":
         code = AGENT_BUSY if agent["availability"] in ("busy", "waiting_input") else AGENT_UNAVAILABLE
         raise AsError(code, f"Agent {agent['display_name']} is {agent['availability']} (pane {agent['pane_state']}).",
@@ -90,38 +99,72 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
     policy = args["policy"]
     if adapter.describe(dict(os.environ))["policies"].get(policy) in (None, "unsupported"):
         raise AsError(POLICY_UNSUPPORTED, f"{agent['provider_id']} has no verified mapping for {policy}.")
-    if policy == "workspace_write":
+    if policy == "workspace_write" and not auto_worktree:
         holder = _mutating_in_workspace(tx, ws)
         if holder:
             raise AsError(WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).",
                           data={"workspace": ws})
-    request = build_request(agent, ws)
-    if args.get("deadlineMs"):
-        request["deadlineMs"] = args["deadlineMs"]
-    if args.get("debugProviderOptions") is not None:
-        if not ctx["debug"] or not getattr(adapter, "test_only", False):
-            raise AsError(BAD_REQUEST, "debugProviderOptions is only accepted by debug coordinators for test-only "
-                                       "providers.")
-        request["providerOptions"] = args["debugProviderOptions"]
-    if alias:
-        request["fixtureAdapter"] = alias
-    task = tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": ws,
-                              "goal": args["text"]})
-    asg = tx.create("assignment", {"team_id": team["id"], "task_id": task, "agent_id": agent["id"], "attempt": 1,
-                                   "policy": policy, "provider_id": agent["provider_id"], "request_json": request},
-                    payload=_request_summary(request))
-    tx.transition("task", task, "assigned")
+    task = new_id()
+    created = None
+    try:
+        if auto_worktree:
+            created = worktrees.create_direct(team["workspace"], task, worktrees.slug(args["text"][:80]),
+                                               direct_policy["baseBranch"], state_dir=ctx["stateDir"])
+            ws = created["path"]
+        extra = {"mcpWorkspace": team["workspace"]}
+        if created:
+            extra["directWorktree"] = dict(created, mainWorkspace=team["workspace"],
+                                            mergeOnSuccess=direct_policy["mergeOnSuccess"],
+                                            onMergeConflict=direct_policy.get("onMergeConflict"))
+        request = build_request(agent, ws, extra)
+        if args.get("deadlineMs"):
+            request["deadlineMs"] = args["deadlineMs"]
+        if args.get("debugProviderOptions") is not None:
+            if not ctx["debug"] or not getattr(adapter, "test_only", False):
+                raise AsError(BAD_REQUEST, "debugProviderOptions is only accepted by debug coordinators for test-only "
+                                           "providers.")
+            request["providerOptions"] = args["debugProviderOptions"]
+        if alias:
+            request["fixtureAdapter"] = alias
+        tx.create("task", {"team_id": team["id"], "origin": "direct", "workspace": ws,
+                           "goal": args["text"]}, entity_id=task)
+        if created:
+            tx.note("task", task, "task.worktree_created",
+                    {"path": created["path"], "branch": created["branch"],
+                     "baseBranch": created["baseBranch"], "baseCommit": created["baseCommit"],
+                     "mergeOnSuccess": direct_policy["mergeOnSuccess"]})
+        asg = tx.create("assignment", {"team_id": team["id"], "task_id": task, "agent_id": agent["id"],
+                                       "attempt": 1, "policy": policy, "provider_id": agent["provider_id"],
+                                       "request_json": request}, payload=_request_summary(request))
+        tx.transition("task", task, "assigned")
+    except BaseException:
+        if created and os.path.isdir(created["path"]):
+            worktrees.remove(team["workspace"], created["path"], state_dir=ctx["stateDir"])
+        raise
     return {"receipt": "accepted", "model": agent.get("model"), "reasoning": agent.get("reasoning"),
             "roleSources": request["roleContext"]["sources"], "roleWarnings": request["roleContext"]["warnings"], "teamId": team["id"], "agentId": agent["id"], "taskId": task,
-            "assignmentId": asg, "policy": policy, "providerId": agent["provider_id"]}
+            "assignmentId": asg, "policy": policy, "providerId": agent["provider_id"], "workspace": ws,
+            "worktree": created}
 
 
-def _finish_cancel(tx: Tx, asg: dict, reason: str) -> None:
+def _finish_cancel(tx: Tx, asg: dict, reason: str, ctx: dict = None) -> None:
     tx.transition("assignment", asg["id"], "cancelled", set_values={"diagnostic_code": "CANCELLED"},
                   payload={"reason": reason})
     task = tx.get("task", asg["task_id"])
     if task["origin"] == "direct" and task["status"] not in ("succeeded", "failed", "cancelled"):
         tx.transition("task", task["id"], "cancelled", payload={"reason": reason})  # workflows own their task
+    try:
+        meta = (json.loads(asg.get("request_json") or "{}").get("directWorktree") or {})
+    except ValueError:
+        meta = {}
+    path, main = meta.get("path"), meta.get("mainWorkspace")
+    if path and main and os.path.isdir(path):
+        if worktrees.is_clean(path):
+            worktrees.remove(main, path, state_dir=(ctx or {}).get("stateDir"))
+            tx.note("task", task["id"], "task.worktree_removed", {"path": path, "reason": reason})
+        else:
+            tx.note("task", task["id"], "task.worktree_preserved",
+                    {"path": path, "branch": meta.get("branch"), "reason": reason})
     agent = tx.get("agent", asg["agent_id"])
     if agent["availability"] in ("busy", "waiting_input") and not _other_active(tx, agent["id"], asg["id"]):
         tx.transition("agent", agent["id"], "idle", payload={"reason": "assignment cancelled"})
@@ -163,7 +206,7 @@ def assignment_cancel(tx: Tx, args: dict, ctx: dict) -> dict:
     if _unapplied_final(tx, asg["id"]):
         return dict(out, outcome="finishing", status=status)  # its final report is being applied right now
     if status == "queued":
-        _finish_cancel(tx, asg, "cancelled before it was claimed")
+        _finish_cancel(tx, asg, "cancelled before it was claimed", ctx)
         return dict(out, outcome="cancelled", status="cancelled")
     if status == "claimed":
         inbox = request_path(sd, asg["agent_id"], asg["id"], "inbox")
@@ -172,11 +215,11 @@ def assignment_cancel(tx: Tx, args: dict, ctx: dict) -> dict:
         os.makedirs(os.path.dirname(pulled), mode=0o700, exist_ok=True)
         try:
             os.rename(inbox, pulled)  # atomic: the worker either already moved it, or never will see it
-            _finish_cancel(tx, asg, "cancelled before any worker picked it up")
+            _finish_cancel(tx, asg, "cancelled before any worker picked it up", ctx)
             return dict(out, outcome="cancelled", status="cancelled")
         except FileNotFoundError:
             if not any(os.path.exists(request_path(sd, asg["agent_id"], asg["id"], b)) for b in ("active", "done")):
-                _finish_cancel(tx, asg, "cancelled before the request was written")
+                _finish_cancel(tx, asg, "cancelled before the request was written", ctx)
                 return dict(out, outcome="cancelled", status="cancelled")
     if status in ("claimed", "running", "reconciling") and (status == "claimed" or _runner_alive(asg)):
         _write_marker(sd, asg["id"])  # the runner checks this before starting and while running
@@ -190,7 +233,7 @@ def assignment_cancel(tx: Tx, args: dict, ctx: dict) -> dict:
         tx.note("assignment", asg["id"], "assignment.cancel_requested", {"signalled": signalled})
         return dict(out, outcome="cancel_requested", status=status)
     # waiting_input, or running/reconciling with the runner gone: nothing can still act, so cancel now.
-    _finish_cancel(tx, asg, f"cancelled while {status}")
+    _finish_cancel(tx, asg, f"cancelled while {status}", ctx)
     return dict(out, outcome="cancelled", status="cancelled")
 
 

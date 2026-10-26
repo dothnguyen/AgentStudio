@@ -100,7 +100,7 @@ Story delivery (S05): `team unpack | review | dev | fix | qa | final | commit | 
 
 ### E. Rules and running
 
-A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?}`. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets of the effective current phase, and only to free members.
+A rule is `{when:{status}, role, workflow, onPass, onFail, onBlocked?, maxRounds?, during?, cap?, requiresDeps?, workspace?: main|worktree|none, action?, priority?, createdTicketStatus?, onPassCreatedTickets?:{from,to}}`. `createdTicketStatus` controls where tickets added through that workflow's board MCP assignment start. An action rule's `onPassCreatedTickets` promotes only tickets created by the workflow run that produced the parent ticket, after the action succeeds; this supports isolated planning worktrees without naming a ProductOwner, workflow, or status in backend code. Rules are validated at load against the roles file, the workflow definitions and the board statuses. A team runs the board with `team run-board`; only one team runs the board at a time. The scheduler offers only tickets of the effective current phase, and only to free members.
 
 ### F. Engine between S06 and S10
 

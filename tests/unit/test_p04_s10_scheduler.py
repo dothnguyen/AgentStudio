@@ -2,6 +2,8 @@
 phase change mid-run lets the running ticket finish."""
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 
@@ -155,6 +157,66 @@ class TickRules(SchedCase):
         self.assertEqual(names, ["ticket.created", "ticket.claimed"])
         assignment = self.conn.execute("SELECT agent_id FROM assignments ORDER BY created_at DESC").fetchone()
         self.assertEqual(assignment["agent_id"], self.worker)
+
+    def test_worktree_rule_holds_created_tickets_until_its_merge_action_passes(self):
+        old_state_home = os.environ.get("XDG_STATE_HOME")
+        state_home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, state_home, True)
+        os.environ["XDG_STATE_HOME"] = state_home
+        if old_state_home is None:
+            self.addCleanup(os.environ.pop, "XDG_STATE_HOME", None)
+        else:
+            self.addCleanup(os.environ.__setitem__, "XDG_STATE_HOME", old_state_home)
+        self.ctx["stateDir"] = os.path.join(state_home, "agent-studio")
+        base_branch = subprocess.run(
+            ["git", "-C", self.ws, "symbolic-ref", "--short", "HEAD"], check=True,
+            stdout=subprocess.PIPE, text=True).stdout.strip()
+        self.write_board({
+            "version": 2,
+            "baseBranch": base_branch,
+            "agentTicketStatus": "unpack-ready",
+            "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "unpack-ready"},
+                         {"id": "plan-merge-ready"}, {"id": "refine-ready"},
+                         {"id": "done", "kind": "done"}],
+            "ticketFields": [],
+            "rules": [
+                {"when": {"status": "unpack-ready"}, "role": "worker", "workflow": "solo",
+                 "workspace": "worktree", "createdTicketStatus": "backlog",
+                 "onPass": "plan-merge-ready", "onFail": "backlog"},
+                {"when": {"status": "plan-merge-ready"}, "action": "merge", "onPass": "done",
+                 "onFail": "unpack-ready",
+                 "onPassCreatedTickets": {"from": "backlog", "to": "refine-ready"}}
+            ]})
+        with self.store.transaction() as tx:
+            tx.conn.execute("UPDATE agents SET can_add_tickets = 1 WHERE id = ?", (self.worker,))
+        self.add_ticket("feature", status="unpack-ready")
+        started = self.tick()
+        self.assertEqual(started["errors"], [])
+        events = [dict(r) for r in self.conn.execute(
+            "SELECT name, payload_json FROM ticket_events ORDER BY id").fetchall()]
+        self.assertEqual(started["claimed"], 1, events)
+        parent = self.ticket("T-001")
+        assignment = self.conn.execute(
+            "SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?",
+            (parent["active_run_id"],)).fetchone()[0]
+        with open(os.path.join(parent["worktree_path"], "plan.md"), "w") as f:
+            f.write("planned in isolation\n")
+        with self.store.transaction() as tx:
+            child = boardmodel.mcp_ticket_add(
+                tx, parent["worktree_path"],
+                {"assignment": assignment, "title": "first story", "priority": 100})["ticket"]
+        self.assertEqual((child["workspace"], child["status"]), (self.ws, "backlog"))
+        self.assertFalse(os.path.exists(os.path.join(self.ws, "plan.md")))
+
+        self.finish(parent["active_run_id"])
+        self.free_member()
+        self.tick()  # apply the run, merge its branch, then promote only tickets created by that run
+        self.assertEqual(self.ticket("T-001")["status"], "done")
+        self.assertEqual(self.ticket("T-002")["status"], "refine-ready")
+        self.assertTrue(os.path.exists(os.path.join(self.ws, "plan.md")))
+        child_events = [r[0] for r in self.conn.execute(
+            "SELECT name FROM ticket_events WHERE ticket_id = ? ORDER BY id", (child["id"],)).fetchall()]
+        self.assertEqual(child_events, ["ticket.created", "ticket.created_status_promoted"])
 
     def test_only_the_effective_current_phase_is_claimed(self):
         with self.store.transaction() as tx:

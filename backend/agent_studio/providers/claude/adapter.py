@@ -183,7 +183,8 @@ class ClaudeAdapter(Adapter):
         launch = mcp_launch()
         config = {"mcpServers": {"agent-studio": {
             "type": "stdio", "command": launch["command"], "args": launch["args"],
-            "env": dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))}}}
+            "env": dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id,
+                                                   inp.mcp_workspace or inp.workspace))}}}
         path = os.path.join(os.path.dirname(inp.prompt_path), "mcp.json")
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -198,7 +199,7 @@ class ClaudeAdapter(Adapter):
         extra_env, mcp_path = {}, None
         if inp.mcp_tickets:
             mcp_path = self._mcp_config(inp)
-            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.workspace))
+            extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.mcp_workspace or inp.workspace))
         if commands_enabled(inp.workspace):
             argv = [exe] + [a for a in COMMON if a != "--restricted"] + COMMAND_FLAGS[inp.policy]
             banned = [a for a in NEVER if a != "Bash"]

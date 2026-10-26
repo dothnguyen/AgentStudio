@@ -61,6 +61,23 @@ class RulesSchema(RulesCase):
         self.assertEqual(set(model["rulesByStatus"]), {"todo", "review", "dropped"})
         self.assertEqual(self.check(), [])
 
+    def test_created_ticket_policies_are_status_validated_and_rule_scoped(self):
+        good = json.loads(json.dumps(RULES_CONFIG))
+        good["rules"][0]["createdTicketStatus"] = "todo"
+        good["rules"][2]["onPassCreatedTickets"] = {"from": "todo", "to": "review"}
+        self.write_config(good)
+        self.assertEqual(self.check(), [])
+
+        bad = json.loads(json.dumps(good))
+        bad["rules"][2]["onPassCreatedTickets"]["to"] = "nowhere"
+        paths = " ".join(p["path"] for p in self.problems_with(bad))
+        self.assertIn("rules[2].onPassCreatedTickets.to", paths)
+
+        bad = json.loads(json.dumps(good))
+        bad["rules"][0]["onPassCreatedTickets"] = {"from": "todo", "to": "review"}
+        paths = " ".join(p["path"] for p in self.problems_with(bad))
+        self.assertIn("rules[0].onPassCreatedTickets", paths)
+
     def test_schema_problems_are_reported_at_load_time(self):
         cases = [
             ({**RULES_CONFIG, "rules": [{"when": {"status": "nowhere"}, "role": "worker",

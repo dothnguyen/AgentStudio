@@ -130,7 +130,8 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
 
     old = json.loads(a["request_json"]) if a["request_json"] else {}
     request = tasks.build_request(agent, task["workspace"],
-                                  {k: v for k, v in old.items() if k in ("deadlineMs", "providerOptions", "promptFile")})
+                                  {k: v for k, v in old.items() if k in ("deadlineMs", "providerOptions", "promptFile",
+                                                                         "mcpWorkspace", "directWorktree")})
     if args.get("debugProviderOptions") is not None:
         request["providerOptions"] = args["debugProviderOptions"]
     if alias:

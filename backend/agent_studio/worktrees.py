@@ -65,6 +65,27 @@ def create(workspace: str, key: str, slug: str, base_branch: str, *, state_dir: 
     return {"branch": branch, "path": target, "baseCommit": base.stdout.decode().strip()}
 
 
+def create_direct(workspace: str, task_id: str, title_slug: str, base_branch: str,
+                  *, state_dir: Optional[str] = None) -> dict:
+    """Create an isolated worktree for a one-off task. Its identity is the task UUID, not a board ticket."""
+    workspace = os.path.realpath(workspace)
+    if not re.fullmatch(r"[0-9a-f-]{36}", task_id) or not _SLUG_RE.fullmatch(title_slug):
+        raise AsError(BAD_REQUEST, "Direct-task id or slug is invalid.")
+    root = root_for(workspace, state_dir=state_dir)
+    target = os.path.realpath(os.path.join(root, "direct", task_id))
+    branch = f"direct/{task_id[:12]}-{title_slug}"
+    exists = gitws.run(workspace, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}", check=False)
+    if exists.returncode == 0 or os.path.lexists(target):
+        raise AsError(WORKTREE_EXISTS, "The direct-task branch or worktree already exists.")
+    if exists.returncode not in (0, 1):
+        _git_error("show-ref", exists)
+    base = gitws.run(workspace, "rev-parse", "--verify", f"{base_branch}^{{commit}}")
+    os.makedirs(os.path.dirname(target), mode=0o700, exist_ok=True)
+    gitws.run(workspace, "worktree", "add", "-b", branch, target, base_branch)
+    return {"branch": branch, "path": target, "baseCommit": base.stdout.decode().strip(),
+            "baseBranch": base_branch}
+
+
 def list_registered(workspace: str, *, state_dir: Optional[str] = None) -> list[dict]:
     workspace = os.path.realpath(workspace)
     root = root_for(workspace, state_dir=state_dir)

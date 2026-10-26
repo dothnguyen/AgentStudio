@@ -138,6 +138,23 @@ def _commit_worktree(tx, ticket: dict, rule) -> None:
                                                             "rule": rule["when"]["status"]})
 
 
+def _commit_leftovers(tx, ticket: dict, rule: dict) -> None:
+    """A run that ended without its outcome being applied (paused, cancelled, a usage limit, a manual retry)
+    leaves its files uncommitted in the ticket worktree, and every start needs a clean tree. The leftovers
+    are committed on the ticket branch before the next run, so the work is kept and nothing blocks."""
+    path = ticket.get("worktree_path")
+    if not path or not os.path.isdir(path) or worktrees.is_clean(path):
+        return
+    try:
+        result = worktrees.commit_round(path, f"{ticket['key']}: uncommitted work from an earlier run")
+    except AsError as e:
+        _ticket_event_note(tx, ticket, "ticket.commit_failed", {"code": e.code, "message": e.message})
+        return
+    if result.get("commit"):
+        _ticket_event_note(tx, ticket, "ticket.committed", {"commit": result["commit"], "rule": rule["when"]["status"],
+                                                            "reason": "leftovers"})
+
+
 def _settle_main(tx, workspace: str, ticket: dict, rule, run_status: str) -> None:
     """A rule that works in the main checkout (`workspace: main`) must leave it clean, because every run starts
     only on a clean tree. The checkout was clean when the run started (the claim required it), so what is
@@ -338,6 +355,7 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
                                 (created["branch"], created["path"], utcnow(), ticket["id"]))
                 ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
             run_workspace = ticket["worktree_path"]
+            _commit_leftovers(tx, ticket, rule)
             if rule.get("syncBase"):
                 _sync_base(tx, ticket, config)
         start_args = {"teamId": team["id"], "definition": rule["workflow"],
@@ -457,11 +475,44 @@ def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) 
                              rule["onPass"], {"ticketId": ticket["id"], "key": ticket["key"],
                                               "branch": ticket["branch"], "to": rule["onPass"]})
     _set_status(tx, ticket, rule["onPass"])
+    _promote_created_tickets(tx, ticket, rule)
     if ticket.get("worktree_path"):
         worktrees.remove(workspace, ticket["worktree_path"], state_dir=ctx["stateDir"])
         tx.conn.execute("UPDATE tickets SET worktree_path = NULL, updated_at = ? WHERE id = ?",
                         (utcnow(), ticket["id"]))
     return True
+
+
+def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:
+    """Apply an action rule's configured transition to tickets created by the parent's workflow.
+
+    The relationship already exists through ``created_by_assignment`` and stage attempts, so this remains
+    generic: no role, workflow, or status name is embedded in the scheduler. The transition happens only after
+    the action succeeds (for today's ``merge`` action, after the branch has landed on the base checkout).
+    """
+    policy = rule.get("onPassCreatedTickets")
+    run_id = parent.get("run_id")
+    if not policy or not run_id:
+        return
+    rows = tx.conn.execute(
+        "SELECT * FROM tickets WHERE created_by_assignment IN "
+        "(SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id IS NOT NULL) "
+        "AND status = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
+    keys = []
+    for row in rows:
+        child = dict(row)
+        _set_status(tx, child, policy["to"])
+        boardmodel._ticket_event(
+            tx.conn, child["id"], "ticket.created_status_promoted", "coordinator", policy["from"], policy["to"],
+            {"ticketId": child["id"], "key": child["key"], "parentKey": parent["key"],
+             "parentTicketId": parent["id"], "run": run_id, "from": policy["from"], "to": policy["to"]})
+        keys.append(child["key"])
+    if keys:
+        boardmodel._ticket_event(
+            tx.conn, parent["id"], "ticket.created_tickets_promoted", "coordinator",
+            rule["onPass"], rule["onPass"],
+            {"ticketId": parent["id"], "key": parent["key"], "run": run_id, "tickets": keys,
+             "from": policy["from"], "to": policy["to"]})
 
 
 def _move_by_rule(tx, workspace: str, ticket: dict, rule: dict, target_key: str, reason: str) -> None:
