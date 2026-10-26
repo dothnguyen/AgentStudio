@@ -8,7 +8,11 @@ import type { DashboardSection } from '../src/renderer/dashboard/useDashboardSec
 afterEach(cleanup);
 
 function section(overrides: Partial<DashboardSection<DashboardTeams>>): DashboardSection<DashboardTeams> {
-  return { state: 'loading', data: null, error: null, lastUpdatedAt: null, reload: vi.fn(), ...overrides };
+  const merged = {
+    state: 'loading' as const, data: null, error: null, lastUpdatedAt: null,
+    reload: vi.fn(() => Promise.resolve()), ...overrides,
+  };
+  return { loading: merged.state === 'loading', ...merged };
 }
 
 describe('TeamsPanel', () => {

@@ -61,7 +61,7 @@ describe('useDashboardSection', () => {
     let latest!: DashboardSection<string>;
     render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
 
-    act(() => { latest.reload(); latest.reload(); });
+    act(() => { void latest.reload(); void latest.reload(); });
     expect(load).toHaveBeenCalledTimes(1);
   });
 
@@ -74,10 +74,10 @@ describe('useDashboardSection', () => {
     render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
     await act(async () => first.resolve({ ok: true, data: 'one' }));
 
-    act(() => latest.reload());
+    act(() => { void latest.reload(); });
     expect(latest).toMatchObject({ state: 'loading', data: null, error: null, lastUpdatedAt: 1234 });
     expect(load).toHaveBeenCalledTimes(2);
-    act(() => latest.reload());
+    act(() => { void latest.reload(); });
     expect(load).toHaveBeenCalledTimes(2);
 
     await act(async () => second.resolve({
@@ -100,7 +100,7 @@ describe('useDashboardSection', () => {
     const result = render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
     await act(async () => firstA.resolve({ ok: true, data: 'first' }));
     expect(latest.lastUpdatedAt).toBe(1234);
-    act(() => latest.reload());
+    act(() => { void latest.reload(); });
     result.rerender(<Harness load={load} workspaceId="b" notify={(section) => { latest = section; }} />);
     expect(load).toHaveBeenNthCalledWith(3, 'b');
     expect(latest.lastUpdatedAt).toBeNull();
@@ -173,7 +173,7 @@ describe('useDashboardSection', () => {
     await act(async () => first.reject(new Error('network down')));
     expect(latest.error).toEqual({ code: 'INTERNAL', message: 'network down', retryable: false });
 
-    act(() => latest.reload());
+    act(() => { void latest.reload(); });
     await act(async () => second.resolve({ ok: true, data: 'recovered' }));
     expect(latest).toMatchObject({ state: 'ready', data: 'recovered', error: null });
   });
@@ -217,5 +217,47 @@ describe('useDashboardSection', () => {
     await act(async () => pending.reject(new Error('late failure')));
     expect(notifications).toHaveLength(count);
     expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('reload_returns_a_resolved_promise_without_loading_while_in_flight', async () => {
+    const pending = deferred<Result<string>>();
+    const load = vi.fn(() => pending.promise);
+    let latest!: DashboardSection<string>;
+    render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
+
+    let settled = false;
+    await act(async () => { await latest.reload(); settled = true; });
+    expect(settled).toBe(true);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('reload_promise_resolves_only_after_the_accepted_request_settles', async () => {
+    const first = deferred<Result<string>>();
+    const second = deferred<Result<string>>();
+    const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    let latest!: DashboardSection<string>;
+    render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
+    await act(async () => first.resolve({ ok: true, data: 'one' }));
+
+    let done = false;
+    let reloading!: Promise<void>;
+    act(() => { reloading = latest.reload().then(() => { done = true; }); });
+    await act(async () => { await Promise.resolve(); });
+    expect(done).toBe(false);
+    expect(latest.loading).toBe(true);
+    expect(latest.state).toBe('loading');
+
+    await act(async () => { second.resolve({ ok: true, data: 'two' }); await reloading; });
+    expect(done).toBe(true);
+    expect(latest).toMatchObject({ state: 'ready', data: 'two', loading: false });
+  });
+
+  it('synchronous_throw_in_load_becomes_internal_error_without_throwing_into_react', async () => {
+    const load = vi.fn(() => { throw new Error('sync boom'); });
+    let latest!: DashboardSection<string>;
+    render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(latest.state).toBe('error');
+    expect(latest.error).toMatchObject({ code: 'INTERNAL', message: 'sync boom' });
   });
 });

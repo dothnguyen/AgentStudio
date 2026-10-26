@@ -1,9 +1,9 @@
 import type { JSX } from 'react';
 import type { DashboardBoard } from '../api';
-import type { DashboardSection } from './useDashboardSection';
+import type { DashboardSectionController } from './useDashboardSection';
 
 export interface BoardPanelProps {
-  section: DashboardSection<DashboardBoard>;
+  section: DashboardSectionController<DashboardBoard>;
   onNavigate(sectionId: string): void;
 }
 
@@ -11,8 +11,8 @@ export function BoardPanel(props: BoardPanelProps): JSX.Element {
   const { section } = props;
 
   return (
-    <section className="dashboard-panel board-panel" aria-labelledby="dashboard-board-title">
-      <h2 id="dashboard-board-title">Board</h2>
+    <section className="dashboard-panel dashboard-panel-board board-panel" aria-labelledby="dashboard-board-title">
+      <h2 id="dashboard-board-title">Board status</h2>
       {section.state === 'loading' && <p className="panel-loading" role="status">Loading board…</p>}
       {section.state === 'error' && section.error?.code === 'BOARD_CONFIG_INVALID' && (
         <p className="panel-empty" role="status">No board configured for this workspace</p>
@@ -23,7 +23,7 @@ export function BoardPanel(props: BoardPanelProps): JSX.Element {
           {typeof section.error.remediation === 'string' && section.error.remediation !== '' && (
             <p>{section.error.remediation}</p>
           )}
-          <button type="button" onClick={section.reload}>Retry</button>
+          <button type="button" onClick={() => { void section.reload(); }}>Retry</button>
         </div>
       )}
       {section.state === 'ready' && section.data !== null && (
@@ -43,7 +43,7 @@ function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string)
       <p className="board-phase">
         <strong>{data.currentPhase.name}</strong>
         {' '}
-        <span>{data.currentPhase.status}</span>
+        <span className="status-badge phase-status">{data.currentPhase.status}</span>
       </p>
       {empty ? (
         <p className="panel-empty">No tickets in the current phase.</p>
@@ -69,11 +69,11 @@ function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string)
             <ul className="board-ticket-list" aria-label="High-priority tickets">
               {data.tickets.map((ticket) => (
                 <li key={ticket.key}>
-                  <span className="monospace">{ticket.key}</span>
+                  <span className="ticket-key">{ticket.key}</span>
                   <span>{ticket.title}</span>
-                  <span>{ticket.status}</span>
+                  <span className="status-badge">{ticket.status}</span>
                   <span>Priority {ticket.priority}</span>
-                  <span>{ticket.activity.state}</span>
+                  <span className="status-badge">{ticket.activity.state}</span>
                   {ticket.activity.agent !== undefined && <span>Agent: {ticket.activity.agent}</span>}
                   {ticket.activity.role !== undefined && <span>Role: {ticket.activity.role}</span>}
                 </li>

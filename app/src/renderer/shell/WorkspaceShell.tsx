@@ -45,7 +45,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
 
   return (
     <div className="workspace-shell">
-      <aside className="workspace-sidebar">
+      <aside className="workspace-sidebar" aria-label="Workspace sidebar">
         <header className="workspace-identity">
           <div className="workspace-name" title={props.workspace.name}>{props.workspace.name}</div>
           <div className="workspace-path" title={props.workspace.path}>{props.workspace.path}</div>

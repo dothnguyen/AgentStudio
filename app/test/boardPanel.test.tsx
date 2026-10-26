@@ -21,14 +21,18 @@ const emptyBoard: DashboardBoard = {
 };
 
 function section(overrides: Partial<DashboardSection<DashboardBoard>> = {}): DashboardSection<DashboardBoard> {
-  return { state: 'loading', data: null, error: null, lastUpdatedAt: null, reload: vi.fn(), ...overrides };
+  const merged = {
+    state: 'loading' as const, data: null, error: null, lastUpdatedAt: null,
+    reload: vi.fn(() => Promise.resolve()), ...overrides,
+  };
+  return { loading: merged.state === 'loading', ...merged };
 }
 
 describe('BoardPanel', () => {
   it('renders_loading_state', () => {
     const result = render(<BoardPanel section={section()} onNavigate={vi.fn()} />);
 
-    expect(result.getByRole('region', { name: 'Board' })).toBeTruthy();
+    expect(result.getByRole('region', { name: 'Board status' })).toBeTruthy();
     expect(result.getByRole('status').textContent).toBe('Loading board…');
     expect(result.queryByRole('button', { name: 'View board' })).toBeNull();
   });
@@ -107,7 +111,7 @@ describe('BoardPanel', () => {
       'T-009First projectionbusyPriority 0workingAgent: agent-aRole: developer',
       'T-002Second projectionideaPriority 7blocked',
     ]);
-    expect(within(tickets[0]).getByText('T-009').classList.contains('monospace')).toBe(true);
+    expect(within(tickets[0]).getByText('T-009').classList.contains('ticket-key')).toBe(true);
     expect(tickets[1].textContent).not.toContain('Agent:');
     expect(tickets[1].textContent).not.toContain('Role:');
   });

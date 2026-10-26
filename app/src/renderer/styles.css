@@ -80,7 +80,11 @@ button.primary:hover:not(:disabled) {
 button.primary:active:not(:disabled) { background: #095a8d; }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+.dashboard-home a:focus-visible,
+.dashboard-panel button:focus-visible,
+.dashboard-actions button:focus-visible,
+.refresh-button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
@@ -233,11 +237,9 @@ code,
 
 .dashboard-path {
   display: block;
-  overflow: hidden;
   color: var(--text-muted);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .dashboard-actions {
@@ -272,7 +274,8 @@ code,
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
+  min-width: 0;
 }
 
 .dashboard-panel {
@@ -283,8 +286,34 @@ code,
   background: var(--surface);
 }
 
+.dashboard-panel-activity { grid-column: 1 / -1; }
 .dashboard-panel h2 { margin-bottom: 13px; }
-.teams-panel { grid-column: 1 / -1; }
+.dashboard-panel li,
+.dashboard-panel p,
+.dashboard-title h1 { overflow-wrap: anywhere; }
+
+.dashboard-panel ul,
+.dashboard-panel ol {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-panel li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 0;
+}
+
+.team-list .team-row { display: block; padding: 11px; }
+
+.ticket-key,
+.entity-id,
+.dashboard-path {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
 
 .panel-loading,
 .panel-empty,
@@ -293,8 +322,9 @@ code,
 
 .panel-error {
   padding: 12px;
+  color: var(--danger);
   border-left: 3px solid var(--danger);
-  background: var(--surface-raised);
+  background: #241f1f;
 }
 
 .panel-error p { overflow-wrap: anywhere; }
@@ -323,10 +353,8 @@ code,
 }
 
 .team-heading strong {
-  overflow: hidden;
   color: var(--text-bright);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .status-badge { flex: 0 0 auto; }
@@ -833,7 +861,6 @@ ul[aria-label="Workspaces"] {
   .dashboard-header { flex-direction: column; }
   .dashboard-actions { justify-content: flex-start; }
   .dashboard-actions time { text-align: left; }
-  .dashboard-grid { grid-template-columns: 1fr; }
 
   .diagnostics dl {
     grid-template-columns: 1fr;
@@ -841,6 +868,11 @@ ul[aria-label="Workspaces"] {
   }
 
   .diagnostics dd:not(:last-child) { margin-bottom: 7px; }
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-panel-activity { grid-column: auto; }
 }
 
 @media (max-width: 400px) {

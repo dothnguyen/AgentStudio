@@ -1,10 +1,23 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DashboardActivity } from '../src/renderer/api';
+import type { ApiError, DashboardActivity } from '../src/renderer/api';
+import type { DashboardSectionController } from '../src/renderer/dashboard/useDashboardSection';
 import { ActivityPanel } from '../src/renderer/dashboard/ActivityPanel';
 
 afterEach(cleanup);
+
+function section(
+  state: 'loading' | 'ready' | 'error',
+  data: DashboardActivity | null,
+  error: ApiError | null,
+  onRetry: () => void,
+): DashboardSectionController<DashboardActivity> {
+  return {
+    state, data, error, loading: state === 'loading', lastUpdatedAt: null,
+    reload: () => { onRetry(); return Promise.resolve(); },
+  };
+}
 
 function activity(entries: DashboardActivity['entries']): DashboardActivity {
   return { workspace: '/workspace', dbId: 'activity-db', head: 42, entries };
@@ -27,7 +40,7 @@ describe('ActivityPanel', () => {
     const entries = Array.from({ length: 16 }, (_, index) => entry(index + 1));
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const result = render(<ActivityPanel state="ready" data={activity(entries)} error={null} onRetry={vi.fn()} />);
+      const result = render(<ActivityPanel section={section('ready', activity(entries), null, vi.fn())} />);
       const items = result.getAllByRole('listitem');
       expect(items).toHaveLength(15);
       expect(items.map((item) => item.querySelectorAll('span')[0].textContent))
@@ -39,12 +52,7 @@ describe('ActivityPanel', () => {
         .toEqual(entries.slice(0, 15).map((item) => item.at));
 
       result.rerender(
-        <ActivityPanel
-          state="ready"
-          data={activity(entries.map((item) => ({ ...item, summary: `Changed ${item.id}` })))}
-          error={null}
-          onRetry={vi.fn()}
-        />,
+        <ActivityPanel section={section('ready', activity(entries.map((item) => ({ ...item, summary: `Changed ${item.id}` }))), null, vi.fn())} />,
       );
       const keyWarnings = consoleError.mock.calls.filter((call) => String(call[0]).toLowerCase().includes('key'));
       expect(keyWarnings).toEqual([]);
@@ -58,7 +66,7 @@ describe('ActivityPanel', () => {
     const entries = [entry(1), entry(2)];
     entries[0] = { ...entries[0], at: valid };
     entries[1] = { ...entries[1], at: 'not-a-date' };
-    const result = render(<ActivityPanel state="ready" data={activity(entries)} error={null} onRetry={vi.fn()} />);
+    const result = render(<ActivityPanel section={section('ready', activity(entries), null, vi.fn())} />);
     const times = result.container.querySelectorAll('time');
     expect(times[0].textContent).toBe(new Date(valid).toLocaleString());
     expect(times[0].getAttribute('datetime')).toBe(valid);
@@ -77,7 +85,7 @@ describe('ActivityPanel', () => {
     data.workspace = 'hidden-workspace';
     data.dbId = 'hidden-db';
     data.head = 987654;
-    const result = render(<ActivityPanel state="ready" data={data} error={null} onRetry={vi.fn()} />);
+    const result = render(<ActivityPanel section={section('ready', data, null, vi.fn())} />);
     expect(result.getByText(unsafe).textContent).toBe(unsafe);
     expect(result.container.querySelector('img')).toBeNull();
     for (const hidden of ['hidden-name', 'hidden-subject-id', 'hidden-subject-label', 'hidden-workspace', 'hidden-db', '987654']) {
@@ -86,12 +94,12 @@ describe('ActivityPanel', () => {
   });
 
   it('renders loading and empty states', () => {
-    const result = render(<ActivityPanel state="ready" data={activity([entry(1)])} error={null} onRetry={vi.fn()} />);
+    const result = render(<ActivityPanel section={section('ready', activity([entry(1)]), null, vi.fn())} />);
     expect(result.getByText('Summary 1')).toBeTruthy();
-    result.rerender(<ActivityPanel state="loading" data={null} error={null} onRetry={vi.fn()} />);
+    result.rerender(<ActivityPanel section={section('loading', null, null, vi.fn())} />);
     expect(result.getByRole('status').textContent).toBe('Loading recent activity…');
     expect(result.queryByText('Summary 1')).toBeNull();
-    result.rerender(<ActivityPanel state="ready" data={activity([])} error={null} onRetry={vi.fn()} />);
+    result.rerender(<ActivityPanel section={section('ready', activity([]), null, vi.fn())} />);
     expect(result.getByText('No recent activity').textContent).toBe('No recent activity');
     expect(result.queryByRole('status')).toBeNull();
   });
@@ -99,12 +107,7 @@ describe('ActivityPanel', () => {
   it('renders an API error and retries exactly once', () => {
     const onRetry = vi.fn();
     const result = render(
-      <ActivityPanel
-        state="error"
-        data={null}
-        error={{ code: 'UNAVAILABLE', message: 'Activity could not be loaded.', retryable: true, remediation: 'Try again.' }}
-        onRetry={onRetry}
-      />,
+      <ActivityPanel section={section('error', null, { code: 'UNAVAILABLE', message: 'Activity could not be loaded.', retryable: true, remediation: 'Try again.' }, onRetry)} />,
     );
     const alert = result.getByRole('alert');
     expect(alert.textContent).toContain('UNAVAILABLE: Activity could not be loaded.');
@@ -116,12 +119,7 @@ describe('ActivityPanel', () => {
   it('keeps Retry available for non-retryable errors and omits empty remediation', () => {
     const onRetry = vi.fn();
     const result = render(
-      <ActivityPanel
-        state="error"
-        data={null}
-        error={{ code: 'INVALID', message: 'Activity is unavailable.', retryable: false, remediation: '' }}
-        onRetry={onRetry}
-      />,
+      <ActivityPanel section={section('error', null, { code: 'INVALID', message: 'Activity is unavailable.', retryable: false, remediation: '' }, onRetry)} />,
     );
 
     const alert = result.getByRole('alert');

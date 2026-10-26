@@ -3,15 +3,18 @@ import type { ApiError, Result } from '../api';
 
 export type DashboardSectionState = 'loading' | 'ready' | 'error';
 
-export interface DashboardSection<T> {
+export interface DashboardSectionController<T> {
   state: DashboardSectionState;
   data: T | null;
   error: ApiError | null;
+  loading: boolean;
   lastUpdatedAt: number | null;
-  reload(): void;
+  reload(): Promise<void>;
 }
 
-type SectionValue<T> = Omit<DashboardSection<T>, 'reload'>;
+export type DashboardSection<T> = DashboardSectionController<T>;
+
+type SectionValue<T> = Omit<DashboardSectionController<T>, 'reload' | 'loading'>;
 
 interface Request<T> {
   sequence: number;
@@ -22,7 +25,7 @@ interface Request<T> {
 export function useDashboardSection<T>(
   load: (workspaceId: string) => Promise<Result<T>>,
   workspaceId: string,
-): DashboardSection<T> {
+): DashboardSectionController<T> {
   const [value, setValue] = useState<SectionValue<T>>({
     state: 'loading',
     data: null,
@@ -36,10 +39,10 @@ export function useDashboardSection<T>(
   const loadedWorkspaceId = useRef(workspaceId);
   current.current = { load, workspaceId };
 
-  const start = useCallback((requestLoad: typeof load, requestWorkspaceId: string, resetTime: boolean) => {
-    if (!active.current) return;
+  const start = useCallback((requestLoad: typeof load, requestWorkspaceId: string, resetTime: boolean): Promise<void> => {
+    if (!active.current) return Promise.resolve();
     const pending = inFlight.current;
-    if (pending?.load === requestLoad && pending.workspaceId === requestWorkspaceId) return;
+    if (pending?.load === requestLoad && pending.workspaceId === requestWorkspaceId) return Promise.resolve();
 
     const request: Request<T> = {
       sequence: ++sequence.current,
@@ -54,7 +57,13 @@ export function useDashboardSection<T>(
       lastUpdatedAt: resetTime ? null : previous.lastUpdatedAt,
     }));
 
-    void requestLoad(requestWorkspaceId).then(
+    let call: Promise<Result<T>>;
+    try {
+      call = Promise.resolve(requestLoad(requestWorkspaceId));
+    } catch (reason) {
+      call = Promise.reject(reason);
+    }
+    return call.then(
       (result) => {
         if (
           !active.current ||
@@ -113,9 +122,10 @@ export function useDashboardSection<T>(
     };
   }, [load, start, workspaceId]);
 
-  const reload = useCallback(() => {
-    start(current.current.load, current.current.workspaceId, false);
-  }, [start]);
+  const reload = useCallback(
+    () => start(current.current.load, current.current.workspaceId, false),
+    [start],
+  );
 
-  return { ...value, reload };
+  return { ...value, loading: value.state === 'loading', reload };
 }
