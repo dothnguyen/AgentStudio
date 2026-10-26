@@ -1,5 +1,12 @@
 import { useRef, useState } from 'react';
-import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
+import type {
+  ConnectionStatus,
+  DashboardActivity,
+  DashboardApi,
+  DashboardBoard,
+  DashboardTeams,
+  Workspace,
+} from '../api';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../StartupScreen';
 import { ShellIcon } from '../shell/ShellIcon';
 import type { SectionId } from '../shell/navModel';
@@ -7,21 +14,62 @@ import { ActivityPanel } from './ActivityPanel';
 import { BoardPanel } from './BoardPanel';
 import { SummaryMetrics } from './SummaryMetrics';
 import { TeamsPanel } from './TeamsPanel';
-import { useDashboardSection } from './useDashboardSection';
+import { useDashboardSection, type DashboardSection } from './useDashboardSection';
 
-export function DashboardHome(props: {
+interface DashboardHomeProps {
   workspace: Workspace;
   dashboard: DashboardApi;
   connection: ConnectionStatus;
   onNavigate(sectionId: SectionId): void;
-}) {
+}
+
+const SECTION_NAMES = { teams: 'Team status', board: 'Board status', activity: 'Recent activity' } as const;
+
+export function isBoardNotConfigured(board: DashboardSection<DashboardBoard>): boolean {
+  return board.state === 'error' && board.error?.code === 'BOARD_CONFIG_INVALID';
+}
+
+export function completeUpdateTime(
+  teams: DashboardSection<DashboardTeams>,
+  board: DashboardSection<DashboardBoard>,
+  activity: DashboardSection<DashboardActivity>,
+): number | null {
+  if (teams.state !== 'ready' || activity.state !== 'ready') return null;
+  if (board.state !== 'ready' && !isBoardNotConfigured(board)) return null;
+  const times = [teams.lastUpdatedAt, activity.lastUpdatedAt];
+  if (board.state === 'ready') times.push(board.lastUpdatedAt);
+  if (times.some((time) => time === null)) return null;
+  return Math.min(...(times as number[]));
+}
+
+export function unavailableSections(
+  teams: DashboardSection<DashboardTeams>,
+  board: DashboardSection<DashboardBoard>,
+  activity: DashboardSection<DashboardActivity>,
+): string[] {
+  const names: string[] = [];
+  if (teams.state === 'error') names.push(SECTION_NAMES.teams);
+  if (board.state === 'error' && !isBoardNotConfigured(board)) names.push(SECTION_NAMES.board);
+  if (activity.state === 'error') names.push(SECTION_NAMES.activity);
+  return names;
+}
+
+export function DashboardHome(props: DashboardHomeProps) {
+  return <DashboardOverview key={props.workspace.id} {...props} />;
+}
+
+function DashboardOverview(props: DashboardHomeProps) {
   const teams = useDashboardSection(props.dashboard.teams, props.workspace.id);
   const boardSection = useDashboardSection(props.dashboard.board, props.workspace.id);
   const activity = useDashboardSection(props.dashboard.activity, props.workspace.id);
   const refreshLock = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const busy = refreshing || teams.loading || boardSection.loading || activity.loading;
-  const latest = teams.lastUpdatedAt;
+  const [lastCompleteAt, setLastCompleteAt] = useState<number | null>(null);
+  const completeAt = completeUpdateTime(teams, boardSection, activity);
+  if (completeAt !== null && completeAt !== lastCompleteAt) setLastCompleteAt(completeAt);
+  const latest = completeAt ?? lastCompleteAt;
+  const unavailable = unavailableSections(teams, boardSection, activity);
   const connectionText = props.connection.state === 'connecting'
     ? CONNECTING_TEXT
     : props.connection.state === 'connected'
@@ -70,6 +118,9 @@ export function DashboardHome(props: {
           </button>
           {latest !== null && (
             <time dateTime={new Date(latest).toISOString()}>Last updated {new Date(latest).toLocaleTimeString()}</time>
+          )}
+          {unavailable.length > 0 && (
+            <p className="dashboard-refresh-note">{`Not updated: ${unavailable.join(', ')}`}</p>
           )}
         </div>
       </header>

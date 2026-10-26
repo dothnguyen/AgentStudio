@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus, DashboardApi, Result } from '../src/renderer/api';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
-import { readyApi, workspaceA } from './dashboardFixtures';
+import { boardFixture, deferred, readyApi, workspaceA } from './dashboardFixtures';
 
 afterEach(cleanup);
 
@@ -116,5 +116,49 @@ describe('dashboard accessibility', () => {
     expect(result.getAllByRole('heading', { level: 2 }).map((node) => node.textContent))
       .toEqual(['Team status', 'Board status', 'Recent activity']);
     expect(region.querySelector('button, a, input, [tabindex]')).toBeNull();
+  });
+
+  it('refresh_is_a_native_busy_button_that_keeps_focus', async () => {
+    const fake = readyApi('x');
+    const result = shell(fake.api);
+    await act(async () => {});
+    const refresh = result.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement;
+    expect(refresh.tagName).toBe('BUTTON');
+    expect(refresh.getAttribute('type')).toBe('button');
+    expect(refresh.disabled).toBe(false);
+    const pending = deferred<Result<never>>();
+    fake.board.mockImplementationOnce(() => pending.promise as never);
+    refresh.focus();
+    fireEvent.click(refresh);
+    expect(refresh.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(refresh);
+    expect(within(result.getByRole('region', { name: 'Board status' })).getByRole('status')).toBeTruthy();
+    await act(async () => pending.resolve({ ok: true, data: boardFixture('x') } as never));
+    expect(refresh.getAttribute('aria-busy')).toBe('false');
+    expect(document.activeElement).toBe(refresh);
+  });
+
+  it('retry_is_native_and_failures_are_announced_once_per_section', async () => {
+    const fake = readyApi('x');
+    fake.activity.mockImplementationOnce(async () => ({
+      ok: false, error: { code: 'BROKEN', message: 'activity broke', retryable: true },
+    }));
+    const result = shell(fake.api);
+    await act(async () => {});
+    const alerts = result.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].textContent).toContain('activity broke');
+    const note = result.container.querySelector('.dashboard-refresh-note')!;
+    expect(note.textContent).toBe('Not updated: Recent activity');
+    expect(note.getAttribute('role')).toBeNull();
+    const retry = within(result.getByRole('region', { name: 'Recent activity' })).getByRole('button', { name: 'Retry' });
+    expect(retry.tagName).toBe('BUTTON');
+    expect(retry.getAttribute('type')).toBe('button');
+    retry.focus();
+    expect(document.activeElement).toBe(retry);
+    fireEvent.click(retry);
+    await act(async () => {});
+    expect(result.queryAllByRole('alert')).toHaveLength(0);
+    expect(result.container.querySelector('.dashboard-refresh-note')).toBeNull();
   });
 });

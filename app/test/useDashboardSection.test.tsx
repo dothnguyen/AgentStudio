@@ -260,4 +260,61 @@ describe('useDashboardSection', () => {
     expect(latest.state).toBe('error');
     expect(latest.error).toMatchObject({ code: 'INTERNAL', message: 'sync boom' });
   });
+
+  it('failed_reload_keeps_time_and_next_success_records_new_time', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const load = vi.fn<(id: string) => Promise<Result<string>>>()
+      .mockResolvedValueOnce({ ok: true, data: 'one' })
+      .mockResolvedValueOnce({ ok: false, error: { code: 'BROKEN', message: 'x', retryable: true } })
+      .mockResolvedValueOnce({ ok: true, data: 'three' });
+    let latest!: DashboardSection<string>;
+    render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
+    await act(async () => {});
+    expect(latest.lastUpdatedAt).toBe(1000);
+    await act(async () => { await latest.reload(); });
+    expect(latest).toMatchObject({ state: 'error', lastUpdatedAt: 1000 });
+    now.mockReturnValue(2000);
+    await act(async () => { await latest.reload(); });
+    expect(latest).toMatchObject({ state: 'ready', lastUpdatedAt: 2000 });
+    expect(load).toHaveBeenCalledTimes(3);
+  });
+
+  it('late_old_workspace_response_never_sets_time', async () => {
+    const a = deferred<Result<string>>();
+    const b = deferred<Result<string>>();
+    const load = vi.fn<(id: string) => Promise<Result<string>>>()
+      .mockReturnValueOnce(a.promise)
+      .mockReturnValueOnce(b.promise);
+    let latest!: DashboardSection<string>;
+    const notify = (section: DashboardSection<string>) => { latest = section; };
+    const view = render(<Harness load={load} workspaceId="a" notify={notify} />);
+    view.rerender(<Harness load={load} workspaceId="b" notify={notify} />);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(5000);
+    await act(async () => a.resolve({ ok: true, data: 'old' }));
+    expect(latest).toMatchObject({ state: 'loading', data: null, lastUpdatedAt: null });
+    now.mockReturnValue(6000);
+    await act(async () => b.resolve({ ok: true, data: 'new' }));
+    expect(latest).toMatchObject({ state: 'ready', data: 'new', lastUpdatedAt: 6000 });
+  });
+
+  it('strict_mode_mount_then_reload_calls_once_each', async () => {
+    const first = deferred<Result<string>>();
+    const second = deferred<Result<string>>();
+    const load = vi.fn<(id: string) => Promise<Result<string>>>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    let latest!: DashboardSection<string>;
+    render(
+      <StrictMode>
+        <Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />
+      </StrictMode>,
+    );
+    expect(load).toHaveBeenCalledTimes(1);
+    await act(async () => first.resolve({ ok: true, data: 'one' }));
+    act(() => { void latest.reload(); });
+    expect(load).toHaveBeenCalledTimes(2);
+    act(() => { void latest.reload(); });
+    expect(load).toHaveBeenCalledTimes(2);
+    await act(async () => second.resolve({ ok: true, data: 'two' }));
+  });
 });

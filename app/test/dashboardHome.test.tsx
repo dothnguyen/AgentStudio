@@ -602,3 +602,206 @@ describe('DashboardHome summary metrics', () => {
     expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('2')).toBeTruthy();
   });
 });
+
+describe('DashboardHome refresh coordination', () => {
+  type Api = ReturnType<typeof readyApi>;
+  const fail = (message = 'failed') => async () => ({ ok: false, error: { code: 'BROKEN', message, retryable: true } }) as never;
+
+  function mountHome(fake: Api, ws: Workspace = workspaceA) {
+    return render(<DashboardHome workspace={ws} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+  }
+  const timeEl = (r: ReturnType<typeof render>) => r.container.querySelector('.dashboard-actions time');
+  const noteEl = (r: ReturnType<typeof render>) => r.container.querySelector('.dashboard-refresh-note');
+  const stamp = (n: number) => `Last updated ${new Date(n).toLocaleTimeString()}`;
+  const refreshButton = (r: ReturnType<typeof render>) => r.getByRole('button', { name: 'Refresh' });
+
+  function holdAll(fake: Api) {
+    const t = deferred<Result<DashboardTeams>>();
+    const b = deferred<Result<DashboardBoard>>();
+    const a = deferred<Result<DashboardActivity>>();
+    fake.teams.mockImplementationOnce(() => t.promise);
+    fake.board.mockImplementationOnce(() => b.promise);
+    fake.activity.mockImplementationOnce(() => a.promise);
+    return { t, b, a };
+  }
+
+  it('refresh_calls_each_section_once_and_ignores_duplicate_clicks', async () => {
+    const fake = readyApi('Alpha');
+    const result = mountHome(fake);
+    await act(async () => {});
+    const d = holdAll(fake);
+    const refresh = refreshButton(result);
+    fireEvent.click(refresh);
+    fireEvent.click(refresh);
+    fireEvent.click(refresh);
+    for (const fn of [fake.teams, fake.board, fake.activity]) expect(fn).toHaveBeenCalledTimes(2);
+    expect(refresh.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      d.t.resolve({ ok: true, data: teamsFixture('Alpha') });
+      d.b.resolve({ ok: true, data: boardFixture('Alpha') });
+      d.a.resolve({ ok: true, data: activityFixture('Alpha') });
+    });
+    expect(refresh.getAttribute('aria-busy')).toBe('false');
+    fireEvent.click(refresh);
+    await act(async () => {});
+    for (const fn of [fake.teams, fake.board, fake.activity]) expect(fn).toHaveBeenCalledTimes(3);
+  });
+
+  it('last_updated_waits_for_all_three_sections', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const fake = readyApi('Alpha');
+    const result = mountHome(fake);
+    await act(async () => {});
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    now.mockReturnValue(2000);
+    const d = holdAll(fake);
+    fireEvent.click(refreshButton(result));
+    await act(async () => d.t.resolve({ ok: true, data: teamsFixture('Alpha') }));
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    await act(async () => d.a.resolve({ ok: true, data: activityFixture('Alpha') }));
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    await act(async () => d.b.resolve({ ok: true, data: boardFixture('Alpha') }));
+    expect(timeEl(result)!.textContent).toBe(stamp(2000));
+    expect(timeEl(result)!.getAttribute('datetime')).toBe(new Date(2000).toISOString());
+  });
+
+  async function partialFailure() {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const fake = readyApi('Alpha');
+    const result = mountHome(fake);
+    await act(async () => {});
+    now.mockReturnValue(2000);
+    fake.board.mockImplementationOnce(fail('panel failed'));
+    fireEvent.click(refreshButton(result));
+    await act(async () => {});
+    return { now, fake, result };
+  }
+
+  it('partial_failure_keeps_prior_time_and_names_unavailable_section', async () => {
+    const { result } = await partialFailure();
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    const note = noteEl(result)!;
+    expect(note.textContent).toBe('Not updated: Board status');
+    expect(note.getAttribute('role')).toBeNull();
+    expect(within(result.getByRole('group', { name: 'Open tickets' })).getByText('Unavailable: board could not be loaded')).toBeTruthy();
+    expect(result.getByText('Alpha running team')).toBeTruthy();
+  });
+
+  it('retry_completing_a_partial_refresh_shows_oldest_data_time', async () => {
+    const { now, fake, result } = await partialFailure();
+    now.mockReturnValue(3000);
+    fireEvent.click(within(result.getByRole('region', { name: 'Board status' })).getByRole('button', { name: 'Retry' }));
+    await act(async () => {});
+    expect(timeEl(result)!.textContent).toBe(stamp(2000));
+    expect(noteEl(result)).toBeNull();
+    expect(fake.teams).toHaveBeenCalledTimes(2);
+    expect(fake.activity).toHaveBeenCalledTimes(2);
+    expect(fake.board).toHaveBeenCalledTimes(3);
+  });
+
+  it('initial_partial_failure_shows_no_last_updated', async () => {
+    const fake = readyApi('Alpha');
+    fake.board.mockImplementationOnce(fail());
+    const result = mountHome(fake);
+    await act(async () => {});
+    expect(timeEl(result)).toBeNull();
+    expect(noteEl(result)!.textContent).toBe('Not updated: Board status');
+  });
+
+  it('all_failures_name_every_section_without_extra_alerts', async () => {
+    const fake = readyApi('Alpha');
+    fake.teams.mockImplementation(fail('teams failed'));
+    fake.board.mockImplementation(fail('board failed'));
+    fake.activity.mockImplementation(fail('activity failed'));
+    const result = mountHome(fake);
+    await act(async () => {});
+    expect(noteEl(result)!.textContent).toBe('Not updated: Team status, Board status, Recent activity');
+    expect(result.getAllByRole('alert')).toHaveLength(3);
+    expect(timeEl(result)).toBeNull();
+  });
+
+  it('board_not_configured_counts_as_complete', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const fake = readyApi('Alpha');
+    fake.board.mockImplementation(async () => ({ ok: false, error: { code: 'BOARD_CONFIG_INVALID', message: 'no board', retryable: false } }));
+    const result = mountHome(fake);
+    await act(async () => {});
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    expect(noteEl(result)).toBeNull();
+  });
+
+  it('workspace_switch_drops_old_responses_and_resets_last_updated', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const aT = deferred<Result<DashboardTeams>>();
+    const aB = deferred<Result<DashboardBoard>>();
+    const aA = deferred<Result<DashboardActivity>>();
+    const bT = deferred<Result<DashboardTeams>>();
+    const bB = deferred<Result<DashboardBoard>>();
+    const bA = deferred<Result<DashboardActivity>>();
+    let bReady = false;
+    const aCalls = { teams: 0, board: 0, activity: 0 };
+    const teams = vi.fn((id: string) => {
+      if (id === workspaceA.id) return ++aCalls.teams === 1 ? Promise.resolve({ ok: true, data: teamsFixture('Alpha') } as Result<DashboardTeams>) : aT.promise;
+      return bReady ? Promise.resolve({ ok: true, data: teamsFixture('Beta') } as Result<DashboardTeams>) : bT.promise;
+    });
+    const board = vi.fn((id: string) => {
+      if (id === workspaceA.id) return ++aCalls.board === 1 ? Promise.resolve({ ok: true, data: boardFixture('Alpha') } as Result<DashboardBoard>) : aB.promise;
+      return bReady ? Promise.resolve({ ok: true, data: boardFixture('Beta') } as Result<DashboardBoard>) : bB.promise;
+    });
+    const activity = vi.fn((id: string) => {
+      if (id === workspaceA.id) return ++aCalls.activity === 1 ? Promise.resolve({ ok: true, data: activityFixture('Alpha') } as Result<DashboardActivity>) : aA.promise;
+      return bReady ? Promise.resolve({ ok: true, data: activityFixture('Beta') } as Result<DashboardActivity>) : bA.promise;
+    });
+    const api = { teams, board, activity } as DashboardApi;
+    const ui = (ws: Workspace) => <DashboardHome workspace={ws} dashboard={api} connection={connected} onNavigate={vi.fn()} />;
+    const result = render(ui(workspaceA));
+    await act(async () => {});
+    expect(timeEl(result)!.textContent).toBe(stamp(1000));
+    fireEvent.click(refreshButton(result));
+    result.rerender(ui(workspaceB));
+    expect(timeEl(result)).toBeNull();
+    for (const fn of [teams, board, activity]) {
+      expect(fn.mock.calls.filter(([id]) => id === workspaceB.id)).toHaveLength(1);
+    }
+    now.mockReturnValue(5000);
+    await act(async () => {
+      aT.resolve({ ok: true, data: teamsFixture('Alpha') });
+      aB.resolve({ ok: true, data: boardFixture('Alpha') });
+      aA.resolve({ ok: true, data: activityFixture('Alpha') });
+    });
+    expect(timeEl(result)).toBeNull();
+    for (const text of ['Alpha running team', 'Alpha phase', 'Alpha team happened']) {
+      expect(result.container.textContent).not.toContain(text);
+    }
+    now.mockReturnValue(6000);
+    await act(async () => {
+      bT.resolve({ ok: true, data: teamsFixture('Beta') });
+      bB.resolve({ ok: true, data: boardFixture('Beta') });
+      bA.resolve({ ok: true, data: activityFixture('Beta') });
+    });
+    expect(timeEl(result)!.textContent).toBe(stamp(6000));
+    expect(result.getByText('Beta running team')).toBeTruthy();
+    bReady = true;
+    fireEvent.click(refreshButton(result));
+    await act(async () => {});
+    for (const fn of [teams, board, activity]) {
+      expect(fn.mock.calls.filter(([id]) => id === workspaceB.id)).toHaveLength(2);
+    }
+  });
+
+  it('unmount_during_refresh_logs_nothing', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fake = readyApi('Alpha');
+    const result = mountHome(fake);
+    await act(async () => {});
+    const d = holdAll(fake);
+    fireEvent.click(refreshButton(result));
+    result.unmount();
+    await act(async () => {
+      d.t.resolve({ ok: true, data: teamsFixture('Alpha') });
+      d.b.resolve({ ok: true, data: boardFixture('Alpha') });
+      d.a.resolve({ ok: true, data: activityFixture('Alpha') });
+    });
+    expect(errors).not.toHaveBeenCalled();
+  });
+});

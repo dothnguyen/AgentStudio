@@ -148,4 +148,13 @@ describe('dashboard styles', () => {
     expect(flat).toMatch(/\.team-row \{[^}]*min-width: 0/);
     expect(flat).not.toContain('.team-metadata');
   });
+
+  it('refresh_timestamp_and_note_wrap_at_narrow_widths', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.dashboard-actions time \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toMatch(/\.dashboard-refresh-note \{[^}]*flex-basis: 100%[^}]*overflow-wrap: anywhere/);
+    const narrow = flat.slice(flat.indexOf('@media (max-width: 560px)'));
+    expect(narrow).toContain('.dashboard-refresh-note { text-align: left; }');
+    expect(flat).toMatch(/\.refresh-button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\)/);
+  });
 });

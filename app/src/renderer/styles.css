@@ -366,6 +366,16 @@ code,
   color: var(--text-muted);
   font-size: 11px;
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-refresh-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: #d7ba7d;
+  font-size: 11px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .connection-badge,
@@ -1093,6 +1103,7 @@ ul[aria-label="Workspaces"] {
   .dashboard-header { flex-direction: column; }
   .dashboard-actions { justify-content: flex-start; }
   .dashboard-actions time { text-align: left; }
+  .dashboard-refresh-note { text-align: left; }
 
   .diagnostics dl {
     grid-template-columns: 1fr;
