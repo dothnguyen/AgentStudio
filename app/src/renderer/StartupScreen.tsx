@@ -49,7 +49,7 @@ function ConnectionLostView(props: { status: ConnectionStatus; title: string; on
   );
 }
 
-export function StartupScreen(props: { connection: ConnectionApi; onRetry: () => void; connectedView: ReactNode }) {
+export function StartupScreen(props: { connection: ConnectionApi; onRetry: () => void; connectedView: (status: ConnectionStatus) => ReactNode }) {
   const status = useConnection(props.connection);
   const seenConnected = useRef(false);
   if (status.state === 'connected') seenConnected.current = true;
@@ -69,7 +69,7 @@ export function StartupScreen(props: { connection: ConnectionApi; onRetry: () =>
           onRetry={props.onRetry}
         />
       )}
-      {status.state === 'connected' && props.connectedView}
+      {status.state === 'connected' && props.connectedView(status)}
     </div>
   );
 }

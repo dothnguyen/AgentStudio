@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Workspace } from '../src/renderer/api';
+import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/api';
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
-import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
+import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
 
 afterEach(cleanup);
@@ -22,6 +22,26 @@ const descriptions = {
   Boards: 'Not available yet. Board phases and tickets will appear here.',
   Configuration: 'Not available yet. Workspace settings will appear here.',
 };
+
+const dashboard: DashboardApi = {
+  teams: vi.fn(async () => ({ ok: true, data: { workspace: workspace.path, teams: [], truncated: false } })),
+  board: vi.fn(),
+  activity: vi.fn(),
+};
+const connection: ConnectionStatus = { state: 'connected', error: null, distro: null, command: 'serve' };
+
+function WorkspaceShell(props: Omit<WorkspaceShellProps, 'dashboard' | 'connection'>) {
+  return (
+    <WorkspaceShellComponent
+      {...props}
+      dashboard={dashboard}
+      connection={connection}
+      renderSection={props.renderSection ?? ((sectionId) => sectionId === 'home' ? (
+        <SectionPlaceholder sectionId="home" title="Home" description={descriptions.Home} />
+      ) : undefined)}
+    />
+  );
+}
 
 function currentButtons(container: HTMLElement): HTMLButtonElement[] {
   return [...container.querySelectorAll<HTMLButtonElement>('button[aria-current="page"]')];

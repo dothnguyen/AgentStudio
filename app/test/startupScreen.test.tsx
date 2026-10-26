@@ -27,7 +27,7 @@ const LOST: ConnectionStatus = {
 function setup(initial?: ConnectionStatus) {
   const f = fakeConnection(initial);
   const spy = vi.fn();
-  const view = render(<StartupScreen connection={f.api} onRetry={spy} connectedView={<p>{CONNECTED_TEXT}</p>} />);
+  const view = render(<StartupScreen connection={f.api} onRetry={spy} connectedView={() => <p>{CONNECTED_TEXT}</p>} />);
   const emit = (s: ConnectionStatus) => act(() => f.emit(s));
   return { f, spy, emit, ...view };
 }
@@ -128,9 +128,18 @@ describe('StartupScreen', () => {
   it('connected view provides the only main landmark', () => {
     const f = fakeConnection({ state: 'connected', error: null, distro: null, command: 'x' });
     const result = render(
-      <StartupScreen connection={f.api} onRetry={vi.fn()} connectedView={<main>Workspace</main>} />,
+      <StartupScreen connection={f.api} onRetry={vi.fn()} connectedView={() => <main>Workspace</main>} />,
     );
     expect(result.getAllByRole('main')).toHaveLength(1);
+  });
+
+  it('passes the exact subscribed status to the connected view', () => {
+    const status: ConnectionStatus = { state: 'connected', error: null, distro: 'Ubuntu', command: 'serve' };
+    const f = fakeConnection(status);
+    const connectedView = vi.fn((received: ConnectionStatus) => <main>{received.command}</main>);
+    render(<StartupScreen connection={f.api} onRetry={vi.fn()} connectedView={connectedView} />);
+
+    expect(connectedView).toHaveBeenCalledWith(status);
   });
 
   it('unsubscribes on unmount', () => {

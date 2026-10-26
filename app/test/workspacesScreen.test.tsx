@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { InitResult, Result, Workspace, WorkspaceList, WorkspacesApi } from '../src/renderer/api';
+import type { ConnectionStatus, DashboardApi, InitResult, Result, Workspace, WorkspaceList, WorkspacesApi } from '../src/renderer/api';
 import { StartupScreen } from '../src/renderer/StartupScreen';
 import {
   BAD_RESPONSE_MESSAGE,
@@ -18,6 +18,14 @@ import {
 import { fakeConnection } from './fakeConnection';
 
 afterEach(cleanup);
+
+const connectionStatus: ConnectionStatus = { state: 'connected', error: null, distro: null, command: 'serve' };
+const dashboard: DashboardApi = {
+  teams: vi.fn(async () => ({ ok: true, data: { workspace: '/workspace', teams: [], truncated: false } })),
+  board: vi.fn(),
+  activity: vi.fn(),
+};
+const screenContext = { dashboard, connection: connectionStatus };
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -68,7 +76,7 @@ function fakeWorkspaces(...items: Array<unknown | Error | Deferred<unknown>>) {
 const settle = () => act(async () => {});
 
 async function mount(api: WorkspacesApi): Promise<RenderResult> {
-  const result = render(<WorkspacesScreen api={api} />);
+  const result = render(<WorkspacesScreen {...screenContext} api={api} />);
   await settle();
   return result;
 }
@@ -81,7 +89,7 @@ describe('WorkspacesScreen', () => {
   it('shows the loading state until the list resolves', async () => {
     const pending = deferred<unknown>();
     const fake = fakeWorkspaces(pending);
-    const result = render(<WorkspacesScreen api={fake.api} />);
+    const result = render(<WorkspacesScreen {...screenContext} api={fake.api} />);
 
     expect(result.getByRole('status').textContent).toBe(LOADING_TEXT);
     expect(view(result)).toBe('loading');
@@ -106,7 +114,7 @@ describe('WorkspacesScreen', () => {
 
   it('uses the shared product identity and illustrated workspace states', async () => {
     const loading = deferred<unknown>();
-    const pending = render(<WorkspacesScreen api={fakeWorkspaces(loading).api} />);
+    const pending = render(<WorkspacesScreen {...screenContext} api={fakeWorkspaces(loading).api} />);
     expect(pending.getByText('Agent Studio').classList.contains('product-name')).toBe(true);
     expect(pending.getByText(PRODUCT_SUBTITLE)).toBeTruthy();
     expect(pending.container.querySelector('[data-view="loading"] .spinner')?.getAttribute('aria-hidden')).toBe('true');
@@ -159,7 +167,7 @@ describe('WorkspacesScreen', () => {
     expect(result.queryByRole('dialog')).toBeNull();
     expect(fake.list).toHaveBeenCalledTimes(2);
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
     expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/b');
     expect(result.queryByRole('button', { name: 'Back' })).toBeNull();
@@ -186,7 +194,7 @@ describe('WorkspacesScreen', () => {
     await act(async () => refresh.resolve(ok(ws('a', 'Alpha', '/a'), added)));
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
   });
 
   it('ignores a post-create refresh result after unmount', async () => {
@@ -432,7 +440,7 @@ describe('WorkspacesScreen', () => {
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
     expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Alpha');
     expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/a');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Alpha');
     expect(result.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
   });
 
@@ -565,8 +573,8 @@ describe('WorkspacesScreen', () => {
     const stale = deferred<unknown>();
     const latestApi = fakeWorkspaces(ok(ws('new', 'Latest', '/latest'))).api;
     const firstApi = fakeWorkspaces(stale).api;
-    const rerendered = render(<WorkspacesScreen api={firstApi} />);
-    rerendered.rerender(<WorkspacesScreen api={latestApi} />);
+    const rerendered = render(<WorkspacesScreen {...screenContext} api={firstApi} />);
+    rerendered.rerender(<WorkspacesScreen {...screenContext} api={latestApi} />);
     await settle();
     expect(rerendered.container.querySelector('.ws-name')?.textContent).toBe('Latest');
     await act(async () => stale.resolve(ok(ws('old', 'Stale', '/stale'))));
@@ -575,7 +583,7 @@ describe('WorkspacesScreen', () => {
     rerendered.unmount();
 
     const pending = deferred<unknown>();
-    const result = render(<WorkspacesScreen api={fakeWorkspaces(pending).api} />);
+    const result = render(<WorkspacesScreen {...screenContext} api={fakeWorkspaces(pending).api} />);
     result.unmount();
     await expect(act(async () => pending.resolve(ok(ws('a', 'Alpha', '/a'))))).resolves.toBeUndefined();
     expect(result.container.innerHTML).toBe('');
@@ -595,7 +603,7 @@ describe('WorkspacesScreen', () => {
       <StartupScreen
         connection={connection.api}
         onRetry={vi.fn()}
-        connectedView={<WorkspacesScreen api={fake.api} />}
+        connectedView={(status) => <WorkspacesScreen api={fake.api} dashboard={dashboard} connection={status} />}
       />,
     );
 

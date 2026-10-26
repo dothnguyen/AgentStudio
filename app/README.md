@@ -32,6 +32,12 @@ The startup window uses a compact dark workbench layout. It supports keyboard na
 shows visible focus outlines, and disables nonessential loading animation when the operating system's
 reduced-motion preference is enabled.
 
+Opening a workspace shows its dashboard. The header reports the current connection state and the time
+the latest dashboard response reached the renderer. Team status loads independently; Refresh does not
+start a duplicate request while that section is already loading, and responses from an older workspace
+or loader are ignored. Board status and Recent activity remain labelled placeholders until their panels
+are implemented.
+
 ## Test
 
 ```
@@ -68,6 +74,10 @@ The window shows Connecting, or Connection lost / Could not connect with the rea
 diagnostics (command, distro, last error). Retry reloads the window; main sees the reload
 (`did-finish-load` after the first load) and, if the state is `lost`, calls `retry()`. The preload API
 stays at the four calls of the brief.
+
+`StartupScreen` owns the renderer's single connection subscription and passes the subscribed status
+into the connected workspace tree. A lost connection therefore unmounts the workspace dashboard, and
+late dashboard responses are ignored.
 
 ## Live check (Windows + WSL)
 

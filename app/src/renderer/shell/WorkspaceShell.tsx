@@ -1,10 +1,13 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
-import type { Workspace } from '../api';
+import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
+import { DashboardHome } from '../dashboard/DashboardHome';
 import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceholder';
 import { DEFAULT_SECTION, NAV_ITEMS, type NavItem } from './navModel';
 
 export interface WorkspaceShellProps {
   workspace: Workspace;
+  dashboard: DashboardApi;
+  connection: ConnectionStatus;
   onSwitchWorkspace(): void;
   items?: readonly NavItem[];
   renderSection?: (
@@ -15,7 +18,7 @@ export interface WorkspaceShellProps {
 
 export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const items = props.items ?? NAV_ITEMS;
-  const [sectionId, setSectionId] = useState(DEFAULT_SECTION);
+  const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
 
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
@@ -29,6 +32,16 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const selectedItem = items.find((item) => item.id === sectionId);
   const section = props.renderSection?.(sectionId, navigate);
   const content = getSectionContent(sectionId, selectedItem?.label ?? sectionId);
+  const defaultSection = sectionId === 'home' ? (
+    <DashboardHome
+      workspace={props.workspace}
+      dashboard={props.dashboard}
+      connection={props.connection}
+      onNavigate={(nextId) => navigate(nextId)}
+    />
+  ) : (
+    <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
+  );
 
   return (
     <div className="workspace-shell">
@@ -61,9 +74,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         </nav>
       </aside>
       <main className="workspace-content">
-        {section === undefined ? (
-          <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
-        ) : section}
+        {section === undefined ? defaultSection : section}
       </main>
     </div>
   );
