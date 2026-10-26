@@ -244,7 +244,10 @@ class Adapter:
         elif term is not None and not term.get("ok"):
             status, code = "failed", term.get("code") or "PROVIDER_ERROR"
         elif term is not None:
-            if st.denials:
+            if st.denials and not (inp.policy == "read_only" and inp.expects_verdict and verdict is not None
+                                   and valid_verdict(verdict)):
+                # a read-only stage that still returned a valid verdict keeps it: a denied tool call cannot
+                # have changed anything, and pausing would throw the review away
                 status, code = "waiting_input", "PERMISSION_DENIED"
                 attention = {"kind": "permission_denied", "items": st.denials[:10]}
             elif oc.get("signal") is not None or oc.get("exitCode") != 0:

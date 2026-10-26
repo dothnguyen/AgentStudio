@@ -124,6 +124,15 @@ class SharedOutcomeRules(unittest.TestCase):
         self.assertEqual(self.outcome(ParseState(malformed=1)), ("inconclusive", "MALFORMED_OUTPUT"))
         self.assertEqual(self.outcome(self.term(verdict={"verdict": "maybe"})), ("inconclusive", "MALFORMED_VERDICT"))
 
+    def test_read_only_verdict_survives_a_denied_tool_call(self):
+        verdict = {"verdict": "pass", "findings": []}
+        for policy, expected in (("read_only", ("succeeded", None)),
+                                 ("workspace_write", ("waiting_input", "PERMISSION_DENIED"))):
+            r = self.a.finalize(inp(policy, expects_verdict=True), self.term(denials=["Bash"], verdict=verdict), oc())
+            self.assertEqual((r["status"], r["diagnosticCode"]), expected, policy)
+        r = self.a.finalize(inp("read_only", expects_verdict=True), self.term(denials=["Bash"]), oc())
+        self.assertEqual(r["status"], "waiting_input")   # no verdict: still paused
+
     def test_cancel_timeout_waiting_are_distinct(self):
         got = {self.outcome(self.term(), cancelRequested=True, exitCode=None, signal=15),
                self.outcome(self.term(), timedOut=True, exitCode=None, signal=15),

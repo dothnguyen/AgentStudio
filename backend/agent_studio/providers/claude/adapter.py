@@ -38,8 +38,9 @@ POLICY_FLAGS = {
 # Opt-in command access (P01-S09b): `.agent-studio/permissions.json` {"version": 1, "claude": {"commands": true}}.
 # Without it nothing changes. With it `--restricted` is dropped (it removes every code-running tool) and Bash is
 # added: any command for workspace_write, a short read-only allowlist for read_only.
-READ_COMMANDS = ["git status", "git diff", "git log", "git show", "git ls-files", "git rev-parse", "ls", "cat",
-                 "python3 -m unittest", "python3 -W ignore -m unittest", "python3 -m pytest",
+READ_COMMANDS = ["git status", "git diff", "git log", "git show", "git ls-files", "git rev-parse", "git grep",
+                 "git blame", "git merge-base", "git branch", "ls", "cat", "head", "tail", "wc", "grep", "sort",
+                 "uniq", "pwd", "cd", "python3 -m unittest", "python3 -W ignore -m unittest", "python3 -m pytest",
                  "rg", "ctags -f -"]
 COMMAND_FLAGS = {
     "read_only": ["--permission-mode", "dontAsk", "--tools", READ_TOOLS + ",Bash", "--allowedTools",
