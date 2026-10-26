@@ -106,7 +106,9 @@ def connect(path: str, role: str, create: bool = False) -> RoleConnection:
     conn.role = role
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 5000")
+    # The coordinator can hold the write lock for a while during a scheduler tick (git work for a ticket), so
+    # the processes that report into the database wait longer instead of failing.
+    conn.execute("PRAGMA busy_timeout = 5000" if role == "coordinator" else "PRAGMA busy_timeout = 30000")
     if role == "reader":
         conn.execute("PRAGMA query_only = 1")
     if role != "coordinator":

@@ -18,6 +18,7 @@ import json
 import os
 import select
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -297,10 +298,20 @@ def run(agent_id: str, assignment_id: str) -> int:
 
     def report(kind: str, payload: dict) -> None:
         nonlocal seq
-        try:
-            reports.submit(conn, assignment_id, seq, kind, dict(payload, agentId=agent_id, attempt=attempt))
-        except AsError as e:
-            _say(f"could not record {kind} report: {e.message}")
+        for tries in range(6):     # a locked database is retried (the coordinator may be mid-tick), not fatal
+            try:
+                reports.submit(conn, assignment_id, seq, kind, dict(payload, agentId=agent_id, attempt=attempt))
+                break
+            except AsError as e:
+                _say(f"could not record {kind} report: {e.message}")
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" not in str(e) and "busy" not in str(e):
+                    raise
+                if tries == 5:
+                    _say(f"could not record {kind} report: {e}")
+                    break
+                time.sleep(1 + tries)
         seq += 1
 
     provider_id = req.get("providerId")
