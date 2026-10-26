@@ -1,4 +1,6 @@
 import type { DashboardActivity } from '../api';
+import { Icon } from '../icons/Icon';
+import { activityIcon } from './dashboardIcons';
 import type { DashboardSectionController } from './useDashboardSection';
 
 export interface ActivityPanelProps {
@@ -22,7 +24,7 @@ export function ActivityPanel(props: ActivityPanelProps) {
   const { section } = props;
   return (
     <section className="dashboard-panel dashboard-panel-activity activity-panel" aria-labelledby="recent-activity-title">
-      <h2 id="recent-activity-title">Recent activity</h2>
+      <h2 id="recent-activity-title"><Icon name="clock" className="panel-title-icon" />Recent activity</h2>
       {section.state === 'loading' && <p className="panel-loading" role="status">Loading recent activity…</p>}
       {section.state === 'error' && section.error !== null && (
         <div className="panel-error" role="alert">
@@ -50,13 +52,16 @@ export function ActivityPanel(props: ActivityPanelProps) {
                 </tr>
               </thead>
               <tbody>
-                {section.data.entries.slice(0, ACTIVITY_DISPLAY_LIMIT).map((entry) => (
+                {section.data.entries.slice(0, ACTIVITY_DISPLAY_LIMIT).map((entry) => {
+                  const spec = activityIcon(entry);
+                  return (
                   <tr key={entry.id}>
-                    <td className="activity-event">{entry.summary}</td>
+                    <td className="activity-event"><span className="activity-event-line"><Icon name={spec.name} tone={spec.tone} /><span className="activity-summary">{entry.summary}</span></span></td>
                     <td className="activity-type"><span className="status-badge">{entry.kind}</span></td>
                     <td className="activity-time"><time dateTime={entry.at}>{formatActivityTime(entry.at)}</time></td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </>

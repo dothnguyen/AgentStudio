@@ -200,3 +200,21 @@ describe('dashboard styles', () => {
     expect(flat).toMatch(/button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
   });
 });
+
+describe('icon tones', () => {
+  it('icon_tones_use_existing_palette_tokens', () => {
+    const flat = squash(css);
+    for (const tone of ['success', 'info', 'warning', 'danger']) {
+      expect(flat).toContain(`.icon-${tone} { color: var(--${tone}); }`);
+    }
+    expect(readToken('--success')).toBe('#89d185');
+    expect(readToken('--info')).toBe('#4daafc');
+    for (const value of ['#89d185', '#4daafc']) expect(css.split(value).length).toBeGreaterThan(2);
+    for (const token of ['--success', '--info', '--warning', '--danger']) {
+      expect(contrastRatio(readToken(token), readToken('--surface'))).toBeGreaterThanOrEqual(3);
+    }
+    const rule = /\.icon \{[^}]*\}/.exec(flat)![0];
+    expect(rule).toContain('stroke: currentColor');
+    expect(rule).not.toMatch(/(^|[\s{;])(width|height):/);
+  });
+});

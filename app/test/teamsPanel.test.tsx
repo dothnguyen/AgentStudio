@@ -207,3 +207,42 @@ function ready(teams: DashboardTeams['teams'], truncated = false): DashboardTeam
 function show(data: DashboardTeams) {
   return render(<TeamsPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
 }
+
+describe('TeamsPanel icons', () => {
+  it('running_badge_has_dot_and_availability_icons', () => {
+    const data = ready([
+      { id: 'a', name: 'A', members: 5, runtime: runtime('running', 5, { idle: 1, busy: 1, error: 1, limit_reached: 1, waiting_input: 1 }, 0) },
+      { id: 'b', name: 'B', members: 1, runtime: runtime('stopped', 1, {}, 0) },
+      { id: 'c', name: 'C', members: 1, runtime: null },
+    ]);
+    const result = show(data);
+    const badges = result.container.querySelectorAll('.team-status');
+    expect(badges[0].querySelector('.status-dot[aria-hidden="true"]')).not.toBeNull();
+    expect(badges[0].textContent).toBe('running');
+    const available = result.container.querySelector('.team-available')!;
+    expect(available.querySelector('svg[data-icon="teams"].icon-success')).not.toBeNull();
+    expect(available.textContent).toBe('1 of 5 available');
+    const badge = (text: string) => result.getByText(text);
+    expect(badge('busy: 1').querySelector('svg.icon-warning[data-icon="clock"]')).not.toBeNull();
+    expect(badge('error: 1').querySelector('svg.icon-danger[data-icon="warning"]')).not.toBeNull();
+    expect(badge('limit_reached: 1').querySelector('svg.icon-danger[data-icon="warning"]')).not.toBeNull();
+    expect(badge('idle: 1').querySelector('svg')).toBeNull();
+    expect(badge('waiting_input: 1').querySelector('svg')).toBeNull();
+    expect(badges[1].querySelector('.status-dot')).toBeNull();
+    expect(badges[2].querySelector('.status-dot')).toBeNull();
+    for (const line of Array.from(result.container.querySelectorAll('.team-presence')).slice(1)) {
+      expect(line.querySelector('svg')).toBeNull();
+    }
+  });
+
+  it('heading_and_view_teams_icons', () => {
+    const loading = render(<TeamsPanel section={section({})} onNavigate={vi.fn()} />);
+    expect(loading.getByRole('region').querySelectorAll('svg')).toHaveLength(1);
+    cleanup();
+    const result = show(ready([]));
+    const h2 = result.getByRole('heading', { level: 2 });
+    expect(h2.textContent).toBe('Team status');
+    expect(h2.querySelector('svg[data-icon="teams"]')).not.toBeNull();
+    expect(result.getByRole('button', { name: 'View teams' }).querySelector('svg[data-icon="arrow-right"]')).not.toBeNull();
+  });
+});

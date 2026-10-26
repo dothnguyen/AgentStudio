@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
 import type { DashboardBoard, DashboardTeams } from '../api';
+import { Icon } from '../icons/Icon';
+import type { IconSpec } from '../icons/Icon';
 import type { DashboardSectionController } from './useDashboardSection';
 
 export type SummaryMetricId = 'running-teams' | 'active-assignments' | 'open-tickets' | 'completed-tickets';
@@ -93,6 +95,13 @@ export function summaryCards(
   ];
 }
 
+export const SUMMARY_ICONS: Record<SummaryMetricId, IconSpec> = {
+  'running-teams': { name: 'teams', tone: 'success' },
+  'active-assignments': { name: 'document', tone: 'info' },
+  'open-tickets': { name: 'ticket', tone: 'warning' },
+  'completed-tickets': { name: 'check-circle', tone: 'success' },
+};
+
 export function SummaryMetrics(props: {
   teams: DashboardSectionController<DashboardTeams>;
   board: DashboardSectionController<DashboardBoard>;
@@ -103,6 +112,7 @@ export function SummaryMetrics(props: {
       <ul className="summary-cards">
         {cards.map((card) => (
           <li key={card.id} className={`summary-card summary-card-${card.tone}`}>
+            <span className="summary-icon"><Icon name={SUMMARY_ICONS[card.id].name} tone={SUMMARY_ICONS[card.id].tone} size={20} /></span>
             <div role="group" aria-labelledby={`summary-${card.id}-label`}>
               <p className="summary-label" id={`summary-${card.id}-label`}>{card.label}</p>
               {card.value === null

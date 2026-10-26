@@ -14,6 +14,8 @@
   --focus: #007fd4;
   --danger: #f48771;
   --warning: #cca700;
+  --success: #89d185;
+  --info: #4daafc;
   --control-height: 30px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-synthesis: none;
@@ -192,6 +194,12 @@ code,
   flex: 1 1 auto;
   min-width: 0;
 }
+
+.icon { flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.icon-success { color: var(--success); }
+.icon-info { color: var(--info); }
+.icon-warning { color: var(--warning); }
+.icon-danger { color: var(--danger); }
 
 .shell-icon {
   width: 16px;
@@ -427,7 +435,7 @@ code,
 
 .summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; min-width: 0; }
 
-.summary-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; background: var(--surface); overflow-wrap: anywhere; }
+.summary-card { min-width: 0; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; background: var(--surface); overflow-wrap: anywhere; display: flex; align-items: flex-start; gap: 12px; }
 
 .summary-card-partial { border-left-color: var(--warning); }
 .summary-card-error { border-left-color: var(--danger); }
@@ -437,7 +445,16 @@ code,
 .summary-scope,
 .summary-status { color: var(--text-muted); font-size: 11px; }
 
-.dashboard-panel h2 { margin-bottom: 13px; }
+.dashboard-panel h2 { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+.panel-title-icon { color: var(--text-muted); }
+.summary-card > div { flex: 1 1 auto; min-width: 0; }
+.summary-icon { display: inline-flex; flex: 0 0 auto; padding: 8px; border-radius: 6px; background: var(--surface-raised); }
+.board-status-heading { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.team-status, .team-availability, .team-available { display: inline-flex; align-items: center; gap: 5px; }
+.team-status .status-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--success); }
+.panel-link-button { display: inline-flex; align-items: center; gap: 6px; }
+.activity-event-line { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.activity-summary { min-width: 0; overflow-wrap: anywhere; }
 .dashboard-panel li,
 .dashboard-panel p,
 .dashboard-title h1 { overflow-wrap: anywhere; }

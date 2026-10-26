@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
 import type { DashboardBoard } from '../api';
+import { Icon } from '../icons/Icon';
+import { boardStatusIcon } from './dashboardIcons';
 import type { DashboardSectionController } from './useDashboardSection';
 
 export interface BoardPanelProps {
@@ -12,7 +14,7 @@ export function BoardPanel(props: BoardPanelProps): JSX.Element {
 
   return (
     <section className="dashboard-panel dashboard-panel-board board-panel" aria-labelledby="dashboard-board-title">
-      <h2 id="dashboard-board-title">Board status</h2>
+      <h2 id="dashboard-board-title"><Icon name="boards" className="panel-title-icon" />Board status</h2>
       {section.state === 'loading' && <p className="panel-loading" role="status">Loading board…</p>}
       {section.state === 'error' && section.error?.code === 'BOARD_CONFIG_INVALID' && (
         <p className="panel-empty" role="status">No board configured for this workspace</p>
@@ -91,13 +93,16 @@ function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string)
       )}
       {data.columns.length > 0 && (
         <ul className="board-status-grid" aria-label="Board status counts">
-          {data.columns.map((column) => (
+          {data.columns.map((column) => {
+            const spec = boardStatusIcon(column);
+            return (
             <li key={column.status} className="board-status-cell">
-              <span className="board-status-name">{column.title}</span>
+              <span className="board-status-heading"><Icon name={spec.name} tone={spec.tone} /><span className="board-status-name">{column.title}</span></span>
               <span className="board-status-count">{column.count}</span>
               {column.kind !== null && <span className="status-badge">{column.kind}</span>}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
       {progress.total > 0 && (
@@ -127,7 +132,7 @@ function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string)
       {data.tickets.length === 0 && progress.total > 0 && (
         <p className="panel-empty">No active or blocked tickets.</p>
       )}
-      <button type="button" className="board-view-button" onClick={() => props.onNavigate('boards')}>View board</button>
+      <button type="button" className="board-view-button panel-link-button" onClick={() => props.onNavigate('boards')}>View board<Icon name="arrow-right" /></button>
     </>
   );
 }

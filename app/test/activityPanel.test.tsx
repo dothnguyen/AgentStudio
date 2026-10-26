@@ -202,3 +202,33 @@ describe('ActivityPanel', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ActivityPanel icons', () => {
+  it('event_cells_lead_with_mapped_icons', () => {
+    const base = entry(1);
+    const specs: Array<[string, DashboardActivity['entries'][number]['kind']]> = [
+      ['ticket.merged', 'ticket'], ['ticket.moved', 'ticket'], ['ticket.outcome_applied', 'ticket'],
+      ['team.running', 'team'], ['assignment.succeeded', 'assignment'], ['workflow_run.paused', 'workflow'],
+    ];
+    const entries = specs.map(([name, kind], index) => ({ ...base, id: `e:${index}`, name, kind, summary: `Summary ${index}` }));
+    const result = render(<ActivityPanel section={section('ready', activity(entries), null, vi.fn())} />);
+    const cells = Array.from(result.container.querySelectorAll('td.activity-event'));
+    expect(cells.map((c) => c.querySelector('svg')!.getAttribute('data-icon')))
+      .toEqual(['git-branch', 'arrow-right', 'ticket', 'teams', 'check', 'gear']);
+    cells.forEach((cell, index) => expect(cell.textContent).toBe(`Summary ${index}`));
+    expect(result.getByRole('heading', { level: 2 }).querySelector('svg[data-icon="clock"]')).not.toBeNull();
+  });
+
+  it('loading_empty_and_error_show_only_the_heading_icon', () => {
+    const states = [
+      section('loading', null, null, vi.fn()),
+      section('ready', activity([]), null, vi.fn()),
+      section('error', null, { code: 'X', message: 'boom', retryable: true }, vi.fn()),
+    ];
+    for (const s of states) {
+      const result = render(<ActivityPanel section={s} />);
+      expect(result.getByRole('region').querySelectorAll('svg')).toHaveLength(1);
+      cleanup();
+    }
+  });
+});

@@ -129,3 +129,29 @@ describe('SummaryMetrics', () => {
     expect(region.querySelector('button, a, input, select, textarea, [tabindex], [role="status"], [role="alert"], [aria-live], h1, h2, h3, h4, h5, h6')).toBeNull();
   });
 });
+
+describe('SummaryMetrics icons', () => {
+  it('summary_cards_show_one_tinted_icon_each', () => {
+    const { result } = renderCards(section('ready', teamsFixture('x')), section('ready', boardFixture('x')));
+    const expected: Array<[string, string, string]> = [
+      ['running-teams', 'teams', 'icon-success'], ['active-assignments', 'document', 'icon-info'],
+      ['open-tickets', 'ticket', 'icon-warning'], ['completed-tickets', 'check-circle', 'icon-success'],
+    ];
+    const items = result.container.querySelectorAll('li.summary-card');
+    expect(items).toHaveLength(4);
+    expected.forEach(([, icon, tone], index) => {
+      const svgs = items[index].querySelectorAll('svg');
+      expect(svgs).toHaveLength(1);
+      expect(svgs[0].getAttribute('data-icon')).toBe(icon);
+      expect(svgs[0].classList.contains(tone)).toBe(true);
+      expect(svgs[0].getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  it('summary_icon_stays_when_a_section_is_unavailable', () => {
+    const { result, group } = renderCards(section('error', null, apiError('X')), section('ready', boardFixture('x')));
+    const first = result.container.querySelector('li.summary-card')!;
+    expect(first.querySelectorAll('svg')).toHaveLength(1);
+    expect(within(group('Running teams')).getByText('Unavailable: team status could not be loaded')).toBeTruthy();
+  });
+});

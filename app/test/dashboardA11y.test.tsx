@@ -293,3 +293,20 @@ describe('dashboard accessibility', () => {
     expect(act2.textContent!.includes(summary) || act2.querySelector(`[title="${summary}"]`) !== null).toBe(true);
   });
 });
+
+describe('dashboard icon accessibility', () => {
+  it('icons_add_no_roles_names_or_tab_stops', async () => {
+    const result = shell(readyApi('x').api);
+    await act(async () => {});
+    const svgs = Array.from(result.container.querySelectorAll('svg[data-icon]'));
+    expect(svgs.length).toBeGreaterThan(0);
+    for (const svg of svgs) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.getAttribute('focusable')).toBe('false');
+      expect(svg.hasAttribute('role')).toBe(false);
+      expect(svg.hasAttribute('tabindex')).toBe(false);
+      expect(svg.querySelector('title')).toBeNull();
+    }
+    for (const name of ['Refresh', 'View board', 'View teams']) expect(result.getByRole('button', { name })).toBeTruthy();
+  });
+});

@@ -1,4 +1,6 @@
 import type { DashboardAgentAvailability, DashboardTeamRuntime, DashboardTeams } from '../api';
+import { Icon } from '../icons/Icon';
+import { AVAILABLE_ICON, availabilityIcon } from './dashboardIcons';
 import type { DashboardSectionController } from './useDashboardSection';
 
 type DashboardTeam = DashboardTeams['teams'][number];
@@ -47,10 +49,16 @@ function TeamPresence(props: { runtime: DashboardTeamRuntime | null }) {
   }
   return (
     <p className="team-presence">
-      <span className="team-available">{`${availabilityCount(runtime, 'idle')} of ${runtime.memberCount} available`}</span>
-      {AVAILABILITY_ORDER.filter((state) => availabilityCount(runtime, state) > 0).map((state) => (
-        <span key={state} className="status-badge team-availability">{`${state}: ${availabilityCount(runtime, state)}`}</span>
-      ))}
+      <span className="team-available"><Icon name={AVAILABLE_ICON.name} tone={AVAILABLE_ICON.tone} />{`${availabilityCount(runtime, 'idle')} of ${runtime.memberCount} available`}</span>
+      {AVAILABILITY_ORDER.filter((state) => availabilityCount(runtime, state) > 0).map((state) => {
+        const spec = availabilityIcon(state);
+        return (
+          <span key={state} className="status-badge team-availability">
+            {spec !== null && <Icon name={spec.name} tone={spec.tone} />}
+            {`${state}: ${availabilityCount(runtime, state)}`}
+          </span>
+        );
+      })}
     </p>
   );
 }
@@ -62,7 +70,7 @@ export function TeamsPanel(props: {
   const { section } = props;
   return (
     <section className="dashboard-panel dashboard-panel-teams teams-panel" aria-labelledby="teams-panel-title">
-      <h2 id="teams-panel-title">Team status</h2>
+      <h2 id="teams-panel-title"><Icon name="teams" className="panel-title-icon" />Team status</h2>
       {section.state === 'loading' && <p className="panel-loading" role="status">Loading team status…</p>}
       {section.state === 'error' && section.error !== null && (
         <div className="panel-error" role="alert">
@@ -85,7 +93,10 @@ export function TeamsPanel(props: {
                   <li key={team.id} className="team-row">
                     <div className="team-heading">
                       <h3 className="team-name">{team.name ?? team.id}</h3>
-                      <span className={`status-badge team-status team-status-${team.runtime?.status ?? 'none'}`}>{runtimeLabel(team)}</span>
+                      <span className={`status-badge team-status team-status-${team.runtime?.status ?? 'none'}`}>
+                        {team.runtime?.status === 'running' && <span className="status-dot" aria-hidden="true" />}
+                        {runtimeLabel(team)}
+                      </span>
                       {team.problems !== undefined && team.problems.length > 0 && (
                         <span className="status-badge team-problem">Definition has problems</span>
                       )}
@@ -105,7 +116,7 @@ export function TeamsPanel(props: {
           {section.data.truncated && (
             <p className="panel-note">{`Showing the first ${section.data.teams.length} teams. More teams are defined in this workspace.`}</p>
           )}
-          <button type="button" onClick={() => props.onNavigate('teams')}>View teams</button>
+          <button type="button" className="panel-link-button" onClick={() => props.onNavigate('teams')}>View teams<Icon name="arrow-right" /></button>
         </>
       )}
     </section>

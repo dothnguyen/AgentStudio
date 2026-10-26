@@ -333,3 +333,36 @@ describe('BoardPanel', () => {
     }
   });
 });
+
+describe('BoardPanel icons', () => {
+  it('renders_status_icons_and_heading_icon', () => {
+    const data: DashboardBoard = {
+      ...emptyBoard,
+      columns: [...emptyBoard.columns, { status: ['dev', 'ready'].join('-'), kind: null, title: 'Dev', count: 0 }],
+    };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+    const h2 = result.getByRole('heading', { level: 2 });
+    expect(h2.textContent).toBe('Board status');
+    expect(h2.querySelector('svg[data-icon="boards"]')).not.toBeNull();
+    const items = result.getByRole('list', { name: 'Board status counts' }).querySelectorAll('li');
+    expect(Array.from(items).map((li) => li.querySelector('svg')!.getAttribute('data-icon')))
+      .toEqual(['document', 'check-circle', 'code']);
+    expect(items[1].querySelector('svg')!.classList.contains('icon-success')).toBe(true);
+    expect(items[0].textContent).toBe('Ideas0initial');
+    const button = result.getByRole('button', { name: 'View board' });
+    expect(button.querySelector('svg[data-icon="arrow-right"]')).not.toBeNull();
+  });
+
+  it('state_views_add_no_icons_beyond_the_heading', () => {
+    const states = [
+      section(),
+      section({ state: 'error', error: { code: 'X', message: 'boom', retryable: true } }),
+      section({ state: 'error', error: { code: 'BOARD_CONFIG_INVALID', message: 'bad', retryable: false } }),
+    ];
+    for (const s of states) {
+      const result = render(<BoardPanel section={s} onNavigate={vi.fn()} />);
+      expect(result.getByRole('region').querySelectorAll('svg')).toHaveLength(1);
+      cleanup();
+    }
+  });
+});

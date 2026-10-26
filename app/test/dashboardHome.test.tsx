@@ -805,3 +805,19 @@ describe('DashboardHome refresh coordination', () => {
     expect(errors).not.toHaveBeenCalled();
   });
 });
+
+describe('DashboardHome icons', () => {
+  it('dashboard_icons_render_in_every_area', async () => {
+    const result = render(<DashboardHome workspace={workspaceA} dashboard={readyApi('x').api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    expect(result.getByRole('region', { name: 'Workspace summary' }).querySelectorAll('svg')).toHaveLength(4);
+    for (const name of ['Board status', 'Team status', 'Recent activity']) {
+      expect(result.getByRole('region', { name }).querySelectorAll('svg').length).toBeGreaterThanOrEqual(2);
+    }
+    expect(result.container.querySelector('.connection-badge .status-dot')).not.toBeNull();
+    for (const svg of Array.from(result.container.querySelectorAll('svg'))) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.getAttribute('focusable')).toBe('false');
+    }
+  });
+});
