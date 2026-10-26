@@ -25,7 +25,13 @@ const descriptions = {
 
 const dashboard: DashboardApi = {
   teams: vi.fn(async () => ({ ok: true, data: { workspace: workspace.path, teams: [], truncated: false } })),
-  board: vi.fn(),
+  board: vi.fn(async () => ({
+    ok: true,
+    data: {
+      workspace: workspace.path, currentPhase: { slug: 'default', name: 'Default', status: 'open' },
+      columns: [], totals: { active: 0, blocked: 0, done: 0 }, tickets: [],
+    },
+  })),
   activity: vi.fn(async () => ({
     ok: true,
     data: { workspace: workspace.path, dbId: 'activity-db', head: 0, entries: [] },

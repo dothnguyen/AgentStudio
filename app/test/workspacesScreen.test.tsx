@@ -22,7 +22,13 @@ afterEach(cleanup);
 const connectionStatus: ConnectionStatus = { state: 'connected', error: null, distro: null, command: 'serve' };
 const dashboard: DashboardApi = {
   teams: vi.fn(async () => ({ ok: true, data: { workspace: '/workspace', teams: [], truncated: false } })),
-  board: vi.fn(),
+  board: vi.fn(async () => ({
+    ok: true,
+    data: {
+      workspace: '/workspace', currentPhase: { slug: 'default', name: 'Default', status: 'open' },
+      columns: [], totals: { active: 0, blocked: 0, done: 0 }, tickets: [],
+    },
+  })),
   activity: vi.fn(async () => ({
     ok: true,
     data: { workspace: '/workspace', dbId: 'activity-db', head: 0, entries: [] },

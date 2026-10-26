@@ -33,10 +33,11 @@ shows visible focus outlines, and disables nonessential loading animation when t
 reduced-motion preference is enabled.
 
 Opening a workspace shows its dashboard. The header reports the current connection state and the time
-the latest dashboard response reached the renderer. Team status loads independently; Refresh does not
-start a duplicate request while that section is already loading, and responses from an older workspace
-or loader are ignored. Board status and Recent activity remain labelled placeholders until their panels
-are implemented.
+the latest team response reached the renderer. Team and Board status load independently; Refresh asks
+both settled sections to reload without duplicating a request that is already in flight, and responses
+from an older workspace or loader are ignored. The Board panel shows the current phase, configured
+status counts, totals, and the high-priority active or blocked ticket projection. Recent activity remains
+a labelled placeholder until its panel is implemented.
 
 ## Test
 

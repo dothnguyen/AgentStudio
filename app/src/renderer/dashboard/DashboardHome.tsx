@@ -2,6 +2,7 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../StartupScreen';
 import type { SectionId } from '../shell/navModel';
 import { ActivityPanel } from './ActivityPanel';
+import { BoardPanel } from './BoardPanel';
 import { TeamsPanel } from './TeamsPanel';
 import { useDashboardSection } from './useDashboardSection';
 
@@ -12,8 +13,9 @@ export function DashboardHome(props: {
   onNavigate(sectionId: SectionId): void;
 }) {
   const teams = useDashboardSection(props.dashboard.teams, props.workspace.id);
+  const boardSection = useDashboardSection(props.dashboard.board, props.workspace.id);
   const activity = useDashboardSection(props.dashboard.activity, props.workspace.id);
-  const loading = teams.state === 'loading' || activity.state === 'loading';
+  const loading = teams.state === 'loading' || boardSection.state === 'loading' || activity.state === 'loading';
   const latest = teams.lastUpdatedAt;
   const connectionText = props.connection.state === 'connecting'
     ? CONNECTING_TEXT
@@ -34,9 +36,9 @@ export function DashboardHome(props: {
             type="button"
             className="refresh-button"
             aria-busy={loading}
-            disabled={loading}
             onClick={() => {
               teams.reload();
+              boardSection.reload();
               activity.reload();
             }}
           >
@@ -49,10 +51,7 @@ export function DashboardHome(props: {
       </header>
       <div className="dashboard-grid">
         <TeamsPanel section={teams} onNavigate={props.onNavigate} />
-        <section className="dashboard-panel placeholder-panel" aria-labelledby="board-panel-title">
-          <h2 id="board-panel-title">Board status</h2>
-          <p>Not available yet.</p>
-        </section>
+        <BoardPanel section={boardSection} onNavigate={(sectionId) => props.onNavigate(sectionId as SectionId)} />
         <ActivityPanel
           state={activity.state}
           data={activity.state === 'ready' ? activity.data : null}
