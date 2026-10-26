@@ -6,7 +6,7 @@
       "id": "lead",
       "name": "lead",
       "role": "TeamLead",
-      "provider": "codex",
+      "provider": "claude",
       "model": "claude-opus-5-5",
       "reasoning": "medium",
       "canAddTickets": true
@@ -15,7 +15,7 @@
       "id": "dev",
       "name": "dev",
       "role": "Developer",
-      "provider": "codex",
+      "provider": "claude",
       "model": "claude-sonnet-5-5",
       "reasoning": "medium"
     },
@@ -23,14 +23,14 @@
       "id": "qa",
       "name": "qa",
       "role": "QA",
-      "provider": "codex",
+      "provider": "claude",
       "model": "claude-sonnet-5-5"
     },
     {
       "id": "reviewer",
       "name": "reviewer",
       "role": "Reviewer",
-      "provider": "codex",
+      "provider": "claude",
       "model": "claude-sonnet-5-5"
     },
     {
