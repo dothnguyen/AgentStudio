@@ -97,6 +97,16 @@ describe('dashboard accessibility', () => {
     expect(result.container.textContent).not.toMatch(/[{}]|"workspace"/);
   });
 
+  it('names the board heading and progress bar', async () => {
+    const result = shell(readyApi('x').api);
+    await act(async () => {});
+
+    const board = within(result.getByRole('region', { name: 'Board status' }));
+    expect(board.getByRole('heading', { level: 2, name: 'Board status' })).toBeTruthy();
+    expect(board.getByRole('progressbar', { name: '0 of 2 completed (0%)' })).toBeTruthy();
+    expect(board.getByRole('button', { name: 'View board' })).toBeTruthy();
+  });
+
   it('summary_cards_are_static_and_labelled', async () => {
     const result = shell(readyApi('x').api);
     await act(async () => {});

@@ -98,6 +98,18 @@ describe('dashboard styles', () => {
     }
   });
 
+  it('reflows the board status grid without clipping', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.dashboard-panel .board-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; margin: 0 0 14px; }');
+    expect(flat).toMatch(/\.dashboard-panel \.board-status-cell \{[^}]*min-width: 0;/);
+    expect(flat).toContain('.board-phase-name, .board-status-name, .board-ticket-title { min-width: 0; overflow-wrap: anywhere; }');
+    const boardRules = css.split('}').filter((rule) => rule.split('{')[0].includes('board-'));
+    for (const rule of boardRules) {
+      expect(rule).not.toContain('nowrap');
+      expect(rule).not.toContain('overflow-x: hidden');
+    }
+  });
+
   it('summary_cards_wrap_without_horizontal_scroll', () => {
     const flat = squash(css);
     expect(flat).toContain('.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));');

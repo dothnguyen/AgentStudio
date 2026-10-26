@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DashboardBoard } from '../src/renderer/api';
-import { BoardPanel } from '../src/renderer/dashboard/BoardPanel';
+import { BoardPanel, boardProgress } from '../src/renderer/dashboard/BoardPanel';
 import type { DashboardSection } from '../src/renderer/dashboard/useDashboardSection';
 
 afterEach(cleanup);
@@ -37,29 +37,35 @@ describe('BoardPanel', () => {
     expect(result.queryByRole('button', { name: 'View board' })).toBeNull();
   });
 
-  it('renders_empty_configured_board', () => {
+  it('renders_zero_total_board_with_every_status_count', () => {
     const result = render(<BoardPanel section={section({ state: 'ready', data: emptyBoard })} onNavigate={vi.fn()} />);
 
+    expect(result.getByText('Current phase')).toBeTruthy();
     expect(result.getByText('Default')).toBeTruthy();
     expect(result.getByText('open')).toBeTruthy();
-    expect(result.getByText('No tickets in the current phase.')).toBeTruthy();
-    expect(result.queryByRole('list', { name: 'Board status counts' })).toBeNull();
+    expect(result.getByText('No tickets counted in the current phase.')).toBeTruthy();
+    expect(result.queryByRole('progressbar')).toBeNull();
+    const items = within(result.getByRole('list', { name: 'Board status counts' })).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual(['Ideas0initial', 'Shipped0done']);
+    expect(result.queryByLabelText('Board totals')).toBeNull();
     expect(result.queryByRole('list', { name: 'High-priority tickets' })).toBeNull();
+    expect(result.queryByText('No active or blocked tickets.')).toBeNull();
     expect(result.getByRole('button', { name: 'View board' })).toBeTruthy();
   });
 
-  it('determines_empty_from_column_counts_and_tickets_only', () => {
+  it('zero_total_ignores_backend_totals', () => {
     const data: DashboardBoard = {
       ...emptyBoard,
-      currentPhase: { slug: 'default', name: 'Default', status: 'open' },
       columns: [{ status: 'idea', kind: null, title: 'Ideas', count: 0 }],
       totals: { active: 2, blocked: 1, done: 4 },
     };
     const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
 
-    expect(result.getByText('No tickets in the current phase.')).toBeTruthy();
-    expect(result.queryByRole('list', { name: 'Board status counts' })).toBeNull();
-    expect(result.queryByRole('list', { name: 'High-priority tickets' })).toBeNull();
+    expect(result.getByText('No tickets counted in the current phase.')).toBeTruthy();
+    expect(result.queryByRole('progressbar')).toBeNull();
+    expect(result.queryByLabelText('Board totals')).toBeNull();
+    const items = within(result.getByRole('list', { name: 'Board status counts' })).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual(['Ideas0']);
   });
 
   it('renders_candidate_tickets_even_when_all_column_counts_are_zero', () => {
@@ -72,9 +78,10 @@ describe('BoardPanel', () => {
     };
     const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
 
-    expect(result.queryByText('No tickets in the current phase.')).toBeNull();
+    expect(result.getByText('No tickets counted in the current phase.')).toBeTruthy();
     expect(within(result.getByRole('list', { name: 'High-priority tickets' })).getByText('T-000')).toBeTruthy();
     expect(result.getByText('Priority 0')).toBeTruthy();
+    expect(result.getByText(/Highest-priority working or blocked tickets/)).toBeTruthy();
   });
 
   it('renders_custom_columns_totals_and_ticket_projection_in_backend_order', () => {
@@ -105,7 +112,8 @@ describe('BoardPanel', () => {
     const statuses = within(result.getByRole('list', { name: 'Board status counts' })).getAllByRole('listitem');
     expect(statuses.map((item) => item.textContent)).toEqual(['Ideas0initial', 'In flight2', 'Shipped1done']);
     const totals = result.getByLabelText('Board totals');
-    expect(totals.textContent).toBe('Active0Blocked1Done3');
+    expect(totals.textContent).toBe('Active0Blocked1');
+    expect(result.getByRole('progressbar', { name: '1 of 3 completed (33%)' })).toBeTruthy();
     const tickets = within(result.getByRole('list', { name: 'High-priority tickets' })).getAllByRole('listitem');
     expect(tickets.map((item) => item.textContent)).toEqual([
       'T-009First projectionbusyPriority 0workingAgent: agent-aRole: developer',
@@ -124,7 +132,7 @@ describe('BoardPanel', () => {
     const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
 
     expect(result.getByText('No active or blocked tickets.')).toBeTruthy();
-    expect(result.queryByText('No tickets in the current phase.')).toBeNull();
+    expect(result.queryByText(/Highest-priority working or blocked tickets/)).toBeNull();
   });
 
   it('maps_board_config_invalid_without_retry', () => {
@@ -187,6 +195,8 @@ describe('BoardPanel', () => {
     const columns = within(result.getByRole('list', { name: 'Board status counts' }));
     expect(columns.getByText('Future title')).toBeTruthy();
     expect(columns.getByText('future-kind')).toBeTruthy();
+    expect(result.getByText('0 of 1 completed (0%)')).toBeTruthy();
+    expect(result.getByText('1 open')).toBeTruthy();
     expect(within(result.getByRole('list', { name: 'High-priority tickets' })).getByText('waiting')).toBeTruthy();
   });
 
@@ -197,6 +207,122 @@ describe('BoardPanel', () => {
     fireEvent.click(result.getByRole('button', { name: 'View board' }));
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledWith('boards');
+  });
+
+  it('computes_progress_from_done_and_closed_kinds', () => {
+    const data: DashboardBoard = {
+      ...emptyBoard,
+      columns: [
+        { status: 'a', kind: 'initial', title: 'Ideas', count: 2 },
+        { status: 'b', kind: null, title: 'In flight', count: 3 },
+        { status: 'c', kind: 'done', title: 'Shipped', count: 4 },
+        { status: 'd', kind: 'closed', title: 'Archived', count: 1 },
+        { status: 'blocked', kind: null, title: 'Blocked', count: 2 },
+      ],
+      totals: { active: 0, blocked: 2, done: 99 },
+    };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+
+    const bar = result.getByRole('progressbar', { name: '5 of 12 completed (41%)' });
+    expect(bar.getAttribute('value')).toBe('5');
+    expect(bar.getAttribute('max')).toBe('12');
+    expect(result.getByText('7 open')).toBeTruthy();
+  });
+
+  it('shows_full_completion_only_when_every_ticket_is_complete', () => {
+    const full: DashboardBoard = { ...emptyBoard, columns: [{ status: 's', kind: 'done', title: 'Shipped', count: 3 }] };
+    const first = render(<BoardPanel section={section({ state: 'ready', data: full })} onNavigate={vi.fn()} />);
+    expect(first.getByText('3 of 3 completed (100%)')).toBeTruthy();
+    expect(first.getByText('0 open')).toBeTruthy();
+    cleanup();
+
+    const almost: DashboardBoard = {
+      ...emptyBoard,
+      columns: [
+        { status: 's', kind: 'done', title: 'Shipped', count: 199 },
+        { status: 'i', kind: 'initial', title: 'Ideas', count: 1 },
+      ],
+    };
+    const second = render(<BoardPanel section={section({ state: 'ready', data: almost })} onNavigate={vi.fn()} />);
+    expect(second.getByText('199 of 200 completed (99%)')).toBeTruthy();
+  });
+
+  it('renders_no_statuses_message_without_grid', () => {
+    const data: DashboardBoard = { ...emptyBoard, columns: [], tickets: [] };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+
+    expect(result.getByText('No statuses configured for this board.')).toBeTruthy();
+    expect(result.queryByRole('list', { name: 'Board status counts' })).toBeNull();
+    expect(result.queryByRole('progressbar')).toBeNull();
+    expect(result.getByRole('button', { name: 'View board' })).toBeTruthy();
+  });
+
+  it('renders_many_statuses_in_backend_order', () => {
+    const columns = Array.from({ length: 12 }, (_, i) => ({ status: `s${i}`, kind: null, title: `Status ${i}`, count: i }));
+    const data: DashboardBoard = { ...emptyBoard, columns };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+
+    const items = within(result.getByRole('list', { name: 'Board status counts' })).getAllByRole('listitem');
+    expect(items).toHaveLength(12);
+    expect(items.map((item) => item.textContent)).toEqual(columns.map((c, i) => `Status ${i}${i}`));
+    expect(result.getByRole('progressbar', { name: '0 of 66 completed (0%)' })).toBeTruthy();
+  });
+
+  it('renders_long_phase_and_ticket_text_in_full', () => {
+    const phase = 'P'.repeat(300);
+    const column = 'C'.repeat(300);
+    const ticket = 'T'.repeat(300);
+    const data: DashboardBoard = {
+      ...emptyBoard,
+      currentPhase: { slug: 'long', name: phase, status: 'open' },
+      columns: [{ status: 'long', kind: null, title: column, count: 1 }],
+      tickets: [{
+        key: 'T-001', title: ticket, status: 'long', priority: 1, phase: 'long', activity: { state: 'working' },
+      }],
+    };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+
+    expect(result.getByText(phase).classList.contains('board-phase-name')).toBe(true);
+    expect(result.getByText(column).classList.contains('board-status-name')).toBe(true);
+    expect(result.getByText(ticket).classList.contains('board-ticket-title')).toBe(true);
+  });
+
+  it('hides_view_board_in_error_states', () => {
+    const generic = render(<BoardPanel section={section({
+      state: 'error', error: { code: 'UNAVAILABLE', message: 'Failed', retryable: false },
+    })} onNavigate={vi.fn()} />);
+    expect(generic.queryByRole('button', { name: 'View board' })).toBeNull();
+    cleanup();
+    const invalid = render(<BoardPanel section={section({
+      state: 'error', error: { code: 'BOARD_CONFIG_INVALID', message: 'Bad', retryable: true },
+    })} onNavigate={vi.fn()} />);
+    expect(invalid.queryByRole('button', { name: 'View board' })).toBeNull();
+  });
+
+  it('view_board_is_a_native_button', () => {
+    const result = render(<BoardPanel section={section({ state: 'ready', data: emptyBoard })} onNavigate={vi.fn()} />);
+    const button = result.getByRole('button', { name: 'View board' });
+
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.getAttribute('type')).toBe('button');
+  });
+
+  it('phase_status_is_text_not_color', () => {
+    const data: DashboardBoard = { ...emptyBoard, currentPhase: { slug: 'x', name: 'Custom phase', status: 'closed' } };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} />);
+    const badge = result.getByText('closed');
+
+    expect(badge.classList.contains('status-badge')).toBe(true);
+    expect(badge.classList.contains('phase-status')).toBe(true);
+    expect(result.getByText('Current phase')).toBeTruthy();
+  });
+
+  it('boardProgress_sums_columns_and_floors_percent', () => {
+    expect(boardProgress([])).toEqual({ total: 0, completed: 0, open: 0, percent: null });
+    expect(boardProgress([
+      { status: 'a', kind: 'done', title: 'A', count: 1 },
+      { status: 'b', kind: 'initial', title: 'B', count: 2 },
+    ])).toEqual({ total: 3, completed: 1, open: 2, percent: 33 });
   });
 
   it('contains_no_software_board_status_literals', () => {

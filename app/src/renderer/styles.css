@@ -510,6 +510,65 @@ code,
 
 .panel-note { color: var(--text-muted); }
 
+.board-phase-label {
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.board-phase-name,
+.board-status-name,
+.board-ticket-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.board-phase-name { color: var(--text-bright); }
+
+.board-progress { margin-bottom: 14px; }
+
+.board-progress-bar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 6px 0;
+  accent-color: var(--accent);
+}
+
+.dashboard-panel .board-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.dashboard-panel .board-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.board-status-count {
+  color: var(--text-bright);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.board-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 14px;
+}
+
+.board-totals div { display: flex; gap: 6px; }
+.board-totals dd { margin: 0; color: var(--text-bright); }
+
 .workspace-welcome {
   width: min(720px, 100%);
   margin: auto;
