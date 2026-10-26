@@ -69,7 +69,7 @@ describe('dashboard accessibility', () => {
     expect(badges.length).toBeGreaterThan(0);
     for (const badge of badges) expect((badge.textContent ?? '').trim()).not.toBe('');
     const texts = badges.map((badge) => badge.textContent!.trim());
-    for (const expected of ['Connected', 'running', 'stopped', 'busy', 'open', 'in-review', 'blocked', 'team', 'assignment', 'workflow', 'ticket']) {
+    for (const expected of ['Connected', 'running', 'no runtime', 'busy', 'open', 'in-review', 'blocked', 'team', 'assignment', 'workflow', 'ticket']) {
       expect(texts.some((text) => text.toLowerCase().includes(expected.toLowerCase()))).toBe(true);
     }
     for (const icon of Array.from(result.container.querySelectorAll('.status-dot, .status-icon, .spinner'))) {

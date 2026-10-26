@@ -122,4 +122,14 @@ describe('dashboard styles', () => {
       expect(rule.replace(/minmax\([^;]*\)/g, '')).not.toMatch(/(^|[\s;])(min-|max-)?width:\s*\d+px/);
     }
   });
+
+  it('wraps team cards and long names at narrow widths', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.team-heading \{[^}]*flex-wrap: wrap/);
+    expect(flat).toMatch(/\.team-name \{[^}]*min-width: 0/);
+    expect(flat).toMatch(/\.team-name \{[^}]*overflow-wrap: anywhere/);
+    expect(flat).toMatch(/\.team-facts, \.team-presence \{[^}]*flex-wrap: wrap/);
+    expect(flat).toMatch(/\.team-row \{[^}]*min-width: 0/);
+    expect(flat).not.toContain('.team-metadata');
+  });
 });
