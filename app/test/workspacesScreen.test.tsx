@@ -23,7 +23,10 @@ const connectionStatus: ConnectionStatus = { state: 'connected', error: null, di
 const dashboard: DashboardApi = {
   teams: vi.fn(async () => ({ ok: true, data: { workspace: '/workspace', teams: [], truncated: false } })),
   board: vi.fn(),
-  activity: vi.fn(),
+  activity: vi.fn(async () => ({
+    ok: true,
+    data: { workspace: '/workspace', dbId: 'activity-db', head: 0, entries: [] },
+  })),
 };
 const screenContext = { dashboard, connection: connectionStatus };
 

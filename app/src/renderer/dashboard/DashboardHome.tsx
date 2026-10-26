@@ -1,6 +1,7 @@
 import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../StartupScreen';
 import type { SectionId } from '../shell/navModel';
+import { ActivityPanel } from './ActivityPanel';
 import { TeamsPanel } from './TeamsPanel';
 import { useDashboardSection } from './useDashboardSection';
 
@@ -11,7 +12,8 @@ export function DashboardHome(props: {
   onNavigate(sectionId: SectionId): void;
 }) {
   const teams = useDashboardSection(props.dashboard.teams, props.workspace.id);
-  const loading = teams.state === 'loading';
+  const activity = useDashboardSection(props.dashboard.activity, props.workspace.id);
+  const loading = teams.state === 'loading' || activity.state === 'loading';
   const latest = teams.lastUpdatedAt;
   const connectionText = props.connection.state === 'connecting'
     ? CONNECTING_TEXT
@@ -28,7 +30,16 @@ export function DashboardHome(props: {
         </div>
         <div className="dashboard-actions">
           <span className={`connection-badge connection-${props.connection.state}`}>{connectionText}</span>
-          <button type="button" className="refresh-button" aria-busy={loading} disabled={loading} onClick={teams.reload}>
+          <button
+            type="button"
+            className="refresh-button"
+            aria-busy={loading}
+            disabled={loading}
+            onClick={() => {
+              teams.reload();
+              activity.reload();
+            }}
+          >
             Refresh
           </button>
           {latest !== null && (
@@ -42,10 +53,12 @@ export function DashboardHome(props: {
           <h2 id="board-panel-title">Board status</h2>
           <p>Not available yet.</p>
         </section>
-        <section className="dashboard-panel placeholder-panel" aria-labelledby="activity-panel-title">
-          <h2 id="activity-panel-title">Recent activity</h2>
-          <p>Not available yet.</p>
-        </section>
+        <ActivityPanel
+          state={activity.state}
+          data={activity.state === 'ready' ? activity.data : null}
+          error={activity.state === 'error' ? activity.error : null}
+          onRetry={activity.reload}
+        />
       </div>
     </div>
   );

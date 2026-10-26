@@ -26,7 +26,10 @@ const descriptions = {
 const dashboard: DashboardApi = {
   teams: vi.fn(async () => ({ ok: true, data: { workspace: workspace.path, teams: [], truncated: false } })),
   board: vi.fn(),
-  activity: vi.fn(),
+  activity: vi.fn(async () => ({
+    ok: true,
+    data: { workspace: workspace.path, dbId: 'activity-db', head: 0, entries: [] },
+  })),
 };
 const connection: ConnectionStatus = { state: 'connected', error: null, distro: null, command: 'serve' };
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectionStatus, DashboardApi, DashboardTeams, Result, Workspace } from '../src/renderer/api';
+import type { ConnectionStatus, DashboardActivity, DashboardApi, DashboardTeams, Result, Workspace } from '../src/renderer/api';
 import { DashboardHome } from '../src/renderer/dashboard/DashboardHome';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../src/renderer/StartupScreen';
@@ -20,13 +20,32 @@ function deferred<T>(): Deferred<T> {
 const workspace: Workspace = { id: 'workspace-7', name: 'Seventh workspace', path: '/full/path/seven', missing: false, exists: true };
 const connected: ConnectionStatus = { state: 'connected', error: null, distro: 'Ubuntu', command: 'serve' };
 const emptyTeams: DashboardTeams = { workspace: workspace.path, teams: [], truncated: false };
+const emptyActivity: DashboardActivity = { workspace: workspace.path, dbId: 'activity-db', head: 0, entries: [] };
+const recentActivity: DashboardActivity = {
+  ...emptyActivity,
+  head: 1,
+  entries: [{
+    id: 'event:1', at: '2026-01-02T03:04:05.000Z', kind: 'team', name: 'created',
+    summary: 'Build team was created', subject: { type: 'team', id: 'build', label: 'Build team' },
+  }],
+};
 
 function fakeDashboard(...responses: Array<Promise<Result<DashboardTeams>> | Result<DashboardTeams>>) {
   let index = 0;
   const teams = vi.fn(() => Promise.resolve(responses[index++]));
   const board = vi.fn();
-  const activity = vi.fn();
+  const activity = vi.fn(async () => ({ ok: true, data: emptyActivity } as Result<DashboardActivity>));
   return { api: { teams, board, activity } as DashboardApi, teams, board, activity };
+}
+
+function fakeDashboardWithActivity(
+  activityResponses: Array<Promise<Result<DashboardActivity>> | Result<DashboardActivity>>,
+  ...teamResponses: Array<Promise<Result<DashboardTeams>> | Result<DashboardTeams>>
+) {
+  const fake = fakeDashboard(...teamResponses);
+  let index = 0;
+  const activity = vi.fn(() => Promise.resolve(activityResponses[index++] ?? activityResponses.at(-1)!));
+  return { ...fake, api: { ...fake.api, activity }, activity };
 }
 
 afterEach(() => {
@@ -47,11 +66,11 @@ describe('DashboardHome', () => {
     expect(result.getByText(CONNECTED_TEXT)).toBeTruthy();
     expect(result.getByRole('region', { name: 'Team status' })).toBeTruthy();
     expect(result.getByRole('region', { name: 'Board status' }).textContent).toContain('Not available yet.');
-    expect(result.getByRole('region', { name: 'Recent activity' }).textContent).toContain('Not available yet.');
+    expect(result.getByRole('region', { name: 'Recent activity' }).textContent).toContain('No recent activity');
     expect(fake.teams).toHaveBeenCalledTimes(1);
     expect(fake.teams).toHaveBeenCalledWith(workspace.id);
     expect(fake.board).not.toHaveBeenCalled();
-    expect(fake.activity).not.toHaveBeenCalled();
+    expect(fake.activity).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes_teams_once_and_updates_last_updated_on_success', async () => {
@@ -89,7 +108,7 @@ describe('DashboardHome', () => {
     fireEvent.click(result.getByRole('button', { name: 'Retry' }));
     expect(fake.teams).toHaveBeenCalledTimes(2);
     expect(fake.board).not.toHaveBeenCalled();
-    expect(fake.activity).not.toHaveBeenCalled();
+    expect(fake.activity).toHaveBeenCalledTimes(1);
   });
 
   it('view_teams_selects_the_existing_shell_section', async () => {
@@ -102,6 +121,59 @@ describe('DashboardHome', () => {
     const nav = result.getByRole('navigation', { name: 'Workspace' });
     expect(within(nav).getByRole('button', { name: 'Teams' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('loads recent activity once for the selected workspace', async () => {
+    const selected = { ...workspace, id: 'workspace-a' };
+    const fake = fakeDashboardWithActivity(
+      [{ ok: true, data: recentActivity }],
+      { ok: true, data: emptyTeams },
+    );
+    const result = render(<DashboardHome workspace={selected} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+
+    expect(fake.activity).toHaveBeenCalledTimes(1);
+    expect(fake.activity).toHaveBeenCalledWith('workspace-a');
+    expect(result.getByText('Build team was created')).toBeTruthy();
+  });
+
+  it('activity failure leaves Teams and Board visible and its retry is isolated', async () => {
+    const activityError: Result<DashboardActivity> = {
+      ok: false,
+      error: { code: 'UNAVAILABLE', message: 'Activity could not be loaded.', retryable: true },
+    };
+    const fake = fakeDashboardWithActivity(
+      [activityError, { ok: true, data: recentActivity }],
+      { ok: true, data: emptyTeams },
+    );
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+
+    expect(result.getByRole('region', { name: 'Team status' })).toBeTruthy();
+    expect(result.getByRole('region', { name: 'Board status' })).toBeTruthy();
+    const activityRegion = result.getByRole('region', { name: 'Recent activity' });
+    expect(within(activityRegion).getByRole('alert').textContent).toContain('UNAVAILABLE: Activity could not be loaded.');
+    fireEvent.click(within(activityRegion).getByRole('button', { name: 'Retry' }));
+
+    expect(fake.activity).toHaveBeenCalledTimes(2);
+    expect(fake.teams).toHaveBeenCalledTimes(1);
+    expect(fake.board).not.toHaveBeenCalled();
+  });
+
+  it('top-level Refresh includes activity', async () => {
+    const fake = fakeDashboardWithActivity(
+      [{ ok: true, data: emptyActivity }, { ok: true, data: recentActivity }],
+      { ok: true, data: emptyTeams },
+      { ok: true, data: emptyTeams },
+    );
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={vi.fn()} />);
+    await act(async () => {});
+    fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
+    await act(async () => {});
+
+    expect(fake.teams).toHaveBeenCalledTimes(2);
+    expect(fake.activity).toHaveBeenCalledTimes(2);
+    expect(fake.board).not.toHaveBeenCalled();
   });
 
   it('uses_exact_startup_connection_wording', () => {
@@ -119,13 +191,13 @@ describe('DashboardHome', () => {
     const fake: DashboardApi = {
       teams: vi.fn(async () => ({ ok: true, data: emptyTeams })),
       board: vi.fn(),
-      activity: vi.fn(),
+      activity: vi.fn(async () => ({ ok: true, data: emptyActivity })),
     };
     render(<DashboardHome workspace={workspace} dashboard={fake} connection={connected} onNavigate={vi.fn()} />);
     await act(async () => {});
     expect(Object.keys(fake).sort()).toEqual(['activity', 'board', 'teams']);
     expect(fake.teams).toHaveBeenCalledTimes(1);
     expect(fake.board).not.toHaveBeenCalled();
-    expect(fake.activity).not.toHaveBeenCalled();
+    expect(fake.activity).toHaveBeenCalledTimes(1);
   });
 });
