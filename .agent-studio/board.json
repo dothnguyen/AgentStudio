@@ -59,7 +59,7 @@
       "when": {
         "status": "review-ready"
       },
-      "role": "TeamLead",
+      "role": "Reviewer",
       "workflow": "board-review",
       "workspace": "worktree",
       "onPass": "merge-ready",

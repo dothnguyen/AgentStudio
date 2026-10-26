@@ -2,7 +2,7 @@
   "version": 1,
   "roles": {
     "TeamLead": {
-      "description": "Team lead: unpacks features into phases, epics and stories; reviews each story before work and fixes it in place; does the final review and marks the story Done.",
+      "description": "Team lead: unpacks features into phases, epics and stories; refines each story into a detailed technical plan before development and fixes it in place. Does not review code or merge.",
       "instructions": "roles/team-lead.md",
       "skills": [
         "story-format",
@@ -24,6 +24,14 @@
       "skills": [
         "story-format",
         "python-testing",
+        "code-search"
+      ]
+    },
+    "Reviewer": {
+      "description": "Reviewer: reviews the code of a ticket after QA, read-only, against the ticket's plan and acceptance criteria, and passes or fails it with precise findings. Never edits files or runs the tests.",
+      "instructions": "roles/reviewer.md",
+      "skills": [
+        "story-format",
         "code-search"
       ]
     },
