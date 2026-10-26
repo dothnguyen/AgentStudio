@@ -36,14 +36,14 @@ function expectConnecting(r: ReturnType<typeof setup>) {
   expect(r.getByRole('status').textContent).toContain(CONNECTING_TEXT);
   expect(r.container.querySelector('.spinner')?.getAttribute('aria-hidden')).toBe('true');
   expect(r.queryAllByRole('button')).toHaveLength(0);
-  expect(r.container.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+  expect(r.container.querySelector('[data-role="app-shell"]')?.getAttribute('aria-busy')).toBe('true');
 }
 
 describe('StartupScreen', () => {
   it('connecting shows the text and a spinner and no buttons', () => {
     const result = setup();
     expectConnecting(result);
-    expect(result.container.querySelector('main')?.classList.contains('app-shell')).toBe(true);
+    expect(result.container.querySelector('[data-role="app-shell"]')?.classList.contains('app-shell')).toBe(true);
     expect(result.container.querySelector('.connecting-state')).toBeTruthy();
   });
 
@@ -64,7 +64,7 @@ describe('StartupScreen', () => {
     expect(r.queryByRole('status')).toBeNull();
     expect(r.queryByText(/create workspace/i)).toBeNull();
     expect(r.queryByRole('list')).toBeNull();
-    expect(r.container.querySelector('main')?.getAttribute('aria-busy')).toBe('false');
+    expect(r.container.querySelector('[data-role="app-shell"]')?.getAttribute('aria-busy')).toBe('false');
     expect(r.container.querySelector('.connection-panel')).toBeTruthy();
   });
 
@@ -123,6 +123,14 @@ describe('StartupScreen', () => {
     r.emit({ state: 'connected', error: null, distro: 'Ubuntu-24.04', command: LOST.command });
     expect(r.getByText(CONNECTED_TEXT)).toBeTruthy();
     expect(r.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('connected view provides the only main landmark', () => {
+    const f = fakeConnection({ state: 'connected', error: null, distro: null, command: 'x' });
+    const result = render(
+      <StartupScreen connection={f.api} onRetry={vi.fn()} connectedView={<main>Workspace</main>} />,
+    );
+    expect(result.getAllByRole('main')).toHaveLength(1);
   });
 
   it('unsubscribes on unmount', () => {

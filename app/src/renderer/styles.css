@@ -115,6 +115,101 @@ code,
   background: var(--bg);
 }
 
+.workspace-shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: clamp(136px, 28vw, 240px) minmax(0, 1fr);
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.workspace-sidebar,
+.workspace-content { min-width: 0; }
+
+.workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 12px;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.workspace-identity { min-width: 0; }
+
+.workspace-name,
+.workspace-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-name {
+  color: var(--text-bright);
+  font-weight: 600;
+}
+
+.workspace-path {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.switch-workspace { width: 100%; }
+
+.workspace-sidebar nav {
+  display: grid;
+  gap: 4px;
+}
+
+.workspace-sidebar nav button {
+  width: 100%;
+  text-align: left;
+  border-color: transparent;
+  background: transparent;
+}
+
+.workspace-sidebar nav button:hover:not(:disabled) {
+  color: var(--text-bright);
+  border-color: var(--border);
+  background: var(--surface-hover);
+}
+
+.workspace-sidebar nav button:active:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.workspace-sidebar nav button[aria-current="page"] {
+  color: var(--text-bright);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.workspace-sidebar nav button:disabled {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.workspace-sidebar nav button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.workspace-content {
+  padding: 32px;
+  overflow: auto;
+}
+
+.workspace-content p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .workspace-welcome {
   width: min(720px, 100%);
   margin: auto;

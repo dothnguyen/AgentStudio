@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ApiError, InitResult, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
+import { WorkspaceShell } from './shell/WorkspaceShell';
 
 export const LOADING_TEXT = 'Loading workspaces…';
 export const EMPTY_TITLE = 'No workspaces yet';
@@ -61,22 +62,6 @@ type Load =
   | { kind: 'loading' }
   | { kind: 'ready'; workspaces: Workspace[] }
   | { kind: 'error'; error: ApiError };
-
-function SelectedView(props: { w: Workspace; onBack: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => ref.current?.focus(), []);
-  return (
-    <WorkspaceLayout>
-      <section data-view="selected" className="workspace-panel selected-workspace">
-        <h1>{props.w.name}</h1>
-        <p className="ws-path">{props.w.path}</p>
-        <button type="button" className="link" data-action="back" ref={ref} onClick={props.onBack}>
-          <span aria-hidden="true">←</span> Back
-        </button>
-      </section>
-    </WorkspaceLayout>
-  );
-}
 
 function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w: Workspace) => void }) {
   const { w, onSelect } = props;
@@ -235,9 +220,9 @@ export function WorkspacesScreen(props: { api: WorkspacesApi }) {
 
   if (selected !== null) {
     return (
-      <SelectedView
-        w={selected}
-        onBack={() => {
+      <WorkspaceShell
+        workspace={selected}
+        onSwitchWorkspace={() => {
           setFocusId(selected.id);
           setSelected(null);
           setNotice(null);

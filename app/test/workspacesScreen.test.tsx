@@ -143,7 +143,7 @@ describe('WorkspacesScreen', () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it('successful create refreshes and selects the created workspace', async () => {
+  it('successful create refreshes and opens its shell', async () => {
     const added = ws('b', 'Beta', '/home/me/b');
     const fake = fakeWorkspaces(ok(ws('a', 'Alpha', '/a')), ok(ws('a', 'Alpha', '/a'), added));
     fake.create.mockResolvedValue({
@@ -158,10 +158,11 @@ describe('WorkspacesScreen', () => {
 
     expect(result.queryByRole('dialog')).toBeNull();
     expect(fake.list).toHaveBeenCalledTimes(2);
-    expect(view(result)).toBe('selected');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
-    expect(result.container.querySelector('.ws-path')?.textContent).toBe('/home/me/b');
-    expect(document.activeElement).toBe(result.getByRole('button', { name: 'Back' }));
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
+    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/b');
+    expect(result.queryByRole('button', { name: 'Back' })).toBeNull();
   });
 
   it('retains the ready view while the post-create refresh is pending', async () => {
@@ -183,8 +184,9 @@ describe('WorkspacesScreen', () => {
     expect(result.queryByText('Beta')).toBeNull();
 
     await act(async () => refresh.resolve(ok(ws('a', 'Alpha', '/a'), added)));
-    expect(view(result)).toBe('selected');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Beta');
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
   });
 
   it('ignores a post-create refresh result after unmount', async () => {
@@ -221,9 +223,9 @@ describe('WorkspacesScreen', () => {
     await act(async () => fireEvent.submit(result.container.querySelector('form')!));
     await settle();
 
-    expect(view(result)).toBe('selected');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Renamed in registry');
-    expect(result.container.querySelector('.ws-path')?.textContent).toBe(refreshed.path);
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Renamed in registry');
+    expect(result.container.querySelector('.workspace-path')?.textContent).toBe(refreshed.path);
   });
 
   it('prefers the created id when the refreshed list also contains a path match', async () => {
@@ -240,9 +242,9 @@ describe('WorkspacesScreen', () => {
     await act(async () => fireEvent.submit(result.container.querySelector('form')!));
     await settle();
 
-    expect(view(result)).toBe('selected');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('ID match');
-    expect(result.container.querySelector('.ws-path')?.textContent).toBe('/registry/id-match');
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('ID match');
+    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/registry/id-match');
   });
 
   it('existing path refreshes without a duplicate and selects it', async () => {
@@ -257,8 +259,8 @@ describe('WorkspacesScreen', () => {
     fireEvent.change(result.getByLabelText('Folder'), { target: { value: existing.path } });
     await act(async () => fireEvent.submit(result.container.querySelector('form')!));
     await settle();
-    expect(view(result)).toBe('selected');
-    fireEvent.click(result.getByRole('button', { name: 'Back' }));
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    fireEvent.click(result.getByRole('button', { name: 'Switch workspace' }));
     expect(result.container.querySelectorAll('[data-id="a"]')).toHaveLength(1);
     expect(result.getAllByText('/home/me/a')).toHaveLength(1);
   });
@@ -423,38 +425,54 @@ describe('WorkspacesScreen', () => {
     expect(view(result)).toBe('empty');
   });
 
-  it('clicking an existing workspace opens the placeholder with Back', async () => {
+  it('clicking an existing workspace opens its shell', async () => {
     const result = await mount(fakeWorkspaces(ok(ws('a', 'Alpha', '/home/me/a'))).api);
     fireEvent.click(result.container.querySelector('.ws-row')!);
 
-    expect(view(result)).toBe('selected');
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Alpha');
-    expect(result.container.querySelector('.ws-path')?.textContent).toBe('/home/me/a');
-    expect(document.activeElement).toBe(result.getByRole('button', { name: 'Back' }));
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
+    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Alpha');
+    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/a');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
+    expect(result.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('Enter and Space on a row open the placeholder', async () => {
+  it('Enter and Space on a row open the shell', async () => {
     const result = await mount(fakeWorkspaces(ok(ws('a', 'Alpha', '/home/me/a'))).api);
     let row = result.container.querySelector('.ws-row')!;
     expect(fireEvent.keyDown(row, { key: 'Enter' })).toBe(false);
-    expect(view(result)).toBe('selected');
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
 
-    fireEvent.click(result.getByRole('button', { name: 'Back' }));
+    fireEvent.click(result.getByRole('button', { name: 'Switch workspace' }));
     row = result.container.querySelector('.ws-row')!;
     expect(fireEvent.keyDown(row, { key: ' ' })).toBe(false);
-    expect(view(result)).toBe('selected');
+    expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
   });
 
-  it('Back returns to the list without reloading and focuses the row', async () => {
+  it('Switch workspace returns to the cached list and focuses the row', async () => {
     const fake = fakeWorkspaces(ok(ws('a', 'Alpha', '/a'), ws('b', 'Beta', '/b')));
     const result = await mount(fake.api);
     fireEvent.click(result.container.querySelector('[data-id="b"]')!);
-    fireEvent.click(result.getByRole('button', { name: 'Back' }));
+    fireEvent.click(result.getByRole('button', { name: 'Switch workspace' }));
 
     expect(view(result)).toBe('list');
     expect(fake.list).toHaveBeenCalledTimes(1);
+    expect(fake.create).toHaveBeenCalledTimes(0);
     expect(document.activeElement?.getAttribute('data-id')).toBe('b');
     expect(result.container.querySelector('[data-role="notice"]')).toBeNull();
+  });
+
+  it('section navigation performs no workspace API calls', async () => {
+    const fake = fakeWorkspaces(ok(ws('a', 'Alpha', '/a')));
+    const result = await mount(fake.api);
+    fireEvent.click(result.container.querySelector('[data-id="a"]')!);
+
+    expect(fake.list).toHaveBeenCalledTimes(1);
+    expect(fake.create).toHaveBeenCalledTimes(0);
+    for (const label of ['Home', 'Teams', 'Boards', 'Configuration']) {
+      fireEvent.click(result.getByRole('button', { name: label }));
+    }
+    expect(fake.list).toHaveBeenCalledTimes(1);
+    expect(fake.create).toHaveBeenCalledTimes(0);
   });
 
   it('a missing-folder workspace shows a message instead of opening', async () => {
@@ -464,6 +482,7 @@ describe('WorkspacesScreen', () => {
 
     const message = 'The folder for "Beta" no longer exists (/mnt/c/b). It cannot be opened.';
     expect(view(result)).toBe('list');
+    expect(result.container.querySelector('.workspace-shell')).toBeNull();
     expect(result.container.querySelector('[data-role="notice"]')?.textContent).toBe(message);
     fireEvent.keyDown(row, { key: 'Enter' });
     expect(view(result)).toBe('list');

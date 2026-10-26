@@ -54,7 +54,7 @@ export function StartupScreen(props: { connection: ConnectionApi; onRetry: () =>
   const seenConnected = useRef(false);
   if (status.state === 'connected') seenConnected.current = true;
   return (
-    <main className="app-shell" aria-busy={status.state === 'connecting'}>
+    <div className="app-shell" data-role="app-shell" aria-busy={status.state === 'connecting'}>
       {status.state === 'connecting' && (
         <div className="connecting-state" role="status" aria-live="polite">
           <div className="connection-brand" aria-hidden="true">AS</div>
@@ -70,6 +70,6 @@ export function StartupScreen(props: { connection: ConnectionApi; onRetry: () =>
         />
       )}
       {status.state === 'connected' && props.connectedView}
-    </main>
+    </div>
   );
 }

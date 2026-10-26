@@ -71,6 +71,10 @@ describe('Electron project wiring', () => {
     const styles = read('src/renderer/styles.css');
     expect(styles).toMatch(/button:focus-visible[\s\S]*?outline:\s*2px solid var\(--focus\)/);
     expect(styles).toMatch(/\.ws-row:focus-visible\s*\{[^}]*border-color:\s*var\(--focus\)/);
+    expect(styles).toMatch(/\.workspace-shell\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:[^;}]*240px/);
+    expect(styles).toMatch(/\.workspace-name,[\s\S]*?\.workspace-path\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis/);
+    expect(styles).toMatch(/\.workspace-sidebar nav button\[aria-current="page"\]\s*\{/);
+    expect(styles).toMatch(/\.workspace-sidebar nav button:focus-visible\s*\{/);
     expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation-duration:\s*0\.01ms !important[\s\S]*?transition-duration:\s*0\.01ms !important/);
   });
 
