@@ -75,6 +75,11 @@ def load_config(workspace: str) -> dict:
                                             "(see phases/phase-04/README.md section D)")
     except (OSError, ValueError) as e:
         raise _invalid([("root", f"cannot be read or is not valid JSON: {e}")])
+    return parse_config(raw)
+
+
+def parse_config(raw) -> dict:
+    """Validate a decoded board.json document -> the normalized board model."""
     if not isinstance(raw, dict):
         raise _invalid([("root", "must be a JSON object")])
     problems = []

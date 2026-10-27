@@ -133,6 +133,25 @@ Work comes only from the state DB (assignments, tasks, workflow runs, tickets) a
 tmux or pane output. Configuration or runtime problems never fail the request; they appear as states
 (`partial: true`). Bounds: 50 teams, 16 members per team, 200-char text, 2000-char role description.
 
+## Board settings (P05-S11)
+
+Direct commands (no coordinator, no `idempotencyKey`; writes happen in the request process):
+
+- `board.settings {workspace}` returns `{workspace, board, statuses, rules, actionRules, worktree,
+  protectedRoutes, roles, workflows, runner}`. `board` and `roles` carry `state` (`ok|invalid|missing`),
+  `sha256`, `message`; a missing or broken file is a state, never an error. `runner.status` is one of
+  `unavailable|not_bound|stopped|team_not_running|disconnected|running`.
+- `board.settings.update {workspace, changes, expectedSha256?}` shallow-merges `changes` (keys `statuses`,
+  `ticketFields`, `rules`, `leaseSeconds`, `baseBranch`, `agentTicketStatus`; `null` removes a key) into the raw
+  `board.json`, validates it (schema, rules check, protected routes) and writes atomically. Invalid edits
+  (`BOARD_CONFIG_INVALID` with `data.problems`) and a stale `expectedSha256` (`CONFIG_CHANGED`) write nothing.
+- `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
+  (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
+
+Protected routes: when a board has the `merge-conflict` or `plan-merge-conflict` status, it must keep it, with a
+rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the existing `board.run` and
+`board.stop`; `board.settings` reports the truthful runner state.
+
 ## Run a team and watch it (inside WSL)
 
 ```bash

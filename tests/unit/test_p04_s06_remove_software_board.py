@@ -50,10 +50,11 @@ class NoBoardCode(unittest.TestCase):
 
     def test_dispatch_has_only_the_generic_board_commands(self):
         """S06 removed every P03 board command; S07 added the generic ticket commands and board.show; S08
-        added ticket.phase and phase.*, and S16 added board.summary. P03-only commands stay gone."""
+        added ticket.phase and phase.*, S16 added board.summary, and P05-S11 added board.settings(.update). P03-only commands stay gone."""
         self.assertNotIn("debug.ticket_worktree", dispatch.COMMANDS)
         board_commands = sorted(n for n in dispatch.COMMANDS if n.startswith("board."))
-        self.assertEqual(board_commands, ["board.resume", "board.run", "board.show", "board.stop",
+        self.assertEqual(board_commands, ["board.resume", "board.run", "board.settings",
+                                          "board.settings.update", "board.show", "board.stop",
                                           "board.summary"])
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
                          ["ticket.add", "ticket.apply", "ticket.depend", "ticket.list", "ticket.move",

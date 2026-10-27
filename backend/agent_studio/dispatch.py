@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, teamdefs, boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -117,6 +117,46 @@ def _team_overview(args, req):
     finally:
         if conn is not None:
             conn.close()
+
+
+def _sha_arg(args):
+    value = args.get("expectedSha256")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not re.match(r"^[0-9a-f]{64}$", value):
+        raise AsError(BAD_REQUEST, "expectedSha256 must be a lowercase hex sha256.")
+    return value
+
+
+def _board_settings(args, req):
+    ws = _catalog_workspace(args, {"workspace"}, "board.settings")
+    running, conn, error = False, None, None
+    try:
+        running = coordinator.running_info(paths.ensure_state_dir()) is not None
+        conn = _reader()
+    except AsError as e:
+        error = {"code": e.code, "message": e.message}
+    try:
+        return boardsettings.settings(conn, ws, running, error)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def _board_settings_update(args, req):
+    ws = _catalog_workspace(args, {"workspace", "changes", "expectedSha256"}, "board.settings.update")
+    if "changes" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'changes'.")
+    return boardsettings.update_board(ws, args["changes"], _sha_arg(args))
+
+
+def _role_update(args, req):
+    ws = _catalog_workspace(args, {"workspace", "role", "description", "expectedSha256"}, "role.update")
+    role = req_text(args, "role", 200, allow_empty=False)
+    if "description" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'description'.")
+    description = None if args["description"] is None else req_text(args, "description", roles.LIMITS["description"])
+    return boardsettings.update_role(ws, role, description, _sha_arg(args))
 
 
 def _catalog_workspace(args, allowed, command):
@@ -832,6 +872,9 @@ COMMANDS = {
     "ticket.list": _ticket_list,
     "board.show": _board_show,
     "board.summary": _board_summary,
+    "board.settings": _board_settings,
+    "board.settings.update": _board_settings_update,
+    "role.update": _role_update,
     "board.run": _inbox("board.run", _validate_board_run),
     "board.stop": _inbox("board.stop", _validate_board_show),
     "phase.add": _inbox("phase.add", _validate_phase_add),
