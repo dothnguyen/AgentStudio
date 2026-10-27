@@ -114,7 +114,7 @@
       "workflow": "board-review",
       "workspace": "worktree",
       "onPass": "merge-ready",
-      "onFail": "qa-ready",
+      "onFail": "dev-ready",
       "onFailPriority": 0,
       "maxRounds": 3
     },
