@@ -5,6 +5,7 @@ import type {
   OverviewMember,
   OverviewTeam,
   Result,
+  TeamDefinition,
   TeamOverview,
 } from '../src/renderer/api';
 
@@ -112,6 +113,8 @@ export function catalogFixture(overrides: Partial<AgentCatalogList> = {}): Agent
 export function fakeManagement(opts: {
   overview?: Array<Response<TeamOverview>>;
   agents?: Array<Response<AgentCatalogList>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  calls?: Partial<Record<keyof ManagementApi, (...args: any[]) => unknown>>;
 } = {}) {
   const overviewList = opts.overview ?? [{ ok: true, data: twoTeams() }];
   const agentList = opts.agents ?? [{ ok: true, data: catalogFixture() }];
@@ -120,8 +123,23 @@ export function fakeManagement(opts: {
   const overview = vi.fn((_id: string) => Promise.resolve(overviewList[Math.min(o++, overviewList.length - 1)]!));
   const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
-  const api = new Proxy({ overview, agents } as Record<string, unknown>, {
+  const api = new Proxy({ overview, agents, ...opts.calls } as Record<string, unknown>, {
     get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
   }) as unknown as ManagementApi;
   return { api, overview, agents };
+}
+
+export function teamDefinition(overrides: Partial<TeamDefinition> = {}): TeamDefinition {
+  return {
+    id: 'dev-team',
+    name: 'Dev Team',
+    members: [{ id: 'dev', name: 'dev', role: 'Developer', agent: 'opencode-sonnet' }],
+    ...overrides,
+  };
+}
+
+export function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => { resolve = r; });
+  return { promise, resolve };
 }

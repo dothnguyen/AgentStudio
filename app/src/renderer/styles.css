@@ -1184,4 +1184,11 @@ ul[aria-label="Workspaces"] {
 .teams-cell-note, .teams-role-description, .teams-agent-description, .teams-agent-usage { color: var(--text-muted); overflow-wrap: anywhere; }
 .teams-members-table th { text-align: left; color: var(--text-muted); font-weight: 600; }
 .teams-members-table th, .teams-members-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.teams-feedback-success { color: var(--success); overflow-wrap: anywhere; }
+.teams-team-actions, .teams-member-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.teams-edit-form { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); }
+.teams-edit-form label { display: flex; flex-direction: column; gap: 4px; }
+.teams-field-error { color: var(--danger); }
+.teams-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.teams-edit-form input:focus-visible, .teams-edit-form select:focus-visible, .teams-edit-form button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 @media (max-width: 900px) { .teams-layout { grid-template-columns: minmax(0, 1fr); } }

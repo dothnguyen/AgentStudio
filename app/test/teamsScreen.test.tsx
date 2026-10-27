@@ -39,6 +39,7 @@ describe('TeamsScreen', () => {
       'opencode · claude-sonnet',
       'Working',
       'T-031 Teams screen',
+      'EditRemove',
     ]);
     expect(r2).toEqual([
       'leadInline member',
@@ -46,6 +47,7 @@ describe('TeamsScreen', () => {
       'codex · model not set',
       'Available',
       'No current work',
+      'EditRemove',
     ]);
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.overview).toHaveBeenCalledWith('ws-a');
