@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { ApiError, ConnectionStatus, DashboardApi, InitResult, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
+import type { ApiError, ConnectionStatus, DashboardApi, InitResult, ManagementApi, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 import { WorkspaceShell } from './shell/WorkspaceShell';
 
@@ -102,7 +102,7 @@ function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w
   );
 }
 
-export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: DashboardApi; connection: ConnectionStatus }) {
+export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: DashboardApi; management: ManagementApi; connection: ConnectionStatus }) {
   const { api } = props;
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
@@ -223,6 +223,7 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: Dashboa
       <WorkspaceShell
         workspace={selected}
         dashboard={props.dashboard}
+        management={props.management}
         connection={props.connection}
         onSwitchWorkspace={() => {
           setFocusId(selected.id);

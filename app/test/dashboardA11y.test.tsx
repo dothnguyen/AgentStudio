@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus, DashboardApi, Result } from '../src/renderer/api';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { activityFixture, boardFixture, deferred, readyApi, teamsFixture, workspaceA } from './dashboardFixtures';
+import { fakeManagement } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -11,7 +12,7 @@ const connected: ConnectionStatus = { state: 'connected', error: null, distro: '
 
 function shell(api: DashboardApi) {
   return render(
-    <WorkspaceShell workspace={workspaceA} dashboard={api} connection={connected} onSwitchWorkspace={vi.fn()} />,
+    <WorkspaceShell management={fakeManagement().api} workspace={workspaceA} dashboard={api} connection={connected} onSwitchWorkspace={vi.fn()} />,
   );
 }
 
@@ -274,7 +275,7 @@ describe('dashboard accessibility', () => {
       activity: vi.fn(async () => ({ ok: true, data: activity })),
     } as unknown as DashboardApi;
     const result = render(
-      <WorkspaceShell workspace={workspace} dashboard={api} connection={connected} onSwitchWorkspace={vi.fn()} />,
+      <WorkspaceShell management={fakeManagement().api} workspace={workspace} dashboard={api} connection={connected} onSwitchWorkspace={vi.fn()} />,
     );
     await act(async () => {});
     const c = result.container;

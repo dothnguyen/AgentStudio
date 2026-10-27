@@ -1,7 +1,8 @@
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
-import type { ConnectionStatus, DashboardApi, Workspace } from '../api';
+import type { ConnectionStatus, DashboardApi, ManagementApi, Workspace } from '../api';
 import { DashboardHome } from '../dashboard/DashboardHome';
 import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceholder';
+import { TeamsScreen } from '../teams/TeamsScreen';
 import { StudioMark } from '../WorkspacesScreen';
 import { ShellIcon } from './ShellIcon';
 import { DEFAULT_SECTION, NAV_ITEMS, type NavItem } from './navModel';
@@ -9,6 +10,7 @@ import { DEFAULT_SECTION, NAV_ITEMS, type NavItem } from './navModel';
 export interface WorkspaceShellProps {
   workspace: Workspace;
   dashboard: DashboardApi;
+  management: ManagementApi;
   connection: ConnectionStatus;
   onSwitchWorkspace(): void;
   items?: readonly NavItem[];
@@ -41,6 +43,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       connection={props.connection}
       onNavigate={(nextId) => navigate(nextId)}
     />
+  ) : sectionId === 'teams' ? (
+    <TeamsScreen workspace={props.workspace} management={props.management} />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
   );

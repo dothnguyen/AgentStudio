@@ -1167,3 +1167,21 @@ ul[aria-label="Workspaces"] {
     border-color: #4daafc;
   }
 }
+
+/* Teams screen (P05-S13) */
+.teams-screen { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.teams-subtitle { color: var(--text-muted); overflow-wrap: anywhere; }
+.teams-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; min-width: 0; }
+.teams-catalog { grid-column: 1 / -1; }
+.teams-notices { margin: 0; padding: 0; list-style: none; color: var(--text-muted); }
+.teams-notices li { overflow-wrap: anywhere; }
+.dashboard-panel .teams-card-list li,
+.dashboard-panel .teams-catalog-list li { display: block; padding: 4px 0; }
+.teams-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; padding: 10px 12px; text-align: left; }
+.teams-card[aria-pressed="true"] { border-color: var(--focus); background: var(--surface-hover); }
+.teams-card-name, .teams-member-name, .teams-agent-name { min-width: 0; color: var(--text-bright); overflow-wrap: anywhere; }
+.teams-card-facts, .teams-detail-facts, .teams-agent-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); }
+.teams-cell-note, .teams-role-description, .teams-agent-description, .teams-agent-usage { color: var(--text-muted); overflow-wrap: anywhere; }
+.teams-members-table th { text-align: left; color: var(--text-muted); font-weight: 600; }
+.teams-members-table th, .teams-members-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+@media (max-width: 900px) { .teams-layout { grid-template-columns: minmax(0, 1fr); } }

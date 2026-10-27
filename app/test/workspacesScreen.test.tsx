@@ -16,6 +16,7 @@ import {
   toLoadResult,
 } from '../src/renderer/WorkspacesScreen';
 import { fakeConnection } from './fakeConnection';
+import { fakeManagement } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -34,7 +35,7 @@ const dashboard: DashboardApi = {
     data: { workspace: '/workspace', dbId: 'activity-db', head: 0, entries: [] },
   })),
 };
-const screenContext = { dashboard, connection: connectionStatus };
+const screenContext = { dashboard, connection: connectionStatus, management: fakeManagement().api };
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -615,7 +616,7 @@ describe('WorkspacesScreen', () => {
       <StartupScreen
         connection={connection.api}
         onRetry={vi.fn()}
-        connectedView={(status) => <WorkspacesScreen api={fake.api} dashboard={dashboard} connection={status} />}
+        connectedView={(status) => <WorkspacesScreen api={fake.api} dashboard={dashboard} management={fakeManagement().api} connection={status} />}
       />,
     );
 

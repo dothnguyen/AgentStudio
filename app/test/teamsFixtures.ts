@@ -1,0 +1,127 @@
+import { vi } from 'vitest';
+import type {
+  AgentCatalogList,
+  ManagementApi,
+  OverviewMember,
+  OverviewTeam,
+  Result,
+  TeamOverview,
+} from '../src/renderer/api';
+
+type Response<T> = Result<T> | Promise<Result<T>>;
+
+export function member(overrides: Partial<OverviewMember> = {}): OverviewMember {
+  return {
+    memberId: 'dev',
+    name: 'dev',
+    role: 'Developer',
+    roleDescription: 'Implements scoped tickets.',
+    roleState: 'defined',
+    source: 'catalog',
+    agentDefId: 'opencode-sonnet',
+    agentDefState: 'ok',
+    provider: 'opencode',
+    model: 'claude-sonnet',
+    reasoning: null,
+    runtime: null,
+    presence: 'not_started',
+    work: { state: 'unavailable', reason: 'not_started' },
+    ...overrides,
+  };
+}
+
+export function team(overrides: Partial<OverviewTeam> = {}): OverviewTeam {
+  return {
+    id: 'dev-team',
+    name: 'Dev Team',
+    definition: { state: 'valid', problems: [] },
+    runtime: { state: 'not_started', teamId: null, status: null },
+    members: [member()],
+    membersTruncated: false,
+    ...overrides,
+  };
+}
+
+export function overviewFixture(teams: OverviewTeam[], overrides: Partial<TeamOverview> = {}): TeamOverview {
+  return {
+    workspace: '/work/alpha',
+    coordinator: { running: true },
+    runtimeState: { available: true, error: null },
+    roles: { state: 'ok', message: null },
+    catalog: { state: 'ok', message: null },
+    teams,
+    truncated: false,
+    partial: false,
+    ...overrides,
+  };
+}
+
+export function twoTeams(): TeamOverview {
+  return overviewFixture([
+    team({
+      id: 'release',
+      name: 'Release Team',
+      runtime: { state: 'stopped', teamId: 't-old', status: 'stopped' },
+      members: [member({
+        memberId: 'qa', name: 'qa', role: 'QA', roleDescription: 'Validates changes.',
+        agentDefId: 'codex-gpt', provider: 'codex', model: 'gpt-6', presence: 'stopped',
+        work: { state: 'unavailable', reason: 'stopped' },
+      })],
+    }),
+    team({
+      id: 'dev-team',
+      name: 'Dev Team',
+      runtime: { state: 'running', teamId: 't-1', status: 'running' },
+      members: [
+        member({
+          presence: 'busy',
+          runtime: {
+            agentId: 'a-1', availability: 'busy', paneState: null, provider: 'opencode',
+            model: 'claude-sonnet', reasoning: null, stale: false,
+          },
+          work: {
+            state: 'working',
+            assignment: null,
+            ticket: { key: 'T-031', title: 'Teams screen', status: 'dev-ready', workflowRunId: null },
+          },
+        }),
+        member({
+          memberId: 'lead', name: 'lead', role: 'TeamLead', roleDescription: null, source: 'inline',
+          agentDefId: null, agentDefState: null, provider: 'codex', model: null, presence: 'idle',
+          work: { state: 'none' },
+        }),
+      ],
+    }),
+  ]);
+}
+
+export function catalogFixture(overrides: Partial<AgentCatalogList> = {}): AgentCatalogList {
+  return {
+    workspace: '/work/alpha',
+    version: 1,
+    agents: [
+      { id: 'opencode-sonnet', name: 'OpenCode Sonnet', provider: 'opencode', model: 'claude-sonnet', description: 'Implements tickets.' },
+      { id: 'codex-gpt', name: 'Codex GPT', provider: 'codex', model: 'gpt-6' },
+      { id: 'spare', name: 'Spare agent', provider: 'claude' },
+    ],
+    problems: [],
+    ...overrides,
+  };
+}
+
+export function fakeManagement(opts: {
+  overview?: Array<Response<TeamOverview>>;
+  agents?: Array<Response<AgentCatalogList>>;
+} = {}) {
+  const overviewList = opts.overview ?? [{ ok: true, data: twoTeams() }];
+  const agentList = opts.agents ?? [{ ok: true, data: catalogFixture() }];
+  let o = 0;
+  let a = 0;
+  const overview = vi.fn((_id: string) => Promise.resolve(overviewList[Math.min(o++, overviewList.length - 1)]!));
+  const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
+  const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
+  const api = new Proxy({ overview, agents } as Record<string, unknown>, {
+    get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
+  }) as unknown as ManagementApi;
+  return { api, overview, agents };
+}

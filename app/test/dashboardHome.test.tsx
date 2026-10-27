@@ -8,6 +8,7 @@ import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE, StartupScreen } from '../src/renderer/StartupScreen';
 import { activityFixture, boardFixture, readyApi, teamsFixture, workspaceA, workspaceB } from './dashboardFixtures';
 import { fakeConnection } from './fakeConnection';
+import { fakeManagement } from './teamsFixtures';
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -152,7 +153,7 @@ describe('DashboardHome', () => {
 
   it('opens_home_with_one_teams_request', async () => {
     const fake = fakeDashboard();
-    const result = render(<WorkspaceShell workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={vi.fn()} />);
+    const result = render(<WorkspaceShell management={fakeManagement().api} workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={vi.fn()} />);
     await act(async () => {});
 
     const heading = result.getByRole('heading', { level: 1, name: 'Workspace overview' });
@@ -221,7 +222,7 @@ describe('DashboardHome', () => {
 
   it('view_teams_selects_the_existing_shell_section', async () => {
     const fake = fakeDashboard();
-    const result = render(<WorkspaceShell workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={vi.fn()} />);
+    const result = render(<WorkspaceShell management={fakeManagement().api} workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={vi.fn()} />);
     await act(async () => {});
     fireEvent.click(result.getByRole('button', { name: 'View teams' }));
 
@@ -401,7 +402,7 @@ describe('DashboardHome', () => {
   it('view_board_selects_boards_in_the_workspace_shell', async () => {
     const fake = fakeDashboard();
     const onSwitchWorkspace = vi.fn();
-    const result = render(<WorkspaceShell workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={onSwitchWorkspace} />);
+    const result = render(<WorkspaceShell management={fakeManagement().api} workspace={workspace} dashboard={fake.api} connection={connected} onSwitchWorkspace={onSwitchWorkspace} />);
     await act(async () => {});
     fireEvent.click(result.getByRole('button', { name: 'View board' }));
 
@@ -478,7 +479,7 @@ describe('DashboardHome composition', () => {
       return current === null ? (
         <button type="button" onClick={() => setCurrent(workspaceB)}>Open B</button>
       ) : (
-        <WorkspaceShell workspace={current} dashboard={api} connection={connected} onSwitchWorkspace={() => setCurrent(null)} />
+        <WorkspaceShell management={fakeManagement().api} workspace={current} dashboard={api} connection={connected} onSwitchWorkspace={() => setCurrent(null)} />
       );
     }
     const result = render(<Harness />);
@@ -516,7 +517,7 @@ describe('DashboardHome composition', () => {
         connection={conn.api}
         onRetry={onRetry}
         connectedView={(status) => (
-          <WorkspaceShell workspace={workspaceA} dashboard={fake.api} connection={status} onSwitchWorkspace={vi.fn()} />
+          <WorkspaceShell management={fakeManagement().api} workspace={workspaceA} dashboard={fake.api} connection={status} onSwitchWorkspace={vi.fn()} />
         )}
       />,
     );

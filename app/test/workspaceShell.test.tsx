@@ -5,6 +5,7 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
+import { fakeManagement } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -37,13 +38,15 @@ const dashboard: DashboardApi = {
     data: { workspace: workspace.path, dbId: 'activity-db', head: 0, entries: [] },
   })),
 };
+const management = fakeManagement().api;
 const connection: ConnectionStatus = { state: 'connected', error: null, distro: null, command: 'serve' };
 
-function WorkspaceShell(props: Omit<WorkspaceShellProps, 'dashboard' | 'connection'>) {
+function WorkspaceShell(props: Omit<WorkspaceShellProps, 'dashboard' | 'connection' | 'management'>) {
   return (
     <WorkspaceShellComponent
       {...props}
       dashboard={dashboard}
+      management={management}
       connection={connection}
       renderSection={props.renderSection ?? ((sectionId) => sectionId === 'home' ? (
         <SectionPlaceholder sectionId="home" title="Home" description={descriptions.Home} />
@@ -87,7 +90,8 @@ describe('WorkspaceShell', () => {
       expect(result.getByText(workspace.name)).toBe(name);
       expect(result.getByText(workspace.path)).toBe(path);
       expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      expect(result.getByText(descriptions[label])).toBeTruthy();
+      if (label === 'Teams') expect(main.querySelector('[data-section="teams"]')).toBeTruthy();
+      else expect(result.getByText(descriptions[label])).toBeTruthy();
       expect(currentButtons(result.container)).toEqual([button]);
       expect(document.activeElement).toBe(button);
     }
@@ -97,7 +101,7 @@ describe('WorkspaceShell', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const main = result.getByRole('main');
 
-    for (const label of ['Home', 'Teams', 'Boards', 'Configuration']) {
+    for (const label of ['Home', 'Boards', 'Configuration']) {
       fireEvent.click(result.getByRole('button', { name: label }));
       expect(main.querySelectorAll('button, a, input, select, textarea, form')).toHaveLength(0);
       expect(main.querySelector('[data-section]')?.getAttribute('data-section')).toBe(label.toLowerCase());
