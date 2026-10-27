@@ -292,7 +292,7 @@ class DispatchTests(BoardCase):
                      "board.stop"):
             self.assertIn(name, dispatch.COMMANDS)
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
-                         ["ticket.add", "ticket.apply", "ticket.depend", "ticket.list", "ticket.move",
+                         ["ticket.add", "ticket.apply", "ticket.depend", "ticket.edit", "ticket.list", "ticket.move",
                           "ticket.phase", "ticket.retry", "ticket.show", "ticket.unblock", "ticket.update"])
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("phase.")),
                          ["phase.add", "phase.clear-current", "phase.close", "phase.edit", "phase.list",
