@@ -30,3 +30,42 @@ Use the current CSS tokens and responsive foundations in `app/src/renderer/style
 | Finish | [P05-S07](./stories/P05-S07-responsive-accessibility.md) | Narrow-width and accessibility polish; full validation |
 
 Dependencies allow the three panels to land independently after the shell, while the final validation story follows the whole layout.
+
+## Teams management screen — T-037
+
+**Goal.** Turn the approved Teams management concept into a workspace-scoped screen for reusable agents, team membership, live operation, and board routing. Every displayed value and action must reflect workspace configuration or runtime evidence.
+
+**Goal, restated.** Operators can maintain reusable agent definitions and assemble teams while seeing each member's provider, model, availability, and current work. They can configure worktree and routing policy and control a live team board from the Teams screen, with Team Lead assigned to merge conflicts.
+
+### Open questions and planning assumptions
+
+| Question | Assumption for this story set |
+|---|---|
+| Where is `design/teams-screen-v1.png`? | It is absent from this checkout. Treat the ticket's enumerated capabilities as the approved functional reference; visual details require the image before visual acceptance. Pictured names, counts, providers, statuses, and models are illustrative only. |
+| Is an agent definition shared across workspaces? | Scope the catalog to one workspace under `.agent-studio/`, consistent with teams, roles, workflows, and board configuration. Team members reference stable catalog ids; editing a catalog entry updates future starts, while a running roster remains frozen. |
+| Can a member override a reusable agent definition? | Keep a member's identity and role in the team; use the catalog's provider/model/reasoning defaults. An explicit team override needs a later product decision. Existing inline members remain readable and editable during migration. |
+| What does “merge on success” mean? | Show and edit the existing board action rule's merge behavior and worktree mode; never imply every workflow success merges. Preserve the board's outcome applier and safety checks. |
+| Which board can the screen control? | The current workspace's one board and its selected running team. Start/stop reflect `board.run`/`board.stop`; a stopped or disconnected board is shown as such. |
+| Are role descriptions editable here? | Read them from `roles.json` and offer workspace-scoped editing through a validated API. Role ids used by workflows and board rules remain stable unless explicitly migrated. |
+| How are rules edited? | Edit the configured status → role → workflow → next-status graph using validated `board.json` writes. Keep action rules visible and protect merge-conflict and plan-merge-conflict routing to TeamLead in this workspace's default configuration; show validation errors rather than silently rewriting rules. |
+
+### Architecture and gaps
+
+`WorkspaceShell.tsx` already routes to a Teams placeholder, and the Home `TeamsPanel` links there. Reuse its shell, tokens, status labels, section loading pattern, and allowlisted preload/IPC boundary. `team.list` only returns a bounded definition summary plus aggregate runtime; it has no member identities, provider/model, role descriptions, or current assignment details. `board.summary` is read-only and omits the rule graph and board runner state. `teamdefs.py` stores inline members and has add/remove but no reusable agent catalog or general edit contract. `roles.json`, `board.json`, `team.status`, `board.show`, `board.run`, and `board.stop` supply foundations; safe workspace-scoped reads/writes, validation, and desktop IPC are still needed. The current board rules already route both `merge-conflict` and `plan-merge-conflict` to `TeamLead`; maintain that explicit mapping.
+
+### Epics → stories
+
+| Epic | Story | Outcome |
+|---|---|---|
+| Management contracts | [P05-S08](./stories/P05-S08-agent-catalog.md) | Reusable workspace agent definitions |
+| | [P05-S09](./stories/P05-S09-team-edit-contract.md) | Team creation and membership against catalog definitions |
+| | [P05-S10](./stories/P05-S10-management-read-model.md) | Member, role, provider/model and truthful live state projection |
+| | [P05-S11](./stories/P05-S11-board-settings-contract.md) | Validated worktree, merge, routing, and board-control contracts |
+| Desktop boundary | [P05-S12](./stories/P05-S12-management-ipc.md) | Typed, allowlisted management IPC |
+| Teams UI | [P05-S13](./stories/P05-S13-teams-screen.md) | Team and reusable agent overview |
+| | [P05-S14](./stories/P05-S14-team-membership-ui.md) | Team and member editing |
+| | [P05-S15](./stories/P05-S15-live-team-controls.md) | Live status and board controls |
+| | [P05-S16](./stories/P05-S16-routing-settings-ui.md) | Worktree, merge and routing editor |
+| Acceptance | [P05-S17](./stories/P05-S17-teams-live-gate.md) | Responsive, accessible, Windows plus WSL live validation |
+
+These ten stories form one dependency-ordered delivery set. Child tickets stay in backlog while this planning worktree is merged; the existing `plan-merge-ready` rule promotes this run's children to `refine-ready` after a successful merge.
