@@ -86,6 +86,8 @@ USAGE = """agent-studio <command>
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
   ticket add (--workspace PATH | cwd) --title TEXT [--body TEXT] [--priority N] [--phase ID]
                                            add a ticket to a phase (the default phase) in the initial status
+  ticket edit KEY (--body TEXT | --body-file PATH|-) [--mode replace|append] [--expected-body-sha256 SHA]
+                                           update an unclaimed ticket body with an operator audit event
   ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
                                            move a ticket; finished tickets need --force
   ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)

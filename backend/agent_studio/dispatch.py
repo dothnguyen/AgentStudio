@@ -360,6 +360,21 @@ def _validate_ticket_update(args):
             "body": req_text(args, "body", boardmodel.BODY_LIMIT, allow_empty=False), "mode": mode}
 
 
+def _validate_ticket_edit(args):
+    _only("ticket.edit", args, {"workspace", "key", "body", "mode", "expectedBodySha256"})
+    mode = args.get("mode", "replace")
+    if mode not in ("replace", "append"):
+        raise AsError(BAD_REQUEST, "mode must be replace or append.")
+    out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+           "body": req_text(args, "body", boardmodel.BODY_LIMIT, allow_empty=False), "mode": mode}
+    sha = args.get("expectedBodySha256")
+    if sha is not None:
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise AsError(BAD_REQUEST, "expectedBodySha256 must be a lowercase hex sha256.")
+        out["expectedBodySha256"] = sha
+    return out
+
+
 def _validate_ticket_phase(args):
     return {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
             "phase": _slug_arg(args.get("phase"), "phase")}
@@ -887,6 +902,7 @@ COMMANDS = {
     "board.resume": _inbox("board.resume", _validate_board_resume),
     "ticket.add": _inbox("ticket.add", _validate_ticket_add),
     "ticket.update": _inbox("ticket.update", _validate_ticket_update),
+    "ticket.edit": _inbox("ticket.edit", _validate_ticket_edit),
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),

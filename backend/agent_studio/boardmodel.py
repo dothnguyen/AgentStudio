@@ -13,7 +13,7 @@ import os
 import re
 
 from . import roles as rolefiles, workflowdef
-from .protocol import AsError, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
+from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
     PHASE_CLOSED, PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, \
     TICKET_CAP_REACHED, TICKET_DEPENDENCY_CYCLE, TICKET_DUPLICATE, TICKET_NOT_FOUND, \
     TICKET_TRANSITION_INVALID
@@ -969,6 +969,28 @@ def mcp_ticket_update(tx, workspace: str, args: dict) -> dict:
     _ticket_event(tx.conn, ticket["id"], "ticket.updated", "agent", ticket["status"], ticket["status"],
                   {"ticketId": ticket["id"], "key": ticket["key"], "mode": args.get("mode") or "replace",
                    "memberId": row["member_id"] or row["agent_id"], "assignment": args["assignment"],
+                   "chars": len(text)})
+    return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone())}
+
+
+def operator_ticket_edit(tx, workspace: str, args: dict) -> dict:
+    """Edit an unclaimed ticket as an operator, recording its body change with the ticket event."""
+    import hashlib
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    if ticket.get("assignee") or ticket.get("active_run_id"):
+        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed; wait until its run finishes before editing.")
+    old = ticket.get("body") or ""
+    expected = args.get("expectedBodySha256")
+    if expected is not None and hashlib.sha256(old.encode("utf-8")).hexdigest() != expected:
+        raise AsError("TICKET_CHANGED", f"Ticket {ticket['key']} changed since it was read; reload and retry.")
+    text = args["body"]
+    body = (old.rstrip() + "\n\n" if old else "") + text if args.get("mode") == "append" else text
+    if len(body) > BODY_LIMIT:
+        raise AsError(BAD_REQUEST, f"Updated ticket body exceeds {BODY_LIMIT} characters.")
+    tx.conn.execute("UPDATE tickets SET body = ?, updated_at = ? WHERE id = ?", (body, utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.updated", "operator", ticket["status"], ticket["status"],
+                  {"ticketId": ticket["id"], "key": ticket["key"], "mode": args.get("mode") or "replace",
                    "chars": len(text)})
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone())}

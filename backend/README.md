@@ -154,6 +154,17 @@ rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the exi
 
 ## Run a team and watch it (inside WSL)
 
+Operators can update an unclaimed ticket body without moving it:
+
+```bash
+agent-studio ticket edit T-048 --body-file /path/to/description.md
+agent-studio ticket edit T-048 --body 'Additional details' --mode append
+```
+
+Use `--expected-body-sha256` with the SHA-256 of the body read earlier to reject stale edits. `--body-file -`
+reads standard input. Edits are recorded as operator ticket events; claimed tickets and oversized bodies are
+rejected without changing them. Agent MCP `ticket_update` retains its existing assignment-based permissions.
+
 ```bash
 agent-studio coordinator start --enable-debug            # debug: allows the test-only `fake` provider
 agent-studio team start --workspace ~/scratch/demo --agent fake:developer:Dev --agent fake:reviewer:Rev --pretty

@@ -1,5 +1,6 @@
 """P04-S07: ticket add/move/show/list/depend and board show through the real coordinator, inbox and CLI."""
 import json
+import hashlib
 import os
 import sqlite3
 import subprocess
@@ -82,6 +83,22 @@ class BoardCommands(unittest.TestCase):
         phases = conn.execute("SELECT slug, name, position FROM phases").fetchall()
         self.assertEqual(phases, [("default", "Default", 0)])
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM board_state").fetchone()[0], 1)
+
+    def test_operator_edits_body_and_records_event_without_moving_ticket(self):
+        ticket = self.ok("ticket", "add", "--workspace", self.ws, "--title", "Planning", "--body", "Original")
+        original_hash = hashlib.sha256(b"Original").hexdigest()
+        updated = self.ok("ticket", "edit", "--workspace", self.ws, ticket["ticket"]["key"],
+                          "--body", "Updated\nRequirements", "--expected-body-sha256", original_hash)
+        self.assertEqual((updated["ticket"]["status"], updated["ticket"]["body"]), ("todo", "Updated\nRequirements"))
+        rc, _, err = self.cli("ticket", "edit", "--workspace", self.ws, "T-001", "--body", "Lost update",
+                              "--expected-body-sha256", original_hash)
+        self.assertEqual(rc, 1)
+        self.assertTrue(err.startswith("TICKET_CHANGED:"), err)
+        self.ok("ticket", "edit", "--workspace", self.ws, "T-001", "--body", "More", "--mode", "append")
+        detail = self.ok("ticket", "show", "--workspace", self.ws, "T-001")
+        self.assertEqual(detail["ticket"]["body"], "Updated\nRequirements\n\nMore")
+        self.assertEqual([e["actor"] for e in detail["events"] if e["name"] == "ticket.updated"],
+                         ["operator", "operator"])
 
     def test_phases_end_to_end(self):
         added = self.ok("board", "phase", "add", "--workspace", self.ws, "--id", "build-out", "--name", "Build out")

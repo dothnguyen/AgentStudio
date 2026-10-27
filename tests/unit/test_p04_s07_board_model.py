@@ -117,6 +117,21 @@ class ConfigTests(BoardCase):
 
 
 class TicketTests(BoardCase):
+    def test_operator_edit_rejects_claimed_and_oversize_without_data_loss(self):
+        ticket = self.add("keep", body="unchanged")
+        with self.store.transaction() as tx:
+            tx.conn.execute("UPDATE tickets SET assignee = ? WHERE id = ?", ("occupied", ticket["id"]))
+            with self.assertRaises(AsError) as caught:
+                boardmodel.operator_ticket_edit(tx, self.ws, {"key": ticket["key"], "body": "replacement"})
+            self.assertEqual(caught.exception.code, "TICKET_BUSY")
+            tx.conn.execute("UPDATE tickets SET assignee = NULL WHERE id = ?", (ticket["id"],))
+            with self.assertRaises(AsError) as caught:
+                boardmodel.operator_ticket_edit(tx, self.ws, {"key": ticket["key"], "mode": "append",
+                                                               "body": "x" * boardmodel.BODY_LIMIT})
+            self.assertEqual(caught.exception.code, "BAD_REQUEST")
+        self.assertEqual(boardmodel.get_ticket(self.conn, self.ws, ticket["key"])["body"], "unchanged")
+        self.assertEqual([event["name"] for event in self.events(ticket["key"])], ["ticket.created"])
+
     def test_first_add_creates_default_phase_and_state_once(self):
         self.assertEqual((self.count("board_state"), self.count("phases")), (0, 0))
         first = self.add("one")

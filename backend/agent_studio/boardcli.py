@@ -7,11 +7,13 @@ here names a status, a role or a host command; the board's configuration carries
 """
 from __future__ import annotations
 
+import sys
+
 from . import boardmodel
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, envelope
 from .teamcli import _Fail, _call, _write_call
 
-TICKET_ACTIONS = ("add", "move", "show", "list", "depend", "phase", "apply", "unblock", "retry")
+TICKET_ACTIONS = ("add", "edit", "move", "show", "list", "depend", "phase", "apply", "unblock", "retry")
 BOARD_ACTIONS = ("show", "phase", "rules")
 PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
 RULES_ACTIONS = ("check",)
@@ -54,6 +56,13 @@ def _parser(action, group="ticket"):
         p.add_argument("--body")
         p.add_argument("--priority", type=int)
         p.add_argument("--phase")
+    elif action == "edit":
+        p.add_argument("ticket_key")
+        body = p.add_mutually_exclusive_group(required=True)
+        body.add_argument("--body")
+        body.add_argument("--body-file")
+        p.add_argument("--mode", choices=("replace", "append"), default="replace")
+        p.add_argument("--expected-body-sha256")
     elif action == "move":
         p.add_argument("ticket_key")
         p.add_argument("--to", required=True)
@@ -103,6 +112,25 @@ def _move(ns):
                                        "force": ns.force, **({"reason": ns.reason} if ns.reason else {})})
     t = data["ticket"]
     return data, lambda d: f"{t['key']}: {d.get('from') or '?'} -> {t['status']}" + ("  (forced)" if ns.force else "")
+
+
+def _edit(ns):
+    if ns.body_file:
+        try:
+            if ns.body_file == "-":
+                body = sys.stdin.read()
+            else:
+                with open(ns.body_file, encoding="utf-8") as source:
+                    body = source.read(boardmodel.BODY_LIMIT + 1)
+        except (OSError, UnicodeError) as e:
+            raise AsError(BAD_REQUEST, f"Cannot read ticket body: {e}")
+    else:
+        body = ns.body
+    args = {"workspace": _workspace(ns), "key": ns.ticket_key, "body": body, "mode": ns.mode}
+    if ns.expected_body_sha256 is not None:
+        args["expectedBodySha256"] = ns.expected_body_sha256
+    data = _write_call("ticket.edit", args)
+    return data, lambda d: f"{d['ticket']['key']}: body updated ({ns.mode})"
 
 
 def _ticket_phase(ns):
@@ -340,7 +368,7 @@ def _render_board(d) -> str:
     return "\n".join(lines)
 
 
-_HANDLERS = {"add": _add, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
+_HANDLERS = {"add": _add, "edit": _edit, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
              "apply": _ticket_apply, "unblock": _ticket_unblock, "retry": _ticket_retry}
 _PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, "edit": _phase_edit,
                    "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,

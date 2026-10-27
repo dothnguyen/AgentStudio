@@ -191,6 +191,7 @@ HANDLERS = {
                                          if args.get("assignment")
                                          else boardmodel.ticket_add(tx, args["workspace"], args)),
     "ticket.update": lambda args, tx, ctx: boardmodel.mcp_ticket_update(tx, args["workspace"], args),
+    "ticket.edit": lambda args, tx, ctx: boardmodel.operator_ticket_edit(tx, args["workspace"], args),
     "ticket.move": lambda args, tx, ctx: boardmodel.ticket_move(tx, args["workspace"], args),
     "ticket.depend": lambda args, tx, ctx: boardmodel.ticket_depend(tx, args["workspace"], args),
     "ticket.phase": lambda args, tx, ctx: boardmodel.ticket_phase(tx, args["workspace"], args),
