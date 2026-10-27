@@ -18,7 +18,8 @@
       "role": "Developer",
       "agents": [
         "claude-sonnet-5-5-medium",
-        "codex-6-1-terra-medium"
+        "codex-6-1-terra-medium",
+        "agy-gemini-3-8-flash-medium"
       ]
     },
     {
