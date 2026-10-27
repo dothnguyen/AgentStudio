@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNELS, forwardState, pickedPath, registerIpc, type ServeLike } from '../src/main/ipc';
 import type { ConnectionPayload, DashboardActivity } from '../src/shared/api';
+import { MANAGEMENT_CHANNELS } from '../src/main/managementSpecs';
 import { ServeError, type StateChange } from '../src/main/serveClient';
 
 type Handler = (e: unknown, ...a: unknown[]) => unknown;
@@ -36,10 +37,10 @@ function setup(over: Partial<{ distro: string | null; reply: unknown; fail: unkn
 }
 
 describe('registerIpc', () => {
-  it('registers exactly the seven invoke channels', () => {
+  it('registers exactly the invoke channels', () => {
     const { handlers } = setup();
     expect([...handlers.keys()].sort()).toEqual(
-      [CHANNELS.list, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet, CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity].sort(),
+      [CHANNELS.list, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet, CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity, ...Object.values(MANAGEMENT_CHANNELS)].sort(),
     );
   });
 

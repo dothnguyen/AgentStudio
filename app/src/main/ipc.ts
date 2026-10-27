@@ -7,6 +7,8 @@ import type {
   Result,
   WorkspaceList,
 } from '../shared/api';
+import { randomUUID } from 'node:crypto';
+import { MANAGEMENT_CHANNELS, MANAGEMENT_SPECS, isPlainObject } from './managementSpecs';
 import { ServeError, type ConnectionState, type ServeResponse, type StateChange } from './serveClient';
 import { WslPathError, toWslPath } from './wslPath';
 
@@ -19,6 +21,7 @@ export const CHANNELS = {
   dashboardTeams: 'dashboard:teams',
   dashboardBoard: 'dashboard:board',
   dashboardActivity: 'dashboard:activity',
+  ...MANAGEMENT_CHANNELS,
 } as const;
 
 export interface ServeLike {
@@ -26,7 +29,7 @@ export interface ServeLike {
   readonly lastError: string | null;
   readonly distro: string | null;
   readonly diagnostics: { distro: string | null; command: string | null };
-  request(command: string, args?: Record<string, unknown>): Promise<ServeResponse>;
+  request(command: string, args?: Record<string, unknown>, opts?: { timeoutMs?: number; idempotencyKey?: string }): Promise<ServeResponse>;
   on(event: 'state', listener: (s: StateChange) => void): unknown;
   off(event: 'state', listener: (s: StateChange) => void): unknown;
 }
@@ -37,6 +40,7 @@ export interface IpcDeps {
   ipcMain: IpcMainLike;
   client: ServeLike;
   showFolderDialog: () => Promise<string | null>;
+  newIdempotencyKey?: () => string;
 }
 
 function badArgs(message: string): Result<never> {
@@ -55,9 +59,12 @@ function fromError(e: unknown): Result<never> {
 
 function fromResponse<T>(resp: ServeResponse): Result<T> {
   if (resp.ok) return { ok: true, data: resp.data as T };
+  if (resp.error) {
+    return { ok: false, error: resp.data === undefined ? resp.error : { ...resp.error, data: resp.data } };
+  }
   return {
     ok: false,
-    error: resp.error ?? { code: 'BAD_RESPONSE', message: 'serve returned ok:false without an error.', retryable: false },
+    error: { code: 'BAD_RESPONSE', message: 'serve returned ok:false without an error.', retryable: false },
   };
 }
 
@@ -129,6 +136,7 @@ async function resolveWorkspacePath(client: ServeLike, workspaceId: string): Pro
 
 export function registerIpc(deps: IpcDeps): void {
   const { ipcMain, client, showFolderDialog } = deps;
+  const newIdempotencyKey = deps.newIdempotencyKey ?? (() => `ipc-${randomUUID()}`);
 
   ipcMain.handle(CHANNELS.list, async (_e, ...args) => {
     if (args.length !== 0) return badArgs('workspaces.list takes no arguments.');
@@ -187,6 +195,27 @@ export function registerIpc(deps: IpcDeps): void {
   registerDashboardHandler<DashboardTeams>(CHANNELS.dashboardTeams, 'dashboard.teams', 'team.list', {});
   registerDashboardHandler<DashboardBoard>(CHANNELS.dashboardBoard, 'dashboard.board', 'board.summary', { limit: 5 });
   registerDashboardHandler<DashboardActivity>(CHANNELS.dashboardActivity, 'dashboard.activity', 'activity.recent', { limit: 15, kinds: ['ticket'] });
+
+  for (const spec of MANAGEMENT_SPECS) {
+    ipcMain.handle(spec.channel, async (_e, ...args) => {
+      if (args.length !== 2 || !isNonEmptyString(args[0]) || !isPlainObject(args[1])) {
+        return badArgs(`${spec.label} expects (workspaceId: string, request: object).`);
+      }
+      const parsed = spec.parse(args[1]);
+      if (typeof parsed === 'string') return badArgs(parsed);
+      const workspace = await resolveWorkspacePath(client, args[0]);
+      if (!workspace.ok) return workspace;
+      try {
+        const backendArgs = { workspace: workspace.data, ...parsed };
+        const resp = spec.mutating
+          ? await client.request(spec.command, backendArgs, { idempotencyKey: newIdempotencyKey() })
+          : await client.request(spec.command, backendArgs);
+        return fromResponse(resp);
+      } catch (e) {
+        return fromError(e);
+      }
+    });
+  }
 
   ipcMain.handle(CHANNELS.connectionGet, (_e, ...args) => {
     if (args.length !== 0) throw new Error('connection.get takes no arguments.');

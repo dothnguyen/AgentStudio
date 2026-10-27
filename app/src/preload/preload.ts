@@ -12,6 +12,24 @@ export const PRELOAD_CHANNELS = {
   dashboardTeams: 'dashboard:teams',
   dashboardBoard: 'dashboard:board',
   dashboardActivity: 'dashboard:activity',
+  managementOverview: 'management:overview',
+  managementAgents: 'management:agents',
+  managementTeam: 'management:team',
+  managementValidateTeam: 'management:validateTeam',
+  managementBoardSettings: 'management:boardSettings',
+  managementCreateAgent: 'management:createAgent',
+  managementUpdateAgent: 'management:updateAgent',
+  managementDeleteAgent: 'management:deleteAgent',
+  managementCreateTeam: 'management:createTeam',
+  managementRenameTeam: 'management:renameTeam',
+  managementDeleteTeam: 'management:deleteTeam',
+  managementAddMember: 'management:addMember',
+  managementUpdateMember: 'management:updateMember',
+  managementRemoveMember: 'management:removeMember',
+  managementUpdateBoardSettings: 'management:updateBoardSettings',
+  managementUpdateRole: 'management:updateRole',
+  managementRunBoard: 'management:runBoard',
+  managementStopBoard: 'management:stopBoard',
 } as const;
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'on' | 'removeListener'>;
@@ -27,6 +45,45 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       teams: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardTeams, id),
       board: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardBoard, id),
       activity: (id: string) => ipc.invoke(PRELOAD_CHANNELS.dashboardActivity, id),
+    },
+    management: {
+      overview: (w) => ipc.invoke(PRELOAD_CHANNELS.managementOverview, w, {}),
+      agents: (w) => ipc.invoke(PRELOAD_CHANNELS.managementAgents, w, {}),
+      team: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementTeam, w, { teamDefId }),
+      validateTeam: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementValidateTeam, w, { teamDefId }),
+      boardSettings: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardSettings, w, {}),
+      createAgent: (w, agent) => ipc.invoke(PRELOAD_CHANNELS.managementCreateAgent, w, { agent }),
+      updateAgent: (w, agentDefId, changes) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateAgent, w, { agentDefId, changes }),
+      deleteAgent: (w, agentDefId) => ipc.invoke(PRELOAD_CHANNELS.managementDeleteAgent, w, { agentDefId }),
+      createTeam: (w, input) =>
+        ipc.invoke(
+          PRELOAD_CHANNELS.managementCreateTeam,
+          w,
+          input.teamDefId === undefined ? { name: input.name } : { name: input.name, teamDefId: input.teamDefId },
+        ),
+      renameTeam: (w, teamDefId, name) => ipc.invoke(PRELOAD_CHANNELS.managementRenameTeam, w, { teamDefId, name }),
+      deleteTeam: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementDeleteTeam, w, { teamDefId }),
+      addMember: (w, teamDefId, member) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementAddMember, w, { teamDefId, member }),
+      updateMember: (w, teamDefId, memberId, changes) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateMember, w, { teamDefId, memberId, changes }),
+      removeMember: (w, teamDefId, memberId) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementRemoveMember, w, { teamDefId, memberId }),
+      updateBoardSettings: (w, changes, expectedSha256) =>
+        ipc.invoke(
+          PRELOAD_CHANNELS.managementUpdateBoardSettings,
+          w,
+          expectedSha256 === undefined ? { changes } : { changes, expectedSha256 },
+        ),
+      updateRole: (w, role, description, expectedSha256) =>
+        ipc.invoke(
+          PRELOAD_CHANNELS.managementUpdateRole,
+          w,
+          expectedSha256 === undefined ? { role, description } : { role, description, expectedSha256 },
+        ),
+      runBoard: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementRunBoard, w, { teamId }),
+      stopBoard: (w) => ipc.invoke(PRELOAD_CHANNELS.managementStopBoard, w, {}),
     },
     connection: {
       onChange: (cb) => {

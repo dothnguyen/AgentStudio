@@ -1,4 +1,5 @@
 import type { StateChange } from '../main/serveClient';
+import type { ManagementApi } from './management';
 
 export interface ConnectionPayload extends StateChange {
   distro: string | null;
@@ -9,6 +10,7 @@ export interface ApiError {
   message: string;
   retryable: boolean;
   remediation?: string;
+  data?: unknown;
 }
 export type Result<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 export interface Workspace {
@@ -105,5 +107,6 @@ export interface AgentStudioApi {
     board(workspaceId: string): Promise<Result<DashboardBoard>>;
     activity(workspaceId: string): Promise<Result<DashboardActivity>>;
   };
+  management: ManagementApi;
   connection: { onChange(cb: (s: ConnectionPayload) => void): () => void };
 }

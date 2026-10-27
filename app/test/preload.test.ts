@@ -17,13 +17,20 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
   return { ipc: { invoke, on, removeListener } as never, invoke, on, removeListener, listeners };
 }
 
+const METHODS = [
+  'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
+  'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
+  'updateRole', 'runBoard', 'stopBoard',
+];
+
 describe('preload', () => {
   it('exposes exactly the fixed calls on window.agentStudio', () => {
     expect(Object.keys(exposed)).toEqual(['agentStudio']);
     const api = exposed.agentStudio as Record<string, Record<string, unknown>>;
-    expect(Object.keys(api).sort()).toEqual(['connection', 'dashboard', 'workspaces']);
+    expect(Object.keys(api).sort()).toEqual(['connection', 'dashboard', 'management', 'workspaces']);
     expect(Object.keys(api.workspaces).sort()).toEqual(['create', 'list', 'pickFolder']);
     expect(Object.keys(api.dashboard).sort()).toEqual(['activity', 'board', 'teams']);
+    expect(Object.keys(api.management).sort()).toEqual([...METHODS].sort());
     expect(Object.keys(api.connection)).toEqual(['onChange']);
     for (const k of ['invoke', 'send', 'on', 'ipcRenderer']) expect(k in api).toBe(false);
   });
@@ -38,6 +45,59 @@ describe('preload', () => {
       [CHANNELS.dashboardTeams, 'ws-1'],
       [CHANNELS.dashboardBoard, 'ws-2'],
       [CHANNELS.dashboardActivity, 'ws-3'],
+    ]);
+  });
+
+  it('management calls forward the workspace id and a fixed request on their channel', () => {
+    const f = fakeIpc();
+    const m = buildApi(f.ipc).management as unknown as Record<string, (...a: unknown[]) => unknown>;
+    const sha = 'a'.repeat(64);
+    const uuid = '123e4567-e89b-42d3-a456-426614174000';
+    const x = 'extra';
+    m.overview('ws', x);
+    m.agents('ws', x);
+    m.team('ws', 'core', x);
+    m.validateTeam('ws', 'core', x);
+    m.boardSettings('ws', x);
+    m.createAgent('ws', { name: 'Ada', provider: 'claude' }, x);
+    m.updateAgent('ws', 'ada', { model: null }, x);
+    m.deleteAgent('ws', 'ada', x);
+    m.createTeam('ws', { name: 'Core' }, x);
+    m.createTeam('ws', { name: 'Core', teamDefId: 'core' }, x);
+    m.renameTeam('ws', 'core', 'New', x);
+    m.deleteTeam('ws', 'core', x);
+    m.addMember('ws', 'core', { role: 'Developer' }, x);
+    m.updateMember('ws', 'core', 'm1', { role: 'QA' }, x);
+    m.removeMember('ws', 'core', 'm1', x);
+    m.updateBoardSettings('ws', { baseBranch: 'main' }, undefined, x);
+    m.updateBoardSettings('ws', { baseBranch: 'main' }, sha);
+    m.updateRole('ws', 'TeamLead', null, undefined, x);
+    m.updateRole('ws', 'TeamLead', 'desc', sha);
+    m.runBoard('ws', uuid, x);
+    m.stopBoard('ws', x);
+    const P = PRELOAD_CHANNELS;
+    expect(f.invoke.mock.calls).toEqual([
+      [P.managementOverview, 'ws', {}],
+      [P.managementAgents, 'ws', {}],
+      [P.managementTeam, 'ws', { teamDefId: 'core' }],
+      [P.managementValidateTeam, 'ws', { teamDefId: 'core' }],
+      [P.managementBoardSettings, 'ws', {}],
+      [P.managementCreateAgent, 'ws', { agent: { name: 'Ada', provider: 'claude' } }],
+      [P.managementUpdateAgent, 'ws', { agentDefId: 'ada', changes: { model: null } }],
+      [P.managementDeleteAgent, 'ws', { agentDefId: 'ada' }],
+      [P.managementCreateTeam, 'ws', { name: 'Core' }],
+      [P.managementCreateTeam, 'ws', { name: 'Core', teamDefId: 'core' }],
+      [P.managementRenameTeam, 'ws', { teamDefId: 'core', name: 'New' }],
+      [P.managementDeleteTeam, 'ws', { teamDefId: 'core' }],
+      [P.managementAddMember, 'ws', { teamDefId: 'core', member: { role: 'Developer' } }],
+      [P.managementUpdateMember, 'ws', { teamDefId: 'core', memberId: 'm1', changes: { role: 'QA' } }],
+      [P.managementRemoveMember, 'ws', { teamDefId: 'core', memberId: 'm1' }],
+      [P.managementUpdateBoardSettings, 'ws', { changes: { baseBranch: 'main' } }],
+      [P.managementUpdateBoardSettings, 'ws', { changes: { baseBranch: 'main' }, expectedSha256: sha }],
+      [P.managementUpdateRole, 'ws', { role: 'TeamLead', description: null }],
+      [P.managementUpdateRole, 'ws', { role: 'TeamLead', description: 'desc', expectedSha256: sha }],
+      [P.managementRunBoard, 'ws', { teamId: uuid }],
+      [P.managementStopBoard, 'ws', {}],
     ]);
   });
 

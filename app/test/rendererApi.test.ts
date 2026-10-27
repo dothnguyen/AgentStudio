@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   getConnectionApi,
   getDashboardApi,
+  getManagementApi,
   getWorkspacesApi,
   type ConnectionStatus,
   type CreateArgs,
@@ -125,5 +126,42 @@ describe('getDashboardApi', () => {
     const api = getDashboardApi();
     expect(api).not.toBe(dashboard);
     expect(Object.keys(api).sort()).toEqual(['activity', 'board', 'teams']);
+  });
+});
+
+describe('getManagementApi', () => {
+  const METHODS = [
+    'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
+    'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
+    'updateRole', 'runBoard', 'stopBoard',
+  ];
+  const fakes = () => {
+    const fns: Record<string, ReturnType<typeof vi.fn>> = {};
+    for (const m of METHODS) fns[m] = vi.fn(async () => ({ ok: true as const, data: { m } }));
+    return fns;
+  };
+
+  it('getManagementApi throws when the preload management API is missing', () => {
+    window.agentStudio = { connection: { onChange: () => () => {} } };
+    expect(() => getManagementApi()).toThrow('Agent Studio preload API is missing (window.agentStudio.management).');
+  });
+
+  it('getManagementApi forwards every method and preserves Results', async () => {
+    const fns = fakes();
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: fns as never };
+    const api = getManagementApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
+    for (const m of METHODS) {
+      const args = ['ws', 'a', { b: 1 }];
+      expect(await api[m](...args)).toEqual({ ok: true, data: { m } });
+      expect(fns[m]).toHaveBeenCalledWith(...args);
+    }
+  });
+
+  it('getManagementApi returns its own narrow forwarding object', () => {
+    const fns = { ...fakes(), extra: vi.fn() };
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: fns as never };
+    const api = getManagementApi();
+    expect(api).not.toBe(fns);
+    expect(Object.keys(api).sort()).toEqual([...METHODS].sort());
   });
 });

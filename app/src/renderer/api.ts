@@ -1,3 +1,45 @@
+import type { ManagementApi } from '../shared/management';
+
+export type {
+  AgentCatalogList,
+  AgentDef,
+  AgentDefChanges,
+  AgentDefDeleted,
+  AgentDefInput,
+  AgentDefResult,
+  BoardRuleView,
+  BoardRunResult,
+  BoardRunner,
+  BoardRunnerStatus,
+  BoardSettings,
+  BoardSettingsChanges,
+  BoardSettingsKey,
+  ConfigState,
+  ConfigWriteResult,
+  ManagementApi,
+  ManagementError,
+  ManagementResult,
+  MemberChanges,
+  MemberEditResult,
+  MemberInput,
+  MemberRemoved,
+  MemberWork,
+  OverviewMember,
+  OverviewRuntimeState,
+  OverviewTeam,
+  Problem,
+  ResolvedMember,
+  RoleWriteResult,
+  TeamCreateInput,
+  TeamDefinition,
+  TeamDefinitionDetail,
+  TeamDeleted,
+  TeamEditResult,
+  TeamMemberConfig,
+  TeamOverview,
+  TeamValidation,
+} from '../shared/management';
+
 export type ConnectionState = 'connecting' | 'connected' | 'lost';
 export interface ConnectionStatus {
   state: ConnectionState;
@@ -23,6 +65,7 @@ declare global {
         pickFolder(): Promise<Result<string | null>>;
       };
       dashboard?: DashboardApi;
+      management?: ManagementApi;
     };
   }
 }
@@ -32,6 +75,7 @@ export interface ApiError {
   message: string;
   retryable: boolean;
   remediation?: string;
+  data?: unknown;
 }
 export type Result<T> = { ok: true; data: T } | { ok: false; error: ApiError };
 export interface Workspace {
@@ -145,6 +189,31 @@ export function getDashboardApi(): DashboardApi {
     teams: (workspaceId) => real.teams(workspaceId),
     board: (workspaceId) => real.board(workspaceId),
     activity: (workspaceId) => real.activity(workspaceId),
+  };
+}
+
+export function getManagementApi(): ManagementApi {
+  const real = window.agentStudio?.management;
+  if (!real) throw new Error('Agent Studio preload API is missing (window.agentStudio.management).');
+  return {
+    overview: (...args) => real.overview(...args),
+    agents: (...args) => real.agents(...args),
+    team: (...args) => real.team(...args),
+    validateTeam: (...args) => real.validateTeam(...args),
+    boardSettings: (...args) => real.boardSettings(...args),
+    createAgent: (...args) => real.createAgent(...args),
+    updateAgent: (...args) => real.updateAgent(...args),
+    deleteAgent: (...args) => real.deleteAgent(...args),
+    createTeam: (...args) => real.createTeam(...args),
+    renameTeam: (...args) => real.renameTeam(...args),
+    deleteTeam: (...args) => real.deleteTeam(...args),
+    addMember: (...args) => real.addMember(...args),
+    updateMember: (...args) => real.updateMember(...args),
+    removeMember: (...args) => real.removeMember(...args),
+    updateBoardSettings: (...args) => real.updateBoardSettings(...args),
+    updateRole: (...args) => real.updateRole(...args),
+    runBoard: (...args) => real.runBoard(...args),
+    stopBoard: (...args) => real.stopBoard(...args),
   };
 }
 
