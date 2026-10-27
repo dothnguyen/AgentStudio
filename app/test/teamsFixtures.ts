@@ -1,6 +1,8 @@
 import { vi } from 'vitest';
 import type {
   AgentCatalogList,
+  BoardRunner,
+  BoardSettings,
   ManagementApi,
   OverviewMember,
   OverviewTeam,
@@ -10,6 +12,30 @@ import type {
 } from '../src/renderer/api';
 
 type Response<T> = Result<T> | Promise<Result<T>>;
+
+export const RUN_TEAM_ID = '123e4567-e89b-42d3-a456-426614174000';
+
+export function runner(overrides: Partial<BoardRunner> = {}): BoardRunner {
+  return {
+    status: 'not_bound', runStatus: null, teamId: null, teamStatus: null, teamDefId: null,
+    coordinatorRunning: true, error: null, ...overrides,
+  };
+}
+
+export function boardSettingsFixture(r: BoardRunner = runner()): BoardSettings {
+  return {
+    workspace: '/work/alpha',
+    board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: {} },
+    statuses: [],
+    rules: [],
+    actionRules: [],
+    worktree: { baseBranch: 'main', worktreeStatuses: [] },
+    protectedRoutes: [],
+    roles: { state: 'ok', sha256: null, message: null, items: [] },
+    workflows: [],
+    runner: r,
+  } as unknown as BoardSettings;
+}
 
 export function member(overrides: Partial<OverviewMember> = {}): OverviewMember {
   return {
@@ -113,20 +139,24 @@ export function catalogFixture(overrides: Partial<AgentCatalogList> = {}): Agent
 export function fakeManagement(opts: {
   overview?: Array<Response<TeamOverview>>;
   agents?: Array<Response<AgentCatalogList>>;
+  boardSettings?: Array<Response<BoardSettings>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   calls?: Partial<Record<keyof ManagementApi, (...args: any[]) => unknown>>;
 } = {}) {
   const overviewList = opts.overview ?? [{ ok: true, data: twoTeams() }];
   const agentList = opts.agents ?? [{ ok: true, data: catalogFixture() }];
+  const boardList = opts.boardSettings ?? [{ ok: true, data: boardSettingsFixture() }];
+  let b = 0;
   let o = 0;
   let a = 0;
   const overview = vi.fn((_id: string) => Promise.resolve(overviewList[Math.min(o++, overviewList.length - 1)]!));
   const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
+  const boardSettings = vi.fn((_id: string) => Promise.resolve(boardList[Math.min(b++, boardList.length - 1)]!));
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
-  const api = new Proxy({ overview, agents, ...opts.calls } as Record<string, unknown>, {
+  const api = new Proxy({ overview, agents, boardSettings, ...opts.calls } as Record<string, unknown>, {
     get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
   }) as unknown as ManagementApi;
-  return { api, overview, agents };
+  return { api, overview, agents, boardSettings };
 }
 
 export function teamDefinition(overrides: Partial<TeamDefinition> = {}): TeamDefinition {

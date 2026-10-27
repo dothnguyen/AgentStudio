@@ -222,6 +222,30 @@ describe('management IPC', () => {
     ]);
   });
 
+  it('board control outcomes and errors pass through unchanged', async () => {
+    const board = { workspace: '/work/a', status: 'running', teamId: UUID };
+    const a = setup({
+      replies: {
+        'board.run': ok({ board, rules: 3 }),
+        'board.stop': { ok: false, error: { code: 'PENDING', message: 'p', retryable: true }, data: { idempotencyKey: 'k-00000001' } },
+      },
+    });
+    expect(await a.call(C.managementRunBoard, 'workspace-a', { teamId: UUID })).toEqual({ ok: true, data: { board, rules: 3 } });
+    expect(await a.call(C.managementStopBoard, 'workspace-a', {})).toEqual({
+      ok: false,
+      error: { code: 'PENDING', message: 'p', retryable: true, data: { idempotencyKey: 'k-00000001' } },
+    });
+    const b = setup({
+      replies: {
+        'board.run': { ok: false, error: { code: 'BOARD_ALREADY_RUNNING', message: 'm', retryable: false }, data: { teamId: 'x' } },
+      },
+    });
+    expect(await b.call(C.managementRunBoard, 'workspace-a', { teamId: UUID })).toEqual({
+      ok: false,
+      error: { code: 'BOARD_ALREADY_RUNNING', message: 'm', retryable: false, data: { teamId: 'x' } },
+    });
+  });
+
   it('default idempotency key matches the backend rule', async () => {
     const { call, calls, optsSeen } = setup();
     await call(C.managementStopBoard, 'workspace-a', {});

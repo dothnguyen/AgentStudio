@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
   AgentDef,
+  BoardRunResult,
+  BoardSettings,
+  ConnectionStatus,
   ManagementApi,
   ManagementResult,
   MemberChanges,
@@ -11,6 +14,7 @@ import type {
 } from '../api';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
+import { boardControlView, boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
 import { MemberForm, TeamNameForm, WriteFeedbackView } from './TeamEditForms';
 import {
   addMemberInput,
@@ -42,9 +46,11 @@ import {
   overviewNotices,
   plural,
   presenceLabel,
+  presenceTone,
   providerModelText,
   roleNote,
   roleText,
+  runtimeTone,
   teamKey,
   teamLabel,
   text,
@@ -54,6 +60,7 @@ import {
 export interface TeamsScreenProps {
   workspace: Workspace;
   management: ManagementApi;
+  connection?: ConnectionStatus;
 }
 
 export interface TeamWrites {
@@ -85,10 +92,12 @@ function SectionError(props: { section: DashboardSectionController<unknown> }): 
 function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const overview = useDashboardSection<TeamOverview>(props.management.overview, props.workspace.id);
   const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
+  const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
+  const [boardAction, setBoardAction] = useState<BoardAction | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const refreshLock = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
-  const busy = refreshing || overview.loading || agents.loading;
+  const busy = refreshing || overview.loading || agents.loading || board.loading;
   const [feedback, setFeedback] = useState<WriteFeedback | null>(null);
   const [pending, setPending] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -150,6 +159,32 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     })),
   };
 
+  async function boardWrite(action: BoardAction, team: OverviewTeam): Promise<void> {
+    if (writeLock.current) return;
+    const runTeamId = team.runtime.teamId;
+    if (action === 'run' && runTeamId === null) return;
+    writeLock.current = true;
+    setPending(true);
+    setBoardAction(action);
+    setFeedback(null);
+    let result: ManagementResult<BoardRunResult>;
+    try {
+      result = action === 'run' ? await mgmt.runBoard(ws, runTeamId!) : await mgmt.stopBoard(ws);
+    } catch (reason) {
+      result = { ok: false, error: thrownError(reason) };
+    } finally {
+      writeLock.current = false;
+      if (mounted.current) {
+        setPending(false);
+        setBoardAction(null);
+      }
+    }
+    if (!mounted.current) return;
+    setFeedback(result.ok ? { kind: 'success', text: boardResultText(action, team, result.data) } : boardErrorFeedback(action, result.error));
+    void overview.reload();
+    void board.reload();
+  }
+
   async function createTeam(name: string): Promise<void> {
     const ok = await runWrite('Team was not created.', () => mgmt.createTeam(ws, { name }), (d) => ({
       text: `Created team "${d.team.name}".${problemsSuffix(d.problems)}`,
@@ -163,12 +198,21 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     refreshLock.current = true;
     setRefreshing(true);
     try {
-      await Promise.all([overview.reload(), agents.reload()]);
+      await Promise.all([overview.reload(), agents.reload(), board.reload()]);
     } finally {
       refreshLock.current = false;
       setRefreshing(false);
     }
   }
+
+  const connectionState = props.connection?.state ?? null;
+  const connected = connectionState === null || connectionState === 'connected';
+  const lastConnection = useRef(connectionState);
+  useEffect(() => {
+    const previous = lastConnection.current;
+    lastConnection.current = connectionState;
+    if (connectionState === 'connected' && previous !== null && previous !== 'connected') void refreshAll();
+  }, [connectionState]);
 
   const data = overview.state === 'ready' ? overview.data : null;
   const ordered = data === null
@@ -196,6 +240,13 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         </div>
       </header>
       <WriteFeedbackView feedback={feedback} onDismiss={() => setFeedback(null)} />
+      {!connected && (
+        <p className="panel-note teams-connection-note">
+          {connectionState === 'lost'
+            ? 'Connection to the backend was lost. Live state may be out of date and board controls are disabled.'
+            : 'Connecting to the backend… Live state may be out of date and board controls are disabled.'}
+        </p>
+      )}
       {overview.state === 'ready' && notices.length > 0 && (
         <ul className="teams-notices" aria-label="Data notices">
           {notices.map((n) => <li key={n}>{n}</li>)}
@@ -233,7 +284,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
                       onClick={() => setSelectedKey(item.key)}
                     >
                       <span className="teams-card-name">{teamLabel(team)}</span>
-                      <span className={`status-badge teams-runtime teams-runtime-${team.runtime.state}`}>
+                      <span className={`status-badge teams-runtime teams-runtime-${team.runtime.state} teams-tone-${runtimeTone(team.runtime.state)}`}>
+                        <span className="status-dot" aria-hidden="true" />
                         {RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}
                       </span>
                       <span className="teams-card-facts">{memberCountText(team)}</span>
@@ -253,6 +305,13 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             agents={agents.state === 'ready' && agents.data !== null ? agents.data.agents : null}
             writes={writes}
             pending={pending}
+            board={{
+              section: board,
+              connected,
+              action: boardAction,
+              onRun: (t) => { void boardWrite('run', t); },
+              onStop: (t) => { void boardWrite('stop', t); },
+            }}
           />
         )}
         <AgentCatalogPanel section={agents} overview={data} />
@@ -267,8 +326,15 @@ function TeamDetailPanel(props: {
   agents: AgentDef[] | null;
   writes: TeamWrites;
   pending: boolean;
+  board: {
+    section: DashboardSectionController<BoardSettings>;
+    connected: boolean;
+    action: BoardAction | null;
+    onRun(team: OverviewTeam): void;
+    onStop(team: OverviewTeam): void;
+  };
 }): JSX.Element {
-  const { team, overview, agents, writes, pending } = props;
+  const { team, overview, agents, writes, pending, board } = props;
   const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
   const [memberForm, setMemberForm] = useState<{ mode: 'add' } | { mode: 'edit'; memberId: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -288,6 +354,7 @@ function TeamDetailPanel(props: {
       </p>
       {unNote !== null && <p className="panel-note">{unNote}</p>}
       {runNote !== null && <p className="panel-note">{runNote}</p>}
+      <BoardControl team={team} pending={pending} {...board} />
       {editable && (
         <div className="teams-team-actions">
           <button type="button" disabled={pending} onClick={() => setTeamForm('rename')}>Rename team</button>
@@ -354,7 +421,12 @@ function TeamDetailPanel(props: {
                     {role !== null && <p className="teams-role-description">{role}</p>}
                   </td>
                   <td>{memberProviderModel(m)}</td>
-                  <td><span className="status-badge teams-presence">{presenceLabel(m.presence)}</span></td>
+                  <td>
+                    <span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}>
+                      <span className="status-dot" aria-hidden="true" />
+                      {presenceLabel(m.presence)}
+                    </span>
+                  </td>
                   <td>{workText(m.work)}</td>
                   <td className="teams-member-actions">
                     {memberId !== null && canEditMember(team, m) && (confirmRemove === memberId ? (
@@ -431,6 +503,44 @@ function TeamDetailPanel(props: {
           }}
           onCancel={() => setMemberForm(null)}
         />
+      )}
+    </section>
+  );
+}
+
+function BoardControl(props: {
+  team: OverviewTeam;
+  section: DashboardSectionController<BoardSettings>;
+  connected: boolean;
+  action: BoardAction | null;
+  pending: boolean;
+  onRun(team: OverviewTeam): void;
+  onStop(team: OverviewTeam): void;
+}): JSX.Element {
+  const { team, section, connected, action, pending, onRun, onStop } = props;
+  const settings = section.state === 'ready' ? section.data : null;
+  const view = settings === null ? null : boardControlView(team, settings.runner, connected);
+  return (
+    <section className="teams-board" aria-labelledby="teams-board-title">
+      <h3 id="teams-board-title">Board control</h3>
+      {section.state === 'loading' && <p className="panel-loading">Loading board state…</p>}
+      {section.state === 'error' && <SectionError section={section} />}
+      {view !== null && (
+        <>
+          <p className={`status-badge teams-board-status teams-tone-${view.tone}`}>
+            <span className="status-dot" aria-hidden="true" />
+            {view.status}
+          </p>
+          {view.detail !== null && <p className="panel-note">{view.detail}</p>}
+          {view.runHint !== null && <p className="panel-note">{view.runHint}</p>}
+          <div className="teams-board-actions">
+            <button type="button" disabled={pending || !view.canRun} onClick={() => onRun(team)}>Run board</button>
+            <button type="button" disabled={pending || !view.canStop} onClick={() => onStop(team)}>Stop board</button>
+          </div>
+        </>
+      )}
+      {action !== null && (
+        <p className="panel-loading" role="status">{action === 'run' ? 'Starting board…' : 'Stopping board…'}</p>
       )}
     </section>
   );

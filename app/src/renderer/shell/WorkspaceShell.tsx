@@ -44,7 +44,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onNavigate={(nextId) => navigate(nextId)}
     />
   ) : sectionId === 'teams' ? (
-    <TeamsScreen workspace={props.workspace} management={props.management} />
+    <TeamsScreen workspace={props.workspace} management={props.management} connection={props.connection} />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
   );

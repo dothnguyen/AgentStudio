@@ -4,7 +4,9 @@ import {
   orderTeams,
   overviewNotices,
   presenceLabel,
+  presenceTone,
   providerModelText,
+  runtimeTone,
   teamKey,
   teamLabel,
   workText,
@@ -76,5 +78,19 @@ describe('teamsModel', () => {
       'Showing the first 1 team. More teams exist in this workspace.',
     ]);
     expect(overviewNotices(overviewFixture([], { partial: true }))).toEqual(['Some team details could not be read.']);
+  });
+
+  it('presence_tone_maps_runtime_evidence', () => {
+    const t = presenceTone;
+    expect([t('idle'), t('busy'), t('waiting_input'), t('limit_reached'), t('offline'), t('error')])
+      .toEqual(['ok', 'busy', 'warning', 'warning', 'danger', 'danger']);
+    expect([t('not_in_runtime'), t('stopped'), t('weird_new_state'), t('constructor')])
+      .toEqual(['muted', 'muted', 'muted', 'muted']);
+  });
+
+  it('runtime_tone_maps_team_state', () => {
+    const t = runtimeTone;
+    expect([t('running'), t('starting'), t('error'), t('disconnected'), t('stopped'), t('not_started'), t('unavailable')])
+      .toEqual(['ok', 'warning', 'danger', 'danger', 'muted', 'muted', 'muted']);
   });
 });

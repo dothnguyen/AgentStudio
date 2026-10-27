@@ -138,3 +138,29 @@ export function agentUsage(o: TeamOverview | null, agentId: string | null): stri
   const atLeast = o.truncated || o.teams.some((t) => t.membersTruncated) ? 'at least ' : '';
   return `Used by ${atLeast}${plural(members, 'member', 'members')} in ${plural(teams, 'team', 'teams')}`;
 }
+
+export type Tone = 'ok' | 'busy' | 'warning' | 'danger' | 'muted';
+
+export function presenceTone(presence: string): Tone {
+  switch (presence) {
+    case 'idle': return 'ok';
+    case 'busy': return 'busy';
+    case 'starting':
+    case 'waiting_input':
+    case 'limit_reached': return 'warning';
+    case 'offline':
+    case 'error':
+    case 'disconnected': return 'danger';
+    default: return 'muted';
+  }
+}
+
+export function runtimeTone(state: string): Tone {
+  switch (state) {
+    case 'running': return 'ok';
+    case 'starting': return 'warning';
+    case 'error':
+    case 'disconnected': return 'danger';
+    default: return 'muted';
+  }
+}
