@@ -67,6 +67,23 @@ class UsageClassifierTests(unittest.TestCase):
                 self.assertEqual(report["diagnosticCode"], "PROVIDER_ERROR" if name == "api_error.jsonl" else "USAGE_LIMIT")
                 self.assertEqual(report.get("limitResetAt"), expected)
 
+    def test_claude_weekly_limit_result_triggers_usage_limit(self):
+        adapter = providers.get("claude")
+        cases = (
+            ("You've hit your weekly limit · resets Oct 29, 5am (Australia/Brisbane)", "USAGE_LIMIT"),
+            ("You have reached your daily limit", "USAGE_LIMIT"),
+            ("Could not retrieve the weekly limit settings", "PROVIDER_ERROR"),
+        )
+        for message, expected in cases:
+            with self.subTest(message=message):
+                state = ParseState()
+                event = {"type": "result", "subtype": "error", "is_error": True,
+                         "terminal_reason": "api_error", "result": message}
+                adapter.parse_line(json.dumps(event).encode("utf-8"), state)
+                report = adapter.finalize(inp("claude"), state, oc())
+                self.assertEqual(report["diagnosticCode"], expected)
+                self.assertNotIn("limitResetAt", report)
+
     def test_usage_limit_report_marks_agent_limited_and_records_event(self):
         from tests.unit import test_s03_rules as rules
         path, conn, store, agent, _task, assignment = rules.setup()

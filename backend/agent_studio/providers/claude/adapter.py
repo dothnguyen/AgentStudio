@@ -65,7 +65,11 @@ ENV = BASE_ENV + ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_U
                   "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy",
                   "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR")
 AUTH_RE = re.compile(r"not logged in|/login|invalid api key|authentication_error|oauth token|\b401\b", re.I)
-LIMIT_RE = re.compile(r"(?:rate[ -]?limit|usage[ -]?limit|quota)\s*(?:has been |is )?(?:reached|exceeded)|too many requests|\b429\b", re.I)
+LIMIT_RE = re.compile(
+    r"(?:rate[ -]?limit|usage[ -]?limit|quota)\s*(?:has been |is )?(?:reached|exceeded)"
+    r"|\b(?:you(?:'ve| have)\s+)?(?:hit|reached|exceeded)\s+(?:your\s+)?"
+    r"(?:weekly|daily|monthly|usage|rate)\s+limit\b"
+    r"|too many requests|\b429\b", re.I)
 EPOCH_RE = re.compile(r"\b(1\d{9}(?:\.\d+)?)\b")
 CLOCK_RE = re.compile(r"\b(\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|GMT|[+-]\d{2}:?\d{2}))\b", re.I)
 
