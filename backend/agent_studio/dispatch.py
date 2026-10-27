@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, teamdefs, boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -662,6 +662,107 @@ def _activity_recent(args, req):
         conn.close()
 
 
+def _only(command, args, allowed):
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AsError(BAD_REQUEST, f"{command} got unknown argument(s): {', '.join(unknown)}.")
+
+
+def _teamdef_ws(args):
+    return _workspace_arg(args), _slug(args.get("teamDefId"), "teamDefId")
+
+
+def _teamdef_active(workspace, team_def_id):
+    sd = paths.ensure_state_dir()
+    if not os.path.exists(state.db_path(sd)):
+        return None
+    conn = _reader()
+    try:
+        return teamdefs.active_runtime(conn, workspace, team_def_id)
+    finally:
+        conn.close()
+
+
+def _member_fields(args, keys):
+    out = {}
+    for k in keys:
+        if k not in args:
+            continue
+        if args[k] is None:
+            out[k] = None
+        elif k == "name":
+            out[k] = req_text(args, k, 200, allow_empty=False)
+        elif k == "role" or k == "provider":
+            out[k] = req_text(args, k, 64, allow_empty=False)
+        elif k == "agent":
+            out[k] = _slug(args[k], k)
+        elif k in ("model", "reasoning"):
+            out[k] = req_text(args, k, 200, allow_empty=False)
+        elif k == "canAddTickets":
+            out[k] = req_bool(args, k)
+    return out
+
+
+_MEMBER_KEYS = ("name", "role", "agent", "provider", "model", "reasoning", "canAddTickets")
+
+
+def _teamdef_show(args, req):
+    _only("teamdef.show", args, {"workspace", "teamDefId"})
+    ws, tid = _teamdef_ws(args)
+    return teamdefs.describe(ws, tid, _teamdef_active(ws, tid))
+
+
+def _teamdef_validate(args, req):
+    _only("teamdef.validate", args, {"workspace", "teamDefId"})
+    ws, tid = _teamdef_ws(args)
+    return teamdefs.check_team(ws, tid)
+
+
+def _teamdef_create(args, req):
+    _only("teamdef.create", args, {"workspace", "name", "teamDefId"})
+    ws = _workspace_arg(args)
+    name = req_text(args, "name", 200, allow_empty=False)
+    tid = _slug(args["teamDefId"], "teamDefId") if args.get("teamDefId") is not None else None
+    return teamdefs.create_team(ws, name, tid)
+
+
+def _teamdef_rename(args, req):
+    _only("teamdef.rename", args, {"workspace", "teamDefId", "name"})
+    ws, tid = _teamdef_ws(args)
+    name = req_text(args, "name", 200, allow_empty=False)
+    return teamdefs.rename_team(ws, tid, name, _teamdef_active(ws, tid))
+
+
+def _teamdef_delete(args, req):
+    _only("teamdef.delete", args, {"workspace", "teamDefId"})
+    ws, tid = _teamdef_ws(args)
+    return teamdefs.delete_team(ws, tid, _teamdef_active(ws, tid))
+
+
+def _teamdef_member_add(args, req):
+    _only("teamdef.member.add", args, {"workspace", "teamDefId", "memberId", *_MEMBER_KEYS})
+    ws, tid = _teamdef_ws(args)
+    fields = {k: v for k, v in _member_fields(args, _MEMBER_KEYS).items() if v is not None}
+    if args.get("memberId") is not None:
+        fields["id"] = _slug(args["memberId"], "memberId")
+    return teamdefs.member_add(ws, tid, fields, _teamdef_active(ws, tid))
+
+
+def _teamdef_member_update(args, req):
+    _only("teamdef.member.update", args, {"workspace", "teamDefId", "memberId", *_MEMBER_KEYS})
+    ws, tid = _teamdef_ws(args)
+    mid = _slug(args.get("memberId"), "memberId")
+    changes = _member_fields(args, _MEMBER_KEYS)
+    return teamdefs.member_update(ws, tid, mid, changes, _teamdef_active(ws, tid))
+
+
+def _teamdef_member_remove(args, req):
+    _only("teamdef.member.remove", args, {"workspace", "teamDefId", "memberId"})
+    ws, tid = _teamdef_ws(args)
+    mid = _slug(args.get("memberId"), "memberId")
+    return teamdefs.member_remove(ws, tid, mid, _teamdef_active(ws, tid))
+
+
 COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
@@ -680,6 +781,14 @@ COMMANDS = {
     "team.attach": _team_attach,
     "team.list": _team_list,
     "team.status": _team_status,
+    "teamdef.show": _teamdef_show,
+    "teamdef.validate": _teamdef_validate,
+    "teamdef.create": _teamdef_create,
+    "teamdef.rename": _teamdef_rename,
+    "teamdef.delete": _teamdef_delete,
+    "teamdef.member.add": _teamdef_member_add,
+    "teamdef.member.update": _teamdef_member_update,
+    "teamdef.member.remove": _teamdef_member_remove,
     "agentdef.list": _agentdef_list,
     "agentdef.create": _agentdef_create,
     "agentdef.update": _agentdef_update,

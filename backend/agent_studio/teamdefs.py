@@ -1,16 +1,18 @@
 """Team definitions: <workspace>/.agent-studio/teams/<id>.json (hand-editable; the file is the only source)."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
 
 from . import providers, roles, teams
-from .protocol import (AsError, BAD_REQUEST, MEMBER_EXISTS, MEMBER_NOT_FOUND, TEAM_AMBIGUOUS, TEAM_EXISTS,
-                       TEAM_NOT_FOUND)
+from .protocol import (AsError, BAD_REQUEST, MEMBER_EXISTS, MEMBER_NOT_FOUND, TEAM_ALREADY_RUNNING, TEAM_AMBIGUOUS,
+                       TEAM_EXISTS, TEAM_NOT_FOUND)
 from .teams import TEAM_CONFIG_INVALID
 
 CONFIG_DIR = ".agent-studio"
+CATALOG_FILE = "agents.json"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 LEGACY_ID = "default"
 _ADD_HINT = "run agent-studio team add --name NAME"
@@ -110,6 +112,34 @@ def _text(v) -> bool:
     return isinstance(v, str) and bool(v.strip())
 
 
+def _catalog(workspace: str) -> dict:
+    """{agent_id: entry} from the reusable agent catalog (agents.json). AsError propagates."""
+    from . import agentcatalog  # lazy: agentcatalog imports teamdefs
+    agents = agentcatalog.load(workspace).get("agents")
+    if isinstance(agents, list):
+        return {a["id"]: a for a in agents if isinstance(a, dict) and isinstance(a.get("id"), str)}
+    if isinstance(agents, dict):
+        return {k: v for k, v in agents.items() if isinstance(v, dict)}
+    return {}
+
+
+def _check_provider(emit, prov, model, reasoning) -> None:
+    if prov not in providers.PEERS and prov not in providers.TEST_ONLY:
+        emit("provider", f"unknown provider {prov!r} (known: {', '.join(providers.PEERS)})")
+        return
+    try:
+        adapter = providers.get(prov, allow_test_only=True)
+    except AsError as e:
+        emit("provider", e.message)
+        return
+    for k, v in (("model", model), ("reasoning", reasoning)):
+        if isinstance(v, str):
+            try:
+                adapter.validate_settings(v if k == "model" else None, v if k == "reasoning" else None)
+            except AsError as e:
+                emit(k, e.message)
+
+
 def validate(workspace: str, team: dict, file_id: str) -> list:
     problems = []
 
@@ -136,18 +166,31 @@ def validate(workspace: str, team: dict, file_id: str) -> list:
         cfg = None
         add("roles.json", e.message)
     known_roles = (cfg or {}).get("roles", {})
+    catalog = None
+    if any(isinstance(m, dict) and "agent" in m for m in members):
+        try:
+            catalog = _catalog(workspace)
+        except AsError as e:
+            add(CATALOG_FILE, e.message)
     seen = set()
     for i, m in enumerate(members):
         p = f"members[{i}]"
         if not isinstance(m, dict):
             add(p, "must be an object")
             continue
-        for k in ("id", "name", "role", "provider"):
+        is_catalog = "agent" in m
+        for k in (("id", "name", "role", "agent") if is_catalog else ("id", "name", "role", "provider")):
             if not _text(m.get(k)):
                 add(f"{p}.{k}", "must be a non-empty string")
-        for k in ("model", "reasoning"):
-            if k in m and not isinstance(m[k], str):
-                add(f"{p}.{k}", "must be a string")
+        if is_catalog:
+            for k in ("provider", "model", "reasoning"):
+                if k in m:
+                    add(f"{p}.{k}", f"must not be set on a member that uses agent {m.get('agent')!r}; "
+                                    f"edit the agent in {CONFIG_DIR}/{CATALOG_FILE}")
+        else:
+            for k in ("model", "reasoning"):
+                if k in m and not isinstance(m[k], str):
+                    add(f"{p}.{k}", "must be a string")
         if "canAddTickets" in m and not isinstance(m["canAddTickets"], bool):
             add(f"{p}.canAddTickets", "must be true or false")
         mid = m.get("id")
@@ -160,23 +203,29 @@ def validate(workspace: str, team: dict, file_id: str) -> list:
         role = m.get("role")
         if _text(role) and role not in known_roles:
             add(f"{p}.role", f"role {role!r} is not defined in {CONFIG_DIR}/roles.json")
+        if is_catalog:
+            aid = m.get("agent")
+            if not _text(aid):
+                continue
+            if not SLUG_RE.match(aid):
+                add(f"{p}.agent", "must be a slug (lowercase letters, digits, '-'; at most 64 characters)")
+            elif catalog is not None:
+                if aid not in catalog:
+                    add(f"{p}.agent", f"agent {aid!r} is not defined in {CONFIG_DIR}/{CATALOG_FILE}")
+                else:
+                    entry = catalog[aid]
+
+                    def emit(field, msg, aid=aid, p=p):
+                        add(f"{p}.agent", f"agent {aid!r} {field}: {msg}")
+
+                    if not _text(entry.get("provider")):
+                        emit("provider", "must be a non-empty string")
+                    else:
+                        _check_provider(emit, entry["provider"], entry.get("model"), entry.get("reasoning"))
+            continue
         prov = m.get("provider")
-        if not _text(prov):
-            continue
-        if prov not in providers.PEERS and prov not in providers.TEST_ONLY:
-            add(f"{p}.provider", f"unknown provider {prov!r} (known: {', '.join(providers.PEERS)})")
-            continue
-        try:
-            adapter = providers.get(prov, allow_test_only=True)
-        except AsError as e:
-            add(f"{p}.provider", e.message)
-            continue
-        for k in ("model", "reasoning"):
-            if isinstance(m.get(k), str):
-                try:
-                    adapter.validate_settings(m[k] if k == "model" else None, m[k] if k == "reasoning" else None)
-                except AsError as e:
-                    add(f"{p}.{k}", e.message)
+        if _text(prov):
+            _check_provider(lambda f, msg, p=p: add(f"{p}.{f}", msg), prov, m.get("model"), m.get("reasoning"))
     return problems
 
 
@@ -292,3 +341,213 @@ def import_legacy(workspace: str, team_id=LEGACY_ID, name=LEGACY_ID) -> dict:
     team = legacy_team(workspace, team_id, name)
     save(workspace, team)
     return {"team": team, "warnings": validate(workspace, team, team_id)}
+
+
+# ---- strict edits (teamdef.* serve commands) ----------------------------------------------------
+
+def resolve_member(member: dict, catalog: dict) -> dict:
+    out = {"id": member.get("id"), "name": member.get("name"), "role": member.get("role")}
+    if "agent" in member:
+        entry = catalog.get(member["agent"]) or {}
+        out.update(source="catalog", agent=member["agent"], provider=entry.get("provider"),
+                   model=entry.get("model"), reasoning=entry.get("reasoning"))
+    else:
+        out.update(source="inline", agent=None, provider=member.get("provider"), model=member.get("model"),
+                   reasoning=member.get("reasoning"))
+    out["canAddTickets"] = member.get("canAddTickets")
+    return out
+
+
+def _members_catalog(workspace: str, team: dict) -> dict:
+    if not any(isinstance(m, dict) and "agent" in m for m in team.get("members", [])):
+        return {}
+    try:
+        return _catalog(workspace)
+    except AsError:
+        return {}
+
+
+def active_runtime(conn, workspace: str, team_id: str):
+    row = conn.execute("SELECT id, status FROM teams WHERE workspace = ? AND def_id = ? "
+                       "AND status IN ('starting','running','stopping') ORDER BY created_at DESC, rowid DESC",
+                       (workspace, team_id)).fetchone()
+    return {"teamId": row["id"], "status": row["status"]} if row else None
+
+
+_MEMBER_PATH = re.compile(r"^members\[(\d+)\](.*)$")
+
+
+def _keyed(team: dict, problems: list) -> set:
+    members = team.get("members") if isinstance(team, dict) else None
+    out = set()
+    for pr in problems:
+        path = pr["path"]
+        mt = _MEMBER_PATH.match(path)
+        if mt and isinstance(members, list) and int(mt.group(1)) < len(members):
+            m = members[int(mt.group(1))]
+            if isinstance(m, dict) and _text(m.get("id")):
+                path = f"members[{m['id']}]{mt.group(2)}"
+        out.add((path, pr["message"]))
+    return out
+
+
+def _check_edit(workspace: str, fid: str, before, candidate: dict) -> list:
+    old = _keyed(before, validate(workspace, before, fid)) if before is not None else set()
+    after = validate(workspace, candidate, fid)
+    new = [p for p in after if next(iter(_keyed(candidate, [p]))) not in old]
+    if new:
+        raise _invalid(fid, new)
+    return after
+
+
+def _strict_team(workspace: str, team_id):
+    team, fid, _ = _select(workspace, team_id)
+    if not isinstance(team.get("members"), list):
+        raise AsError(TEAM_CONFIG_INVALID, f"team {fid}: members must be a list")
+    return team, fid
+
+
+def _running(fid: str, active: dict, verb_phrase: str):
+    raise AsError(TEAM_ALREADY_RUNNING, f"Team {fid!r} is running in this workspace; stop it before {verb_phrase}.",
+                  remediation=f"run agent-studio team stop --team {fid}",
+                  data={"teamId": active["teamId"], "teamDefId": fid})
+
+
+def _roster(workspace: str, team: dict) -> list:
+    catalog = _members_catalog(workspace, team)
+    return [resolve_member(m, catalog) for m in team["members"] if isinstance(m, dict)]
+
+
+def describe(workspace: str, team_id, active) -> dict:
+    team, fid = _strict_team(workspace, team_id)
+    return {"team": team, "members": _roster(workspace, team), "problems": validate(workspace, team, fid),
+            "active": active}
+
+
+def check_team(workspace: str, team_id) -> dict:
+    team, fid = _strict_team(workspace, team_id)
+    problems = validate(workspace, team, fid)
+    if not problems and not team["members"]:
+        problems = [{"path": "members", "message": "the team has no members"}]
+    ready = not problems
+    return {"teamDefId": fid, "ready": ready, "problems": problems,
+            "roster": _roster(workspace, team) if ready else []}
+
+
+def create_team(workspace: str, name, team_id=None) -> dict:
+    return {"team": add_team(workspace, name, team_id)["team"], "problems": []}
+
+
+def rename_team(workspace: str, team_id, name, active) -> dict:
+    if not _text(name):
+        raise AsError(BAD_REQUEST, "teamdef.rename needs name")
+    team, fid = _strict_team(workspace, team_id)
+    candidate = copy.deepcopy(team)
+    candidate["name"] = name
+    after = _check_edit(workspace, fid, team, candidate)
+    save(workspace, candidate)
+    return {"team": candidate, "problems": after, "appliesOnNextStart": active is not None}
+
+
+def delete_team(workspace: str, team_id, active) -> dict:
+    team, fid = _strict_team(workspace, team_id)
+    if active:
+        _running(fid, active, "deleting it")
+    os.remove(_path(workspace, fid))
+    return {"deleted": fid}
+
+
+def _agent_model_error(agent) -> AsError:
+    return AsError(BAD_REQUEST, f"model and reasoning come from agent {agent!r} in {CONFIG_DIR}/{CATALOG_FILE}; "
+                                f"edit the agent instead.")
+
+
+def member_add(workspace: str, team_id, fields: dict, active) -> dict:
+    team, fid = _strict_team(workspace, team_id)
+    agent, provider = fields.get("agent"), fields.get("provider")
+    if agent is not None and provider is not None:
+        raise AsError(BAD_REQUEST, "Give agent or provider, not both.")
+    if agent is None and provider is None:
+        raise AsError(BAD_REQUEST, "teamdef.member.add needs agent (a catalog agent id) or provider.")
+    if agent is not None and (fields.get("model") is not None or fields.get("reasoning") is not None):
+        raise _agent_model_error(agent)
+    if fields.get("role") is None:
+        raise AsError(BAD_REQUEST, "teamdef.member.add needs role")
+    name = fields.get("name")
+    if name is None and agent is not None:
+        try:
+            name = _catalog(workspace).get(agent, {}).get("name")
+        except AsError:
+            name = None
+    if not _text(name):
+        raise AsError(BAD_REQUEST, "teamdef.member.add needs name")
+    mid = fields.get("id") or slug(name)
+    if any(isinstance(m, dict) and m.get("id") == mid for m in team["members"]):
+        raise AsError(MEMBER_EXISTS, f"Team {fid!r} already has a member {mid!r}.")
+    member = {"id": mid, "name": name, "role": fields["role"]}
+    if agent is not None:
+        member["agent"] = agent
+    else:
+        member["provider"] = provider
+        for k in ("model", "reasoning"):
+            if fields.get(k) is not None:
+                member[k] = fields[k]
+    if fields.get("canAddTickets") is not None:
+        member["canAddTickets"] = fields["canAddTickets"]
+    candidate = copy.deepcopy(team)
+    candidate["members"].append(member)
+    after = _check_edit(workspace, fid, team, candidate)
+    save(workspace, candidate)
+    return {"team": candidate, "member": member, "problems": after, "appliesOnNextStart": active is not None}
+
+
+def _exact_member(candidate: dict, fid: str, member_id: str) -> dict:
+    for m in candidate["members"]:
+        if isinstance(m, dict) and m.get("id") == member_id:
+            return m
+    raise AsError(MEMBER_NOT_FOUND, f"No member {member_id!r} in team {fid!r}.")
+
+
+def member_update(workspace: str, team_id, member_id: str, changes: dict, active) -> dict:
+    if not changes:
+        raise AsError(BAD_REQUEST, "teamdef.member.update needs at least one change.")
+    if any(k in changes and changes[k] is None for k in ("name", "role", "agent", "provider")):
+        raise AsError(BAD_REQUEST, "name, role, agent and provider cannot be cleared.")
+    if "agent" in changes and "provider" in changes:
+        raise AsError(BAD_REQUEST, "Give agent or provider, not both.")
+    team, fid = _strict_team(workspace, team_id)
+    candidate = copy.deepcopy(team)
+    m = _exact_member(candidate, fid, member_id)
+    if "agent" in changes:
+        m["agent"] = changes["agent"]
+        for k in ("provider", "model", "reasoning"):
+            m.pop(k, None)
+    if "provider" in changes:
+        m["provider"] = changes["provider"]
+        m.pop("agent", None)
+    if "agent" in m and (changes.get("model") is not None or changes.get("reasoning") is not None):
+        raise _agent_model_error(m["agent"])
+    for k in ("name", "role"):
+        if k in changes:
+            m[k] = changes[k]
+    for k in ("model", "reasoning", "canAddTickets"):
+        if k in changes:
+            if changes[k] is None:
+                m.pop(k, None)
+            else:
+                m[k] = changes[k]
+    after = _check_edit(workspace, fid, team, candidate)
+    save(workspace, candidate)
+    return {"team": candidate, "member": m, "problems": after, "appliesOnNextStart": active is not None}
+
+
+def member_remove(workspace: str, team_id, member_id: str, active) -> dict:
+    team, fid = _strict_team(workspace, team_id)
+    candidate = copy.deepcopy(team)
+    member = _exact_member(candidate, fid, member_id)
+    if active:
+        _running(fid, active, f"removing member {member_id!r}")
+    candidate["members"] = [x for x in candidate["members"] if x is not member]
+    after = _check_edit(workspace, fid, team, candidate)
+    save(workspace, candidate)
+    return {"team": candidate, "removed": member, "problems": after}

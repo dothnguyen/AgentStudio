@@ -279,14 +279,12 @@ def _pick_def(ws, ref, verb) -> str:
 
 def _definition_start_args(ws, ns) -> dict:
     fid = _pick_def(ws, ns.team, "start")
+    res = teamdefs.check_team(ws, fid)
+    if not res["ready"]:
+        raise teamdefs._invalid(fid, res["problems"])
     team = teamdefs.load(ws, fid)
-    problems = teamdefs.validate(ws, team, fid)
-    if not problems and not team.get("members"):
-        problems = [{"path": "members", "message": "the team has no members"}]
-    if problems:
-        raise teamdefs._invalid(fid, problems)
     roster = []
-    for m in team["members"]:
+    for m in res["roster"]:
         item = {"memberId": m["id"], "displayName": m["name"], "providerId": m["provider"], "role": m["role"]}
         for k in ("model", "reasoning"):
             if m.get(k):

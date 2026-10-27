@@ -144,10 +144,15 @@ def get(workspace: str, agent_id: str) -> dict:
     return catalog["agents"][_find(catalog, agent_id)]
 
 
-def references(workspace: str, agent_id: str) -> list:
+def references(workspace: str, agent_id: str, strict: bool = False) -> list:
     out = []
     for tid in teamdefs.list_ids(workspace):
-        members = teamdefs.load(workspace, tid).get("members")
+        try:
+            members = teamdefs.load(workspace, tid).get("members")
+        except AsError:
+            if strict:
+                raise
+            continue
         if isinstance(members, list) and any(isinstance(m, dict) and m.get("agent") == agent_id for m in members):
             out.append(tid)
     return sorted(out)
@@ -212,7 +217,7 @@ def update_agent(workspace: str, agent_id: str, changes: dict) -> dict:
 def delete_agent(workspace: str, agent_id: str) -> dict:
     catalog = _load_valid(workspace)
     i = _find(catalog, agent_id)
-    teams = references(workspace, agent_id)
+    teams = references(workspace, agent_id, strict=True)
     if teams:
         raise AsError(AGENT_IN_USE, f"Agent {agent_id!r} is used by team(s): {', '.join(teams)}.",
                       remediation="remove it from those teams first", data={"teams": teams})
