@@ -93,6 +93,30 @@ Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login
   `WORKSPACE_NOT_FOUND` comes only from workspace resolution in other commands.
 - These files are not in `state.db`, so the commands run without the coordinator and need no `idempotencyKey`.
 
+## Agent catalog (P05-S08)
+
+Reusable agent definitions live in `<workspace>/.agent-studio/agents.json` (hand-editable; the file is the only
+source, a missing file is an empty catalog):
+
+```json
+{"version": 1, "agents": [{"id": "ada", "name": "Ada", "description": "Implements backend stories.",
+                           "provider": "claude", "model": "opus", "reasoning": "high"}]}
+```
+
+- `id` (slug, unique) , `name` (at most 80 chars) and `provider` are required; `description` (at most 4000),
+  `model` and `reasoning` are optional and checked by the provider adapter like team members. A definition holds no
+  role (identity and role stay in the team file). Unknown keys are preserved by every write.
+- Commands (direct file access, no coordinator, no `idempotencyKey`): `agentdef.list {workspace}` →
+  `{workspace, version, agents, problems}`; `agentdef.create {workspace, agent}` → `{workspace, agent}` (id derived
+  from the name when absent); `agentdef.update {workspace, agentDefId, changes}` → `{workspace, agent}` (a `null`
+  `description`/`model`/`reasoning` removes it; the id cannot change); `agentdef.delete {workspace, agentDefId}` →
+  `{workspace, deleted}`.
+- Errors: `AGENT_CATALOG_INVALID` (`data.problems`), `AGENT_EXISTS`, `AGENT_NOT_FOUND`, `AGENT_IN_USE`
+  (`data.teams`; a team member with `"agent": "<id>"` references an entry), `WORKSPACE_NOT_FOUND`, `BAD_REQUEST`.
+  Failed requests leave every file unchanged. A broken `agents.json` is never rewritten.
+- Team members will reference an entry with the key `"agent"` (resolved from P05-S09). Running teams keep their
+  roster frozen in the state DB, so catalog edits never affect them.
+
 ## Run a team and watch it (inside WSL)
 
 ```bash

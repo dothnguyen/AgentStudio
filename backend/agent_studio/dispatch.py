@@ -9,13 +9,13 @@ import traceback
 
 import copy
 
-from . import boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, queries, state, \
-    teams, teamstatus, tmuxctl, workspace
+from . import agentcatalog, boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+    queries, state, teams, teamstatus, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
-from .protocol import (AsError, BAD_REQUEST, INTERNAL, UNKNOWN_COMMAND, UNSUPPORTED_PROTOCOL, envelope, req_bool,
-                       req_int, req_text, validate_id, validate_idempotency_key)
+from .protocol import (AsError, BAD_REQUEST, INTERNAL, UNKNOWN_COMMAND, UNSUPPORTED_PROTOCOL, WORKSPACE_NOT_FOUND,
+                       envelope, req_bool, req_int, req_text, validate_id, validate_idempotency_key)
 
 MAX_ECHO_BYTES = 256 * 1024
 DEFAULT_TIMEOUT_MS = 30000
@@ -102,6 +102,42 @@ def _team_list(args, req):
         return teamstatus.workspace_teams(conn, workspace_path)
     finally:
         conn.close()
+
+
+def _catalog_workspace(args, allowed, command):
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AsError(BAD_REQUEST, f"{command} got unknown argument(s): {', '.join(unknown)}.")
+    ws = _workspace_arg(args)
+    if not os.path.isdir(os.path.join(ws, ".agent-studio")):
+        raise AsError(WORKSPACE_NOT_FOUND, f"{ws} is not an Agent Studio workspace (no .agent-studio directory).")
+    return ws
+
+
+def _agentdef_list(args, req):
+    ws = _catalog_workspace(args, {"workspace"}, "agentdef.list")
+    return dict(agentcatalog.list_agents(ws), workspace=ws)
+
+
+def _agentdef_create(args, req):
+    ws = _catalog_workspace(args, {"workspace", "agent"}, "agentdef.create")
+    if "agent" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'agent'.")
+    return dict(agentcatalog.create_agent(ws, args["agent"]), workspace=ws)
+
+
+def _agentdef_update(args, req):
+    ws = _catalog_workspace(args, {"workspace", "agentDefId", "changes"}, "agentdef.update")
+    aid = _slug(args.get("agentDefId"), "agentDefId")
+    if "changes" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'changes'.")
+    return dict(agentcatalog.update_agent(ws, aid, args["changes"]), workspace=ws)
+
+
+def _agentdef_delete(args, req):
+    ws = _catalog_workspace(args, {"workspace", "agentDefId"}, "agentdef.delete")
+    aid = _slug(args.get("agentDefId"), "agentDefId")
+    return dict(agentcatalog.delete_agent(ws, aid), workspace=ws)
 
 
 def _validate_fake_options(opts):
@@ -644,6 +680,10 @@ COMMANDS = {
     "team.attach": _team_attach,
     "team.list": _team_list,
     "team.status": _team_status,
+    "agentdef.list": _agentdef_list,
+    "agentdef.create": _agentdef_create,
+    "agentdef.update": _agentdef_update,
+    "agentdef.delete": _agentdef_delete,
     "task.direct": _inbox("task.direct", _validate_task_direct),
     "task.show": _task_show,
     "assignment.cancel": _inbox("assignment.cancel", _validate_cancel),
