@@ -155,7 +155,7 @@ class ValidateTests(Base):
 
     def test_all_problems_with_paths(self):
         self.roles()
-        members = [{"id": "a", "name": "A", "role": "developer", "provider": "agy", "model": "x"},
+        members = [{"id": "a", "name": "A", "role": "developer", "provider": "agy", "model": "bad model"},
                    {"id": "a", "name": "A", "role": "ghost", "provider": "nope"},
                    {"id": "c", "name": "C", "role": "developer", "provider": "codex", "reasoning": "extreme"},
                    {"id": "d", "name": "D", "role": "", "provider": "codex", "model": "bad model!"},
@@ -175,10 +175,10 @@ class ValidateTests(Base):
 
     def test_model_rejected_for_known_provider_without_model_selection(self):
         from backend.agent_studio import providers
-        self.assertFalse(providers.get("agy").model_selectable())  # opencode is implemented (P00-S11)
+        self.assertTrue(providers.get("agy").model_selectable())
         self.roles()
         got = self.problems({"id": "t", "name": "T", "members": [
-            {"id": "a", "name": "A", "role": "developer", "provider": "agy", "model": "gpt-5"}]})
+            {"id": "a", "name": "A", "role": "developer", "provider": "agy", "model": "bad model"}]})
         self.assertEqual(got, {"members[0].model"})
 
     def test_validate_team_error_lists_problems(self):

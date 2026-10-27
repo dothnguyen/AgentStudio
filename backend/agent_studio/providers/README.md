@@ -1,6 +1,6 @@
 # Provider adapters
 
-Every provider — `codex`, `claude`, `opencode`, `agy` (placeholder), and the test-only `fake` — is one package directory
+Every provider — `codex`, `claude`, `opencode`, `agy` (operator-approved workspace-write exception; see `agy/CONTRACT.md`), and the test-only `fake` — is one package directory
 here exposing `ADAPTER`, an instance of `base.Adapter`. The coordinator, runner, and workflow never contain
 provider-specific code (a test fails if a provider name appears outside this folder and `schema.py`).
 

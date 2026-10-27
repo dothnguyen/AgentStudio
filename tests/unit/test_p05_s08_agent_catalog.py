@@ -109,8 +109,8 @@ class CatalogTests(Base):
             ({"id": "a", "name": "x" * 81, "provider": "fake"}, "agent.name", None),
             ({"id": "a", "name": "A", "provider": "fake", "description": "x" * 4001}, "agent.description", None),
             ({"id": "a", "name": "A", "provider": "gemini"}, "agent.provider", "unknown provider 'gemini'"),
-            ({"id": "a", "name": "A", "provider": "agy", "model": "x"}, "agent.model",
-             "agy: choosing a model is not supported."),
+            ({"id": "a", "name": "A", "provider": "agy", "model": "bad model"}, "agent.model",
+             "agy: invalid model name"),
             ({"id": "a", "name": "A", "provider": "fake", "reasoning": "extreme"}, "agent.reasoning", None),
             ({"id": "a", "name": "A", "provider": "fake", "model": 5}, "agent.model", "must be a string"),
         ]
@@ -149,7 +149,7 @@ class CatalogTests(Base):
     def test_update_provider_change_revalidates_settings(self):
         self.ok(self.call("agentdef.create", agent=dict(ADA)))
         before = self.catalog_bytes()
-        r = self.err(self.call("agentdef.update", agentDefId="ada", changes={"provider": "agy"}),
+        r = self.err(self.call("agentdef.update", agentDefId="ada", changes={"provider": "opencode"}),
                       "AGENT_CATALOG_INVALID")
         paths = {p["path"] for p in r["data"]["problems"]}
         self.assertTrue(paths & {"agents[0].model", "agents[0].reasoning"}, paths)

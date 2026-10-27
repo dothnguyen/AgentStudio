@@ -35,6 +35,12 @@
       "provider": "codex",
       "model": "gpt-6.1-terra",
       "reasoning": "medium"
+    },
+    {
+      "id": "agy-default",
+      "name": "Antigravity (default model)",
+      "provider": "agy",
+      "description": "Write-capable roles only; workspace isolation is not guaranteed."
     }
   ]
 }

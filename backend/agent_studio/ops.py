@@ -135,6 +135,9 @@ def preflight(args: dict) -> dict:
     if not isinstance(policies, list) or not set(policies) <= set(POLICIES):
         raise AsError("BAD_REQUEST", f"policies must be a subset of {list(POLICIES)}.")
     for pid, probe in providers.probe_many(wanted, env, allow_test_only=True, deep=bool(args.get("deep"))).items():
+        for warning in probe.get("warnings", []):
+            if isinstance(warning, str):
+                warnings.append({"code": "PROVIDER_POLICY_WARNING", "message": warning})
         if not probe.get("available"):
             record(f"provider:{pid}", AsError(PROVIDER_UNAVAILABLE, f"{pid}: {probe.get('reason')}"), probe=probe)
             continue
