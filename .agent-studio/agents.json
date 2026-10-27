@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "claude-opus-5-5-medium",
+      "name": "Claude Opus 5.5 medium",
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "reasoning": "medium"
+    },
+    {
+      "id": "claude-sonnet-5-5-medium",
+      "name": "Claude Sonnet 5.5 medium",
+      "provider": "claude",
+      "model": "claude-sonnet-5-5",
+      "reasoning": "medium"
+    },
+    {
+      "id": "codex-sol-5-6-medium",
+      "name": "Codex 5.6 Sol medium",
+      "provider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoning": "medium"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "name": "Clause Haiku 4.5",
+      "provider": "claude",
+      "model": "claude-haiku-4-5",
+      "reasoning": "medium"
+    },
+    {
+      "id": "codex-6-1-terra-medium",
+      "name": "Codex 6.1 Terra medium",
+      "provider": "codex",
+      "model": "gpt-6.1-terra",
+      "reasoning": "medium"
+    }
+  ]
+}
