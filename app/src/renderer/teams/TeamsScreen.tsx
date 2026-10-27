@@ -1,3 +1,4 @@
+import { RoutingSettingsPanel } from './RoutingSettingsPanel';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
@@ -315,6 +316,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           />
         )}
         <AgentCatalogPanel section={agents} overview={data} />
+        <RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} />
       </div>
     </div>
   );

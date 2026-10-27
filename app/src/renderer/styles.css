@@ -1200,3 +1200,13 @@ ul[aria-label="Workspaces"] {
 .teams-board-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .teams-connection-note { color: var(--warning); overflow-wrap: anywhere; }
 @media (max-width: 900px) { .teams-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* Routing settings (P05-S16) */
+.routing-settings { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+.routing-rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
+.routing-rule-grid fieldset { min-width: 0; }
+.routing-settings label { display: flex; flex-direction: column; gap: .25rem; margin-block: .5rem; }
+.routing-settings input, .routing-settings textarea, .routing-settings select { max-width: 100%; min-width: 0; }
+.routing-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.routing-problem { color: var(--danger, #b42318); overflow-wrap: anywhere; }
+@media (max-width: 900px) { .routing-rule-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -219,16 +219,20 @@ describe('useDashboardSection', () => {
     expect(consoleError).not.toHaveBeenCalled();
   });
 
-  it('reload_returns_a_resolved_promise_without_loading_while_in_flight', async () => {
+  it('reload_waits_for_the_existing_request_while_in_flight', async () => {
     const pending = deferred<Result<string>>();
     const load = vi.fn(() => pending.promise);
     let latest!: DashboardSection<string>;
     render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
 
     let settled = false;
-    await act(async () => { await latest.reload(); settled = true; });
-    expect(settled).toBe(true);
+    let reloading!: Promise<void>;
+    act(() => { reloading = latest.reload().then(() => { settled = true; }); });
+    await act(async () => { await Promise.resolve(); });
+    expect(settled).toBe(false);
     expect(load).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.resolve({ ok: true, data: 'ready' }); await reloading; });
+    expect(settled).toBe(true);
   });
 
   it('reload_promise_resolves_only_after_the_accepted_request_settles', async () => {

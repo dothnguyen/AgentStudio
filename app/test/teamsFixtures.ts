@@ -173,3 +173,19 @@ export function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } 
   const promise = new Promise<T>((r) => { resolve = r; });
   return { promise, resolve };
 }
+
+export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): BoardSettings {
+  const raw = [
+    { type: 'agent', when: { status: 'backlog' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', maxRounds: 3, syncBase: true, onFailPriority: 2, onPassCreatedTickets: { status: 'backlog' } },
+    { type: 'action', when: { status: 'merge-ready' }, action: 'merge', onPass: 'done', onFail: 'merge-conflict' },
+    { type: 'action', when: { status: 'plan-merge-ready' }, action: 'merge', onPass: 'done', onFail: 'plan-merge-conflict' },
+    { type: 'agent', when: { status: 'merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready' },
+    { type: 'agent', when: { status: 'plan-merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'plan-merge-ready', onFail: 'dev-ready' },
+  ];
+  return { ...boardSettingsFixture(), board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: { rules: raw } },
+    statuses: ['backlog', 'dev-ready', 'merge-ready', 'merge-conflict', 'plan-merge-ready', 'plan-merge-conflict', 'done'].map(id => ({ id, name: id, kind: id === 'backlog' ? 'initial' : id === 'done' ? 'done' : null })),
+    rules: raw.map((r, index) => ({ index, status: r.when.status, type: r.type as 'agent' | 'action', role: r.role ?? null, workflow: r.workflow ?? null, action: r.action ?? null, onPass: r.onPass, onFail: r.onFail, onBlocked: null, workspace: r.workspace ?? null, syncBase: !!r.syncBase, maxRounds: r.maxRounds ?? null, priority: null, protected: r.when.status.includes('conflict') })),
+    roles: { state: 'ok', sha256: 'b'.repeat(64), message: null, items: [{ id: 'Developer', description: 'Develops' }, { id: 'TeamLead', description: 'Leads' }] },
+    workflows: [{ name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] }, { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] }],
+    protectedRoutes: ['merge-conflict', 'plan-merge-conflict'].map(status => ({ status, role: 'TeamLead', satisfied: true })), ...overrides };
+}

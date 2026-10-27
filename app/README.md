@@ -34,7 +34,8 @@ reduced-motion preference is enabled.
 
 Opening a workspace shows its dashboard. The header reports the current connection state and the time
 the latest team response reached the renderer. Team and Board status load independently; Refresh asks
-both settled sections to reload without duplicating a request that is already in flight, and responses
+both settled sections to reload without duplicating a request that is already in flight; callers wait
+for that request to finish, and responses
 from an older workspace or loader are ignored. The Board panel shows the current phase, configured
 status counts, totals, and the high-priority active or blocked ticket projection. Recent activity remains
 a labelled placeholder until its panel is implemented.
@@ -107,3 +108,5 @@ Steps:
 
 It never starts the coordinator. The default evidence file is `scripts/windows/app-live-check-evidence.json`.
 If the repository path has a space or another character outside `SAFE_ARG`, pass `--repo-wsl`.
+
+The Teams screen includes worktree and routing settings from the workspace board configuration. Operators can edit existing routes and role descriptions; saves check the configuration version and reload the latest settings. If a refresh reports invalid board or roles configuration, open drafts cannot be saved until the configuration is valid again. Configuration conflicts require an explicit reload before retrying. If the reload fails, the editor retains the draft and offers a retry; a successful write is reported only after fresh settings load.

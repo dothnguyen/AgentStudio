@@ -10,16 +10,18 @@ export interface DashboardSectionController<T> {
   loading: boolean;
   lastUpdatedAt: number | null;
   reload(): Promise<void>;
+  reloadFresh?(): Promise<Result<T>>;
 }
 
 export type DashboardSection<T> = DashboardSectionController<T>;
 
-type SectionValue<T> = Omit<DashboardSectionController<T>, 'reload' | 'loading'>;
+type SectionValue<T> = Omit<DashboardSectionController<T>, 'reload' | 'reloadFresh' | 'loading'>;
 
 interface Request<T> {
   sequence: number;
   load: (workspaceId: string) => Promise<Result<T>>;
   workspaceId: string;
+  completion: Promise<Result<T>>;
 }
 
 export function useDashboardSection<T>(
@@ -39,15 +41,16 @@ export function useDashboardSection<T>(
   const loadedWorkspaceId = useRef(workspaceId);
   current.current = { load, workspaceId };
 
-  const start = useCallback((requestLoad: typeof load, requestWorkspaceId: string, resetTime: boolean): Promise<void> => {
-    if (!active.current) return Promise.resolve();
+  const start = useCallback((requestLoad: typeof load, requestWorkspaceId: string, resetTime: boolean, fresh = false): Promise<Result<T>> => {
+    if (!active.current) return Promise.resolve({ ok: false, error: { code: 'INTERNAL', message: 'Section is inactive.', retryable: false } });
     const pending = inFlight.current;
-    if (pending?.load === requestLoad && pending.workspaceId === requestWorkspaceId) return Promise.resolve();
+    if (!fresh && pending?.load === requestLoad && pending.workspaceId === requestWorkspaceId) return pending.completion;
 
     const request: Request<T> = {
       sequence: ++sequence.current,
       load: requestLoad,
       workspaceId: requestWorkspaceId,
+      completion: Promise.resolve({ ok: false, error: { code: 'INTERNAL', message: 'Request not started.', retryable: false } }),
     };
     inFlight.current = request;
     setValue((previous) => ({
@@ -63,14 +66,14 @@ export function useDashboardSection<T>(
     } catch (reason) {
       call = Promise.reject(reason);
     }
-    return call.then(
+    request.completion = call.then(
       (result) => {
         if (
           !active.current ||
           sequence.current !== request.sequence ||
           current.current.load !== request.load ||
           current.current.workspaceId !== request.workspaceId
-        ) return;
+        ) return { ok: false as const, error: { code: 'INTERNAL', message: 'Settings refresh was superseded.', retryable: true } };
         if (inFlight.current === request) inFlight.current = null;
         if (result.ok) {
           setValue({ state: 'ready', data: result.data, error: null, lastUpdatedAt: Date.now() });
@@ -82,27 +85,27 @@ export function useDashboardSection<T>(
             lastUpdatedAt: previous.lastUpdatedAt,
           }));
         }
+        return result;
       },
       (reason: unknown) => {
+        const error = { code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false };
         if (
           !active.current ||
           sequence.current !== request.sequence ||
           current.current.load !== request.load ||
           current.current.workspaceId !== request.workspaceId
-        ) return;
+        ) return { ok: false as const, error };
         if (inFlight.current === request) inFlight.current = null;
         setValue((previous) => ({
           state: 'error',
           data: null,
-          error: {
-            code: 'INTERNAL',
-            message: reason instanceof Error ? reason.message : String(reason),
-            retryable: false,
-          },
+          error,
           lastUpdatedAt: previous.lastUpdatedAt,
         }));
+        return { ok: false as const, error };
       },
     );
+    return request.completion;
   }, []);
 
   useEffect(() => {
@@ -123,9 +126,10 @@ export function useDashboardSection<T>(
   }, [load, start, workspaceId]);
 
   const reload = useCallback(
-    () => start(current.current.load, current.current.workspaceId, false),
+    async () => { await start(current.current.load, current.current.workspaceId, false); },
     [start],
   );
 
-  return { ...value, loading: value.state === 'loading', reload };
+  const reloadFresh = useCallback(() => start(current.current.load, current.current.workspaceId, false, true), [start]);
+  return { ...value, loading: value.state === 'loading', reload, reloadFresh };
 }
