@@ -117,6 +117,22 @@ source, a missing file is an empty catalog):
 - Team members will reference an entry with the key `"agent"` (resolved from P05-S09). Running teams keep their
   roster frozen in the state DB, so catalog edits never affect them.
 
+## Teams management read model (P05-S10)
+
+`team.overview {workspace}` (direct read: no coordinator needed, no `idempotencyKey`) returns
+`{workspace, coordinator: {running}, runtimeState: {available, error}, roles: {state, message},
+catalog: {state, message}, teams, truncated, partial}`. Each team has `id`, `name`, `definition`
+(`state`: `valid|problems|unreadable|missing`, `problems`), `runtime` (`state`:
+`not_started|starting|running|stopped|error|disconnected|unavailable`, `teamId`, `status`), `members` and
+`membersTruncated`. Each member has `memberId`, `name`, `role`, `roleDescription` (from `roles.json`) with
+`roleState` (`defined|undefined|unavailable`), `source` (`catalog|inline|runtime`), `agentDefId`/`agentDefState`
+(`ok|missing|unavailable`), the definition's `provider/model/reasoning`, the frozen `runtime` roster entry (or
+`null`), `presence` (an agent availability, or `not_in_runtime|not_started|stopped|error|disconnected|unavailable`)
+and `work`: `{state: "working", assignment, ticket}`, `{state: "none"}` or `{state: "unavailable", reason}`.
+Work comes only from the state DB (assignments, tasks, workflow runs, tickets) and is never inferred from
+tmux or pane output. Configuration or runtime problems never fail the request; they appear as states
+(`partial: true`). Bounds: 50 teams, 16 members per team, 200-char text, 2000-char role description.
+
 ## Run a team and watch it (inside WSL)
 
 ```bash

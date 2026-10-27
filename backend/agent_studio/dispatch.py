@@ -10,7 +10,7 @@ import traceback
 import copy
 
 from . import agentcatalog, teamdefs, boardmodel, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
-    queries, state, teams, teamstatus, tmuxctl, workspace
+    queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
 from .store import validate_uuid
@@ -102,6 +102,21 @@ def _team_list(args, req):
         return teamstatus.workspace_teams(conn, workspace_path)
     finally:
         conn.close()
+
+
+def _team_overview(args, req):
+    ws = _catalog_workspace(args, {"workspace"}, "team.overview")
+    running, conn, error = False, None, None
+    try:
+        running = coordinator.running_info(paths.ensure_state_dir()) is not None
+        conn = _reader()
+    except AsError as e:
+        error = {"code": e.code, "message": e.message}
+    try:
+        return teamview.overview(conn, ws, running, error)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _catalog_workspace(args, allowed, command):
@@ -781,6 +796,7 @@ COMMANDS = {
     "team.attach": _team_attach,
     "team.list": _team_list,
     "team.status": _team_status,
+    "team.overview": _team_overview,
     "teamdef.show": _teamdef_show,
     "teamdef.validate": _teamdef_validate,
     "teamdef.create": _teamdef_create,
