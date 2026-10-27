@@ -175,9 +175,15 @@ class CodexParsing(unittest.TestCase):
         self.assertIn(("progress", "$ bash -lc ls"), shown)
 
     def test_turn_failed(self):
-        st, _ = feed(self.SUCCESS[:2] + [{"type": "turn.failed", "error": {"message": "quota exceeded"}}])
+        st, _ = feed(self.SUCCESS[:2] + [{"type": "turn.failed", "error": {"message": "stream disconnected"}}])
         r = CODEX.finalize(inp(), st, oc(exitCode=1))
         self.assertEqual((r["status"], r["diagnosticCode"]), ("failed", "PROVIDER_ERROR"))
+        self.assertIn("disconnected", r["summary"])
+
+    def test_turn_failed_usage_limit(self):
+        st, _ = feed(self.SUCCESS[:2] + [{"type": "turn.failed", "error": {"message": "quota exceeded"}}])
+        r = CODEX.finalize(inp(), st, oc(exitCode=1))
+        self.assertEqual((r["status"], r["diagnosticCode"]), ("failed", "USAGE_LIMIT"))
         self.assertIn("quota", r["summary"])
 
     def test_captured_real_network_failure_is_not_terminal(self):

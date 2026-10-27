@@ -30,7 +30,7 @@ time and refuses with `CAPABILITY_GAP` if any is missing; it never guesses a fla
 | `turn.started` | progress |
 | `item.started/updated/completed {item}` | progress by `item.type`: `agent_message` (last one = final summary), `reasoning`, `command_execution` (`status: declined` → permission denial → `waiting_input`), `file_change` (failed → attention), `mcp_tool_call`, `web_search`, `todo_list`, `error` (attention only) |
 | `turn.completed {usage}` | **terminal success**; usage recorded |
-| `turn.failed {error}` | terminal failure → `failed / PROVIDER_ERROR` |
+| `turn.failed {error}` | terminal failure → `failed / PROVIDER_ERROR`, `AUTH_REQUIRED` for auth failures, or `USAGE_LIMIT` for rate/usage/quota limits |
 | top-level `error {message}` | **not terminal** — codex also uses it for "Reconnecting... n/5"; shown as attention |
 
 Older `{"id":…,"msg":{…}}` output (`session_configured`, `agent_message`, `task_complete`, `error`) is also understood.
@@ -38,8 +38,8 @@ Reviewer stages read the verdict from the last JSON line of the final message (`
 
 Without network, codex 0.163.0 keeps reconnecting and never exits on its own (captured in
 `tests/fixtures/codex/captured-0.163.0-network-unreachable.jsonl`); the assignment deadline ends it → `failed / TIMEOUT`.
-There is no captured Codex usage- or rate-limit sample yet, so no usage-limit classifier is implemented: unrecognised
-Codex failures remain `PROVIDER_ERROR` rather than being guessed.
+Failures whose error text reports a rate-, usage-, or quota-limit classify as `USAGE_LIMIT` (with `limitResetAt` UTC
+if a reset hint is present); auth failures classify as `AUTH_REQUIRED`; unrecognised Codex failures remain `PROVIDER_ERROR`.
 
 ## Cancel / reconcile
 

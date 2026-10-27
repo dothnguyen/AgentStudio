@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from typing import Iterable, Optional
 
 from ..protocol import AsError
@@ -15,6 +17,39 @@ from .base import AssignmentInput, ParseState
 
 DEEP_PROBE_TTL_S = 24 * 3600
 PROBE_TOKEN = "AGENT_STUDIO_OK"
+
+AUTH_RE = re.compile(r"not logged in|/login|invalid api key|authentication_error|oauth token|\b401\b", re.I)
+LIMIT_RE = re.compile(
+    r"(?:rate[ -]?limit|usage[ -]?limit|quota)\s*(?:has been |is )?(?:reached|exceeded)"
+    r"|\b(?:you(?:'ve| have)\s+)?(?:hit|reached|exceeded)\s+(?:your\s+)?"
+    r"(?:current\s+)?(?:weekly|daily|monthly|usage|rate|quota)\s*(?:limit)?\b"
+    r"|\binsufficient_quota\b"
+    r"|too many requests|\b429\b", re.I)
+EPOCH_RE = re.compile(r"\b(1\d{9}(?:\.\d+)?)\b")
+CLOCK_RE = re.compile(r"\b(\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|GMT|[+-]\d{2}:?\d{2}))\b", re.I)
+
+
+def limit_reset_at(text: Optional[str]) -> Optional[str]:
+    """Best-effort normalization of provider-supplied reset hints; never invent a time."""
+    epoch = EPOCH_RE.search(text or "")
+    if epoch:
+        try:
+            return datetime.fromtimestamp(float(epoch.group(1)), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except (OverflowError, OSError, ValueError):
+            pass
+    clock = CLOCK_RE.search(text or "")
+    if clock:
+        value = clock.group(1).replace("GMT", "UTC").upper().replace("UTC", "+00:00")
+        for fmt in ("%H:%M%z", "%H:%M:%S%z"):
+            try:
+                return datetime.strptime(value.replace(" ", ""), fmt).replace(
+                    year=datetime.now(timezone.utc).year,
+                    month=datetime.now(timezone.utc).month,
+                    day=datetime.now(timezone.utc).day,
+                ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                pass
+    return None
 
 
 def short(text, n: int = 300) -> str:

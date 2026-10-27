@@ -189,8 +189,17 @@ class CodexAdapter(Adapter):
         if t == "turn.failed":
             err = ev.get("error") or {}
             msg = err.get("message") if isinstance(err, dict) else str(err)
-            state.terminal = {"ok": False, "summary": _short(msg or "turn failed", 2000), "code": "PROVIDER_ERROR"}
-            return [("attention", f"turn failed: {_short(msg or '')}")]
+            err_code = str(err.get("code") or err.get("type") or "") if isinstance(err, dict) else ""
+            full_text = f"{msg} {err_code}".strip() if err_code else (msg or "")
+            code = "AUTH_REQUIRED" if cli_support.AUTH_RE.search(full_text) else (
+                "USAGE_LIMIT" if cli_support.LIMIT_RE.search(full_text) else "PROVIDER_ERROR"
+            )
+            state.terminal = {"ok": False, "summary": _short(msg or err_code or "turn failed", 2000), "code": code}
+            if code == "USAGE_LIMIT":
+                reset = cli_support.limit_reset_at(full_text)
+                if reset:
+                    state.terminal["limitResetAt"] = reset
+            return [("attention", f"turn failed: {_short(msg or err_code or '')}")]
         if t == "error":  # not terminal: codex also reports reconnect attempts this way
             return [("attention", _short(ev.get("message", "error")))]
         return []
@@ -247,6 +256,14 @@ class CodexAdapter(Adapter):
             state.final_text = msg.get("last_agent_message") or state.final_text
             state.terminal = {"ok": True, "summary": (state.final_text or "codex finished")[:2000]}
         elif t == "error":
-            state.terminal = {"ok": False, "summary": _short(msg.get("message", "error"), 2000), "code": "PROVIDER_ERROR"}
-            return [("attention", _short(msg.get("message", "error")))]
+            raw_msg = msg.get("message", "error")
+            code = "AUTH_REQUIRED" if cli_support.AUTH_RE.search(raw_msg or "") else (
+                "USAGE_LIMIT" if cli_support.LIMIT_RE.search(raw_msg or "") else "PROVIDER_ERROR"
+            )
+            state.terminal = {"ok": False, "summary": _short(raw_msg, 2000), "code": code}
+            if code == "USAGE_LIMIT":
+                reset = cli_support.limit_reset_at(raw_msg)
+                if reset:
+                    state.terminal["limitResetAt"] = reset
+            return [("attention", _short(raw_msg))]
         return []

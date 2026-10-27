@@ -84,6 +84,23 @@ class UsageClassifierTests(unittest.TestCase):
                 self.assertEqual(report["diagnosticCode"], expected)
                 self.assertNotIn("limitResetAt", report)
 
+    def test_codex_limit_result_triggers_usage_limit(self):
+        adapter = providers.get("codex")
+        cases = (
+            ("You have exceeded your current quota", "USAGE_LIMIT", None),
+            ("Rate limit reached · resets at 1893510000", "USAGE_LIMIT", "2030-01-01T15:00:00Z"),
+            ("You've hit your usage limit", "USAGE_LIMIT", None),
+            ("stream disconnected before completion", "PROVIDER_ERROR", None),
+        )
+        for message, expected_code, expected_reset in cases:
+            with self.subTest(message=message):
+                state = ParseState()
+                event = {"type": "turn.failed", "error": {"message": message}}
+                adapter.parse_line(json.dumps(event).encode("utf-8"), state)
+                report = adapter.finalize(inp("codex"), state, oc())
+                self.assertEqual(report["diagnosticCode"], expected_code)
+                self.assertEqual(report.get("limitResetAt"), expected_reset)
+
     def test_usage_limit_report_marks_agent_limited_and_records_event(self):
         from tests.unit import test_s03_rules as rules
         path, conn, store, agent, _task, assignment = rules.setup()
