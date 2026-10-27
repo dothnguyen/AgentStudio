@@ -6,10 +6,11 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tests import helpers
 from tests.helpers import fresh, make_repo
-from agent_studio import boardsched, boardmodel
+from agent_studio import boardsched, boardmodel, teams, workflow
 from agent_studio.protocol import AsError
 from tests.unit.test_p04_s09_rules_and_applier import SOLO
 
@@ -141,6 +142,99 @@ class Binding(SchedCase):
 
 
 class TickRules(SchedCase):
+    @patch("agent_studio.providers.probe_many", return_value={"fake": {"available": True}})
+    def test_quota_failover_reclaims_ticket_with_fallback_agent(self, probe):
+        config = os.path.join(self.ws, ".agent-studio")
+        os.makedirs(os.path.join(config, "teams"), exist_ok=True)
+        with open(os.path.join(config, "agents.json"), "w") as f:
+            json.dump({"version": 1, "agents": [
+                {"id": "first", "name": "First", "provider": "fake", "model": "fake-1"},
+                {"id": "backup", "name": "Backup", "provider": "fake", "model": "fake-2"}]}, f)
+        with open(os.path.join(config, "teams", "t.json"), "w") as f:
+            json.dump({"id": "t", "name": "Team", "members": [
+                {"id": "worker", "name": "Worker", "role": "worker", "agents": ["first", "backup"]}]}, f)
+        self.commit_board()
+        with self.store.transaction() as tx:
+            tx.update("team", self.team, {"def_id": "t"}, "team.definition_set")
+            tx.update("agent", self.worker, {"member_id": "worker", "active_catalog_agent": "first",
+                                              "model": "fake-1"}, "agent.option_set")
+        self.add_ticket()
+        self.tick()
+        original = self.ticket("T-001")["active_run_id"]
+        assignment = self.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?",
+                                       (original,)).fetchone()[0]
+        with self.store.transaction() as tx:
+            tx.transition("assignment", assignment, "failed", set_values={
+                "diagnostic_code": "USAGE_LIMIT", "result_json": {"diagnosticCode": "USAGE_LIMIT"}})
+            tx.transition("agent", self.worker, "busy")
+            tx.transition("agent", self.worker, "limit_reached")
+            teams.handle_quota_limit(tx, self.worker, None, self.ctx)
+        workflow.advance(self.store, self.ctx)
+        tick = self.tick()
+        self.assertEqual(tick["errors"], [])
+        replacement = self.ticket("T-001")["active_run_id"]
+        self.assertNotEqual(original, replacement)
+        row = self.conn.execute("SELECT a.request_json FROM assignments a JOIN stage_attempts s ON s.assignment_id = a.id "
+                                "WHERE s.workflow_run_id = ?", (replacement,)).fetchone()
+        self.assertEqual(json.loads(row["request_json"])["model"], "fake-2")
+
+    def test_paused_quota_failure_is_released_and_claimed_again(self):
+        self.add_ticket()
+        self.tick()
+        original = self.ticket("T-001")["active_run_id"]
+        assignment = self.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?",
+                                       (original,)).fetchone()[0]
+        with self.store.transaction() as tx:
+            tx.transition("assignment", assignment, "failed", set_values={
+                "diagnostic_code": "USAGE_LIMIT", "result_json": {"diagnosticCode": "USAGE_LIMIT"}})
+        workflow.advance(self.store, self.ctx)
+        self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (original,)).fetchone()[0],
+                         "paused")
+        tick = self.tick()
+        self.assertEqual(tick["errors"], [])
+        self.assertEqual((tick["applied"], tick["claimed"]), (1, 1))
+        self.assertNotEqual(self.ticket("T-001")["active_run_id"], original)
+        self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (original,)).fetchone()[0],
+                         "failed")
+        self.assertIsNone(self.ticket("T-001")["rounds_json"])
+        names = [r[0] for r in self.conn.execute("SELECT name FROM ticket_events ORDER BY id").fetchall()]
+        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.claim_released", "ticket.claimed"])
+
+    def test_other_paused_failure_keeps_its_claim(self):
+        self.add_ticket()
+        self.tick()
+        original = self.ticket("T-001")["active_run_id"]
+        assignment = self.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?",
+                                       (original,)).fetchone()[0]
+        with self.store.transaction() as tx:
+            tx.transition("assignment", assignment, "failed", set_values={
+                "diagnostic_code": "PROVIDER_ERROR", "result_json": {"diagnosticCode": "PROVIDER_ERROR"}})
+        workflow.advance(self.store, self.ctx)
+        self.tick()
+        self.assertEqual(self.ticket("T-001")["active_run_id"], original)
+        self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (original,)).fetchone()[0],
+                         "paused")
+
+    def test_paused_quota_failure_after_team_stop_releases_claim(self):
+        self.add_ticket()
+        self.tick()
+        original = self.ticket("T-001")["active_run_id"]
+        wf = self.conn.execute("SELECT task_id FROM workflow_runs WHERE id = ?", (original,)).fetchone()
+        assignment = self.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?",
+                                       (original,)).fetchone()[0]
+        with self.store.transaction() as tx:
+            tx.transition("assignment", assignment, "failed", set_values={
+                "diagnostic_code": "USAGE_LIMIT", "result_json": {"diagnosticCode": "USAGE_LIMIT"}})
+        workflow.advance(self.store, self.ctx)
+        with self.store.transaction() as tx:
+            tx.transition("task", wf["task_id"], "cancelled")
+            boardsched.stop_board(tx, self.ws)
+        tick = self.tick()
+        self.assertEqual(tick["errors"], [])
+        self.assertIsNone(self.ticket("T-001")["active_run_id"])
+        self.assertEqual(self.conn.execute("SELECT status FROM tasks WHERE id = ?", (wf["task_id"],)).fetchone()[0],
+                         "cancelled")
+
     def test_claims_by_rule_with_lease_during_status_and_event(self):
         self.add_ticket()
         out = self.tick()

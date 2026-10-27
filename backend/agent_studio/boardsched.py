@@ -104,12 +104,33 @@ def _apply_finished(tx, workspace: str) -> int:
     applied = 0
     for row in rows:
         run = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (row["run"],)).fetchone()
-        if run is None or run["status"] not in APPLY_RUN_STATES:
+        if run is None:
             continue
         if tx.conn.execute("SELECT 1 FROM agents a JOIN stage_attempts s ON s.assignment_id = a.pending_assignment "
                            "WHERE a.pending_agent IS NOT NULL AND s.workflow_run_id = ?", (row["run"],)).fetchone():
             continue
         ticket = boardmodel.get_ticket(tx.conn, workspace, row["key"])
+        if run["status"] == "paused" and _paused_on_usage_limit(tx, row["run"]):
+            # Failed provider assignments pause definition workflows. Quota failures are recoverable:
+            # end this attempt and release its ticket so a switched or resumed member can claim it.
+            from . import workflow
+            wf = tx.get("workflow_run", row["run"])
+            task = tx.get("task", wf["task_id"])
+            if task["status"] in ("succeeded", "failed", "cancelled"):
+                # A team stop can already have cancelled the task without settling its paused workflow.
+                for stage in tx.conn.execute("SELECT id FROM stage_attempts WHERE workflow_run_id = ? AND status = 'active'",
+                                             (wf["id"],)).fetchall():
+                    tx.transition("stage_attempt", stage["id"], "abandoned", payload={"reason": "provider usage limit"})
+                tx.transition("workflow_run", wf["id"], "failed",
+                              set_values={"transition_reason": "provider usage limit", "current_agent_id": None},
+                              payload={"reason": "provider usage limit"})
+            else:
+                workflow._end(tx, wf, "failed", "provider usage limit")
+            _release_with_run(tx, workspace, ticket, "usage_limit")
+            applied += 1
+            continue
+        if run["status"] not in APPLY_RUN_STATES:
+            continue
         if run["status"] == "failed" and _usage_limited(tx, row["run"]):
             # a USAGE_LIMIT result releases the ticket without counting a round; report_rules has already
             # marked the member limit_reached, and `board resume` makes them eligible again
@@ -185,6 +206,13 @@ def _usage_limited(tx, run_id: str) -> bool:
         "SELECT 1 FROM assignments a JOIN workflow_runs w ON w.task_id = a.task_id "
         "WHERE w.id = ? AND a.diagnostic_code = 'USAGE_LIMIT' LIMIT 1", (run_id,)).fetchone()
     return row is not None
+
+
+def _paused_on_usage_limit(tx, run_id: str) -> bool:
+    return tx.conn.execute(
+        "SELECT 1 FROM stage_attempts s JOIN assignments a ON a.id = s.assignment_id "
+        "WHERE s.workflow_run_id = ? AND s.status = 'active' AND a.status = 'failed' "
+        "AND a.diagnostic_code = 'USAGE_LIMIT' LIMIT 1", (run_id,)).fetchone() is not None
 
 
 def _release_with_run(tx, workspace: str, ticket: dict, reason: str, to_status=None):
