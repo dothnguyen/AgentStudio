@@ -80,6 +80,40 @@ def quota_holds(agent):
     return holds
 
 
+def resume_member_agent(tx: Tx, args: dict) -> dict:
+    """Clear one configured option's hold, without switching or interrupting the member."""
+    from . import teamdefs
+    workspace, fid, mid, choice = (args[k] for k in ("workspace", "teamDefId", "memberId", "agent"))
+    team = tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND def_id = ? AND status = 'running' "
+                           "ORDER BY created_at DESC, rowid DESC LIMIT 1", (workspace, fid)).fetchone()
+    if team is None:
+        raise AsError(TEAM_NOT_RUNNING, f"Team {fid!r} is not running.")
+    member = teamdefs.find_member(teamdefs.load(workspace, fid), mid)
+    if choice not in (member.get("agents") or []):
+        raise AsError(BAD_REQUEST, f"Agent {choice!r} is not configured for member {mid!r}.")
+    row = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (team["id"], mid)).fetchone()
+    if row is None:
+        raise AsError(MEMBER_NOT_FOUND, f"No running member {mid!r} in team {fid!r}.")
+    agent = dict(row)
+    try:
+        holds = json.loads(agent.get("quota_holds_json") or "{}")
+    except (TypeError, ValueError):
+        raise AsError("INTERNAL", "The member's quota holds are invalid; no hold was cleared.")
+    if not isinstance(holds, dict):
+        raise AsError("INTERNAL", "The member's quota holds are invalid; no hold was cleared.")
+    cleared = choice in holds
+    if cleared:
+        del holds[choice]
+        payload = {"option": choice, "active": agent["active_catalog_agent"] == choice}
+        if agent["availability"] == "limit_reached" and agent["active_catalog_agent"] == choice:
+            tx.transition("agent", agent["id"], "idle", event="agent.quota_resumed", payload=payload,
+                          set_values={"quota_holds_json": holds, "limit_reset_at": None})
+        else:
+            tx.update("agent", agent["id"], {"quota_holds_json": holds}, "agent.quota_resumed", payload)
+    return {"teamId": team["id"], "memberId": mid, "agentId": agent["id"], "option": choice,
+            "cleared": cleared, "activeAgent": agent["active_catalog_agent"]}
+
+
 def switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict:
     from . import teamdefs
     workspace, fid, mid, choice = (args[k] for k in ("workspace", "teamDefId", "memberId", "agent"))

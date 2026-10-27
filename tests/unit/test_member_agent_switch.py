@@ -65,6 +65,34 @@ class MemberAgentSwitchTests(Base):
         row = self.conn.execute("SELECT availability, active_catalog_agent FROM agents WHERE id = ?", (self.agent,)).fetchone()
         self.assertEqual(tuple(row), ("busy", "first"))
 
+    def test_resume_inactive_option_preserves_active_work_and_other_holds(self):
+        with self.store.transaction() as tx:
+            tx.update("agent", self.agent, {"quota_holds_json": {"first": None, "second": "2030-01-01T00:00:00Z"},
+                                            "active_catalog_agent": "second"}, "agent.test_setup")
+            tx.transition("agent", self.agent, "busy")
+            result = teams.resume_member_agent(tx, dict(self.args, agent="first"))
+        agent = dict(self.conn.execute("SELECT * FROM agents WHERE id = ?", (self.agent,)).fetchone())
+        self.assertTrue(result["cleared"])
+        self.assertEqual((agent["availability"], agent["active_catalog_agent"]), ("busy", "second"))
+        self.assertEqual(teams.quota_holds(agent), {"second": "2030-01-01T00:00:00Z"})
+        with self.store.transaction() as tx:
+            self.assertFalse(teams.resume_member_agent(tx, dict(self.args, agent="first"))["cleared"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM events WHERE name = 'agent.quota_resumed'").fetchone()[0], 1)
+
+    def test_resume_active_option_makes_quota_held_member_idle(self):
+        with self.store.transaction() as tx:
+            tx.transition("agent", self.agent, "limit_reached", set_values={
+                "quota_holds_json": {"first": None, "second": None}, "limit_reset_at": "2030-01-01"})
+            teams.resume_member_agent(tx, dict(self.args, agent="first"))
+        agent = dict(self.conn.execute("SELECT * FROM agents WHERE id = ?", (self.agent,)).fetchone())
+        self.assertEqual((agent["availability"], agent["limit_reset_at"]), ("idle", None))
+        self.assertEqual(teams.quota_holds(agent), {"second": None})
+
+    def test_resume_rejects_unconfigured_option(self):
+        with self.store.transaction() as tx:
+            with self.assertRaises(AsError):
+                teams.resume_member_agent(tx, dict(self.args, agent="unknown"))
+
     @patch("agent_studio.providers.probe_many", return_value={"fake": {"available": True}})
     def test_quota_failover_and_all_options_exhausted(self, probe):
         with self.store.transaction() as tx:

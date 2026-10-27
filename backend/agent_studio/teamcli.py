@@ -12,7 +12,7 @@ from . import PROTOCOL, dispatch, teams, watch
 from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_NOT_RUNNING, envelope
 
 ACTIONS = ("ask", "run-workflow", "workflows", "check", "retry", "blocked", "resolve", "run-board",
-           "stop-board", "switch-agent")
+           "stop-board", "switch-agent", "resume")
 NOT_FOUND = "NOT_FOUND"
 POLICIES = ("read_only", "workspace_write")
 STUCK = ("waiting_input", "reconciling")
@@ -74,6 +74,9 @@ def _parser(action):
         p.add_argument("--member", required=True)
         p.add_argument("--agent", required=True)
         p.add_argument("--cancel-active", action="store_true")
+    elif action == "resume":
+        p.add_argument("--member", required=True)
+        p.add_argument("--agent", required=True)
     return p
 
 
@@ -401,9 +404,20 @@ def _switch_agent(ns):
                             f"{who['name']}: active agent is {d['activeAgent']} ({d['provider']})")
 
 
+def _resume_agent(ns):
+    team, members = _running_team(ns, "resume")
+    who = _member(members, ns.member)
+    if not team.get("teamDefId") or not who.get("memberId"):
+        raise AsError(BAD_REQUEST, "Resuming an agent option requires a team definition and member id.")
+    data = _write_call("team.member.resume", {"workspace": team["workspace"], "teamDefId": team["teamDefId"],
+                                             "memberId": who["memberId"], "agent": ns.agent})
+    return data, lambda d: (f"{who['name']}: quota hold cleared for {d['option']}"
+                            if d["cleared"] else f"{who['name']}: {d['option']} has no quota hold")
+
+
 _HANDLERS = {"ask": _ask, "run-workflow": _run_workflow, "workflows": _workflows, "check": _check,
              "retry": _retry, "blocked": _blocked, "resolve": _resolve, "run-board": _run_board,
-             "stop-board": _stop_board, "switch-agent": _switch_agent}
+             "stop-board": _stop_board, "switch-agent": _switch_agent, "resume": _resume_agent}
 
 
 def run(argv, pretty) -> int:

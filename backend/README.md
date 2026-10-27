@@ -244,8 +244,16 @@ agent-studio team status --team my-team --json
 The equivalent coordinator command is `team.member.switch` with `workspace`, `teamDefId`, `memberId` and `agent`.
 When an option reports a usage limit, the coordinator records its quota hold and tries the next configured option.
 If every option is on hold or unavailable, the member remains `limit_reached` and cannot receive assignments.
-Known reset times are checked automatically; unknown reset times require an operator to run `board resume` for the
-member after quota becomes available. Holds and the selected option persist in coordinator state across team starts.
+Known reset times are checked automatically. When an agent's quota becomes available and its reset time was unknown,
+clear that specific hold without changing the active agent or interrupting work:
+
+```bash
+agent-studio team resume --team my-team --member dev --agent claude-backup
+```
+
+The command records the operator's decision; it does not verify provider quota or switch agents. If the resumed option
+is the active one and the member was quota-held, the member becomes idle. Holds and the selected option persist in
+coordinator state across team starts.
 
 For a manual switch with active work, the CLI asks whether to cancel the displayed assignment. `--cancel-active`
 explicitly confirms cancellation for non-interactive use. The coordinator waits for cancellation to complete before

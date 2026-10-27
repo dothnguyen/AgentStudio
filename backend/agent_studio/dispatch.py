@@ -312,6 +312,12 @@ def _validate_agent_switch(args):
     return out
 
 
+def _validate_member_resume(args):
+    _only("team.member.resume", args, {"workspace", "teamDefId", "memberId", "agent"})
+    return {"workspace": _workspace_arg(args), "teamDefId": _slug(args.get("teamDefId"), "teamDefId"),
+            "memberId": _slug(args.get("memberId"), "memberId"), "agent": _slug(args.get("agent"), "agent")}
+
+
 def _slug_arg(value, name):
     if not isinstance(value, str) or not DEFINITION_NAME.match(value):
         raise AsError(BAD_REQUEST, f"Argument '{name}' must be a slug (lowercase letters, digits, '-'; at "
@@ -863,6 +869,7 @@ COMMANDS = {
     "teamdef.member.update": _teamdef_member_update,
     "teamdef.member.remove": _teamdef_member_remove,
     "team.member.switch": _inbox("team.member.switch", _validate_agent_switch),
+    "team.member.resume": _inbox("team.member.resume", _validate_member_resume),
     "agentdef.list": _agentdef_list,
     "agentdef.create": _agentdef_create,
     "agentdef.update": _agentdef_update,

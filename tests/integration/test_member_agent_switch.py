@@ -5,6 +5,29 @@ from tests.integration.test_p01_s04_start import git
 
 
 class LiveAgentSwitchTests(LifecycleCase):
+    def test_resume_inactive_agent_persists_after_team_restart(self):
+        self.write("agents.json", {"version": 1, "agents": [
+            {"id": "primary", "name": "Primary", "provider": "fake"},
+            {"id": "backup", "name": "Backup", "provider": "fake"}]})
+        self.put("alpha", [{"id": "ryan", "name": "Ryan", "role": "developer",
+                            "agents": ["primary", "backup"]}])
+        team = self.start("alpha")["data"]
+        args = {"teamId": team["teamId"], "agentId": team["agents"][0]["agentId"],
+                "policy": "read_only", "text": "go",
+                "debugProviderOptions": {"scenario": "usage_limit_no_reset", "durationMs": 100}}
+        _, result, _ = self.sb.request(req("task.direct", args, idempotencyKey=key()))
+        self.assertTrue(result["ok"], result)
+        wait_until(lambda: self.status("alpha")["members"][0]["activeAgent"] == "backup", message="quota failover")
+        rc, result, process = self.sb.run("team", "resume", "--workspace", self.ws, "--team", "alpha",
+                                          "--member", "ryan", "--agent", "primary", "--json")
+        self.assertEqual(rc, 0, (result, process.stderr))
+        self.assertTrue(result["data"]["cleared"])
+        self.assertTrue(self.stop("alpha")["ok"])
+        self.assertTrue(self.start("alpha")["ok"])
+        member = self.status("alpha")["members"][0]
+        self.assertEqual(member["activeAgent"], "backup")
+        self.assertNotIn("primary", member["quotaHolds"])
+
     def test_switch_without_team_restart_and_restore_on_next_start(self):
         self.write("agents.json", {"version": 1, "agents": [
             {"id": "primary", "name": "Primary", "provider": "fake", "model": "fake-1"},
@@ -65,6 +88,17 @@ class LiveAgentSwitchTests(LifecycleCase):
             self.assertTrue(response["ok"], response)
         exhaust()
         wait_until(lambda: self.status("alpha")["members"][0]["activeAgent"] == "backup", message="quota failover")
+        rc, resumed, process = self.sb.run("team", "resume", "--workspace", self.ws, "--team", "alpha",
+                                          "--member", "ryan", "--agent", "primary", "--json")
+        self.assertEqual(rc, 0, (resumed, process.stderr))
+        self.assertTrue(resumed["data"]["cleared"])
+        self.assertEqual(self.status("alpha")["members"][0]["activeAgent"], "backup")
+        self.assertNotIn("primary", self.status("alpha")["members"][0]["quotaHolds"])
+        rc, result, process = self.sb.run("team", "switch-agent", "--workspace", self.ws, "--team", "alpha",
+                                          "--member", "ryan", "--agent", "primary", "--json")
+        self.assertEqual(rc, 0, (result, process.stderr))
+        exhaust()
+        wait_until(lambda: self.status("alpha")["members"][0]["activeAgent"] == "backup", message="second quota failover")
         exhaust()
         wait_until(lambda: self.status("alpha")["members"][0]["availability"] == "limit_reached",
                    message="quota hold")

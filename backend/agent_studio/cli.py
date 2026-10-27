@@ -37,6 +37,8 @@ USAGE = """agent-studio <command>
   team remove-member [--team ID] --member ID|NAME [--workspace PATH]
   team switch-agent --team ID --member ID|NAME --agent CATALOG_ID [--cancel-active] [--workspace PATH]
                                            switch agents; confirm before cancelling an active assignment
+  team resume --member ID|NAME --agent CATALOG_ID [--team ID] [--workspace PATH]
+                                           clear a specific agent's quota hold without switching
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
   team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
   team attach --team ID|UUID [--print]     attach this terminal to the team's tmux window (or print commands)
