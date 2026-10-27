@@ -1,6 +1,8 @@
 """Read-only status of the runtime team started from a team definition (P04-S03). Imports no board module."""
 from __future__ import annotations
 
+import json
+
 from . import teamdefs
 from .protocol import AsError
 from .schema import AGENT_STATES
@@ -25,6 +27,9 @@ def team_status(conn, team_id, workspace, def_id) -> dict:
                          "ORDER BY created_at DESC, rowid DESC", (g["id"],) + ACTIVE).fetchone()
         members.append({"memberId": g["member_id"], "name": g["display_name"], "role": g["role"],
                         "provider": g["provider_id"], "agentId": g["id"], "availability": g["availability"],
+                        "activeAgent": g["active_catalog_agent"],
+                        "quotaHolds": json.loads(g["quota_holds_json"] or "{}"),
+                        "pendingAgent": g["pending_agent"],
                         "paneState": g["pane_state"],
                         "assignment": {"id": a["id"], "status": a["status"], "taskId": a["task_id"]} if a else None})
     return {"team": {"id": team["id"], "teamDefId": team["def_id"], "name": team["name"], "status": team["status"],

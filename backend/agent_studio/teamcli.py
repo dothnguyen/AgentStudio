@@ -12,7 +12,7 @@ from . import PROTOCOL, dispatch, teams, watch
 from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_NOT_RUNNING, envelope
 
 ACTIONS = ("ask", "run-workflow", "workflows", "check", "retry", "blocked", "resolve", "run-board",
-           "stop-board")
+           "stop-board", "switch-agent")
 NOT_FOUND = "NOT_FOUND"
 POLICIES = ("read_only", "workspace_write")
 STUCK = ("waiting_input", "reconciling")
@@ -70,6 +70,10 @@ def _parser(action):
         p.add_argument("--action", dest="resolve_action")
     elif action in ("run-board", "stop-board"):
         pass  # --team / --workspace / --json only
+    elif action == "switch-agent":
+        p.add_argument("--member", required=True)
+        p.add_argument("--agent", required=True)
+        p.add_argument("--cancel-active", action="store_true")
     return p
 
 
@@ -373,9 +377,33 @@ def _stop_board(ns):
     return data, lambda d: f"board {ws} stopped (running work finishes; no new claims)"
 
 
+def _switch_agent(ns):
+    from . import cli
+    ws = cli._team_workspace(ns)
+    team, members = _running_team(ns, "switch-agent")
+    who = _member(members, ns.member)
+    if not team.get("teamDefId") or not who.get("memberId"):
+        raise AsError(BAD_REQUEST, "Switching requires a team definition and member id.")
+    args = {"workspace": ws, "teamDefId": team["teamDefId"], "memberId": who["memberId"], "agent": ns.agent}
+    assignment = who.get("assignment")
+    if assignment:
+        if not ns.cancel_active:
+            if not sys.stdin.isatty():
+                raise AsError(BAD_REQUEST, f"Member has active assignment {assignment['id']}; confirmation required. "
+                              "Run interactively or pass --cancel-active to confirm cancellation.")
+            answer = input(f"Cancel assignment {assignment['id']} for {who['name']} and switch agent? [y/N] ")
+            if answer.strip().lower() not in ("y", "yes"):
+                return {"switched": False, "reason": "cancel declined"}, lambda d: "Switch cancelled; assignment continues."
+        args.update(cancelActive=True, assignmentId=assignment["id"])
+    data = _write_call("team.member.switch", args)
+    return data, lambda d: (f"{who['name']}: cancelling assignment {d['assignmentId']}; switching to {d['pendingAgent']}"
+                            if d.get("pendingAgent") else
+                            f"{who['name']}: active agent is {d['activeAgent']} ({d['provider']})")
+
+
 _HANDLERS = {"ask": _ask, "run-workflow": _run_workflow, "workflows": _workflows, "check": _check,
              "retry": _retry, "blocked": _blocked, "resolve": _resolve, "run-board": _run_board,
-             "stop-board": _stop_board}
+             "stop-board": _stop_board, "switch-agent": _switch_agent}
 
 
 def run(argv, pretty) -> int:

@@ -86,7 +86,7 @@ def task_direct(tx: Tx, args: dict, ctx: dict) -> dict:
         if direct_policy["onMergeConflict"] not in board["byId"]:
             raise AsError("ROLES_CONFIG_INVALID", f"Role {agent['role']!r} sends direct-task merge conflicts to "
                                                    f"unknown board status {direct_policy['onMergeConflict']!r}.")
-    if agent["availability"] != "idle" or agent["pane_state"] != "alive":
+    if agent["availability"] != "idle" or agent["pane_state"] != "alive" or agent.get("pending_agent"):
         code = AGENT_BUSY if agent["availability"] in ("busy", "waiting_input") else AGENT_UNAVAILABLE
         raise AsError(code, f"Agent {agent['display_name']} is {agent['availability']} (pane {agent['pane_state']}).",
                       data={"agentId": agent["id"], "availability": agent["availability"]})

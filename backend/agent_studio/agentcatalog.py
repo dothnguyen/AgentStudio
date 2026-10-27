@@ -153,7 +153,9 @@ def references(workspace: str, agent_id: str, strict: bool = False) -> list:
             if strict:
                 raise
             continue
-        if isinstance(members, list) and any(isinstance(m, dict) and m.get("agent") == agent_id for m in members):
+        if isinstance(members, list) and any(isinstance(m, dict) and
+                                             (m.get("agent") == agent_id or agent_id in (m.get("agents") or []))
+                                             for m in members):
             out.append(tid)
     return sorted(out)
 

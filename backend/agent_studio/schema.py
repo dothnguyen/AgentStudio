@@ -66,7 +66,7 @@ ENTITIES: Dict[str, Entity] = {
         "agent", "agents", "availability", AGENT_STATES, frozenset({"starting"}),
         # Agents have no terminal state: an offline/error agent can be restarted.
         _t({"starting": ("idle", "offline", "error"),
-            "idle": ("busy", "offline", "error"),
+            "idle": ("busy", "limit_reached", "offline", "error"),
             "busy": ("idle", "waiting_input", "limit_reached", "offline", "error"),
             "waiting_input": ("busy", "idle", "limit_reached", "offline", "error"),
             "limit_reached": ("idle", "offline", "error"),
@@ -74,7 +74,8 @@ ENTITIES: Dict[str, Entity] = {
             "error": ("starting", "offline")}),
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
          "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at",
-         "member_id", "can_add_tickets"),
+         "member_id", "can_add_tickets", "active_catalog_agent", "quota_holds_json", "pending_agent",
+         "pending_assignment"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -517,3 +518,10 @@ MIGRATION_13 = [
 MIGRATION_14 = [
     "ALTER TABLE agents ADD COLUMN can_add_tickets INTEGER NOT NULL DEFAULT 0",
 ]
+
+MIGRATION_15 = ["ALTER TABLE agents ADD COLUMN active_catalog_agent TEXT"]
+
+MIGRATION_16 = ["ALTER TABLE agents ADD COLUMN quota_holds_json TEXT",
+                "ALTER TABLE agents ADD COLUMN pending_agent TEXT",
+                "ALTER TABLE agents ADD COLUMN pending_assignment TEXT",
+                "ALTER TABLE tickets ADD COLUMN preferred_agent_id TEXT"]

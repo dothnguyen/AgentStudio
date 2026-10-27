@@ -299,6 +299,19 @@ def _validate_board_resume(args):
     return out
 
 
+def _validate_agent_switch(args):
+    _only("team.member.switch", args, {"workspace", "teamDefId", "memberId", "agent", "cancelActive", "assignmentId"})
+    out = {"workspace": _workspace_arg(args), "teamDefId": _slug(args.get("teamDefId"), "teamDefId"),
+            "memberId": _slug(args.get("memberId"), "memberId"), "agent": _slug(args.get("agent"), "agent")}
+    if args.get("cancelActive") is not None:
+        out["cancelActive"] = req_bool(args, "cancelActive")
+    if args.get("assignmentId") is not None:
+        out["assignmentId"] = validate_uuid(args["assignmentId"], "assignmentId")
+    if out.get("cancelActive") and not out.get("assignmentId"):
+        raise AsError(BAD_REQUEST, "cancelActive requires the confirmed assignmentId.")
+    return out
+
+
 def _slug_arg(value, name):
     if not isinstance(value, str) or not DEFINITION_NAME.match(value):
         raise AsError(BAD_REQUEST, f"Argument '{name}' must be a slug (lowercase letters, digits, '-'; at "
@@ -751,6 +764,10 @@ def _member_fields(args, keys):
             out[k] = req_text(args, k, 64, allow_empty=False)
         elif k == "agent":
             out[k] = _slug(args[k], k)
+        elif k == "agents":
+            if not isinstance(args[k], list) or not args[k]:
+                raise AsError(BAD_REQUEST, "agents must be a non-empty list of catalog agent ids.")
+            out[k] = [_slug(a, "agents") for a in args[k]]
         elif k in ("model", "reasoning"):
             out[k] = req_text(args, k, 200, allow_empty=False)
         elif k == "canAddTickets":
@@ -758,7 +775,7 @@ def _member_fields(args, keys):
     return out
 
 
-_MEMBER_KEYS = ("name", "role", "agent", "provider", "model", "reasoning", "canAddTickets")
+_MEMBER_KEYS = ("name", "role", "agent", "agents", "provider", "model", "reasoning", "canAddTickets")
 
 
 def _teamdef_show(args, req):
@@ -845,6 +862,7 @@ COMMANDS = {
     "teamdef.member.add": _teamdef_member_add,
     "teamdef.member.update": _teamdef_member_update,
     "teamdef.member.remove": _teamdef_member_remove,
+    "team.member.switch": _inbox("team.member.switch", _validate_agent_switch),
     "agentdef.list": _agentdef_list,
     "agentdef.create": _agentdef_create,
     "agentdef.update": _agentdef_update,

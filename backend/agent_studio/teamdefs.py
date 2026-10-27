@@ -167,7 +167,7 @@ def validate(workspace: str, team: dict, file_id: str) -> list:
         add("roles.json", e.message)
     known_roles = (cfg or {}).get("roles", {})
     catalog = None
-    if any(isinstance(m, dict) and "agent" in m for m in members):
+    if any(isinstance(m, dict) and ("agent" in m or "agents" in m) for m in members):
         try:
             catalog = _catalog(workspace)
         except AsError as e:
@@ -178,6 +178,28 @@ def validate(workspace: str, team: dict, file_id: str) -> list:
         if not isinstance(m, dict):
             add(p, "must be an object")
             continue
+        if "agents" in m:
+            options = m["agents"]
+            if not isinstance(options, list) or not options:
+                add(f"{p}.agents", "must be a non-empty list of catalog agent ids")
+                continue
+            if any(not _text(a) or not SLUG_RE.match(a) for a in options):
+                add(f"{p}.agents", "must contain only valid catalog agent ids")
+                continue
+            if len(set(options)) != len(options):
+                add(f"{p}.agents", "must not contain duplicates")
+            if any(k in m for k in ("agent", "provider", "model", "reasoning")):
+                add(f"{p}.agents", "cannot be combined with agent or inline provider settings")
+            for aid in options:
+                if catalog is not None and aid not in catalog:
+                    add(f"{p}.agents", f"agent {aid!r} is not defined in {CONFIG_DIR}/{CATALOG_FILE}")
+                elif catalog is not None:
+                    entry = catalog[aid]
+                    _check_provider(lambda f, msg, aid=aid: add(f"{p}.agents", f"agent {aid!r} {f}: {msg}"),
+                                    entry.get("provider"), entry.get("model"), entry.get("reasoning"))
+            # Reuse existing member and role validation for the first option.
+            m = dict(m, agent=options[0])
+            m.pop("agents")
         is_catalog = "agent" in m
         for k in (("id", "name", "role", "agent") if is_catalog else ("id", "name", "role", "provider")):
             if not _text(m.get(k)):
@@ -347,6 +369,12 @@ def import_legacy(workspace: str, team_id=LEGACY_ID, name=LEGACY_ID) -> dict:
 
 def resolve_member(member: dict, catalog: dict) -> dict:
     out = {"id": member.get("id"), "name": member.get("name"), "role": member.get("role")}
+    if member.get("agents"):
+        selected = dict(member, agent=member["agents"][0])
+        selected.pop("agents")
+        out = resolve_member(selected, catalog)
+        out["agents"] = list(member["agents"])
+        return out
     if "agent" in member:
         entry = catalog.get(member["agent"]) or {}
         out.update(source="catalog", agent=member["agent"], provider=entry.get("provider"),
@@ -359,7 +387,7 @@ def resolve_member(member: dict, catalog: dict) -> dict:
 
 
 def _members_catalog(workspace: str, team: dict) -> dict:
-    if not any(isinstance(m, dict) and "agent" in m for m in team.get("members", [])):
+    if not any(isinstance(m, dict) and ("agent" in m or "agents" in m) for m in team.get("members", [])):
         return {}
     try:
         return _catalog(workspace)
@@ -465,12 +493,15 @@ def _agent_model_error(agent) -> AsError:
 def member_add(workspace: str, team_id, fields: dict, active) -> dict:
     team, fid = _strict_team(workspace, team_id)
     agent, provider = fields.get("agent"), fields.get("provider")
+    options = fields.get("agents")
+    if options is not None and (agent is not None or provider is not None):
+        raise AsError(BAD_REQUEST, "Give agents, agent or provider, not more than one.")
     if agent is not None and provider is not None:
         raise AsError(BAD_REQUEST, "Give agent or provider, not both.")
-    if agent is None and provider is None:
+    if agent is None and provider is None and options is None:
         raise AsError(BAD_REQUEST, "teamdef.member.add needs agent (a catalog agent id) or provider.")
-    if agent is not None and (fields.get("model") is not None or fields.get("reasoning") is not None):
-        raise _agent_model_error(agent)
+    if (agent is not None or options is not None) and (fields.get("model") is not None or fields.get("reasoning") is not None):
+        raise _agent_model_error(agent or options)
     if fields.get("role") is None:
         raise AsError(BAD_REQUEST, "teamdef.member.add needs role")
     name = fields.get("name")
@@ -485,7 +516,9 @@ def member_add(workspace: str, team_id, fields: dict, active) -> dict:
     if any(isinstance(m, dict) and m.get("id") == mid for m in team["members"]):
         raise AsError(MEMBER_EXISTS, f"Team {fid!r} already has a member {mid!r}.")
     member = {"id": mid, "name": name, "role": fields["role"]}
-    if agent is not None:
+    if options is not None:
+        member["agents"] = options
+    elif agent is not None:
         member["agent"] = agent
     else:
         member["provider"] = provider
@@ -515,16 +548,24 @@ def member_update(workspace: str, team_id, member_id: str, changes: dict, active
         raise AsError(BAD_REQUEST, "name, role, agent and provider cannot be cleared.")
     if "agent" in changes and "provider" in changes:
         raise AsError(BAD_REQUEST, "Give agent or provider, not both.")
+    if "agents" in changes and any(k in changes for k in ("agent", "provider", "model", "reasoning")):
+        raise AsError(BAD_REQUEST, "Give agents or a single agent/provider, not both.")
     team, fid = _strict_team(workspace, team_id)
     candidate = copy.deepcopy(team)
     m = _exact_member(candidate, fid, member_id)
+    if "agents" in changes:
+        m["agents"] = changes["agents"]
+        for k in ("agent", "provider", "model", "reasoning"):
+            m.pop(k, None)
     if "agent" in changes:
         m["agent"] = changes["agent"]
+        m.pop("agents", None)
         for k in ("provider", "model", "reasoning"):
             m.pop(k, None)
     if "provider" in changes:
         m["provider"] = changes["provider"]
         m.pop("agent", None)
+        m.pop("agents", None)
     if "agent" in m and (changes.get("model") is not None or changes.get("reasoning") is not None):
         raise _agent_model_error(m["agent"])
     for k in ("name", "role"):

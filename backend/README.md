@@ -223,6 +223,37 @@ the current phase, registered to that branch/worktree. A board rule can assign t
 workflow and return it to the appropriate merge action after resolution.
 The task's permission is unchanged: pass `--policy workspace_write` when the agent must edit files.
 
+### Switching a member's AI agent
+
+Define reusable options in `.agent-studio/agents.json`, then replace a team member's single `agent` or inline
+`provider` with an ordered list of catalog IDs in `.agent-studio/teams/<team-id>.json`:
+
+```json
+{"id":"dev", "name":"dev", "role":"Developer", "agents":["codex-primary", "claude-backup"]}
+```
+
+Existing single-agent and inline member definitions continue to work. The first option is used initially. The
+`teamdef.member.add` and `teamdef.member.update` serve commands also accept an `agents` array; `teamdef.show`
+returns the options. While the team is running, switch a member with:
+
+```bash
+agent-studio team switch-agent --team my-team --member dev --agent claude-backup
+agent-studio team status --team my-team --json
+```
+
+The equivalent coordinator command is `team.member.switch` with `workspace`, `teamDefId`, `memberId` and `agent`.
+When an option reports a usage limit, the coordinator records its quota hold and tries the next configured option.
+If every option is on hold or unavailable, the member remains `limit_reached` and cannot receive assignments.
+Known reset times are checked automatically; unknown reset times require an operator to run `board resume` for the
+member after quota becomes available. Holds and the selected option persist in coordinator state across team starts.
+
+For a manual switch with active work, the CLI asks whether to cancel the displayed assignment. `--cancel-active`
+explicitly confirms cancellation for non-interactive use. The coordinator waits for cancellation to complete before
+switching; a cancelled board ticket returns to its prior status, retains its worktree and is reserved for the same
+member's next run. Direct tasks are cancelled but are not automatically recreated. The equivalent API confirmation
+uses `cancelActive: true` together with the exact `assignmentId` shown in `team.status`, preventing a stale
+confirmation from cancelling a different assignment. A declined confirmation makes no change.
+
 ## Run the Developer → Reviewer workflow
 
 The workspace must be a git repository (clean, at least one commit) with a committed

@@ -106,6 +106,9 @@ def _apply_finished(tx, workspace: str) -> int:
         run = tx.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (row["run"],)).fetchone()
         if run is None or run["status"] not in APPLY_RUN_STATES:
             continue
+        if tx.conn.execute("SELECT 1 FROM agents a JOIN stage_attempts s ON s.assignment_id = a.pending_assignment "
+                           "WHERE a.pending_agent IS NOT NULL AND s.workflow_run_id = ?", (row["run"],)).fetchone():
+            continue
         ticket = boardmodel.get_ticket(tx.conn, workspace, row["key"])
         if run["status"] == "failed" and _usage_limited(tx, row["run"]):
             # a USAGE_LIMIT result releases the ticket without counting a round; report_rules has already
@@ -282,7 +285,7 @@ def _deps_open(tx, ticket_id: str, config) -> int:
 def _free_members(tx, team_id: str, role: str) -> list:
     rows = tx.conn.execute(
         f"SELECT * FROM agents WHERE team_id = ? AND role = ? AND availability = 'idle' "
-        f"AND pane_state = 'alive' AND id NOT IN (SELECT agent_id FROM assignments WHERE status IN "
+        f"AND pane_state = 'alive' AND pending_agent IS NULL AND id NOT IN (SELECT agent_id FROM assignments WHERE status IN "
         f"({','.join('?' * len(ACTIVE_ASSIGNMENT))})) "
         f"AND id NOT IN (SELECT assignee FROM tickets WHERE assignee IS NOT NULL)",
         (team_id, role) + ACTIVE_ASSIGNMENT).fetchall()
@@ -310,12 +313,13 @@ def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
             if rule.get("workspace") == "main" and (tasks._mutating_in_workspace(tx, workspace)
                                                     or not worktrees.is_clean(workspace)):
                 continue  # the main checkout is held; this rule waits
-            member = next(iter(_free_members(tx, team["id"], rule["role"])), None)
-            if member is None:
+            members = _free_members(tx, team["id"], rule["role"])
+            if not members:
                 continue
-            ticket = _pick_ticket(tx, workspace, rule, config, current)
+            ticket = _pick_ticket(tx, workspace, rule, config, current, members)
             if ticket is None:
                 continue
+            member = next((m for m in members if m["id"] == ticket.get("preferred_agent_id")), members[0])
             if _start_ticket(tx, workspace, team, member, rule, ticket, config, ctx) is not None:
                 claimed += 1
         except AsError as e:  # one rule's problem never blocks the others
@@ -323,12 +327,21 @@ def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
     return claimed, errors
 
 
-def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict):
+def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, members=None):
     rows = tx.conn.execute(
         "SELECT * FROM tickets WHERE workspace = ? AND status = ? AND assignee IS NULL "
         "ORDER BY priority, created_at, key", (workspace, rule["when"]["status"])).fetchall()
     for row in rows:
         ticket = dict(row)
+        preferred = ticket.get("preferred_agent_id")
+        if preferred and members is not None and not any(m["id"] == preferred for m in members):
+            # A stopped/replaced runtime cannot satisfy an old reservation.
+            prior = tx.conn.execute("SELECT t.status FROM agents a JOIN teams t ON t.id = a.team_id WHERE a.id = ?",
+                                    (preferred,)).fetchone()
+            if prior and prior["status"] == "running":
+                continue
+            tx.conn.execute("UPDATE tickets SET preferred_agent_id = NULL WHERE id = ?", (ticket["id"],))
+            ticket["preferred_agent_id"] = None
         if not boardmodel.ticket_in_scope(ticket, current):
             continue
         if rule.get("requiresDeps") and _deps_open(tx, ticket["id"], config):
@@ -367,6 +380,7 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
         # validation stage from being mistaken for an abandoned pre-start claim.
         tx.conn.execute("UPDATE tickets SET active_run_id = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
                         (started["workflowRunId"], utcnow(), ticket["id"]))
+        tx.conn.execute("UPDATE tickets SET preferred_agent_id = NULL WHERE id = ?", (ticket["id"],))
         boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.claimed", "coordinator", rule["when"]["status"],
                                  status, {"ticketId": ticket["id"], "key": ticket["key"],
                                           "agentId": member["id"], "run": started["workflowRunId"],

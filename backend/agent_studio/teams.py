@@ -5,6 +5,7 @@ import json
 import os
 import shlex
 import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from . import ops, procid, providers, tmuxctl
@@ -60,6 +61,180 @@ def attach_info(team: dict, tmux: tmuxctl.Tmux) -> dict:
                                                        "nextPane": "Ctrl-b o", "selectPane": "Ctrl-b <arrow>"}}
 
 
+def quota_holds(agent):
+    try:
+        holds = json.loads(agent.get("quota_holds_json") or "{}")
+    except (ValueError, TypeError):
+        holds = {}
+    if not isinstance(holds, dict):
+        return {}
+    now = datetime.now(timezone.utc)
+    for key, reset in list(holds.items()):
+        if isinstance(reset, str):
+            try:
+                parsed = datetime.fromisoformat(reset.replace("Z", "+00:00"))
+                if parsed.tzinfo and parsed <= now:
+                    del holds[key]
+            except ValueError:
+                pass
+    return holds
+
+
+def switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict:
+    from . import teamdefs
+    workspace, fid, mid, choice = (args[k] for k in ("workspace", "teamDefId", "memberId", "agent"))
+    row = tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND def_id = ? AND status = 'running' "
+                          "ORDER BY created_at DESC, rowid DESC LIMIT 1", (workspace, fid)).fetchone()
+    if row is None:
+        raise AsError(TEAM_NOT_RUNNING, f"Team {fid!r} is not running.")
+    agent = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (row["id"], mid)).fetchone()
+    if agent is None:
+        raise AsError(MEMBER_NOT_FOUND, f"No running member {mid!r} in team {fid!r}.")
+    agent = dict(agent)
+    member = teamdefs.find_member(teamdefs.load(workspace, fid), mid)
+    if choice not in (member.get("agents") or []):
+        raise AsError(BAD_REQUEST, f"Agent {choice!r} is not configured for member {mid!r}.")
+    if choice in quota_holds(agent):
+        raise AsError(BAD_REQUEST, f"Agent {choice!r} is on quota hold.")
+    marks = ",".join("?" * len(ACTIVE))
+    active_assignment = tx.conn.execute(f"SELECT id FROM assignments WHERE agent_id = ? AND status IN ({marks}) LIMIT 1",
+                                        (agent["id"], *ACTIVE)).fetchone()
+    if agent["pane_state"] != "alive":
+        raise AsError(BAD_REQUEST, "The member's pane is not alive.")
+    if agent.get("pending_agent") and not args.get("_pending"):
+        raise AsError(BAD_REQUEST, "A switch is already pending for this member.")
+    if active_assignment and (not args.get("cancelActive") or args.get("assignmentId") != active_assignment["id"]):
+        raise AsError(BAD_REQUEST, "Member has an active assignment; confirm cancellation of this assignment to switch.",
+                      data={"assignmentId": active_assignment["id"]})
+    if not active_assignment and agent["availability"] not in ("idle", "limit_reached"):
+        raise AsError(BAD_REQUEST, "Member must be idle or quota-limited before switching.")
+    if agent["active_catalog_agent"] == choice:
+        raise AsError(BAD_REQUEST, "That agent is already active; use board resume when its quota resets.")
+    entry = teamdefs._catalog(workspace).get(choice)
+    if not entry:
+        raise AsError(TEAM_CONFIG_INVALID, f"Agent {choice!r} is missing from the catalog.")
+    pid = entry.get("provider")
+    aliases = providers.fixture_aliases(os.environ, ctx["debug"])
+    adapter = providers.resolve(pid, allow_test_only=ctx["debug"], fixture=aliases.get(pid))
+    adapter.validate_settings(entry.get("model"), entry.get("reasoning"))
+    probes = providers.probe_many([pid], dict(os.environ), allow_test_only=ctx["debug"], aliases=aliases)
+    if not probes[pid].get("available"):
+        raise AsError(providers.PROVIDER_UNAVAILABLE, f"Provider {pid!r} is not ready: {probes[pid].get('reason')}")
+    if active_assignment:
+        from . import workflow, tasks
+        assignment_id = active_assignment["id"]
+        wf = tx.conn.execute("SELECT w.id FROM workflow_runs w JOIN stage_attempts s ON s.workflow_run_id = w.id "
+                             "WHERE s.assignment_id = ? AND w.status IN ('running','paused') LIMIT 1",
+                             (assignment_id,)).fetchone()
+        tx.update("agent", agent["id"], {"pending_agent": choice, "pending_assignment": assignment_id},
+                  "agent.switch_requested", {"toAgent": choice, "assignmentId": assignment_id})
+        outcome = (workflow.cancel(tx, {"workflowRunId": wf["id"]}, ctx) if wf else
+                   tasks.assignment_cancel(tx, {"assignmentId": assignment_id}, ctx))
+        return {"teamId": row["id"], "memberId": mid, "agentId": agent["id"], "pendingAgent": choice,
+                "assignmentId": assignment_id, "cancellation": outcome}
+    values = {"provider_id": pid, "model": entry.get("model"), "reasoning": entry.get("reasoning"),
+              "capabilities_json": probes[pid], "active_catalog_agent": choice, "limit_reset_at": None,
+              "quota_holds_json": quota_holds(agent), "pending_agent": None, "pending_assignment": None}
+    payload = {"fromAgent": agent["active_catalog_agent"], "toAgent": choice, "providerId": pid}
+    tx.update("agent", agent["id"], values, "agent.option_switched", payload)
+    if agent["availability"] == "limit_reached":
+        tx.transition("agent", agent["id"], "idle")
+    return {"teamId": row["id"], "memberId": mid, "agentId": agent["id"], "activeAgent": choice, "provider": pid}
+
+
+def handle_quota_limit(tx: Tx, agent_id: str, reset, ctx: dict) -> None:
+    from . import teamdefs
+    agent = tx.get("agent", agent_id)
+    team = tx.get("team", agent["team_id"])
+    active = agent.get("active_catalog_agent")
+    if not active or not team.get("def_id") or not agent.get("member_id"):
+        return
+    holds = quota_holds(agent)
+    holds[active] = reset
+    tx.update("agent", agent_id, {"quota_holds_json": holds}, "agent.quota_held",
+              {"option": active, "resetAt": reset})
+    if agent.get("pending_agent"):
+        return
+    try:
+        member = teamdefs.find_member(teamdefs.load(team["workspace"], team["def_id"]), agent["member_id"])
+        options = member.get("agents") or []
+        start = options.index(active) + 1 if active in options else 0
+        ordered = options[start:] + options[:start]
+        for option in ordered:
+            if option == active or option in holds:
+                continue
+            try:
+                switch_member_agent(tx, {"workspace": team["workspace"], "teamDefId": team["def_id"],
+                                         "memberId": agent["member_id"], "agent": option}, ctx)
+                return
+            except AsError as e:
+                tx.note("agent", agent_id, "agent.option_unavailable", {"option": option, "code": e.code})
+    except AsError as e:
+        tx.note("agent", agent_id, "agent.failover_failed", {"code": e.code})
+
+
+def recover_expired_quotas(store: Store, ctx: dict) -> None:
+    from . import teamdefs
+    rows = store.conn.execute("SELECT a.id FROM agents a JOIN teams t ON t.id = a.team_id "
+                              "WHERE a.availability = 'limit_reached' AND a.pending_agent IS NULL "
+                              "AND t.status = 'running' AND a.active_catalog_agent IS NOT NULL").fetchall()
+    for row in rows:
+        with store.transaction() as tx:
+            agent = tx.get("agent", row["id"])
+            try:
+                recorded = json.loads(agent.get("quota_holds_json") or "{}")
+                holds = quota_holds(agent)
+                if recorded == holds:
+                    continue
+                team = tx.get("team", agent["team_id"])
+                member = teamdefs.find_member(teamdefs.load(team["workspace"], team["def_id"]), agent["member_id"])
+                if agent["active_catalog_agent"] not in holds:
+                    tx.transition("agent", agent["id"], "idle", event="agent.quota_reset",
+                                  set_values={"quota_holds_json": holds, "limit_reset_at": None})
+                    continue
+                for option in member.get("agents") or []:
+                    if option not in holds:
+                        try:
+                            switch_member_agent(tx, {"workspace": team["workspace"], "teamDefId": team["def_id"],
+                                                     "memberId": agent["member_id"], "agent": option}, ctx)
+                            break
+                        except AsError:
+                            continue
+            except (AsError, ValueError, TypeError):
+                continue
+
+
+def complete_pending_switches(store: Store, ctx: dict) -> None:
+    from . import boardsched
+    rows = store.conn.execute("SELECT id FROM agents WHERE pending_agent IS NOT NULL").fetchall()
+    for row in rows:
+        with store.transaction() as tx:
+            agent = tx.get("agent", row["id"])
+            assignment = tx.get("assignment", agent["pending_assignment"])
+            if assignment["status"] in ACTIVE:
+                continue
+            wf = tx.conn.execute("SELECT w.* FROM workflow_runs w JOIN stage_attempts s ON s.workflow_run_id = w.id "
+                                 "WHERE s.assignment_id = ? ORDER BY s.created_at DESC LIMIT 1",
+                                 (assignment["id"],)).fetchone()
+            if wf and wf["status"] not in ("succeeded", "failed", "cancelled"):
+                continue
+            team = tx.get("team", agent["team_id"])
+            ticket = (tx.conn.execute("SELECT * FROM tickets WHERE active_run_id = ?", (wf["id"],)).fetchone()
+                      if wf and wf["status"] == "cancelled" else None)
+            try:
+                switch_member_agent(tx, {"workspace": team["workspace"], "teamDefId": team["def_id"],
+                                         "memberId": agent["member_id"], "agent": agent["pending_agent"],
+                                         "_pending": True}, ctx)
+                if ticket:
+                    boardsched._release_with_run(tx, team["workspace"], dict(ticket), "agent_switch_cancelled")
+                    tx.conn.execute("UPDATE tickets SET preferred_agent_id = ? WHERE id = ?", (agent["id"], ticket["id"]))
+            except AsError as e:
+                tx.update("agent", agent["id"], {"pending_agent": None, "pending_assignment": None},
+                          "agent.switch_failed", {"code": e.code, "message": e.message})
+                if ticket:
+                    boardsched._release_with_run(tx, team["workspace"], dict(ticket), "agent_switch_failed")
+
+
 # ---- team.start ---------------------------------------------------------------------------------
 
 def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
@@ -111,6 +286,10 @@ def validate_roster(args: dict, allow_fake: bool) -> List[dict]:
             if not isinstance(m.get("canAddTickets"), bool):
                 raise AsError(TEAM_CONFIG_INVALID, f"roster[{i}].canAddTickets must be true or false.")
             member["canAddTickets"] = m["canAddTickets"]
+        if m.get("activeCatalogAgent") is not None:
+            member["activeCatalogAgent"] = m["activeCatalogAgent"]
+        if m.get("quotaHolds") is not None:
+            member["quotaHolds"] = m["quotaHolds"]
         clean.append(member)
     return clean
 
@@ -123,6 +302,32 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     if not args.get("roster"):
         from . import roles
         args = dict(args, roster=roles.load_team(workspace))  # .agent-studio/team.json
+    if args.get("teamDefId"):
+        from . import teamdefs
+        definition = teamdefs.load(workspace, args["teamDefId"])
+        catalog = teamdefs._members_catalog(workspace, definition)
+        args = dict(args, roster=[dict(m) for m in args["roster"]])
+        for member in args["roster"]:
+            if not member.get("memberId"):
+                continue
+            definition_member = teamdefs.find_member(definition, member["memberId"])
+            choices = definition_member.get("agents")
+            if not choices:
+                continue
+            previous = tx.conn.execute(
+                "SELECT a.active_catalog_agent, a.quota_holds_json FROM agents a JOIN teams t ON t.id = a.team_id "
+                "WHERE t.workspace = ? AND t.def_id = ? AND a.member_id = ? "
+                "ORDER BY t.created_at DESC, t.rowid DESC LIMIT 1",
+                (workspace, args["teamDefId"], member["memberId"])).fetchone()
+            holds = quota_holds(dict(previous)) if previous else {}
+            selected = previous["active_catalog_agent"] if previous and previous["active_catalog_agent"] in choices else choices[0]
+            if selected in holds:
+                selected = next((c for c in choices if c not in holds), selected)
+            entry = catalog.get(selected)
+            if not entry:
+                raise AsError(TEAM_CONFIG_INVALID, f"Agent {selected!r} is missing from the catalog.")
+            member.update(providerId=entry.get("provider"), model=entry.get("model"), reasoning=entry.get("reasoning"),
+                          activeCatalogAgent=selected, quotaHolds=holds)
     roster = validate_roster(args, allow_fake=ctx["debug"])
     probes = providers.probe_many([m["providerId"] for m in roster], dict(os.environ), allow_test_only=ctx["debug"],
                                   aliases=providers.fixture_aliases(os.environ, ctx["debug"]))
@@ -159,6 +364,8 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
                             "display_name": m["displayName"], "capabilities_json": probes[m["providerId"]],
                             "model": m.get("model"), "reasoning": m.get("reasoning"),
                             "member_id": m.get("memberId"),
+                            "active_catalog_agent": m.get("activeCatalogAgent"),
+                            "quota_holds_json": m.get("quotaHolds"),
                             "can_add_tickets": 1 if m.get("canAddTickets") else 0},
                   entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
@@ -188,6 +395,9 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
                                               "pane_state": "alive"}, "agent.pane_assigned",
                       {"paneId": pane["pane_id"]})
             tx.transition("agent", m["agentId"], "idle")
+            if m.get("activeCatalogAgent") in (m.get("quotaHolds") or {}):
+                tx.transition("agent", m["agentId"], "limit_reached",
+                              set_values={"limit_reset_at": m["quotaHolds"][m["activeCatalogAgent"]]})
             from . import roles
             rc = roles.context_for(workspace, m["role"])
             agents_out.append(dict(m, paneId=pane["pane_id"], roleConfigured=rc["configured"],

@@ -169,6 +169,8 @@ def apply(tx: Tx, report: dict, ctx: dict = None):
             if g_state == "limit_reached":
                 tx.note("agent", agent["id"], "board.limit_reached",
                         {"agentId": agent["id"], "resetAt": report_body.get("limitResetAt")})
+                from . import teams
+                teams.handle_quota_limit(tx, agent["id"], report_body.get("limitResetAt"), ctx)
         return "finished", seq
 
     raise AsError(REPORT_MISMATCH, f"Unknown report kind {kind!r}.")

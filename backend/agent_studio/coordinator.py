@@ -142,11 +142,11 @@ def _handle_debug_assign(args: dict, tx, ctx: dict) -> dict:
 
 
 def _handle_board_resume(args, tx, ctx):
-    teams = [dict(row) for row in tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running'",
+    running_teams = [dict(row) for row in tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND status = 'running'",
                                                    (args["workspace"],)).fetchall()]
-    if not teams:
+    if not running_teams:
         raise AsError(tasks.TEAM_NOT_RUNNING, "No team is running on this workspace.")
-    team = teams[0]
+    team = running_teams[0]
     if args["all"]:
         agents = [dict(row) for row in tx.conn.execute("SELECT * FROM agents WHERE team_id = ? ORDER BY ordinal", (team["id"],))]
     elif args.get("member") is not None:
@@ -165,7 +165,10 @@ def _handle_board_resume(args, tx, ctx):
     resumed = []
     for agent in agents:
         if agent["availability"] == "limit_reached":
-            tx.transition("agent", agent["id"], "idle", set_values={"limit_reset_at": None})
+            holds = teams.quota_holds(agent)
+            holds.pop(agent.get("active_catalog_agent"), None)
+            tx.transition("agent", agent["id"], "idle", set_values={"limit_reset_at": None,
+                                                                      "quota_holds_json": holds})
             resumed.append(agent["id"])
     if resumed:
         tx.note("team", team["id"], "board.resumed", {"agentIds": resumed})
@@ -204,6 +207,7 @@ HANDLERS = {
     "board.run": lambda args, tx, ctx: boardsched.bind_team(tx, args["workspace"], args["teamId"]),
     "board.stop": lambda args, tx, ctx: boardsched.stop_board(tx, args["workspace"]),
     "board.resume": _handle_board_resume,
+    "team.member.switch": lambda args, tx, ctx: teams.switch_member_agent(tx, args, ctx),
 }
 MONITOR_INTERVAL_S = 2.0
 
@@ -326,6 +330,7 @@ def run(enable_debug: bool = False) -> int:
             reports.apply_pending(store, apply_report)  # first, so commands see the latest outcomes
             process_pending(store, ctx)
             workflow.advance(store, ctx)
+            teams.complete_pending_switches(store, ctx)
             tick = boardsched.tick(store, ctx)
             seen = json.dumps(tick["errors"], sort_keys=True, default=str)
             if seen != last_tick_errors[0]:  # log a board problem once, not on every pass
@@ -338,6 +343,7 @@ def run(enable_debug: bool = False) -> int:
                 _reap_children()
                 teams.monitor(store, tmux)
                 reconcile.tick(store, ctx)
+                teams.recover_expired_quotas(store, ctx)
                 next_monitor = time.monotonic() + MONITOR_INTERVAL_S
         except Exception:
             _log(f"loop error:\n{traceback.format_exc()}")

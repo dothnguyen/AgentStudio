@@ -246,7 +246,7 @@ class CatalogTests(Base):
             self.assertIn(name, dispatch.COMMANDS)
         self.assertEqual({n for n in dispatch.COMMANDS if n.startswith("team.")},
                          {"team.attach", "team.start", "team.stop", "team.status", "team.list",
-                          "team.overview"})
+                          "team.overview", "team.member.switch"})
 
 
 if __name__ == "__main__":
