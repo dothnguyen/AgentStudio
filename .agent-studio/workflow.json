@@ -4,7 +4,7 @@
     "argv": [
       "python3",
       "scripts/validate.py",
-      "--touched"
+      "--all"
     ],
     "timeoutMs": 600000
   }

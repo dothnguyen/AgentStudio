@@ -1,5 +1,5 @@
 version: 1
-description: Board stage dev-ready. The Developer implements the ticket in its worktree; the touched tests run; failures go back to the Developer.
+description: Board stage dev-ready. The Developer implements the ticket in its worktree; the configured validation suite runs; failures go back to the Developer.
 maxSteps: 12
 stages:
   - id: develop

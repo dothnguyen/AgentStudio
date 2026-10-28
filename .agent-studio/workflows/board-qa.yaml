@@ -1,5 +1,5 @@
 version: 1
-description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria, the touched tests run, QA gives the verdict.
+description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria, the configured validation suite runs, QA gives the verdict.
 maxSteps: 8
 stages:
   - id: qa_tests
