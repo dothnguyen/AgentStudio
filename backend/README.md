@@ -129,6 +129,11 @@ catalog: {state, message}, teams, truncated, partial}`. Each team has `id`, `nam
 (`ok|missing|unavailable`), the definition's `provider/model/reasoning`, the frozen `runtime` roster entry (or
 `null`), `presence` (an agent availability, or `not_in_runtime|not_started|stopped|error|disconnected|unavailable`)
 and `work`: `{state: "working", assignment, ticket}`, `{state: "none"}` or `{state: "unavailable", reason}`.
+Saved configuration also exposes `agentMode` (`ordered_catalog|single_catalog|inline`), `defaultAgent`,
+and ordered `agentOptions` with catalog details and an `ok|missing` state. Missing references remain in
+place. The nested runtime reports frozen `configuredAgents`, `activeAgent`, `quotaHolds`, `pendingAgent`,
+`lastSwitch`, actual provider/model/reasoning, and the newest active `assignment`. Its `stale` flag is true
+when the effective team state is not starting or running; saved catalog edits do not change runtime evidence.
 Work comes only from the state DB (assignments, tasks, workflow runs, tickets) and is never inferred from
 tmux or pane output. Configuration or runtime problems never fail the request; they appear as states
 (`partial: true`). Bounds: 50 teams, 16 members per team, 200-char text, 2000-char role description.

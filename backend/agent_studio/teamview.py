@@ -1,7 +1,9 @@
 """Read-only Teams management projection (P05-S10): definitions + catalog + roles.json joined with runtime evidence by stable ids. Never reads tmux or pane output."""
 from __future__ import annotations
 
-from . import roles, teamdefs, textsafe
+import json
+
+from . import roles, teamdefs, teamstatus, textsafe
 from .protocol import AsError
 from .teams import ACTIVE
 
@@ -63,9 +65,23 @@ def _latest_runtime(conn, workspace, def_id):
 
 
 def _runtime_agents(conn, team_id):
-    return [dict(r) for r in conn.execute(
-        "SELECT id, member_id, display_name, role, provider_id, model, reasoning, availability, pane_state "
-        "FROM agents WHERE team_id = ? ORDER BY ordinal", (team_id,)).fetchall()]
+    rows = conn.execute(
+        "SELECT id, team_id, member_id, display_name, role, provider_id, model, reasoning, availability, pane_state, "
+        "configured_agents_json, active_catalog_agent, quota_holds_json, pending_agent, pending_assignment "
+        "FROM agents WHERE team_id = ? ORDER BY ordinal", (team_id,)).fetchall()
+    agents = []
+    marks = ",".join("?" * len(ACTIVE))
+    for row in rows:
+        agent = dict(row)
+        a = conn.execute(f"SELECT id, status, task_id FROM assignments WHERE agent_id = ? AND status IN ({marks}) "
+                         "ORDER BY created_at DESC, rowid DESC LIMIT 1", (agent["id"],) + ACTIVE).fetchone()
+        agent.update(configuredAgents=json.loads(agent["configured_agents_json"]) if agent["configured_agents_json"] is not None else None,
+                     activeAgent=agent["active_catalog_agent"],
+                     quotaHolds=json.loads(agent["quota_holds_json"]) if agent["quota_holds_json"] is not None else {},
+                     pendingAgent=agent["pending_agent"], lastSwitch=teamstatus._last_switch(conn, agent),
+                     assignment={"id": a["id"], "status": a["status"], "taskId": a["task_id"]} if a else None)
+        agents.append(agent)
+    return agents
 
 
 def _work(conn, workspace, agent_id):
@@ -92,7 +108,27 @@ def _str(value):
     return value if isinstance(value, str) else None
 
 
+def _agent_options(member, catalog):
+    if member is not None and "agents" in member:
+        mode, ids = "ordered_catalog", member["agents"]
+        ids = ids if isinstance(ids, list) else []
+    elif member is not None and "agent" in member:
+        mode, ids = "single_catalog", [member["agent"]]
+    else:
+        mode, ids = "inline", []
+    options = []
+    for agent_id in ids:
+        entry = (catalog or {}).get(agent_id) if isinstance(agent_id, str) else None
+        exists = isinstance(agent_id, str) and catalog is not None and agent_id in catalog
+        entry = entry if isinstance(entry, dict) else {}
+        options.append({"id": agent_id, **{key: _clip(entry.get(key)) for key in
+                       ("name", "provider", "model", "reasoning", "description")},
+                        "state": "ok" if exists else "missing"})
+    return mode, options, ids[0] if ids else None
+
+
 def _member(cfg_member, agent_row, roles_map, catalog, team_state, conn, workspace):
+    agent_mode, agent_options, default_agent = _agent_options(cfg_member, catalog)
     if cfg_member is not None:
         r = teamdefs.resolve_member(cfg_member, catalog or {})
         source, agent_def = r["source"], r["agent"]
@@ -111,7 +147,9 @@ def _member(cfg_member, agent_row, roles_map, catalog, team_state, conn, workspa
     runtime = None
     if agent_row is not None:
         runtime = {"agentId": agent_row["id"], "availability": agent_row["availability"],
-                   "paneState": agent_row["pane_state"], "provider": agent_row["provider_id"],
+                   "paneState": agent_row["pane_state"],
+                   **{key: agent_row[key] for key in ("configuredAgents", "activeAgent", "quotaHolds", "pendingAgent", "lastSwitch", "assignment")},
+                   "provider": agent_row["provider_id"],
                    "model": agent_row["model"], "reasoning": agent_row["reasoning"], "stale": not live}
     if live and agent_row is not None:
         presence, work = agent_row["availability"], _work(conn, workspace, agent_row["id"])
@@ -122,6 +160,7 @@ def _member(cfg_member, agent_row, roles_map, catalog, team_state, conn, workspa
     return {"memberId": _str(member_id), "name": _clip(name), "role": _str(role),
             **_role_fields(role, roles_map),
             "source": source, "agentDefId": _str(agent_def), "agentDefState": state,
+            "agentMode": agent_mode, "agentOptions": agent_options, "defaultAgent": default_agent,
             "provider": _str(provider), "model": _str(model), "reasoning": _str(reasoning),
             "runtime": runtime, "presence": presence, "work": work}
 
