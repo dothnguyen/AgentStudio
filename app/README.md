@@ -115,3 +115,5 @@ The typed management API accepts ordered catalog agent IDs when adding or updati
 Named switch and resume calls resolve the workspace in the main process and submit coordinator
 commands with fresh idempotency keys. Switching an active assignment requires its exact ID and
 an explicit cancellation confirmation; backend errors and cancellation results are passed through.
+
+Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details remain separate from saved configuration.

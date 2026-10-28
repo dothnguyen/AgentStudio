@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addMemberInput,
+  emptyMemberForm, addMemberInput, addAgentOption, removeAgentOption, moveAgentOption, validateAgentOptions, memberFormInitial,
   canEditMember,
   canEditTeam,
   errorFeedback,
@@ -13,23 +13,64 @@ import {
 import { member, team, twoTeams } from './teamsFixtures';
 
 describe('teamEditModel', () => {
-  it('member_changes_only_changed_fields', () => {
-    const initial = { name: 'dev', role: 'Developer', agent: 'opencode-sonnet' };
-    expect(memberChanges(initial, { name: ' dev ', role: 'Reviewer', agent: 'opencode-sonnet' })).toEqual({ role: 'Reviewer' });
-    expect(memberChanges(initial, { ...initial })).toBeNull();
-    const inline = memberChanges({ name: 'lead', role: 'TeamLead', agent: '' }, { name: 'lead', role: 'QA', agent: '' });
-    expect(inline).toEqual({ role: 'QA' });
-    expect(inline).not.toHaveProperty('agent');
+  it('ordered_add_remove_reorder_default', () => {
+    const original = ['primary', 'backup'];
+    const added = addAgentOption(original, 'third');
+    const moved = moveAgentOption(added, 2, -1);
+    const reordered = moveAgentOption(moved, 0, 1);
+    const removed = removeAgentOption(reordered, 2);
+    expect(added).toEqual(['primary', 'backup', 'third']);
+    expect(moved).toEqual(['primary', 'third', 'backup']);
+    expect(reordered).toEqual(['third', 'primary', 'backup']);
+    expect(removed).toEqual(['third', 'primary']);
+    expect(original).toEqual(['primary', 'backup']);
+    expect(memberChanges({name: 'a', role: 'r', agents: original, useCatalogAgents: true}, {name: 'a', role: 'r', agents: removed, useCatalogAgents: true})).toEqual({agents: ['third', 'primary']});
   });
-
-  it('add_member_input_omits_blank_name', () => {
-    expect(addMemberInput({ name: '  ', role: ' QA ', agent: 'codex-gpt' })).toEqual({ role: 'QA', agent: 'codex-gpt' });
-    expect(addMemberInput({ name: 'Quinn', role: 'QA', agent: 'codex-gpt' })).toEqual({ name: 'Quinn', role: 'QA', agent: 'codex-gpt' });
+  it('option_helpers_handle_boundaries_without_mutation', () => {
+    const original = Object.freeze(['a', 'b']);
+    for (const result of [addAgentOption(original, ''), addAgentOption(original, '  '), addAgentOption(original, 'a'),
+      removeAgentOption(original, -1), removeAgentOption(original, 2),
+      moveAgentOption(original, -1, 1), moveAgentOption(original, 0, -1), moveAgentOption(original, 1, 1)]) {
+      expect(result).toEqual(['a', 'b']);
+      expect(result).not.toBe(original);
+    }
+    expect(original).toEqual(['a', 'b']);
   });
-
-  it('validate_member_form_messages', () => {
-    expect(validateMemberForm({ name: '', role: '', agent: '' }, 'add')).toEqual({ agent: 'Choose an agent.', role: 'Enter a role.' });
-    expect(validateMemberForm({ name: '', role: '', agent: '' }, 'edit')).toEqual({ name: 'Enter a name.', role: 'Enter a role.' });
+  it('initial_values_and_conversion_are_explicit', () => {
+    expect(emptyMemberForm()).toEqual({name: '', role: '', agents: [], useCatalogAgents: true});
+    expect(memberFormInitial(member({agentOptions: [], defaultAgent: 'fallback'})).agents).toEqual(['fallback']);
+    const inline = memberFormInitial(member({agentMode: 'inline'}));
+    expect(inline.agents).toEqual([]);
+    expect(validateMemberForm(inline, 'edit', new Set())).toEqual({});
+    expect(validateMemberForm({...inline, useCatalogAgents: true}, 'edit', new Set()).agents).toBe('Choose at least one agent.');
+    expect(memberChanges(inline, {...inline, useCatalogAgents: true, agents: ['a']})).toEqual({agents: ['a']});
+    expect(memberChanges(inline, {...inline})).toBeNull();
+    const input = addMemberInput({name: ' Name ', role: ' QA ', agents: ['a'], useCatalogAgents: true});
+    expect(input).toEqual({name: 'Name', role: 'QA', agents: ['a']});
+  });
+  it('duplicate_and_missing_options_block_save', () => {
+    const missing = new Set(['missing']);
+    expect(validateAgentOptions([], missing)).toBe('Choose at least one agent.');
+    expect(validateAgentOptions(['missing', 'missing'], missing)).toBe('Each agent can appear only once.');
+    expect(validateAgentOptions(['missing'], missing)).toBe('Remove or replace missing catalog agents before saving.');
+    expect(validateAgentOptions(['a', 'b'], missing)).toBeNull();
+  });
+  it('single_catalog_is_not_silently_rewritten', () => {
+    const initial = memberFormInitial(member());
+    expect(memberChanges(initial, {...initial, role: 'QA'})).toEqual({role: 'QA'});
+  });
+  it('inline_member_preserves_provider_fields', () => {
+    const initial = memberFormInitial(member({agentMode: 'inline', provider: 'p', model: 'm', reasoning: 'r'}));
+    expect(memberChanges(initial, {...initial, name: 'new', role: 'QA'})).toEqual({name: 'new', role: 'QA'});
+  });
+  it('preserves_role_identity_and_can_add_tickets', () => {
+    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}));
+    expect(memberChanges(initial, {...initial, agents: ['other']})).toEqual({agents: ['other']});
+  });
+  it('add_and_validate_member', () => {
+    const draft = { name: ' ', role: ' QA ', agents: ['a'], useCatalogAgents: true };
+    expect(addMemberInput(draft)).toEqual({role: 'QA', agents: ['a']});
+    expect(validateMemberForm({...draft, agents: [], role: ''}, 'add', new Set())).toEqual({agents: 'Choose at least one agent.', role: 'Enter a role.'});
   });
 
   it('error_feedback_lists_problems_and_hint', () => {
@@ -63,7 +104,7 @@ describe('teamEditModel', () => {
   });
 
   it('suffixes', () => {
-    expect(nextStartSuffix(true)).toBe(' Changes apply the next time the team starts.');
+    expect(nextStartSuffix(true)).toBe(' Saved configuration applies on the next team start; the running member is unchanged.');
     expect(nextStartSuffix(false)).toBe('');
     expect(nextStartSuffix(undefined)).toBe('');
     expect(problemsSuffix([])).toBe('');

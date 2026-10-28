@@ -41,7 +41,8 @@ import {
   definitionBadge,
   memberCountText,
   memberName,
-  memberProviderModel,
+  savedAgentOptionText,
+  liveAgentText,
   memberSourceNote,
   orderTeams,
   overviewNotices,
@@ -400,7 +401,8 @@ function TeamDetailPanel(props: {
             <tr>
               <th scope="col">Agent</th>
               <th scope="col">Role</th>
-              <th scope="col">Provider / model</th>
+              <th scope="col">Saved options</th>
+              <th scope="col">Live agent</th>
               <th scope="col">Status</th>
               <th scope="col">Current work</th>
               <th scope="col">Actions</th>
@@ -422,7 +424,10 @@ function TeamDetailPanel(props: {
                     {roleText(m)}
                     {role !== null && <p className="teams-role-description">{role}</p>}
                   </td>
-                  <td>{memberProviderModel(m)}</td>
+                  <td>{m.source === 'runtime' ? 'Not available' : m.agentMode === 'inline'
+                    ? `Inline — ${providerModelText(m.provider, m.model)}${m.reasoning ? ` · Reasoning: ${m.reasoning}` : ''}`
+                    : <ol>{m.agentOptions.map((option, i) => <li key={`${option.id}-${i}`}>{savedAgentOptionText(option, i)}</li>)}</ol>}</td>
+                  <td>{liveAgentText(m)}</td>
                   <td>
                     <span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}>
                       <span className="status-dot" aria-hidden="true" />
@@ -480,7 +485,8 @@ function TeamDetailPanel(props: {
           mode="add"
           heading="Add member"
           initial={emptyMemberForm()}
-          inlineProvider={null}
+          originalOptions={[]}
+          inlineContext={null}
           agents={agents}
           roles={knownRoles(overview)}
           pending={pending}
@@ -494,7 +500,8 @@ function TeamDetailPanel(props: {
           mode="edit"
           heading={`Edit ${memberName(editing)}`}
           initial={memberFormInitial(editing)}
-          inlineProvider={editing.source === 'inline' ? (editing.provider ?? 'unknown') : null}
+          originalOptions={editing.agentOptions}
+          inlineContext={editing.agentMode === 'inline' ? { provider: editing.provider, model: editing.model, reasoning: editing.reasoning } : null}
           agents={agents}
           roles={knownRoles(overview)}
           pending={pending}

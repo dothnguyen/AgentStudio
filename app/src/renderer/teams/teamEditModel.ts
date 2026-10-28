@@ -24,7 +24,8 @@ export type WriteFeedback =
 export interface MemberFormValues {
   name: string;
   role: string;
-  agent: string;
+  agents: string[];
+  useCatalogAgents: boolean;
 }
 
 export function isLiveTeam(team: OverviewTeam): boolean {
@@ -100,7 +101,7 @@ export function errorFeedback(title: string, error: ManagementError): WriteFeedb
 }
 
 export function nextStartSuffix(applies: boolean | undefined): string {
-  return applies === true ? ' Changes apply the next time the team starts.' : '';
+  return applies === true ? ' Saved configuration applies on the next team start; the running member is unchanged.' : '';
 }
 
 export function problemsSuffix(problems: Problem[]): string {
@@ -109,45 +110,57 @@ export function problemsSuffix(problems: Problem[]): string {
     : ` The team still has ${plural(problems.length, 'problem', 'problems')}; see the team details.`;
 }
 
-export function memberFormInitial(m: OverviewMember): MemberFormValues {
-  return {
-    name: m.name ?? '',
-    role: m.role ?? '',
-    agent: m.source === 'catalog' ? (m.agentDefId ?? '') : '',
-  };
+export function addAgentOption(agents: readonly string[], agentId: string): string[] {
+  return agentId.trim() === '' || agents.includes(agentId) ? [...agents] : [...agents, agentId];
 }
-
-export function emptyMemberForm(): MemberFormValues {
-  return { name: '', role: '', agent: '' };
+export function removeAgentOption(agents: readonly string[], index: number): string[] {
+  return agents.filter((_, i) => i !== index);
 }
-
-export function validateMemberForm(
-  v: MemberFormValues,
-  mode: 'add' | 'edit',
-): Partial<Record<keyof MemberFormValues, string>> {
-  const errors: Partial<Record<keyof MemberFormValues, string>> = {};
-  if (mode === 'add') {
-    if (v.agent === '') errors.agent = 'Choose an agent.';
-  } else if (v.name.trim() === '') {
-    errors.name = 'Enter a name.';
+export function moveAgentOption(agents: readonly string[], index: number, delta: -1 | 1): string[] {
+  const result = [...agents];
+  const target = index + delta;
+  if (index >= 0 && index < result.length && target >= 0 && target < result.length) {
+    [result[index], result[target]] = [result[target]!, result[index]!];
   }
+  return result;
+}
+export function validateAgentOptions(agents: readonly string[], missingAgentIds: ReadonlySet<string>): string | null {
+  if (agents.length === 0) return 'Choose at least one agent.';
+  if (new Set(agents).size !== agents.length) return 'Each agent can appear only once.';
+  if (agents.some((id) => missingAgentIds.has(id))) return 'Remove or replace missing catalog agents before saving.';
+  return null;
+}
+export function memberFormInitial(m: OverviewMember): MemberFormValues {
+  const catalog = m.agentMode !== 'inline';
+  const agents = m.agentOptions.map((o) => o.id);
+  if (m.agentMode === 'single_catalog' && agents.length === 0 && m.defaultAgent !== null) agents.push(m.defaultAgent);
+  return { name: m.name ?? '', role: m.role ?? '', agents: catalog ? agents : [], useCatalogAgents: catalog };
+}
+export function emptyMemberForm(): MemberFormValues {
+  return { name: '', role: '', agents: [], useCatalogAgents: true };
+}
+export function validateMemberForm(v: MemberFormValues, mode: 'add' | 'edit', missingAgentIds: ReadonlySet<string>): Partial<Record<keyof MemberFormValues, string>> {
+  const errors: Partial<Record<keyof MemberFormValues, string>> = {};
+  if (mode === 'edit' && v.name.trim() === '') errors.name = 'Enter a name.';
   if (v.role.trim() === '') errors.role = 'Enter a role.';
+  if (v.useCatalogAgents) {
+    const error = validateAgentOptions(v.agents, missingAgentIds);
+    if (error !== null) errors.agents = error;
+  }
   return errors;
 }
-
 export function addMemberInput(v: MemberFormValues): MemberInput {
-  const input: MemberInput = { role: v.role.trim(), agent: v.agent };
+  const input: MemberInput = { role: v.role.trim(), agents: [...v.agents] };
   const name = v.name.trim();
   if (name !== '') input.name = name;
   return input;
 }
-
 export function memberChanges(initial: MemberFormValues, current: MemberFormValues): MemberChanges | null {
   const changes: MemberChanges = {};
   const name = current.name.trim();
   const role = current.role.trim();
   if (name !== initial.name) changes.name = name;
   if (role !== initial.role) changes.role = role;
-  if (current.agent !== '' && current.agent !== initial.agent) changes.agent = current.agent;
+  if (current.useCatalogAgents && (!initial.useCatalogAgents || current.agents.length !== initial.agents.length || current.agents.some((id, i) => id !== initial.agents[i]))) changes.agents = [...current.agents];
   return Object.keys(changes).length === 0 ? null : changes;
 }

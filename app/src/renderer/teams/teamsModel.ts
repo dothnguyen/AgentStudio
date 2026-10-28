@@ -1,4 +1,4 @@
-import type { MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
+import type { ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
 
 export const MAX_CATALOG_PROBLEMS = 5;
 
@@ -56,6 +56,16 @@ export function providerModelText(provider: string | null, model: string | null)
   if (provider === null) return 'Not available';
   if (model === null) return `${provider} · model not set`;
   return `${provider} · ${model}`;
+}
+
+export function savedAgentOptionText(option: ResolvedAgentOption, index: number): string {
+  return `${index === 0 ? 'Default — ' : ''}${option.name ?? option.id} · ${providerModelText(option.provider, option.model)}${option.reasoning ? ` · Reasoning: ${option.reasoning}` : ''}${option.state === 'missing' ? ' · Missing from catalog' : ''}`;
+}
+export function liveAgentText(member: OverviewMember): string {
+  const runtime = member.runtime;
+  if (runtime === null) return 'Not running';
+  if (!runtime.activeAgent) return 'No live agent';
+  return `${runtime.activeAgent} · ${providerModelText(runtime.provider, runtime.model)}${runtime.reasoning ? ` · Reasoning: ${runtime.reasoning}` : ''}`;
 }
 
 export function memberProviderModel(m: OverviewMember): string {

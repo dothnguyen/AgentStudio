@@ -69,7 +69,7 @@ describe('team editing', () => {
     await click('Save name');
     expect(renameTeam).toHaveBeenCalledWith('ws-a', 'dev-team', 'Core Team');
     expect(screen.getByRole('status').textContent).toBe(
-      'Renamed team to "Core Team". Changes apply the next time the team starts.',
+      'Renamed team to "Core Team". Saved configuration applies on the next team start; the running member is unchanged.',
     );
   });
 
@@ -95,12 +95,12 @@ describe('team editing', () => {
     }));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'codex-gpt' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
     type('Role', 'QA');
     await submitAddMember();
-    expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', { role: 'QA', agent: 'codex-gpt' });
+    expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', { role: 'QA', agents: ['codex-gpt'] });
     expect(screen.getByRole('status').textContent).toBe(
-      'Added Codex GPT to Dev Team. Changes apply the next time the team starts.',
+      'Added Codex GPT to Dev Team. Saved configuration applies on the next team start; the running member is unchanged.',
     );
   });
 
@@ -128,11 +128,170 @@ describe('team editing', () => {
     }));
     await renderScreen({ calls: { updateMember } });
     await click('Edit lead');
-    const select = screen.getByLabelText('Agent') as HTMLSelectElement;
-    expect(select.options[0]!.textContent).toBe('Keep inline provider (codex)');
+    await click('Use catalog agents');
+    const select = screen.getByLabelText('Add agent option') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'spare' } });
     await click('Save member');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', { agent: 'spare' });
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', { agents: ['spare'] });
+  });
+
+  it('ordered_options_buttons_and_partial_patch', async () => {
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
+    await renderScreen({calls: {updateMember}});
+    await click('Edit dev');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    const up = screen.getByRole('button', {name: 'Move Codex GPT up'});
+    expect(up.tagName).toBe('BUTTON');
+    up.focus(); expect(document.activeElement).toBe(up);
+    fireEvent.click(up);
+    expect(screen.getByRole('button', {name: 'Move Codex GPT down'}).tagName).toBe('BUTTON');
+    expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'}).tagName).toBe('BUTTON');
+    await click('Remove OpenCode Sonnet');
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt']});
+    expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
+  });
+  it('add_options_excludes_selected_agents_and_restores_removed_agents', async () => {
+    await renderScreen();
+    await click('Edit dev');
+    const select = screen.getByLabelText('Add agent option') as HTMLSelectElement;
+    const offered = () => Array.from(select.options, option => option.value).filter(Boolean);
+    expect(offered()).toEqual(['codex-gpt', 'spare']);
+    fireEvent.change(select, {target: {value: 'codex-gpt'}});
+    expect(offered()).toEqual(['spare']);
+    fireEvent.change(select, {target: {value: 'spare'}});
+    expect(offered()).toEqual([]);
+    expect(select.disabled).toBe(true);
+    expect(screen.getByText('All catalog agents are already options.')).toBeTruthy();
+    await click('Remove Codex GPT');
+    expect(select.disabled).toBe(false);
+    expect(offered()).toEqual(['codex-gpt']);
+  });
+
+  it('saved_edit_does_not_change_live_agent_while_overview_reloads', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
+    await renderScreen({overview: [ok(twoTeams()), gate.promise], calls: {updateMember}});
+    await click('Edit dev');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    await click('Move Codex GPT up');
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt', 'opencode-sonnet']});
+    gate.resolve(ok(twoTeams()));
+    await flush();
+    const row = within(screen.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
+    expect(row.querySelectorAll('td')[3]?.textContent).toBe('opencode-sonnet · opencode · claude-sonnet');
+  });
+  it('missing_option_blocks_save_until_removed', async () => {
+    const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: false}));
+    await renderScreen({overview: [ok(overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [missing]})]})]))], calls: {updateMember}});
+    await click('Edit dev');
+    expect(screen.getByText('Missing from catalog')).toBeTruthy();
+    type('Role', 'QA'); await click('Save member');
+    expect(screen.getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
+    expect(updateMember).not.toHaveBeenCalled();
+    await click('Remove gone');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA', agents: ['codex-gpt']});
+  });
+
+  it('removing_last_option_blocks_save_and_associates_error', async () => {
+    const updateMember = vi.fn();
+    await renderScreen({calls: {updateMember}});
+    await click('Edit dev');
+    await click('Remove OpenCode Sonnet');
+    await click('Save member');
+    const error = screen.getByRole('alert');
+    expect(error.textContent).toBe('Choose at least one agent.');
+    expect(screen.getByLabelText('Add agent option').getAttribute('aria-describedby')).toBe(error.id);
+    expect(updateMember).not.toHaveBeenCalled();
+  });
+
+  it('inline_name_edit_keeps_saved_configuration_until_conversion', async () => {
+    const inline = member({memberId: 'lead', name: 'lead', role: 'TeamLead', source: 'inline', agentMode: 'inline', agentOptions: [], defaultAgent: null, provider: 'codex', model: 'model-x', reasoning: 'high'});
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'lead', name: 'Lead', role: 'TeamLead'}, problems: [], appliesOnNextStart: false}));
+    await renderScreen({overview: [ok(overviewFixture([team({members: [inline]})]))], calls: {updateMember}});
+    await click('Edit lead');
+    expect(screen.getAllByText(/Inline — codex · model-x · Reasoning: high/).length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Add agent option')).toBeNull();
+    type('Member name', 'Lead');
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', {name: 'Lead'});
+    await click('Edit lead');
+    await click('Use catalog agents');
+    await click('Save member');
+    expect(screen.getByRole('alert').textContent).toBe('Choose at least one agent.');
+    expect(updateMember).toHaveBeenCalledTimes(1);
+  });
+
+  it('unavailable_catalog_preserves_rows_and_missing_evidence', async () => {
+    const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
+    const saved = member({agentMode: 'ordered_catalog', agentOptions: [...member().agentOptions, missing]});
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'QA'}, problems: [], appliesOnNextStart: false}));
+    await renderScreen({overview: [ok(overviewFixture([team({members: [saved]})]))], agents: [fail({code: 'OFFLINE', message: 'offline'})], calls: {updateMember}});
+    await click('Edit dev');
+    expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'})).toBeTruthy();
+    expect(screen.getByRole('button', {name: 'Remove gone'})).toBeTruthy();
+    expect((screen.getByLabelText('Add agent option') as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getAllByText('Missing from catalog')).toHaveLength(1);
+    type('Role', 'QA');
+    await click('Save member');
+    expect(within(screen.getByRole('form', {name: 'Edit dev'})).getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
+    await click('Remove gone');
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA', agents: ['opencode-sonnet']});
+  });
+
+  it('option_controls_are_ordered_native_buttons_and_operable', async () => {
+    await renderScreen();
+    await click('Edit dev');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    const form = screen.getByRole('form', {name: 'Edit dev'});
+    const controls = within(form).getAllByRole('button').filter(b => /^(Move |Remove )/.test(b.getAttribute('aria-label') ?? ''));
+    expect(controls.map(b => b.getAttribute('aria-label'))).toEqual([
+      'Move OpenCode Sonnet up', 'Move OpenCode Sonnet down', 'Remove OpenCode Sonnet',
+      'Move Codex GPT up', 'Move Codex GPT down', 'Remove Codex GPT',
+    ]);
+    for (const button of controls) {
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.getAttribute('type')).toBe('button');
+    }
+    expect((controls[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((controls[4] as HTMLButtonElement).disabled).toBe(true);
+    const enabled = controls.filter((button) => !(button as HTMLButtonElement).disabled);
+    for (const [index, button] of enabled.entries()) {
+      expect(button.tabIndex).toBe(0);
+      if (index > 0) expect(enabled[index - 1]!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      button.focus();
+      expect(document.activeElement).toBe(button);
+    }
+
+    // jsdom does not perform the browser's native button activation on Space.
+    // Dispatch the keyboard events and their native click default action explicitly.
+    const activate = (name: string) => {
+      const button = screen.getByRole('button', {name}) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      fireEvent.keyDown(button, {key: ' ', code: 'Space'});
+      fireEvent.keyUp(button, {key: ' ', code: 'Space'});
+      fireEvent.click(button, {detail: 0});
+    };
+    const names = () => Array.from(form.querySelectorAll('.teams-option-meta strong'), (node) => node.textContent);
+    activate('Move OpenCode Sonnet down');
+    expect(names()).toEqual(['Codex GPT', 'OpenCode Sonnet']);
+    activate('Move OpenCode Sonnet up');
+    expect(names()).toEqual(['OpenCode Sonnet', 'Codex GPT']);
+    activate('Move Codex GPT up');
+    expect(names()).toEqual(['Codex GPT', 'OpenCode Sonnet']);
+    activate('Move Codex GPT down');
+    expect(names()).toEqual(['OpenCode Sonnet', 'Codex GPT']);
+    activate('Remove OpenCode Sonnet');
+    expect(names()).toEqual(['Codex GPT']);
+    activate('Remove Codex GPT');
+    expect(names()).toEqual([]);
   });
 
   it('remove_member_after_confirmation', async () => {
@@ -177,7 +336,7 @@ describe('team editing', () => {
     await click('Cancel');
     await click('Add member');
     await submitAddMember();
-    expect(screen.getByText('Choose an agent.')).toBeTruthy();
+    expect(screen.getByText('Choose at least one agent.')).toBeTruthy();
     expect(screen.getByText('Enter a role.')).toBeTruthy();
     await click('Cancel');
     await click('Edit dev');
@@ -212,7 +371,7 @@ describe('team editing', () => {
     }));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'codex-gpt' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
     type('Role', 'Ghost');
     await submitAddMember();
     const alert = screen.getByRole('alert');
@@ -225,7 +384,7 @@ describe('team editing', () => {
     const addMember = vi.fn(async () => fail({ code: 'MEMBER_EXISTS', message: "Team 'dev-team' already has a member 'dev'." }));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'codex-gpt' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
     type('Role', 'QA');
     await submitAddMember();
     expect(screen.getByRole('alert').textContent).toContain("MEMBER_EXISTS: Team 'dev-team' already has a member 'dev'.");
@@ -266,7 +425,7 @@ describe('team editing', () => {
     const addMember = vi.fn(() => Promise.reject(new Error('ipc down')));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'codex-gpt' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
     type('Role', 'QA');
     await submitAddMember();
     expect(screen.getByRole('alert').textContent).toContain('INTERNAL: ipc down');

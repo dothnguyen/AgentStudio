@@ -56,21 +56,21 @@ describe('live team state', () => {
     })]);
     await renderScreen({ overview: [ok(o)] });
     const rows = within(screen.getByRole('region', { name: 'Dev Team' })).getAllByRole('row').slice(1);
-    const status = rows.map((r) => cells(r)[3]!);
+    const status = rows.map((r) => cells(r)[4]!);
     expect(status.map((c) => c.textContent)).toEqual(['Available', 'Working', 'Waiting for input', 'Offline']);
     ['ok', 'busy', 'warning', 'danger'].forEach((tone, i) => {
       expect(status[i]!.querySelector('.status-badge')!.className).toContain(`teams-tone-${tone}`);
     });
-    expect(rows.map((r) => cells(r)[4]!.textContent)).toEqual(['No current work', 'T-7 Fix login', 'Answer question', 'Not available']);
+    expect(rows.map((r) => cells(r)[5]!.textContent)).toEqual(['No current work', 'T-7 Fix login', 'Answer question', 'Not available']);
   });
 
   it('stopped_team_members_say_unavailable', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
     const row = within(screen.getByRole('region', { name: 'Release Team' })).getAllByRole('row')[1]!;
-    expect(cells(row)[3]!.textContent).toBe('Stopped');
-    expect(cells(row)[3]!.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
-    expect(cells(row)[4]!.textContent).toBe('Not available');
+    expect(cells(row)[4]!.textContent).toBe('Stopped');
+    expect(cells(row)[4]!.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
+    expect(cells(row)[5]!.textContent).toBe('Not available');
     const badge = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).querySelector('.teams-runtime')!;
     expect(badge('Release Team').className).toContain('teams-tone-muted');
     expect(badge('Dev Team').className).toContain('teams-tone-ok');

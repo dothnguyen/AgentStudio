@@ -1,12 +1,13 @@
 import { useId, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
-import type { AgentDef } from '../api';
+import type { AgentDef, ResolvedAgentOption } from '../api';
 import {
+  addAgentOption, removeAgentOption, moveAgentOption,
   memberChanges,
   validateMemberForm,
   type MemberFormValues,
   type WriteFeedback,
 } from './teamEditModel';
-import { text } from './teamsModel';
+import { providerModelText } from './teamsModel';
 
 function escapeCancel(onCancel: () => void) {
   return (e: KeyboardEvent<HTMLFormElement>) => {
@@ -78,32 +79,28 @@ export function MemberForm(props: {
   mode: 'add' | 'edit';
   heading: string;
   initial: MemberFormValues;
-  inlineProvider: string | null;
+  originalOptions: ResolvedAgentOption[];
+  inlineContext: { provider: string | null; model: string | null; reasoning: string | null } | null;
   agents: AgentDef[] | null;
   roles: string[];
   pending: boolean;
   onSubmit(values: MemberFormValues): void;
   onCancel(): void;
 }): JSX.Element {
-  const { mode, heading, initial, inlineProvider, agents, roles, pending, onSubmit, onCancel } = props;
+  const { mode, heading, initial, originalOptions, inlineContext, agents, roles, pending, onSubmit, onCancel } = props;
   const uid = useId();
   const [values, setValues] = useState<MemberFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormValues, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  const options: Array<{ id: string; label: string }> = [];
-  for (const a of agents ?? []) {
-    const id = text(a.id);
-    if (id !== null) options.push({ id, label: `${text(a.name) ?? id} (${id})` });
-  }
-  if (initial.agent !== '' && !options.some((o) => o.id === initial.agent)) {
-    options.push({ id: initial.agent, label: `${initial.agent} (not in catalog)` });
-  }
-  const noAgents = mode === 'add' && options.length === 0;
+  const available = (agents ?? []).filter((a) => !values.agents.includes(a.id));
+  const missing = new Set(values.agents.filter((id) => agents === null
+    ? originalOptions.some((o) => o.id === id && o.state === 'missing')
+    : !agents.some((a) => a.id === id)));
 
   function submit(e: FormEvent): void {
     e.preventDefault();
-    const found = validateMemberForm(values, mode);
+    const found = validateMemberForm(values, mode, missing);
     setErrors(found);
     setFormError(null);
     if (Object.keys(found).length > 0) return;
@@ -124,35 +121,55 @@ export function MemberForm(props: {
       described: errors[key] !== undefined ? err : undefined,
     };
   }
-  const agentF = field('agent');
+  const agentF = field('agents');
   const roleF = field('role');
   const nameF = field('name');
   const listId = `${uid}-roles`;
-  const set = (key: keyof MemberFormValues, value: string) => setValues((v) => ({ ...v, [key]: value }));
+  const set = (key: 'name' | 'role', value: string) => setValues((v) => ({ ...v, [key]: value }));
 
   return (
     <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel)}>
       <h3>{heading}</h3>
-      {agents === null && mode === 'edit' && (
-        <p className="panel-note">Agent catalog unavailable; the agent cannot be changed.</p>
+      {!values.useCatalogAgents && inlineContext !== null && (
+        <>
+          <p>Inline — {providerModelText(inlineContext.provider, inlineContext.model)}{inlineContext.reasoning ? ` · Reasoning: ${inlineContext.reasoning}` : ''}</p>
+          <button type="button" onClick={() => setValues((v) => ({ ...v, useCatalogAgents: true }))}>Use catalog agents</button>
+        </>
       )}
-      {noAgents && <p className="panel-note">No reusable agents available. Add an agent to the catalog first.</p>}
-      <label htmlFor={agentF.id}>Agent</label>
-      <select
-        id={agentF.id}
-        autoFocus
-        value={values.agent}
-        aria-invalid={agentF.invalid}
-        aria-describedby={agentF.described}
-        onChange={(e) => set('agent', e.target.value)}
-      >
-        {mode === 'add' && <option value="">Choose an agent</option>}
-        {mode === 'edit' && inlineProvider !== null && (
-          <option value="">{`Keep inline provider (${inlineProvider})`}</option>
-        )}
-        {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-      </select>
-      <FieldError id={agentF.err} message={errors.agent} />
+      {values.useCatalogAgents && (
+        <div className="teams-options" aria-describedby={agentF.described}>
+          {agents === null && <p className="panel-note">Agent catalog unavailable; adding options is unavailable.</p>}
+          <ol className="teams-option-list">
+            {values.agents.map((id, index) => {
+              const option = agents?.find((a) => a.id === id);
+              const original = originalOptions.find((o) => o.id === id);
+              const name = option?.name ?? (agents === null ? original?.name : null) ?? id;
+              const provider = option?.provider ?? original?.provider ?? null;
+              const model = option?.model ?? original?.model ?? null;
+              const reasoning = option?.reasoning ?? original?.reasoning;
+              return <li className="teams-option-row" key={`${id}-${index}`}>
+                <div className="teams-option-meta"><strong>{name}</strong> <span>{providerModelText(provider, model)}</span>
+                  {reasoning && <span>Reasoning: {reasoning}</span>}
+                  {index === 0 && <span className="teams-option-default">Default</span>}
+                  {missing.has(id) && <span className="teams-option-missing">Missing from catalog</span>}
+                </div>
+                <div className="teams-option-actions">
+                  <button type="button" aria-label={`Move ${name} up`} disabled={pending || index === 0} onClick={() => setValues((v) => ({ ...v, agents: moveAgentOption(v.agents, index, -1) }))}>Up</button>
+                  <button type="button" aria-label={`Move ${name} down`} disabled={pending || index === values.agents.length - 1} onClick={() => setValues((v) => ({ ...v, agents: moveAgentOption(v.agents, index, 1) }))}>Down</button>
+                  <button type="button" aria-label={`Remove ${name}`} disabled={pending} onClick={() => setValues((v) => ({ ...v, agents: removeAgentOption(v.agents, index) }))}>Remove</button>
+                </div>
+              </li>;
+            })}
+          </ol>
+          <label htmlFor={agentF.id}>Add agent option</label>
+          <select id={agentF.id} value="" disabled={pending || agents === null || available.length === 0} aria-invalid={agentF.invalid} aria-describedby={agentF.described} onChange={(e) => setValues((v) => ({ ...v, agents: addAgentOption(v.agents, e.target.value) }))}>
+            <option value="">Choose an agent</option>
+            {available.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}
+          </select>
+          {agents !== null && available.length === 0 && <p>All catalog agents are already options.</p>}
+          {errors.agents && <p className="teams-field-error" id={agentF.err} role="alert">{errors.agents}</p>}
+        </div>
+      )}
       <label htmlFor={roleF.id}>Role</label>
       <input
         id={roleF.id}
@@ -179,7 +196,7 @@ export function MemberForm(props: {
       <FieldError id={nameF.err} message={errors.name} />
       {formError !== null && <p className="teams-field-error" role="alert">{formError}</p>}
       <div className="teams-team-actions">
-        <button type="submit" disabled={pending || noAgents}>
+        <button type="submit" disabled={pending}>
           {pending ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save member'}
         </button>
         <button type="button" onClick={onCancel}>Cancel</button>

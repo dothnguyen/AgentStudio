@@ -1210,3 +1210,8 @@ ul[aria-label="Workspaces"] {
 .routing-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .routing-problem { color: var(--danger, #b42318); overflow-wrap: anywhere; }
 @media (max-width: 900px) { .routing-rule-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.teams-option-list { padding-left: 1.5rem; }
+.teams-option-row { margin-bottom: .5rem; overflow-wrap: anywhere; }
+.teams-option-meta, .teams-option-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.teams-option-default, .teams-option-missing { font-weight: 600; }

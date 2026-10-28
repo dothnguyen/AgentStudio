@@ -22,6 +22,35 @@ const card = (root: HTMLElement, name: string) =>
   within(root).getByRole('button', { name: new RegExp(`^${name}`) });
 
 describe('TeamsScreen', () => {
+  it('saved_options_are_distinct_from_live_agent', async () => {
+    const live = twoTeams().teams[1]!.members[0]!.runtime!;
+    const saved = {id: 'saved', name: 'Saved choice', provider: 'saved-provider', model: 'saved-model', reasoning: null, description: null, state: 'ok' as const};
+    const m = member({agentMode: 'ordered_catalog', agentOptions: [saved], defaultAgent: 'saved', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model'}});
+    const {result} = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
+    const row = within(result.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
+    const values = cells(row);
+    expect(values[2]).toBe('Default — Saved choice · saved-provider · saved-model');
+    expect(values[3]).toBe('live-id · live-provider · live-model');
+    expect(values[2]).not.toContain('live-id');
+    expect(values[3]).not.toContain('Saved choice');
+  });
+
+  it('saved_options_keep_order_and_live_reasoning_uses_runtime_values', async () => {
+    const live = twoTeams().teams[1]!.members[0]!.runtime!;
+    const first = {id: 'first', name: 'First', provider: 'saved-provider', model: 'saved-model', reasoning: 'low', description: null, state: 'ok' as const};
+    const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
+    const m = member({agentMode: 'ordered_catalog', agentOptions: [first, missing], defaultAgent: 'first', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model', reasoning: 'high'}});
+    const {result} = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
+    const row = within(result.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
+    const savedCell = row.querySelectorAll('td')[2]!;
+    const items = within(savedCell).getAllByRole('listitem');
+    expect(items.map(item => item.textContent)).toEqual([
+      'Default — First · saved-provider · saved-model · Reasoning: low',
+      'gone · Not available · Missing from catalog',
+    ]);
+    expect(row.querySelectorAll('td')[3]?.textContent).toBe('live-id · live-provider · live-model · Reasoning: high');
+  });
+
   it('renders_teams_and_members_from_overview', async () => {
     const { fake, result } = await renderScreen();
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
@@ -36,7 +65,8 @@ describe('TeamsScreen', () => {
     expect(r1).toEqual([
       'devAgent: opencode-sonnet',
       'DeveloperImplements scoped tickets.',
-      'opencode · claude-sonnet',
+      'Default — OpenCode Sonnet · opencode · sonnet',
+      'opencode-sonnet · opencode · claude-sonnet',
       'Working',
       'T-031 Teams screen',
       'EditRemove',
@@ -44,7 +74,8 @@ describe('TeamsScreen', () => {
     expect(r2).toEqual([
       'leadInline member',
       'TeamLeadNo description',
-      'codex · model not set',
+      'Inline — codex · model not set',
+      'Not running',
       'Available',
       'No current work',
       'EditRemove',
