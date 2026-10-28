@@ -34,9 +34,37 @@ class AgyTests(unittest.TestCase):
                 prepared = self.adapter.prepare(assignment, {})
             self.assertNotIn("secret task", " ".join(prepared.argv))
             self.assertIn("--sandbox", prepared.argv)
+            self.assertNotIn("--dangerously-skip-permissions", prepared.argv)
             self.assertEqual(prepared.argv[prepared.argv.index("--mode") + 1], "accept-edits")
             with open(prepared.stdin_path, encoding="utf-8") as f:
                 self.assertEqual(json.load(f)["message"]["content"], "secret task")
+
+    def test_commands_opt_in_adds_dangerously_skip_permissions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = os.path.join(directory, "prompt.txt")
+            with open(prompt, "w", encoding="utf-8") as f:
+                f.write("task")
+            as_dir = os.path.join(directory, ".agent-studio")
+            os.makedirs(as_dir)
+            with open(os.path.join(as_dir, "permissions.json"), "w", encoding="utf-8") as f:
+                json.dump({"version": 1, "agy": {"commands": True}}, f)
+            assignment = inp(policy="workspace_write")
+            assignment.workspace = directory
+            assignment.prompt_path = prompt
+            with patch.object(self.adapter, "inspect", return_value={"found": True, "path": "/bin/agy", "missing": []}):
+                prepared = self.adapter.prepare(assignment, {})
+            self.assertIn("--dangerously-skip-permissions", prepared.argv)
+            self.assertIn("--sandbox", prepared.argv)
+
+    def test_bad_permissions_file_means_off(self):
+        from agent_studio.providers.agy import adapter as agy_mod
+        with tempfile.TemporaryDirectory() as directory:
+            as_dir = os.path.join(directory, ".agent-studio")
+            os.makedirs(as_dir)
+            for text in ("not json", '{"version": 2, "agy": {"commands": true}}', '{"version":1,"agy":{"commands":"yes"}}'):
+                with open(os.path.join(as_dir, "permissions.json"), "w", encoding="utf-8") as f:
+                    f.write(text)
+                self.assertFalse(agy_mod.commands_enabled(directory))
 
     def test_success_and_stderr_soft_denial(self):
         assignment = inp(policy="workspace_write")

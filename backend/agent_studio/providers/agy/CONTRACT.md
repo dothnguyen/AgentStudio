@@ -8,10 +8,12 @@ guarantee. `read_only` is unsupported and rejected by generic policy validation
 before any provider process starts. Do not use agy for read-only roles.
 
 The adapter uses `--mode accept-edits`, streaming JSON over stdin/stdout, and
-optional model/effort flags. It does not enable permission bypass. Existing agy
-permission settings still apply and can cause headless operations to be denied.
-Permission denial diagnostics are treated as waiting for input, including when
-the CLI exits successfully. Assignment-specific Agent Studio board MCP is not
+optional model/effort flags. It does not enable permission bypass by default. Opt-in:
+a workspace file `.agent-studio/permissions.json` with `{"version": 1, "agy": {"commands": true}}`
+adds `--dangerously-skip-permissions` to auto-approve tool execution (e.g. commands) without
+prompting. Existing agy permission settings still apply when opt-in is absent, which can cause
+headless operations to be denied. Permission denial diagnostics are treated as waiting for input,
+including when the CLI exits successfully. Assignment-specific Agent Studio board MCP is not
 supported and requests to enable it are rejected. Global agy MCP configuration is
 managed by agy, not isolated by this adapter.
 

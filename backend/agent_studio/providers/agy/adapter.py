@@ -18,6 +18,16 @@ DENIAL = re.compile(r"permission.{0,40}(denied|rejected|not granted)|(?:denied|r
 AUTH = re.compile(r"authentication required|not authenticated|not logged in|sign in|unauthorized|\b401\b", re.I)
 
 
+def commands_enabled(workspace: str) -> bool:
+    try:
+        with open(os.path.join(workspace, ".agent-studio", "permissions.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        agy = cfg.get("agy") or {}
+        return cfg.get("version") == 1 and (agy.get("commands") is True or agy.get("dangerouslySkipPermissions") is True)
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 class AgyAdapter(Adapter):
     provider_id = "agy"
 
@@ -88,7 +98,10 @@ class AgyAdapter(Adapter):
         with os.fdopen(fd, "w", encoding="utf-8") as output:
             json.dump({"event": "user", "message": {"content": prompt}}, output)
             output.write("\n")
-        argv = [info["path"], "--input-format", "stream-json", "--output-format", "stream-json"] + self.policy_mapping()[inp.policy]
+        flags = list(self.policy_mapping()[inp.policy])
+        if commands_enabled(inp.workspace):
+            flags.append("--dangerously-skip-permissions")
+        argv = [info["path"], "--input-format", "stream-json", "--output-format", "stream-json"] + flags
         if inp.model:
             argv += ["--model", inp.model]
         if inp.reasoning:

@@ -1,4 +1,5 @@
 {
   "version": 1,
-  "claude": { "commands": true }
+  "claude": { "commands": true },
+  "agy": { "commands": true }
 }
