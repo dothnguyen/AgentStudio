@@ -80,6 +80,12 @@ class Recovery(S07Case):
         self.crash_drill("after_verdict_before_route")
 
     def test_crash_while_the_validator_runs(self):
+        # Keep the validator alive long enough for the coordinator to observe it.
+        with open(os.path.join(self.ws, "check.py"), "r+", encoding="utf-8") as f:
+            source = f.read()
+            f.seek(0)
+            f.write("import time; time.sleep(3)\n" + source)
+        self.commit("slow validation for crash drill")
         d = self.crash_drill("while_validating")
         self.assertEqual(d["stageAttempts"][1]["outcome"], "validation_passed")
 

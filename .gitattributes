@@ -5,3 +5,4 @@ backend/bin/* text eol=lf
 *.py text eol=lf
 *.ps1 text eol=crlf
 *.psm1 text eol=crlf
+tests/fixtures/*/bin/* text eol=lf

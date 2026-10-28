@@ -55,8 +55,10 @@ class ProviderUsageResetTests(LifecycleCase):
         self.assertNotIn("codex-a", member["quotaHolds"])
 
     def test_all_held_on_other_provider_switches_to_codex(self):
+        self.assertTrue(self.stop("alpha")["ok"])
         self.put("alpha", [{"id": "ryan", "name": "Ryan", "role": "developer",
                             "agents": ["codex-a", "claude-a"]}])
+        self.team = self.start("alpha")["data"]
         self.exhaust()
         wait_until(lambda: self.status("alpha")["members"][0]["activeAgent"] == "claude-a")
         self.exhaust()

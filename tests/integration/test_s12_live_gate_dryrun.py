@@ -33,7 +33,7 @@ class DryRun(unittest.TestCase):
             os.makedirs(tmuxdir, mode=0o700)
             env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
             env.update(HOME=home, XDG_STATE_HOME=os.path.join(root, "state"), TMUX_TMPDIR=tmuxdir,
-                       AGENT_STUDIO_ENV_MODE="inherit", PATH=bin_dir + os.pathsep + env.get("PATH", "/usr/bin:/bin"))
+                       AGENT_STUDIO_ENV_MODE="inherit", PATH=bin_dir + os.pathsep + "/usr/bin:/bin")
             env.pop("CODEX_HOME", None)
             env.pop("CLAUDE_CONFIG_DIR", None)
             subprocess.run(["tmux", "new-session", "-d", "-s", "users-own-session"], env=env, check=True)

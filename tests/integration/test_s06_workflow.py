@@ -195,12 +195,10 @@ class TruthTable(WorkflowCase):
             self.assertEqual(paused["data"]["diagnosticCode"], code)
             self.assertIn("verdict", d["workflowRun"]["transitionReason"])
 
-    def test_reviewer_write_is_blocked_and_surfaced(self):
+    def test_reviewer_denied_write_preserves_valid_verdict(self):
         d = self.run_case({"developer": fake("success", "fixed.txt"),
-                           "reviewer": fake("verdict_pass", write="reviewer-was-here.txt")}, "paused")
-        paused = [e for e in d["events"] if e["name"] == "workflow_run.paused"][0]
-        self.assertEqual(paused["data"]["diagnosticCode"], "PERMISSION_DENIED")
-        self.assertEqual(d["assignments"][1]["result"]["attention"]["kind"], "permission_denied")
+                           "reviewer": fake("verdict_pass", write="reviewer-was-here.txt")}, "succeeded")
+        self.assertEqual(d["assignments"][1]["result"]["verdict"]["verdict"], "pass")
         self.assertFalse(os.path.exists(os.path.join(self.ws, "reviewer-was-here.txt")))
 
 

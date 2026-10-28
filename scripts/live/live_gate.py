@@ -392,10 +392,15 @@ class Gate:
             pr = prov.get(p).probe(env)
             out[f"auth:{p}"] = {"code": pr.get("code"), "reason": pr.get("reason"), "ok": pr.get("code") == "AUTH_REQUIRED"}
         # missing provider and unsupported permissions
-        missing = [p for p in PEERS if p not in self.pair]
-        r = self.req("team.start", {"workspace": self.ws, "roster": [{"providerId": missing[0], "role": "X"}]},
-                     f"gate-missing-{self.stamp}")
-        out["missingProvider"] = {"code": (r.get("error") or {}).get("code"), "ok": not r.get("ok")}
+        from agent_studio import envresolve
+        provider_env, _ = envresolve.resolve()
+        missing = [p for p in PEERS if p not in self.pair and not prov.get(p).probe(provider_env).get("available")]
+        if missing:
+            r = self.req("team.start", {"workspace": self.ws, "roster": [{"providerId": missing[0], "role": "X"}]},
+                         f"gate-missing-{self.stamp}")
+            out["missingProvider"] = {"code": (r.get("error") or {}).get("code"), "ok": not r.get("ok")}
+        else:
+            out["missingProvider"] = {"code": None, "ok": False, "reason": "No unselected provider is unavailable."}
         r = self.req("task.direct", {"teamId": self.team["teamId"], "agentId": self.rev, "policy": "unrestricted",
                                      "text": "anything"}, f"gate-policy-{self.stamp}")
         out["unsupportedPolicy"] = {"code": (r.get("error") or {}).get("code"),

@@ -356,6 +356,15 @@ class Roles(unittest.TestCase):
 
 
 REAL = shutil.which("codex", path="/tmp/codexcli/node_modules/.bin:" + os.environ.get("PATH", ""))
+if REAL:
+    try:
+        # WSL may expose a Windows shim whose required Node executable is unavailable.
+        available = subprocess.run([REAL, "--version"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        available = False
+    if not available:
+        REAL = None
 
 
 @unittest.skipUnless(REAL, "real codex CLI not installed here")
