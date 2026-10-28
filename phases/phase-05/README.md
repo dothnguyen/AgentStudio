@@ -69,3 +69,41 @@ Dependencies allow the three panels to land independently after the shell, while
 | Acceptance | [P05-S17](./stories/P05-S17-teams-live-gate.md) | Responsive, accessible, Windows plus WSL live validation |
 
 These ten stories form one dependency-ordered delivery set. Child tickets stay in backlog while this planning worktree is merged; the existing `plan-merge-ready` rule promotes this run's children to `refine-ready` after a successful merge.
+
+## Multi-agent member options — T-048
+
+Operators can manage each team member's ordered catalog agent options and switch the active runtime agent without restarting the team. The coordinator remains authoritative for live selection, quota holds and board work while saved edits apply on a future start.
+
+All assumptions for this work are fixed by T-048; there is no open product question. Keep the existing team table and edit form, add an ordered options editor inside the member form, and add live option/hold actions in the selected member row/detail. `design/teams-screen-v1.png` remains authoritative for hierarchy, not its single provider/model cell.
+
+### Verified contracts and gaps
+
+- `backend/agent_studio/teamdefs.py` validates `member.agents` as a non-empty, ordered, duplicate-free list of existing catalog ids, incompatible with `agent`, `provider`, `model`, or `reasoning`. `resolve_member(member: dict, catalog: dict)` returns ordered agents; `member_add(workspace: str, team_id, fields: dict, active)` and `member_update(workspace: str, team_id, member_id: str, changes: dict, active)` accept `agents`.
+- `backend/agent_studio/dispatch.py` allowlists `agents` in `teamdef.member.add/update`. `_validate_agent_switch(args)` accepts only `workspace`, `teamDefId`, `memberId`, `agent`, `cancelActive`, `assignmentId`; `_validate_member_resume(args)` accepts only `workspace`, `teamDefId`, `memberId`, `agent`.
+- `backend/agent_studio/teams.py` already supplies `switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict`, `resume_member_agent(tx: Tx, args: dict) -> dict`, `handle_quota_limit(tx: Tx, agent_id: str, reset, ctx: dict) -> None`, `recover_expired_quotas(store: Store, ctx: dict) -> None`, and `complete_pending_switches(store: Store, ctx: dict) -> None`. Reuse their cancellation, failover, quota and board recovery behavior.
+- `team.member.switch` returns `{teamId, memberId, agentId, activeAgent, provider}` immediately or `{teamId, memberId, agentId, pendingAgent, assignmentId, cancellation}` after cancellation is requested. `team.member.resume` returns `{teamId, memberId, agentId, option, cleared, activeAgent}`. `team.status` currently exposes `memberId`, `name`, `role`, `provider`, `agentId`, `availability`, `activeAgent`, `quotaHolds`, `pendingAgent`, `paneState`, and `assignment`.
+- Preserve these exact errors: "Member has an active assignment; confirm cancellation of this assignment to switch." with `error.data.assignmentId`; "A switch is already pending for this member."; "Agent '<id>' is on quota hold."; "That agent is already active; use board resume when its quota resets."; "The member's pane is not alive."; "Member must be idle or quota-limited before switching."; "Agent '<id>' is not configured for member '<id>'."; "Agent '<id>' is missing from the catalog." Provider failure is `PROVIDER_UNAVAILABLE` with "Provider '<provider>' is not ready: <reason>".
+- Existing `tests/unit/test_member_agent_switch.py`, `tests/integration/test_member_agent_switch.py`, and `tests/unit/test_p04_s10_scheduler.py` cover switching, failover/exhaustion, both resume cases, persistence, exact-assignment cancellation, same-member recovery and quota retry without an ordinary failure round. Extend them only for gaps.
+
+The remaining gaps are: (1) live operations reread mutable definitions instead of a frozen start-time option list; (2) status has `pendingAgent` but no durable last switch result, although completion/failure events exist; (3) `teamview.py` and `app/src/shared/management.ts` lack all resolved saved options and runtime option/hold fields in TeamOverview; (4) `managementSpecs.ts`, preload and `ManagementApi` lack ordered edits and switch/resume methods; (5) MemberForm and TeamsScreen have only single-agent editing and no live option controls.
+
+### Shared shapes and compatibility
+
+A resolved saved option is `ResolvedAgentOption = {id: string, name: string | null, provider: string | null, model: string | null, reasoning: string | null, description: string | null, state: "ok" | "missing"}`. Members expose `agentMode: "ordered_catalog" | "single_catalog" | "inline"`, `agentOptions: ResolvedAgentOption[]`, and `defaultAgent: string | null`. Runtime adds `configuredAgents: string[] | null`, `activeAgent`, `quotaHolds: Record<string, string | null>`, `pendingAgent`, actual provider/model/reasoning, assignment evidence, `stale`, and `lastSwitch: null | {state: "pending" | "completed" | "failed", requestedAgent: string, assignmentId: string | null, code: string | null, message: string | null, at: string}`. Known holds are ISO-8601 reset strings; null means "Reset time unknown". The latest durable switch event is the result source; local optimistic state may say only "Requesting…" before projection.
+
+Saved order is authoritative, with index zero the default for a future start without a valid persisted selection. Live operations use `configuredAgents` frozen at start; `appliesOnNextStart` edits do not change current eligibility. On restart retain a persisted selection if still configured; otherwise choose the first non-held saved option, or the first option with `limit_reached` if all are held. The coordinator recovers expired known holds. Resume clears only the specified hold without verifying quota; inactive resume neither switches nor interrupts, and active resume may restore availability.
+
+Missing saved references remain visible for repair and block a new save; never silently remove them. Preserve member name, role, identity and `canAddTickets`. Inline members remain editable without conversion and have no switch/resume controls until explicitly converted; single-catalog members remain supported without an alternate target. Provider readiness is checked at switch time; show `PROVIDER_UNAVAILABLE` and its reason/remediation. Backend validation and coordinator-only runtime writes remain authoritative; no arbitrary serve command, SQLite access from Electron, or new agent write permission is permitted.
+
+### Epics → stories
+
+| Epic | Story | Board ticket | Dependencies | Outcome |
+|---|---|---|---|---|
+| Runtime | [P05-S18](./stories/P05-S18-frozen-member-agent-runtime.md) | T-050 | T-039 | Freeze options and project switch result |
+| Read model | [P05-S19](./stories/P05-S19-multi-agent-management-read-model.md) | T-051 | T-040, T-050 (S18) | Saved options and runtime projection |
+| Desktop boundary | [P05-S20](./stories/P05-S20-multi-agent-management-ipc.md) | T-052 | T-042, T-051 (S19) | Typed named IPC |
+| Saved editing | [P05-S21](./stories/P05-S21-ordered-member-options-ui.md) | T-053 | T-044, T-052 (S20) | Ordered options editor |
+| Live controls | [P05-S22](./stories/P05-S22-live-agent-switch-controls.md) | T-054 | T-045, T-052 (S20), T-053 (S21) | Switch and resume controls |
+| Acceptance | [P05-S23](./stories/P05-S23-multi-agent-live-gate.md) | T-055 | T-047, T-053 (S21), T-054 (S22) | Accessible Windows plus WSL live gate |
+
+T-047 is not yet merged and supplies only its completed accessibility/responsive baseline audit and Windows Electron plus WSL Teams live-gate evidence, not a callable data interface. Feature implementation does not wait for it. Child tickets remain in backlog until the configured plan-merge workflow promotes them after this planning change merges; the operator reviews boundaries and priority then. Windows/WSL execution is deferred to S23.

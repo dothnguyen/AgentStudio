@@ -152,6 +152,61 @@
         "phases/phase-05/stories/P05-S16-routing-settings-ui.md"
       ],
       "priority": 5
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S18-frozen-member-agent-runtime.md",
+      "title": "Freeze member agent runtime options and project switch results",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S09-team-edit-contract.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S19-multi-agent-management-read-model.md",
+      "title": "Expose multi-agent management read model",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S10-management-read-model.md",
+        "phases/phase-05/stories/P05-S18-frozen-member-agent-runtime.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S20-multi-agent-management-ipc.md",
+      "title": "Expose typed multi-agent management IPC",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S12-management-ipc.md",
+        "phases/phase-05/stories/P05-S19-multi-agent-management-read-model.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S21-ordered-member-options-ui.md",
+      "title": "Edit ordered member agent options",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S14-team-membership-ui.md",
+        "phases/phase-05/stories/P05-S20-multi-agent-management-ipc.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S22-live-agent-switch-controls.md",
+      "title": "Control live member agent switches and holds",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S15-live-team-controls.md",
+        "phases/phase-05/stories/P05-S20-multi-agent-management-ipc.md",
+        "phases/phase-05/stories/P05-S21-ordered-member-options-ui.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S23-multi-agent-live-gate.md",
+      "title": "Multi-agent Teams accessibility and live gate",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S17-teams-live-gate.md",
+        "phases/phase-05/stories/P05-S21-ordered-member-options-ui.md",
+        "phases/phase-05/stories/P05-S22-live-agent-switch-controls.md"
+      ],
+      "priority": 5
     }
   ],
   "questions": [
