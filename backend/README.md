@@ -107,10 +107,11 @@ source, a missing file is an empty catalog):
   `model` and `reasoning` are optional and checked by the provider adapter like team members. A definition holds no
   role (identity and role stay in the team file). Unknown keys are preserved by every write.
 - Commands (direct file access, no coordinator, no `idempotencyKey`): `agentdef.list {workspace}` →
-  `{workspace, version, agents, problems}`; `agentdef.create {workspace, agent}` → `{workspace, agent}` (id derived
+  `{workspace, version, agents, problems, editorOptions}`; `agentdef.create {workspace, agent}` → `{workspace, agent}` (id derived
   from the name when absent); `agentdef.update {workspace, agentDefId, changes}` → `{workspace, agent}` (a `null`
   `description`/`model`/`reasoning` removes it; the id cannot change); `agentdef.delete {workspace, agentDefId}` →
   `{workspace, deleted}`.
+- `editorOptions.providers` lists production adapter model selection and reasoning capabilities, plus distinct models from valid saved entries in order. These suggestions do not indicate availability or authentication and are not an allowlist.
 - Errors: `AGENT_CATALOG_INVALID` (`data.problems`), `AGENT_EXISTS`, `AGENT_NOT_FOUND`, `AGENT_IN_USE`
   (`data.teams`; a team member with `"agent": "<id>"` references an entry), `WORKSPACE_NOT_FOUND`, `BAD_REQUEST`.
   Failed requests leave every file unchanged. A broken `agents.json` is never rewritten.

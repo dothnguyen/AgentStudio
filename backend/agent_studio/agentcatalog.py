@@ -160,12 +160,31 @@ def references(workspace: str, agent_id: str, strict: bool = False) -> list:
     return sorted(out)
 
 
+def _editor_options(catalog: dict) -> dict:
+    agents = catalog.get("agents")
+    rows = []
+    for provider_id in providers.PEERS:
+        adapter = providers.get(provider_id)
+        models = []
+        if isinstance(agents, list):
+            for index, entry in enumerate(agents):
+                if (isinstance(entry, dict) and entry.get("provider") == provider_id
+                        and not validate_agent(entry, f"agents[{index}]")):
+                    model = entry.get("model")
+                    if isinstance(model, str) and model and model not in models:
+                        models.append(model)
+        rows.append({"id": provider_id, "modelSelectable": adapter.model_selectable(),
+                     "reasoningLevels": list(adapter.reasoning_levels()), "configuredModels": models})
+    return {"providers": rows}
+
+
 def list_agents(workspace: str) -> dict:
     catalog = load(workspace)
     agents = catalog.get("agents")
     return {"version": catalog.get("version"),
             "agents": [a for a in agents if isinstance(a, dict)] if isinstance(agents, list) else [],
-            "problems": validate(catalog)}
+            "problems": validate(catalog),
+            "editorOptions": _editor_options(catalog)}
 
 
 def _check_fields(fields, allowed, what: str) -> None:

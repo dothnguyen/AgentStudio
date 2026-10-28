@@ -1,3 +1,4 @@
+import { catalogFixture } from './teamsFixtures';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { registerIpc, type ServeLike } from '../src/main/ipc';
@@ -102,6 +103,13 @@ describe('management IPC', () => {
     const r = await call(channel, 'workspace-a', request);
     expect(calls).toEqual([['workspace.list', {}], [command, { workspace: '/work/a', ...expected }]]);
     expect(r).toEqual({ ok: true, data: { payload: command } });
+  });
+
+  it('forwards agent editor options unchanged', async () => {
+    const catalog = catalogFixture({ workspace: '/work/a' });
+    const { call, calls } = setup({ replies: { 'agentdef.list': ok(catalog) } });
+    expect(await call(C.managementAgents, 'workspace-a', {})).toEqual({ ok: true, data: catalog });
+    expect(calls).toEqual([['workspace.list', {}], ['agentdef.list', { workspace: '/work/a' }]]);
   });
 
   it('optional keys are omitted when absent', async () => {

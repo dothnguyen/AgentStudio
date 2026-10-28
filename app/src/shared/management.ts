@@ -37,11 +37,18 @@ export interface AgentDefChanges {
   model?: string | null;
   reasoning?: string | null;
 }
+export interface AgentEditorProviderOption {
+  id: string;
+  modelSelectable: boolean;
+  reasoningLevels: string[];
+  configuredModels: string[];
+}
 export interface AgentCatalogList {
   workspace: string;
   version: unknown;
   agents: AgentDef[];
   problems: Problem[];
+  editorOptions: { providers: AgentEditorProviderOption[] };
 }
 export interface AgentDefResult {
   workspace: string;

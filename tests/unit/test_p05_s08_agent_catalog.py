@@ -4,13 +4,23 @@ import os
 import shutil
 import tempfile
 import unittest
+from contextlib import ExitStack
+from unittest.mock import patch
 
 from tests import helpers  # noqa: F401  (puts backend on sys.path)
-from agent_studio import PROTOCOL, agentcatalog, cli, dispatch, teamdefs, workspace
+from agent_studio import PROTOCOL, agentcatalog, cli, dispatch, providers, teamdefs, workspace
 
 ROLES = {"version": 1, "roles": {"developer": {}, "reviewer": {}}}
 ADA = {"id": "ada", "name": "Ada", "description": "Implements backend stories.", "provider": "fake",
        "model": "fake-1", "reasoning": "high"}
+
+
+OPTIONS = {"providers": [
+    {"id": "codex", "modelSelectable": True, "reasoningLevels": ["minimal", "low", "medium", "high", "xhigh"], "configuredModels": []},
+    {"id": "claude", "modelSelectable": True, "reasoningLevels": ["low", "medium", "high", "xhigh", "max"], "configuredModels": []},
+    {"id": "agy", "modelSelectable": True, "reasoningLevels": ["low", "medium", "high", "xhigh", "max"], "configuredModels": []},
+    {"id": "opencode", "modelSelectable": True, "reasoningLevels": [], "configuredModels": []},
+]}
 
 
 class Base(unittest.TestCase):
@@ -72,6 +82,87 @@ class CatalogTests(Base):
         d = self.ok(self.call("agentdef.list"))
         self.assertEqual((d["agents"], d["problems"], d["version"]), ([], [], 1))
         self.assertIsNone(self.catalog_bytes())
+        self.assertEqual(d["editorOptions"], OPTIONS)
+
+    def test_editor_options_use_adapter_capabilities_and_stable_model_suggestions(self):
+        entries = [
+            {"id": "a", "name": "A", "provider": "codex", "model": "gpt-6"},
+            {"id": "b", "name": "B", "provider": "claude", "model": "sonnet"},
+            {"id": "c", "name": "C", "provider": "codex", "model": "gpt-5"},
+            {"id": "d", "name": "D", "provider": "codex", "model": "gpt-6"},
+            {"id": "e", "name": "E", "provider": "opencode", "model": "vendor/model"},
+        ]
+        self.write("agents.json", {"version": 2, "agents": entries})
+        result = self.ok(self.call("agentdef.list"))
+        expected = json.loads(json.dumps(OPTIONS))
+        expected["providers"][0]["configuredModels"] = ["gpt-6", "gpt-5"]
+        expected["providers"][1]["configuredModels"] = ["sonnet"]
+        expected["providers"][3]["configuredModels"] = ["vendor/model"]
+        self.assertEqual(result["editorOptions"], expected)
+        self.assertEqual(result["agents"], entries)
+        self.assertEqual(result["problems"][0]["path"], "version")
+
+    def test_editor_options_ignore_test_only_and_invalid_entries(self):
+        entries = [dict(ADA), {"id": "valid", "name": "Valid", "provider": "codex", "model": "gpt-6"},
+                   {"id": "bad", "provider": "codex", "model": "gpt-5"},
+                   {"id": "bad2", "name": "Bad", "provider": "agy", "model": "bad model"}]
+        self.write("agents.json", {"version": 1, "agents": entries})
+        result = self.ok(self.call("agentdef.list"))
+        expected = json.loads(json.dumps(OPTIONS))
+        expected["providers"][0]["configuredModels"] = ["gpt-6"]
+        self.assertEqual(result["editorOptions"], expected)
+        self.assertEqual(result["agents"], entries)
+        self.assertTrue({"agents[2].name", "agents[3].model"} <= {p["path"] for p in result["problems"]})
+        self.write("agents.json", {"version": 1, "agents": {}})
+        result = self.ok(self.call("agentdef.list"))
+        self.assertEqual(result["editorOptions"], OPTIONS)
+        self.assertEqual(result["problems"][0]["path"], "agents")
+
+    def test_editor_options_do_not_probe_providers(self):
+        with ExitStack() as stack:
+            for provider_id in providers.PEERS:
+                stack.enter_context(patch.object(providers.get(provider_id), "probe", side_effect=AssertionError("probe called")))
+            self.assertEqual(self.ok(self.call("agentdef.list"))["editorOptions"], OPTIONS)
+
+    def test_editor_options_read_capabilities_at_list_time(self):
+        adapter = providers.get("codex")
+        with patch.object(adapter, "model_selectable", return_value=False), \
+             patch.object(adapter, "reasoning_levels", return_value=("custom",)):
+            expected = json.loads(json.dumps(OPTIONS))
+            expected["providers"][0]["modelSelectable"] = False
+            expected["providers"][0]["reasoningLevels"] = ["custom"]
+            self.assertEqual(self.ok(self.call("agentdef.list"))["editorOptions"], expected)
+        self.assertEqual(self.ok(self.call("agentdef.list"))["editorOptions"], OPTIONS)
+
+    def test_editor_options_preserve_exact_models_and_skip_malformed_entries(self):
+        entries = [
+            {"id": "a", "name": "A", "provider": "codex", "model": "Model"},
+            {"id": "b", "name": "B", "provider": "claude", "model": "Model"},
+            {"id": "c", "name": "C", "provider": "codex", "model": "model"},
+            {"id": "d", "name": "D", "provider": "codex", "model": "Model"},
+            {"id": "e", "name": "E", "provider": "codex"},
+            {"id": "f", "name": "F", "provider": "codex", "model": ""},
+            {"id": "g", "name": "G", "provider": "codex", "model": 4},
+            {"id": "h", "name": "H", "provider": "unknown", "model": "other"},
+            None,
+        ]
+        self.write("agents.json", {"version": 1, "agents": entries})
+        result = self.ok(self.call("agentdef.list"))
+        expected = json.loads(json.dumps(OPTIONS))
+        expected["providers"][0]["configuredModels"] = ["Model", "model"]
+        expected["providers"][1]["configuredModels"] = ["Model"]
+        self.assertEqual(result["editorOptions"], expected)
+        self.assertEqual(result["agents"], entries[:-1])
+        self.assertTrue({"agents[6].model", "agents[7].provider", "agents[8]"}
+                        <= {p["path"] for p in result["problems"]})
+
+    def test_editor_options_propagate_registry_errors(self):
+        from agent_studio.protocol import AsError
+        error = AsError("PROVIDER_UNAVAILABLE", "registry failure")
+        with patch.object(providers, "get", side_effect=error):
+            with self.assertRaises(AsError) as raised:
+                agentcatalog.list_agents(self.ws)
+        self.assertIs(raised.exception, error)
 
     def test_create_update_delete_round_trip_survives_reload(self):
         self.ok(self.call("agentdef.create", agent=dict(ADA)))

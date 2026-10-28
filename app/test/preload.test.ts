@@ -1,3 +1,4 @@
+import { catalogFixture } from './teamsFixtures';
 import { describe, expect, it, vi } from 'vitest';
 
 const exposed = vi.hoisted(() => ({}) as Record<string, unknown>);
@@ -105,6 +106,13 @@ describe('preload', () => {
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: uuid } }],
       [P.managementResumeMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
     ]);
+  });
+
+  it('management agents returns the fixed invoke result unchanged', async () => {
+    const result = { ok: true, data: catalogFixture() };
+    const f = fakeIpc(result);
+    expect(await buildApi(f.ipc).management.agents('ws')).toEqual(result);
+    expect(f.invoke.mock.calls).toEqual([[PRELOAD_CHANNELS.managementAgents, 'ws', {}]]);
   });
 
   it('channel strings equal the main process constants', () => {

@@ -134,6 +134,12 @@ export function catalogFixture(overrides: Partial<AgentCatalogList> = {}): Agent
       { id: 'spare', name: 'Spare agent', provider: 'claude' },
     ],
     problems: [],
+    editorOptions: { providers: [
+      { id: 'codex', modelSelectable: true, reasoningLevels: ['minimal', 'low', 'medium', 'high', 'xhigh'], configuredModels: ['gpt-6'] },
+      { id: 'claude', modelSelectable: true, reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'], configuredModels: [] },
+      { id: 'agy', modelSelectable: true, reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max'], configuredModels: [] },
+      { id: 'opencode', modelSelectable: true, reasoningLevels: [], configuredModels: ['claude-sonnet'] },
+    ] },
     ...overrides,
   };
 }
