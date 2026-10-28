@@ -20,7 +20,6 @@ Edit saved ordered catalog membership without changing live state.
 ## Project validation commands
 - `python3 -m unittest tests.unit.test_member_agent_switch tests.unit.test_p05_s10_management_read_model tests.unit.test_p04_s10_scheduler`
 - `python3 -m unittest tests.integration.test_member_agent_switch`
-- `python3 -m unittest discover -s tests -t .`
 - `npm --prefix app test`
 - `npm --prefix app run typecheck`
 - `npm --prefix app run build`
