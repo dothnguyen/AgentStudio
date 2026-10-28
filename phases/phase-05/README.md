@@ -107,3 +107,38 @@ Missing saved references remain visible for repair and block a new save; never s
 | Acceptance | [P05-S23](./stories/P05-S23-multi-agent-live-gate.md) | T-055 | T-047, T-053 (S21), T-054 (S22) | Accessible Windows plus WSL live gate |
 
 T-047 is not yet merged and supplies only its completed accessibility/responsive baseline audit and Windows Electron plus WSL Teams live-gate evidence, not a callable data interface. Feature implementation does not wait for it. Child tickets remain in backlog until the configured plan-merge workflow promotes them after this planning change merges; the operator reviews boundaries and priority then. Windows/WSL execution is deferred to S23.
+
+## Standalone Agents catalog management — T-056
+
+Move reusable agent catalog management out of Teams into a dedicated workspace Agents screen, while Teams continues to assemble members from that shared catalog and remains the only place for live activation, quota, and switching controls. Operators can search, filter, inspect, create, edit, duplicate, and safely delete saved agent definitions without mistaking saved changes for the currently running agent.
+
+### Open questions and planning assumptions
+
+| Question | Assumption used by these stories |
+|---|---|
+| Does the backend provide friendly provider names or a model registry? | No. Show the provider ids returned by the backend contract, expose only configured model values as suggestions, and keep model entry free-form only when the selected provider reports `modelSelectable`; do not reproduce illustrative mockup brands or models. |
+| How complete can “Used by” be? | Reuse `team.overview` and count every saved `agentOptions` reference, not only the default option. Show member/team names when present, “at least” for truncated projections, and “Usage unavailable” for an unavailable overview; backend `AGENT_IN_USE` remains deletion authority. |
+| Can the UI repair an invalid hand-edited `agents.json`? | No. `agentdef.list` may display parsed entries plus problems, but existing mutation commands reject an invalid catalog. Keep entries inspectable, disable mutations with an actionable explanation, and never overwrite invalid configuration. |
+| Should Agents have URL routing or open directly to a specific entry? | No new router is introduced. Add `agents` to the existing `WorkspaceShell` section state, select the first visible entry by default, and preserve current workspace-switch reset behavior. |
+| What happens to a running member after a catalog edit? | Nothing immediately. Every mutation success and editor note says saved changes apply on a future team start; live selection, quota holds, cancellation, resume, and switching stay in Teams. |
+
+### Verified architecture and contract gaps
+
+- `backend/agent_studio/agentcatalog.py` already stores `id`, `name`, `provider`, optional `model`, `reasoning`, and `description`; derives or validates slug ids; makes ids immutable; validates provider-specific settings; writes atomically; preserves unrelated fields; and rejects referenced deletion with `AGENT_IN_USE` plus team ids.
+- `agentdef.list/create/update/delete` are already allowlisted through `app/src/main/managementSpecs.ts`, `app/src/preload/preload.ts`, and `ManagementApi` in `app/src/shared/management.ts`. No arbitrary command, credential, activation, or runtime mutation is needed.
+- The missing editor contract is provider capability metadata. Extend the existing `agentdef.list` result with production provider ids, `modelSelectable`, allowed `reasoningLevels`, and model values observed in valid configured entries; do not probe authentication or invent a model registry.
+- `TeamsScreen.tsx` currently loads catalog data both for member forms and for a visible read-only `AgentCatalogPanel`. Remove only that visible panel: Teams must retain `management.agents()` for ordered member option selection and must retain all live controls.
+- `team.overview` already distinguishes saved `agentOptions` from runtime `activeAgent` and reports truncation/partial state. The Agents screen may use it for references, but must never infer live activation from the catalog or claim that editing switches a member.
+- Reuse `WorkspaceShell.tsx`, `navModel.ts`, `ShellIcon.tsx`, the existing dark tokens in `styles.css`, `useDashboardSection`, and structured `ManagementResult` feedback. The reference [agents-screen-v1.png](../../design/agents-screen-v1.png) supplies hierarchy and visual direction only.
+
+### Epics → stories
+
+| Epic | Story | Outcome |
+|---|---|---|
+| Editor contract | [P05-S24](./stories/P05-S24-agent-editor-options-contract.md) | Backend-derived provider, reasoning, and configured-model choices on the existing catalog read |
+| Standalone catalog | [P05-S25](./stories/P05-S25-agents-navigation-and-browser.md) | Agents navigation, searchable/filterable catalog, details, and truthful saved references; no catalog panel in Teams |
+| Catalog mutations | [P05-S26](./stories/P05-S26-agent-create-edit-duplicate.md) | Validated create, edit, and duplicate flows with immutable ids and saved-versus-live messaging |
+| | [P05-S27](./stories/P05-S27-agent-delete-guards.md) | Explicit unused-agent confirmation and clear referenced-delete protection |
+| Completion | [P05-S28](./stories/P05-S28-agents-states-responsive-accessibility.md) | Automated loading/empty/disconnected/error/narrow-layout and accessibility coverage |
+
+These stories intentionally add no live acceptance gate. The operator owns manual application verification; implementation tickets require only focused backend, renderer, IPC, accessibility, typecheck, and build automation.

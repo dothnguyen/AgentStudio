@@ -207,6 +207,52 @@
         "phases/phase-05/stories/P05-S22-live-agent-switch-controls.md"
       ],
       "priority": 5
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S24-agent-editor-options-contract.md",
+      "title": "Expose backend-derived agent editor options",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S08-agent-catalog.md",
+        "phases/phase-05/stories/P05-S12-management-ipc.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S25-agents-navigation-and-browser.md",
+      "title": "Add Agents navigation and standalone catalog browser",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S13-teams-screen.md",
+        "phases/phase-05/stories/P05-S19-multi-agent-management-read-model.md",
+        "phases/phase-05/stories/P05-S24-agent-editor-options-contract.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S26-agent-create-edit-duplicate.md",
+      "title": "Create, edit, and duplicate saved agents",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S24-agent-editor-options-contract.md",
+        "phases/phase-05/stories/P05-S25-agents-navigation-and-browser.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S27-agent-delete-guards.md",
+      "title": "Guard agent deletion with saved references",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S25-agents-navigation-and-browser.md",
+        "phases/phase-05/stories/P05-S26-agent-create-edit-duplicate.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S28-agents-states-responsive-accessibility.md",
+      "title": "Complete Agents states, responsive layout, and accessibility",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S26-agent-create-edit-duplicate.md",
+        "phases/phase-05/stories/P05-S27-agent-delete-guards.md"
+      ],
+      "priority": 4
     }
   ],
   "questions": [
