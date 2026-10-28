@@ -80,7 +80,7 @@ def _cancel_requested(tx: Tx, wf_id: str) -> bool:
 
 def _current_attempt(tx: Tx, wf_id: str) -> Optional[dict]:
     row = tx.conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? AND status = 'active' "
-                          "ORDER BY created_at DESC, rowid DESC LIMIT 1", (wf_id,)).fetchone()
+                          "ORDER BY rowid DESC LIMIT 1", (wf_id,)).fetchone()
     return dict(row) if row else None
 
 
@@ -356,21 +356,21 @@ def _legacy_run(tx: Tx, wf: dict, sa: Optional[dict], cancel: bool) -> bool:
 
 def _prev_assignment(tx: Tx, wf_id: str) -> Optional[str]:
     row = tx.conn.execute("SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id "
-                          "IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1", (wf_id,)).fetchone()
+                          "IS NOT NULL ORDER BY rowid DESC LIMIT 1", (wf_id,)).fetchone()
     return row[0] if row else None
 
 
 def _latest_result(tx: Tx, wf_id: str, stage: Optional[str] = None) -> Optional[dict]:
     """The newest completed validation result of the run (or of one validation stage)."""
     sql = ("SELECT validation_json FROM stage_attempts WHERE workflow_run_id = ? AND stage_type = 'validation' "
-           "AND status = 'completed'" + (" AND stage = ?" if stage else "") + " ORDER BY created_at DESC, rowid DESC")
+           "AND status = 'completed'" + (" AND stage = ?" if stage else "") + " ORDER BY rowid DESC")
     row = tx.conn.execute(sql, (wf_id, stage) if stage else (wf_id,)).fetchone()
     return _loads(row[0], None) if row else None
 
 
 def _last_summary(tx: Tx, wf_id: str) -> str:
     for row in tx.conn.execute("SELECT artifacts_json FROM stage_attempts WHERE workflow_run_id = ? AND artifacts_json "
-                               "IS NOT NULL ORDER BY created_at DESC, rowid DESC", (wf_id,)).fetchall():
+                               "IS NOT NULL ORDER BY rowid DESC", (wf_id,)).fetchall():
         text = (_loads(row[0], {}) or {}).get("summary")
         if text:
             return text
@@ -540,7 +540,7 @@ def _stage_of(wf: dict, stage_id: str) -> "workflowdef.Stage":
 def _latest_diff_text(tx: Tx, wf_id: str) -> Optional[str]:
     """The newest captured diff of the run (the workspace_write stage that ran last), or None before any."""
     for row in tx.conn.execute("SELECT diff_json FROM stage_attempts WHERE workflow_run_id = ? AND diff_json IS NOT NULL "
-                               "ORDER BY created_at DESC, rowid DESC", (wf_id,)).fetchall():
+                               "ORDER BY rowid DESC", (wf_id,)).fetchall():
         diff = _loads(row["diff_json"], {}) or {}
         if diff.get("path"):
             return _read(diff["path"])

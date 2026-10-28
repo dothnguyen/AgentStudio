@@ -254,10 +254,10 @@ def workflow_detail(conn, wf_id: str) -> dict:
         wf = conn.execute("SELECT * FROM workflow_runs WHERE id = ?", (wf_id,)).fetchone()
         if wf is None:
             raise AsError("NOT_FOUND", f"Workflow run {wf_id} does not exist.")
-        stages = conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? ORDER BY created_at, rowid",
+        stages = conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? ORDER BY rowid",
                               (wf_id,)).fetchall()
         task = conn.execute("SELECT * FROM tasks WHERE id = ?", (wf["task_id"],)).fetchone()
-        assignments = conn.execute("SELECT * FROM assignments WHERE task_id = ? ORDER BY created_at, rowid",
+        assignments = conn.execute("SELECT * FROM assignments WHERE task_id = ? ORDER BY rowid",
                                    (wf["task_id"],)).fetchall()
         events = conn.execute("SELECT * FROM events WHERE workflow_run_id = ? OR task_id = ? ORDER BY seq LIMIT 2000",
                               (wf_id, wf["task_id"])).fetchall()
