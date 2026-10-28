@@ -67,6 +67,8 @@ const LABELS: Record<string, string> = {
   [C.managementUpdateRole]: 'updateRole',
   [C.managementRunBoard]: 'runBoard',
   [C.managementStopBoard]: 'stopBoard',
+  [C.managementSwitchMemberAgent]: 'switchMemberAgent',
+  [C.managementResumeMemberAgent]: 'resumeMemberAgent',
 };
 
 const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
@@ -88,6 +90,8 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementUpdateRole, { role: 'TeamLead', description: null }, 'role.update', { role: 'TeamLead', description: null }],
   [C.managementRunBoard, { teamId: UUID }, 'board.run', { teamId: UUID }],
   [C.managementStopBoard, {}, 'board.stop', {}],
+  [C.managementSwitchMemberAgent, { teamDefId: 'core', memberId: 'm1', agent: 'ada' }, 'team.member.switch', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
+  [C.managementResumeMemberAgent, { teamDefId: 'core', memberId: 'm1', agent: 'ada' }, 'team.member.resume', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
 ];
 
 const SLUG_MSG = (f: string) => `${f} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
@@ -210,6 +214,9 @@ describe('management IPC', () => {
     await call(C.managementRunBoard, 'workspace-a', { teamId: UUID });
     await call(C.managementRunBoard, 'workspace-a', { teamId: UUID });
     await call(C.managementStopBoard, 'workspace-a', {});
+    await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
+    await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: UUID } });
+    await call(C.managementResumeMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
     await call(C.managementOverview, 'workspace-a', {});
     await call(C.managementCreateAgent, 'workspace-a', { agent: { name: 'A', provider: 'claude' } });
     const targetOpts = calls.map(([c], i) => [c, optsSeen[i]] as const).filter(([c]) => c !== 'workspace.list').map(([, o]) => o);
@@ -217,6 +224,9 @@ describe('management IPC', () => {
       { idempotencyKey: 'k-00000001' },
       { idempotencyKey: 'k-00000002' },
       { idempotencyKey: 'k-00000003' },
+      { idempotencyKey: 'k-00000004' },
+      { idempotencyKey: 'k-00000005' },
+      { idempotencyKey: 'k-00000006' },
       undefined,
       undefined,
     ]);
@@ -258,7 +268,7 @@ describe('management IPC', () => {
     for (const [channel, request] of ROWS) await call(channel, 'workspace-a', request);
     expect([...new Set(calls.map(([c]) => c))].sort()).toEqual([
       'agentdef.create', 'agentdef.delete', 'agentdef.list', 'agentdef.update', 'board.run', 'board.settings',
-      'board.settings.update', 'board.stop', 'role.update', 'team.overview', 'teamdef.create', 'teamdef.delete',
+      'board.settings.update', 'board.stop', 'role.update', 'team.member.resume', 'team.member.switch', 'team.overview', 'teamdef.create', 'teamdef.delete',
       'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename', 'teamdef.show',
       'teamdef.validate', 'workspace.list',
     ]);
@@ -268,4 +278,88 @@ describe('management IPC', () => {
     const src = readFileSync(new URL('../src/shared/management.ts', import.meta.url), 'utf8');
     expect(src).not.toMatch(/^\s*import\s/m);
   });
+  it('forwards_ordered_agents', async () => {
+    const { call, calls } = setup();
+    await call(C.managementAddMember, 'workspace-a', { teamDefId: 'core', member: { agents: ['z', 'a'] } });
+    await call(C.managementUpdateMember, 'workspace-a', { teamDefId: 'core', memberId: 'm1', changes: { agents: ['a', 'z'] } });
+    expect(calls.filter(([c]) => c !== 'workspace.list')).toEqual([
+      ['teamdef.member.add', { workspace: '/work/a', teamDefId: 'core', agents: ['z', 'a'] }],
+      ['teamdef.member.update', { workspace: '/work/a', teamDefId: 'core', memberId: 'm1', agents: ['a', 'z'] }],
+    ]);
+  });
+  it('rejects_empty_duplicate_or_invalid_agent_arrays', async () => {
+    for (const [channel, method, field] of [[C.managementAddMember, 'addMember', 'member'], [C.managementUpdateMember, 'updateMember', 'changes']]) {
+      for (const [value, suffix] of [
+        ['a', 'must be a non-empty array of slugs.'], [[], 'must be a non-empty array of slugs.'],
+        [['a', 'a'], 'must not contain duplicates.'], [['a', 'Bad'], "[1] must be a slug (lowercase letters, digits, '-'; at most 64 characters)."],
+        [['a', 1], "[1] must be a slug (lowercase letters, digits, '-'; at most 64 characters)."],
+      ] as const) {
+        const request = { teamDefId: 'core', ...(method === 'updateMember' ? { memberId: 'm1' } : {}), [field]: { agents: value } };
+        await bad(channel as string, request, `management.${method}: ${field}.agents${suffix.startsWith('[') ? '' : ' '}${suffix}`);
+      }
+    }
+  });
+  it('forwards_switch_without_confirmation', async () => {
+    const { call, calls, optsSeen } = setup();
+    await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
+    expect(calls[1]).toEqual(['team.member.switch', { workspace: '/work/a', teamDefId: 'core', memberId: 'm1', agent: 'ada' }]);
+    expect(optsSeen[1]?.idempotencyKey).toBeTruthy();
+  });
+  it('forwards_exact_assignment_confirmation', async () => {
+    const { call, calls } = setup();
+    await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: UUID } });
+    expect(calls[1]).toEqual(['team.member.switch', { workspace: '/work/a', teamDefId: 'core', memberId: 'm1', agent: 'ada', cancelActive: true, assignmentId: UUID }]);
+  });
+  it('rejects_partial_or_extra_confirmation', async () => {
+    const base = { teamDefId: 'core', memberId: 'm1', agent: 'ada' };
+    for (const [confirmation, message] of [
+      [{ assignmentId: UUID }, 'confirmation.cancelActive is required.'],
+      [{ cancelActive: true }, 'confirmation.assignmentId is required.'],
+      [{ cancelActive: false, assignmentId: UUID }, 'confirmation.cancelActive must be true.'],
+      [{ cancelActive: 'true', assignmentId: UUID }, 'confirmation.cancelActive must be true.'],
+      [{ cancelActive: true, assignmentId: UUID.toUpperCase() }, 'confirmation.assignmentId must be a lowercase UUID v4.'],
+      [{ cancelActive: true, assignmentId: 'bad' }, 'confirmation.assignmentId must be a lowercase UUID v4.'],
+      [{ extra: 1 }, 'unknown field(s): confirmation.extra.'],
+    ] as const) await bad(C.managementSwitchMemberAgent, { ...base, confirmation }, `management.switchMemberAgent: ${message}`);
+  });
+  it('forwards_resume', async () => {
+    const { call, calls, optsSeen } = setup();
+    await call(C.managementResumeMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
+    expect(calls[1]).toEqual(['team.member.resume', { workspace: '/work/a', teamDefId: 'core', memberId: 'm1', agent: 'ada' }]);
+    expect(optsSeen[1]?.idempotencyKey).toBeTruthy();
+  });
+  it('preserves switch backend errors and structured data', async () => {
+    const base = { teamDefId: 'core', memberId: 'm1', agent: 'ada' };
+    const active = { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false };
+    const provider = { code: 'PROVIDER_UNAVAILABLE', message: "Provider 'claude' is not ready: unavailable", retryable: false, remediation: 'Install the provider.' };
+    const a = setup({ replies: { 'team.member.switch': { ok: false, error: active, data: { assignmentId: UUID } } } });
+    expect(await a.call(C.managementSwitchMemberAgent, 'workspace-a', base)).toEqual({ ok: false, error: { ...active, data: { assignmentId: UUID } } });
+    const b = setup({ replies: { 'team.member.switch': { ok: false, error: provider } } });
+    expect(await b.call(C.managementSwitchMemberAgent, 'workspace-a', base)).toEqual({ ok: false, error: provider });
+  });
+
+  it('preserves each specified switch error and both cancellation result shapes', async () => {
+    const base = { teamDefId: 'core', memberId: 'm1', agent: 'ada' };
+    const messages = [
+      'A switch is already pending for this member.',
+      "Agent 'ada' is on quota hold.",
+      'That agent is already active; use board resume when its quota resets.',
+      "The member's pane is not alive.",
+      'Member must be idle or quota-limited before switching.',
+      "Agent 'ada' is not configured for member 'm1'.",
+      "Agent 'ada' is missing from the catalog.",
+    ];
+    for (const message of messages) {
+      const error = { code: 'BAD_REQUEST', message, retryable: false };
+      const { call } = setup({ replies: { 'team.member.switch': { ok: false, error } } });
+      expect(await call(C.managementSwitchMemberAgent, 'workspace-a', base)).toEqual({ ok: false, error });
+    }
+    for (const identifier of [{ assignmentId: UUID }, { workflowRunId: UUID }]) {
+      const data = { teamId: UUID, memberId: 'm1', agentId: 'worker', pendingAgent: 'ada', assignmentId: UUID,
+        cancellation: { ...identifier, previousStatus: 'running', outcome: 'cancel_requested', status: 'running' } };
+      const { call } = setup({ replies: { 'team.member.switch': ok(data) } });
+      expect(await call(C.managementSwitchMemberAgent, 'workspace-a', base)).toEqual({ ok: true, data });
+    }
+  });
+
 });

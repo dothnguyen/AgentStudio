@@ -30,6 +30,8 @@ export const PRELOAD_CHANNELS = {
   managementUpdateRole: 'management:updateRole',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
+  managementSwitchMemberAgent: 'management:switchMemberAgent',
+  managementResumeMemberAgent: 'management:resumeMemberAgent',
 } as const;
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'on' | 'removeListener'>;
@@ -83,6 +85,9 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
           expectedSha256 === undefined ? { role, description } : { role, description, expectedSha256 },
         ),
       runBoard: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementRunBoard, w, { teamId }),
+      switchMemberAgent: (w, teamDefId, memberId, agent, confirmation) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementSwitchMemberAgent, w, confirmation === undefined ? { teamDefId, memberId, agent } : { teamDefId, memberId, agent, confirmation }),
+      resumeMemberAgent: (w, teamDefId, memberId, agent) => ipc.invoke(PRELOAD_CHANNELS.managementResumeMemberAgent, w, { teamDefId, memberId, agent }),
       stopBoard: (w) => ipc.invoke(PRELOAD_CHANNELS.managementStopBoard, w, {}),
     },
     connection: {

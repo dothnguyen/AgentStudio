@@ -58,6 +58,7 @@ export interface TeamMemberConfig {
   name: string;
   role: string;
   agent?: string;
+  agents?: string[];
   provider?: string;
   model?: string;
   reasoning?: string;
@@ -76,6 +77,7 @@ export interface ResolvedMember {
   role: string | null;
   source: 'catalog' | 'inline';
   agent: string | null;
+  agents?: string[];
   provider: string | null;
   model: string | null;
   reasoning: string | null;
@@ -110,6 +112,7 @@ export interface MemberInput {
   name?: string;
   role: string;
   agent?: string;
+  agents?: string[];
   provider?: string;
   model?: string;
   reasoning?: string;
@@ -119,6 +122,7 @@ export interface MemberChanges {
   name?: string;
   role?: string;
   agent?: string;
+  agents?: string[];
   provider?: string;
   model?: string | null;
   reasoning?: string | null;
@@ -153,6 +157,25 @@ export type MemberWork =
     }
   | { state: 'none' }
   | { state: 'unavailable'; reason: string };
+export interface ResolvedAgentOption {
+  id: string;
+  name: string | null;
+  provider: string | null;
+  model: string | null;
+  reasoning: string | null;
+  description: string | null;
+  state: 'ok' | 'missing';
+}
+export interface RuntimeSwitchState {
+  state: 'pending' | 'completed' | 'failed';
+  requestedAgent: string;
+  assignmentId: string | null;
+  code: string | null;
+  message: string | null;
+  at: string;
+}
+export type QuotaHoldMap = Record<string, string | null>;
+export type RuntimeAssignment = { id: string; status: string; taskId: string } | null;
 export interface OverviewMember {
   memberId: string | null;
   name: string | null;
@@ -160,6 +183,9 @@ export interface OverviewMember {
   roleDescription: string | null;
   roleState: 'defined' | 'undefined' | 'unavailable';
   source: 'catalog' | 'inline' | 'runtime';
+  agentMode: 'ordered_catalog' | 'single_catalog' | 'inline';
+  agentOptions: ResolvedAgentOption[];
+  defaultAgent: string | null;
   agentDefId: string | null;
   agentDefState: 'ok' | 'missing' | 'unavailable' | null;
   provider: string | null;
@@ -167,6 +193,12 @@ export interface OverviewMember {
   reasoning: string | null;
   runtime: {
     agentId: string;
+    configuredAgents: string[] | null;
+    activeAgent: string | null;
+    quotaHolds: QuotaHoldMap;
+    pendingAgent: string | null;
+    lastSwitch: RuntimeSwitchState | null;
+    assignment: RuntimeAssignment;
     availability: string;
     paneState: string | null;
     provider: string | null;
@@ -276,6 +308,16 @@ export interface BoardRunResult {
   rules?: number;
 }
 
+export type CancellationResult = ({ assignmentId: string } | { workflowRunId: string }) & {
+  previousStatus: string;
+  outcome: 'already_finished' | 'finishing' | 'cancelled' | 'cancel_requested';
+  status: string;
+};
+export type MemberSwitchResult =
+  | { teamId: string; memberId: string; agentId: string; activeAgent: string; provider: string }
+  | { teamId: string; memberId: string; agentId: string; pendingAgent: string; assignmentId: string; cancellation: CancellationResult };
+export type MemberResumeResult = { teamId: string; memberId: string; agentId: string; option: string; cleared: boolean; activeAgent: string | null };
+
 type R<T> = Promise<ManagementResult<T>>;
 export interface ManagementApi {
   overview(workspaceId: string): R<TeamOverview>;
@@ -295,5 +337,7 @@ export interface ManagementApi {
   updateBoardSettings(workspaceId: string, changes: BoardSettingsChanges, expectedSha256?: string): R<ConfigWriteResult>;
   updateRole(workspaceId: string, role: string, description: string | null, expectedSha256?: string): R<RoleWriteResult>;
   runBoard(workspaceId: string, teamId: string): R<BoardRunResult>;
+  switchMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string, confirmation?: { cancelActive: true; assignmentId: string }): R<MemberSwitchResult>;
+  resumeMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string): R<MemberResumeResult>;
   stopBoard(workspaceId: string): R<BoardRunResult>;
 }

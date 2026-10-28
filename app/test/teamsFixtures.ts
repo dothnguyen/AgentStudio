@@ -45,6 +45,7 @@ export function member(overrides: Partial<OverviewMember> = {}): OverviewMember 
     roleDescription: 'Implements scoped tickets.',
     roleState: 'defined',
     source: 'catalog',
+    agentMode: 'single_catalog', agentOptions: [], defaultAgent: 'opencode-sonnet',
     agentDefId: 'opencode-sonnet',
     agentDefState: 'ok',
     provider: 'opencode',
@@ -104,7 +105,8 @@ export function twoTeams(): TeamOverview {
           presence: 'busy',
           runtime: {
             agentId: 'a-1', availability: 'busy', paneState: null, provider: 'opencode',
-            model: 'claude-sonnet', reasoning: null, stale: false,
+            model: 'claude-sonnet', reasoning: null, stale: false, configuredAgents: ['opencode-sonnet'],
+            activeAgent: 'opencode-sonnet', quotaHolds: {}, pendingAgent: null, lastSwitch: null, assignment: null,
           },
           work: {
             state: 'working',

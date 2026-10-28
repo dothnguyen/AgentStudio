@@ -133,7 +133,7 @@ describe('getManagementApi', () => {
   const METHODS = [
     'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-    'updateRole', 'runBoard', 'stopBoard',
+    'updateRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
   ];
   const fakes = () => {
     const fns: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -151,10 +151,19 @@ describe('getManagementApi', () => {
     window.agentStudio = { connection: { onChange: () => () => {} }, management: fns as never };
     const api = getManagementApi() as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
     for (const m of METHODS) {
-      const args = ['ws', 'a', { b: 1 }];
+      const args = m === 'switchMemberAgent' || m === 'resumeMemberAgent' ? ['ws', 'core', 'm1', 'ada'] : ['ws', 'a', { b: 1 }];
       expect(await api[m](...args)).toEqual({ ok: true, data: { m } });
       expect(fns[m]).toHaveBeenCalledWith(...args);
     }
+  });
+
+  it('forwards switch confirmation', async () => {
+    const fns = fakes();
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: fns as never };
+    const api = getManagementApi();
+    const confirmation = { cancelActive: true as const, assignmentId: '123e4567-e89b-42d3-a456-426614174000' };
+    await api.switchMemberAgent('ws', 'core', 'm1', 'ada', confirmation);
+    expect(fns.switchMemberAgent).toHaveBeenCalledWith('ws', 'core', 'm1', 'ada', confirmation);
   });
 
   it('getManagementApi returns its own narrow forwarding object', () => {

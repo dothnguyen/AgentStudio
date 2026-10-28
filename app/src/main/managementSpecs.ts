@@ -20,6 +20,8 @@ export const MANAGEMENT_CHANNELS = {
   managementUpdateRole: 'management:updateRole',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
+  managementSwitchMemberAgent: 'management:switchMemberAgent',
+  managementResumeMemberAgent: 'management:resumeMemberAgent',
 } as const;
 
 export interface ManagementSpec {
@@ -41,7 +43,7 @@ const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA = /^[0-9a-f]{64}$/;
 
-type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any';
+type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true';
 
 interface Field {
   kind: Kind;
@@ -61,7 +63,15 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
         ? null
         : `${label}: ${field} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
     case 'uuid':
-      return typeof value === 'string' && UUID4.test(value) ? null : `${label}: teamId must be a lowercase UUID v4.`;
+      return typeof value === 'string' && UUID4.test(value) ? null : `${label}: ${field} must be a lowercase UUID v4.`;
+    case 'stringArrayOfSlugs':
+      if (!Array.isArray(value) || value.length === 0) return `${label}: ${field} must be a non-empty array of slugs.`;
+      for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] !== 'string' || !SLUG.test(value[i])) return `${label}: ${field}[${i}] must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
+      }
+      return new Set(value).size === value.length ? null : `${label}: ${field} must not contain duplicates.`;
+    case 'true':
+      return value === true ? null : `${label}: ${field} must be true.`;
     case 'sha':
       return typeof value === 'string' && SHA.test(value) ? null : `${label}: expectedSha256 must be a lowercase hex sha256.`;
     case 'nonEmpty':
@@ -111,7 +121,7 @@ function parseObject(
     } else {
       const err = checkValue(spec.kind, value, name, label);
       if (err) return err;
-      out[key] = value;
+      out[key] = spec.kind === 'stringArrayOfSlugs' ? [...value as string[]] : value;
     }
   }
   return out;
@@ -205,6 +215,7 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
           name: { kind: 'nonEmpty' },
           role: { kind: 'nonEmpty' },
           agent: { kind: 'slug' },
+          agents: { kind: 'stringArrayOfSlugs' },
           provider: { kind: 'nonEmpty' },
           model: { kind: 'nonEmpty' },
           reasoning: { kind: 'nonEmpty' },
@@ -228,6 +239,7 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
           name: { kind: 'nonEmpty' },
           role: { kind: 'nonEmpty' },
           agent: { kind: 'slug' },
+          agents: { kind: 'stringArrayOfSlugs' },
           provider: { kind: 'nonEmpty' },
           model: { kind: 'stringOrNull' },
           reasoning: { kind: 'stringOrNull' },
@@ -259,5 +271,12 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
     expectedSha256: sha,
   }),
   spec(C.managementRunBoard, 'runBoard', 'board.run', { teamId: { kind: 'uuid', required: true } }, { mutating: true }),
+  spec(C.managementSwitchMemberAgent, 'switchMemberAgent', 'team.member.switch', {
+    teamDefId, memberId, agent: { kind: 'slug', required: true },
+    confirmation: { object: { cancelActive: { kind: 'true', required: true }, assignmentId: { kind: 'uuid', required: true } } },
+  }, { mutating: true, flatten: 'confirmation' }),
+  spec(C.managementResumeMemberAgent, 'resumeMemberAgent', 'team.member.resume', {
+    teamDefId, memberId, agent: { kind: 'slug', required: true },
+  }, { mutating: true }),
   spec(C.managementStopBoard, 'stopBoard', 'board.stop', {}, { mutating: true }),
 ];

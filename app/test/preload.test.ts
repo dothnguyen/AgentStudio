@@ -20,7 +20,7 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-  'updateRole', 'runBoard', 'stopBoard',
+  'updateRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
 ];
 
 describe('preload', () => {
@@ -75,6 +75,9 @@ describe('preload', () => {
     m.updateRole('ws', 'TeamLead', 'desc', sha);
     m.runBoard('ws', uuid, x);
     m.stopBoard('ws', x);
+    m.switchMemberAgent('ws', 'core', 'm1', 'ada');
+    m.switchMemberAgent('ws', 'core', 'm1', 'ada', { cancelActive: true, assignmentId: uuid }, x);
+    m.resumeMemberAgent('ws', 'core', 'm1', 'ada', x);
     const P = PRELOAD_CHANNELS;
     expect(f.invoke.mock.calls).toEqual([
       [P.managementOverview, 'ws', {}],
@@ -98,6 +101,9 @@ describe('preload', () => {
       [P.managementUpdateRole, 'ws', { role: 'TeamLead', description: 'desc', expectedSha256: sha }],
       [P.managementRunBoard, 'ws', { teamId: uuid }],
       [P.managementStopBoard, 'ws', {}],
+      [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
+      [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: uuid } }],
+      [P.managementResumeMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
     ]);
   });
 

@@ -19,6 +19,13 @@ export type {
   ManagementApi,
   ManagementError,
   ManagementResult,
+  CancellationResult,
+  MemberSwitchResult,
+  MemberResumeResult,
+  ResolvedAgentOption,
+  RuntimeSwitchState,
+  QuotaHoldMap,
+  RuntimeAssignment,
   MemberChanges,
   MemberEditResult,
   MemberInput,
@@ -213,6 +220,9 @@ export function getManagementApi(): ManagementApi {
     updateBoardSettings: (...args) => real.updateBoardSettings(...args),
     updateRole: (...args) => real.updateRole(...args),
     runBoard: (...args) => real.runBoard(...args),
+    switchMemberAgent: (workspaceId, teamDefId, memberId, agent, confirmation) =>
+      confirmation === undefined ? real.switchMemberAgent(workspaceId, teamDefId, memberId, agent) : real.switchMemberAgent(workspaceId, teamDefId, memberId, agent, confirmation),
+    resumeMemberAgent: (workspaceId, teamDefId, memberId, agent) => real.resumeMemberAgent(workspaceId, teamDefId, memberId, agent),
     stopBoard: (...args) => real.stopBoard(...args),
   };
 }

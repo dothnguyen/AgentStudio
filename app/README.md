@@ -110,3 +110,8 @@ It never starts the coordinator. The default evidence file is `scripts/windows/a
 If the repository path has a space or another character outside `SAFE_ARG`, pass `--repo-wsl`.
 
 The Teams screen includes worktree and routing settings from the workspace board configuration. Operators can edit existing routes and role descriptions; saves check the configuration version and reload the latest settings. If a refresh reports invalid board or roles configuration, open drafts cannot be saved until the configuration is valid again. Configuration conflicts require an explicit reload before retrying. If the reload fails, the editor retains the draft and offers a retry; a successful write is reported only after fresh settings load.
+
+The typed management API accepts ordered catalog agent IDs when adding or updating a member.
+Named switch and resume calls resolve the workspace in the main process and submit coordinator
+commands with fresh idempotency keys. Switching an active assignment requires its exact ID and
+an explicit cancellation confirmation; backend errors and cancellation results are passed through.

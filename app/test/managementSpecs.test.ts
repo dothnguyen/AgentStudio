@@ -6,9 +6,9 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only runBoard and stopBoard are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(18);
+    expect(MANAGEMENT_SPECS).toHaveLength(20);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
-    expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual(['management.runBoard', 'management.stopBoard']);
+    expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual(['management.resumeMemberAgent', 'management.runBoard', 'management.stopBoard', 'management.switchMemberAgent']);
   });
 
   it('isPlainObject accepts plain and null-prototype objects only', () => {
@@ -73,4 +73,20 @@ describe('managementSpecs', () => {
   it('unknown keys are reported before other errors', () => {
     expect(parse('renameTeam', { teamDefId: '../x', name: '', extra: 1 })).toBe('management.renameTeam: unknown field(s): extra.');
   });
+  it('validates ordered agents and exact switch confirmation', () => {
+    const agents = ['z', 'a'];
+    const parsed = parse('addMember', { teamDefId: 'core', member: { agents } });
+    expect(parsed).toEqual({ teamDefId: 'core', agents });
+    expect((parsed as Record<string, unknown>).agents).not.toBe(agents);
+    expect(parse('updateMember', { teamDefId: 'core', memberId: 'm', changes: { agents: [] } })).toBe('management.updateMember: changes.agents must be a non-empty array of slugs.');
+    expect(parse('addMember', { teamDefId: 'core', member: { agents: ['a', 'a'] } })).toBe('management.addMember: member.agents must not contain duplicates.');
+    const base = { teamDefId: 'core', memberId: 'm', agent: 'a' };
+    const assignmentId = '123e4567-e89b-42d3-a456-426614174000';
+    expect(parse('switchMemberAgent', { ...base, confirmation: { cancelActive: true, assignmentId } })).toEqual({ ...base, cancelActive: true, assignmentId });
+    expect(parse('switchMemberAgent', { ...base, confirmation: { cancelActive: false, assignmentId } })).toBe('management.switchMemberAgent: confirmation.cancelActive must be true.');
+    expect(parse('switchMemberAgent', { ...base, confirmation: { cancelActive: true, assignmentId: 'bad' } })).toBe('management.switchMemberAgent: confirmation.assignmentId must be a lowercase UUID v4.');
+    expect(parse('switchMemberAgent', { ...base, confirmation: { extra: 1 } })).toBe('management.switchMemberAgent: unknown field(s): confirmation.extra.');
+    expect(parse('switchMemberAgent', { ...base, extra: 1, confirmation: {} })).toBe('management.switchMemberAgent: unknown field(s): extra.');
+  });
+
 });
