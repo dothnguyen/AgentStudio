@@ -1,10 +1,39 @@
-from tests.integration.test_p04_s03_team_lifecycle import LifecycleCase
+import os
+import sqlite3
+
+from tests.integration import test_p04_s03_team_lifecycle, test_p04_s10_run_board
 from tests.helpers import key, req, wait_until
-from tests.integration.test_p04_s10_run_board import RunBoardCase, WORKTREE_BOARD
 from tests.integration.test_p01_s04_start import git
 
 
-class LiveAgentSwitchTests(LifecycleCase):
+class LiveAgentSwitchTests(test_p04_s03_team_lifecycle.LifecycleCase):
+    def test_definition_edit_applies_to_switching_only_after_restart(self):
+        self.write("agents.json", {"version": 1, "agents": [
+            {"id": x, "name": x.title(), "provider": "fake"}
+            for x in ("primary", "old-backup", "new-backup")]})
+        self.put("alpha", [{"id": "ryan", "name": "Ryan", "role": "developer",
+                            "agents": ["primary", "old-backup"]}])
+        self.assertTrue(self.start("alpha")["ok"])
+        self.assertEqual(self.status("alpha")["members"][0]["configuredAgents"], ["primary", "old-backup"])
+        common = {"workspace": self.ws, "teamDefId": "alpha", "memberId": "ryan"}
+        _, updated, _ = self.sb.request(req("teamdef.member.update", dict(common, agents=["primary", "new-backup"]), idempotencyKey=key()))
+        self.assertTrue(updated["ok"], updated)
+        self.assertTrue(updated["data"]["appliesOnNextStart"])
+        self.assertEqual(self.status("alpha")["members"][0]["configuredAgents"], ["primary", "old-backup"])
+        def switch(option):
+            return self.sb.request(req("team.member.switch", dict(common, agent=option), idempotencyKey=key()))[1]
+        self.assertTrue(switch("old-backup")["ok"])
+        denied = switch("new-backup")
+        self.assertEqual((denied["error"]["code"], denied["error"]["message"]),
+                         ("BAD_REQUEST", "Agent 'new-backup' is not configured for member 'ryan'."))
+        self.assertTrue(self.stop("alpha")["ok"])
+        self.assertTrue(self.start("alpha")["ok"])
+        self.assertEqual(self.status("alpha")["members"][0]["configuredAgents"], ["primary", "new-backup"])
+        denied = switch("old-backup")
+        self.assertEqual((denied["error"]["code"], denied["error"]["message"]),
+                         ("BAD_REQUEST", "Agent 'old-backup' is not configured for member 'ryan'."))
+        self.assertTrue(switch("new-backup")["ok"])
+
     def test_resume_inactive_agent_persists_after_team_restart(self):
         self.write("agents.json", {"version": 1, "agents": [
             {"id": "primary", "name": "Primary", "provider": "fake"},
@@ -104,15 +133,22 @@ class LiveAgentSwitchTests(LifecycleCase):
                    message="quota hold")
         held = self.status("alpha")["members"][0]
         self.assertEqual(set(held["quotaHolds"]), {"primary", "backup"})
+        self.assertEqual(held["activeAgent"], "backup")
+        self.assertIsNone(held["quotaHolds"]["primary"])
         self.assertTrue(self.stop("alpha")["ok"])
         self.assertTrue(self.start("alpha")["ok"])
         held = self.status("alpha")["members"][0]
         self.assertEqual(held["availability"], "limit_reached")
+        self.assertEqual(held["activeAgent"], "primary")
         self.assertEqual(set(held["quotaHolds"]), {"primary", "backup"})
+        with sqlite3.connect(os.path.join(self.sb.state_dir, "state.db")) as conn:
+            reset = conn.execute("SELECT limit_reset_at FROM agents WHERE id = ?", (held["agentId"],)).fetchone()[0]
+        self.assertIsNone(reset)
+        self.assertEqual(reset, held["quotaHolds"]["primary"])
 
 
-class BoardAgentSwitchTests(RunBoardCase):
-    board = WORKTREE_BOARD
+class BoardAgentSwitchTests(test_p04_s10_run_board.RunBoardCase):
+    board = test_p04_s10_run_board.WORKTREE_BOARD
 
     def test_cancelled_board_ticket_returns_to_same_member(self):
         self.put("agents.json", {"version": 1, "agents": [

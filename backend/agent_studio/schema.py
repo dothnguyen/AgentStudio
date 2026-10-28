@@ -75,7 +75,7 @@ ENTITIES: Dict[str, Entity] = {
         ("team_id", "ordinal", "provider_id", "role", "display_name", "pane_state", "pane_id", "pane_pid",
          "pane_start_time", "pane_boot_id", "capabilities_json", "model", "reasoning", "limit_reset_at",
          "member_id", "can_add_tickets", "active_catalog_agent", "quota_holds_json", "pending_agent",
-         "pending_assignment"),
+         "pending_assignment", "configured_agents_json"),
         "agent_id", ("team_id",)),
     "task": Entity(
         "task", "tasks", "status", TASK_STATES, frozenset({"queued"}),
@@ -525,3 +525,6 @@ MIGRATION_16 = ["ALTER TABLE agents ADD COLUMN quota_holds_json TEXT",
                 "ALTER TABLE agents ADD COLUMN pending_agent TEXT",
                 "ALTER TABLE agents ADD COLUMN pending_assignment TEXT",
                 "ALTER TABLE tickets ADD COLUMN preferred_agent_id TEXT"]
+
+MIGRATION_17 = ["ALTER TABLE agents ADD COLUMN configured_agents_json TEXT",
+                "CREATE INDEX events_by_entity ON events (entity, entity_id, team_id, seq)"]

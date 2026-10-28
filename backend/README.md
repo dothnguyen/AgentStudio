@@ -252,6 +252,9 @@ agent-studio team switch-agent --team my-team --member dev --agent claude-backup
 agent-studio team status --team my-team --json
 ```
 
+The ordered options are frozen when the team starts; saved definition edits apply on the next start.
+`team.status` reports the frozen list as `configuredAgents` and the latest switch event as `lastSwitch`.
+
 The equivalent coordinator command is `team.member.switch` with `workspace`, `teamDefId`, `memberId` and `agent`.
 When an option reports a usage limit, the coordinator records its quota hold and tries the next configured option.
 If every option is on hold or unavailable, the member remains `limit_reached` and cannot receive assignments.

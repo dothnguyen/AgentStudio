@@ -80,6 +80,19 @@ def quota_holds(agent):
     return holds
 
 
+def _configured_agent_options(agent: dict, fallback_member: dict | None = None) -> list[str]:
+    if agent.get("configured_agents_json") is not None:
+        return json.loads(agent["configured_agents_json"])
+    return list((fallback_member or {}).get("agents") or [])
+
+
+def _runtime_options(agent, workspace, fid, mid):
+    from . import teamdefs
+    member = None if agent.get("configured_agents_json") is not None else teamdefs.find_member(
+        teamdefs.load(workspace, fid), mid)
+    return _configured_agent_options(agent, member)
+
+
 def resume_member_agent(tx: Tx, args: dict) -> dict:
     """Clear one configured option's hold, without switching or interrupting the member."""
     from . import teamdefs
@@ -88,13 +101,12 @@ def resume_member_agent(tx: Tx, args: dict) -> dict:
                            "ORDER BY created_at DESC, rowid DESC LIMIT 1", (workspace, fid)).fetchone()
     if team is None:
         raise AsError(TEAM_NOT_RUNNING, f"Team {fid!r} is not running.")
-    member = teamdefs.find_member(teamdefs.load(workspace, fid), mid)
-    if choice not in (member.get("agents") or []):
-        raise AsError(BAD_REQUEST, f"Agent {choice!r} is not configured for member {mid!r}.")
     row = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (team["id"], mid)).fetchone()
     if row is None:
         raise AsError(MEMBER_NOT_FOUND, f"No running member {mid!r} in team {fid!r}.")
     agent = dict(row)
+    if choice not in _runtime_options(agent, workspace, fid, mid):
+        raise AsError(BAD_REQUEST, f"Agent {choice!r} is not configured for member {mid!r}.")
     try:
         holds = json.loads(agent.get("quota_holds_json") or "{}")
     except (TypeError, ValueError):
@@ -125,13 +137,18 @@ def reset_provider_usage(tx: Tx, args: dict, ctx: dict) -> dict:
     definition = teamdefs.load(workspace, fid)
     catalog = teamdefs._catalog(workspace)
     results = []
-    for member in definition.get("members", []):
+    members = list(definition.get("members", []))
+    member_ids = {member.get("id") for member in members}
+    for runtime in tx.conn.execute("SELECT member_id FROM agents WHERE team_id = ? AND configured_agents_json IS NOT NULL ORDER BY ordinal", (row["id"],)):
+        if runtime["member_id"] and runtime["member_id"] not in member_ids:
+            members.append({"id": runtime["member_id"]})
+    for member in members:
         mid = member.get("id")
-        choices = [option for option in (member.get("agents") or [])
-                   if catalog.get(option, {}).get("provider") == provider]
+        current = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (row["id"], mid)).fetchone()
+        options = _configured_agent_options(dict(current), member) if current else list(member.get("agents") or [])
+        choices = [option for option in options if catalog.get(option, {}).get("provider") == provider]
         if not choices:
             continue
-        current = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (row["id"], mid)).fetchone()
         if current is None:
             results.append({"memberId": mid, "cleared": [], "error": "Member is not running."})
             continue
@@ -172,8 +189,7 @@ def switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict:
     if agent is None:
         raise AsError(MEMBER_NOT_FOUND, f"No running member {mid!r} in team {fid!r}.")
     agent = dict(agent)
-    member = teamdefs.find_member(teamdefs.load(workspace, fid), mid)
-    if choice not in (member.get("agents") or []):
+    if choice not in _runtime_options(agent, workspace, fid, mid):
         raise AsError(BAD_REQUEST, f"Agent {choice!r} is not configured for member {mid!r}.")
     if choice in quota_holds(agent):
         raise AsError(BAD_REQUEST, f"Agent {choice!r} is on quota hold.")
@@ -217,6 +233,8 @@ def switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict:
               "capabilities_json": probes[pid], "active_catalog_agent": choice, "limit_reset_at": None,
               "quota_holds_json": quota_holds(agent), "pending_agent": None, "pending_assignment": None}
     payload = {"fromAgent": agent["active_catalog_agent"], "toAgent": choice, "providerId": pid}
+    if args.get("_pending"):
+        payload["assignmentId"] = agent["pending_assignment"]
     tx.update("agent", agent["id"], values, "agent.option_switched", payload)
     if agent["availability"] == "limit_reached":
         tx.transition("agent", agent["id"], "idle")
@@ -237,8 +255,7 @@ def handle_quota_limit(tx: Tx, agent_id: str, reset, ctx: dict) -> None:
     if agent.get("pending_agent"):
         return
     try:
-        member = teamdefs.find_member(teamdefs.load(team["workspace"], team["def_id"]), agent["member_id"])
-        options = member.get("agents") or []
+        options = _runtime_options(agent, team["workspace"], team["def_id"], agent["member_id"])
         start = options.index(active) + 1 if active in options else 0
         ordered = options[start:] + options[:start]
         for option in ordered:
@@ -268,12 +285,11 @@ def recover_expired_quotas(store: Store, ctx: dict) -> None:
                 if recorded == holds:
                     continue
                 team = tx.get("team", agent["team_id"])
-                member = teamdefs.find_member(teamdefs.load(team["workspace"], team["def_id"]), agent["member_id"])
                 if agent["active_catalog_agent"] not in holds:
                     tx.transition("agent", agent["id"], "idle", event="agent.quota_reset",
                                   set_values={"quota_holds_json": holds, "limit_reset_at": None})
                     continue
-                for option in member.get("agents") or []:
+                for option in _runtime_options(agent, team["workspace"], team["def_id"], agent["member_id"]):
                     if option not in holds:
                         try:
                             switch_member_agent(tx, {"workspace": team["workspace"], "teamDefId": team["def_id"],
@@ -311,7 +327,8 @@ def complete_pending_switches(store: Store, ctx: dict) -> None:
                     tx.conn.execute("UPDATE tickets SET preferred_agent_id = ? WHERE id = ?", (agent["id"], ticket["id"]))
             except AsError as e:
                 tx.update("agent", agent["id"], {"pending_agent": None, "pending_assignment": None},
-                          "agent.switch_failed", {"code": e.code, "message": e.message})
+                          "agent.switch_failed", {"toAgent": agent["pending_agent"], "assignmentId": agent["pending_assignment"],
+                                                  "code": e.code, "message": e.message})
                 if ticket:
                     boardsched._release_with_run(tx, team["workspace"], dict(ticket), "agent_switch_failed")
 
@@ -383,6 +400,7 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     if not args.get("roster"):
         from . import roles
         args = dict(args, roster=roles.load_team(workspace))  # .agent-studio/team.json
+    frozen_options = {}
     if args.get("teamDefId"):
         from . import teamdefs
         definition = teamdefs.load(workspace, args["teamDefId"])
@@ -395,21 +413,24 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
             choices = definition_member.get("agents")
             if not choices:
                 continue
+            frozen_options[member["memberId"]] = list(choices)
             previous = tx.conn.execute(
                 "SELECT a.active_catalog_agent, a.quota_holds_json FROM agents a JOIN teams t ON t.id = a.team_id "
                 "WHERE t.workspace = ? AND t.def_id = ? AND a.member_id = ? "
                 "ORDER BY t.created_at DESC, t.rowid DESC LIMIT 1",
                 (workspace, args["teamDefId"], member["memberId"])).fetchone()
             holds = quota_holds(dict(previous)) if previous else {}
-            selected = previous["active_catalog_agent"] if previous and previous["active_catalog_agent"] in choices else choices[0]
-            if selected in holds:
-                selected = next((c for c in choices if c not in holds), selected)
+            prior = previous["active_catalog_agent"] if previous else None
+            selected = prior if prior in choices and prior not in holds else next((c for c in choices if c not in holds), choices[0])
             entry = catalog.get(selected)
             if not entry:
                 raise AsError(TEAM_CONFIG_INVALID, f"Agent {selected!r} is missing from the catalog.")
             member.update(providerId=entry.get("provider"), model=entry.get("model"), reasoning=entry.get("reasoning"),
                           activeCatalogAgent=selected, quotaHolds=holds)
     roster = validate_roster(args, allow_fake=ctx["debug"])
+    for m in roster:
+        if m.get("memberId") in frozen_options:
+            m["_configuredAgents"] = frozen_options[m["memberId"]]
     probes = providers.probe_many([m["providerId"] for m in roster], dict(os.environ), allow_test_only=ctx["debug"],
                                   aliases=providers.fixture_aliases(os.environ, ctx["debug"]))
     missing = {pid: p.get("reason") for pid, p in probes.items() if not p.get("available")}
@@ -447,6 +468,7 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
                             "member_id": m.get("memberId"),
                             "active_catalog_agent": m.get("activeCatalogAgent"),
                             "quota_holds_json": m.get("quotaHolds"),
+                            "configured_agents_json": m.get("_configuredAgents"),
                             "can_add_tickets": 1 if m.get("canAddTickets") else 0},
                   entity_id=m["agentId"])
         d = agent_dir(ctx["stateDir"], m["agentId"])
@@ -481,7 +503,7 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
                               set_values={"limit_reset_at": m["quotaHolds"][m["activeCatalogAgent"]]})
             from . import roles
             rc = roles.context_for(workspace, m["role"])
-            agents_out.append(dict(m, paneId=pane["pane_id"], roleConfigured=rc["configured"],
+            agents_out.append(dict({k: v for k, v in m.items() if k != "_configuredAgents"}, paneId=pane["pane_id"], roleConfigured=rc["configured"],
                                    roleSources=rc["sources"], roleWarnings=rc["warnings"]))
         tx.transition("team", team_id, "running")
     except BaseException:

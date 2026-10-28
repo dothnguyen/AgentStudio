@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from . import schema
 from .protocol import AsError, BACKEND_UNAVAILABLE, UNSUPPORTED_SCHEMA
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 ROLES = ("coordinator", "client", "runner", "reader")
 ROLE_INSERTS = {"client": {"commands"}, "runner": {"worker_reports"}, "reader": set()}
 
@@ -53,6 +53,7 @@ MIGRATIONS = {
     14: schema.MIGRATION_14,
     15: schema.MIGRATION_15,
     16: schema.MIGRATION_16,
+    17: schema.MIGRATION_17,
 }
 
 _DDL_ACTIONS = {getattr(sqlite3, n) for n in dir(sqlite3)
