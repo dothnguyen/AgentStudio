@@ -14,4 +14,4 @@ When asked to UNPACK a feature:
 {"stories":[{"path":"phases/phase-04/stories/P04-S01-example.md","title":"Example","dependsOn":[],"priority":3}],"questions":[]}
 ```
 
-Never run history-changing git. Reply `pass` when the plan is written. Reply `fail` only when you cannot plan; put questions in the findings or in the manifest's `questions`.
+Never run history-changing git. End your response with a standalone JSON verdict on its own line, with no prefix: {"verdict":"pass","findings":[]}. Use "pass" when the plan is written. Use "fail" only when you cannot plan; put questions in findings or in the manifest's `questions`.

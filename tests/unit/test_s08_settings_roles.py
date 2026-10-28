@@ -235,6 +235,19 @@ class CodexParsing(unittest.TestCase):
         st, _ = feed(lines)
         self.assertIsNone(CODEX.finalize(inp(verdict=False), st, oc())["verdict"])
 
+    def test_extract_verdict_accepts_consistent_label_and_rejects_mismatch(self):
+        self.assertEqual(extract_verdict('pass JSON: {"verdict":"pass","findings":[]}'),
+                         {"verdict": "pass", "findings": []})
+        self.assertEqual(extract_verdict('JSON: {"verdict":"fail","findings":["missing"]}')["verdict"], "fail")
+        self.assertIsNone(extract_verdict('pass JSON: {"verdict":"fail","findings":[]}'))
+        self.assertIsNone(extract_verdict('example: {"verdict":"pass","findings":[]}'))
+
+    def test_prefixed_verdict_survives_provider_finalization(self):
+        st, _ = feed(self.SUCCESS[:2] + [{"type": "item.completed", "item": {
+            "id": "m", "type": "agent_message", "text": 'pass JSON: {"verdict":"pass","findings":[]}' }},
+            self.SUCCESS[-1]])
+        self.assertEqual(CODEX.finalize(inp(verdict=True), st, oc())["verdict"],
+                         {"verdict": "pass", "findings": []})
     def test_extract_verdict_takes_last_json_line(self):
         self.assertEqual(extract_verdict('{"verdict":"pass"}\ntext\n{"verdict":"fail","findings":[]}')["verdict"],
                          "fail")

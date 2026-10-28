@@ -122,18 +122,21 @@ class ParseState:
 
 
 def extract_verdict(text: Optional[str]):
-    """Find a reviewer verdict in free text: the last line (or fenced block) that parses as a JSON object with a
-    "verdict" key. Returns the object or None. Never evaluates anything."""
+    """Find the last JSON verdict line, including an explicitly labelled JSON verdict."""
     if not text:
         return None
     candidates = [l.strip().strip("`").strip() for l in text.strip().splitlines()]
     for blob in reversed(candidates):
+        labelled = re.fullmatch(r"(?i)(?:(pass|fail)\s+)?json:\s*(\{.*\})", blob)
+        label = labelled.group(1).lower() if labelled and labelled.group(1) else None
+        if labelled:
+            blob = labelled.group(2)
         if blob.startswith("{") and '"verdict"' in blob:
             try:
                 obj = json.loads(blob)
             except ValueError:
                 continue
-            if isinstance(obj, dict) and "verdict" in obj:
+            if isinstance(obj, dict) and "verdict" in obj and (label is None or label == obj["verdict"]):
                 return obj
     return None
 

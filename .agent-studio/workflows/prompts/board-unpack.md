@@ -8,6 +8,6 @@ Break the feature into small stories: each one implementable and testable by one
 
 Write only under `phases/`; do not edit code, tests, or other documents, and do not run git commands that change history or the working tree (the coordinator commits your files when you pass). You may add at most 10 tickets in this run: if the feature needs more, write and add the first 10 in dependency order and say so in a finding. Do not write detailed implementation steps beyond what the story format needs: the team lead refines each story next.
 
-Verdict "pass" when every story file is written and its ticket is on the board. Verdict "fail" only when the brief is too unclear to plan (write and add nothing; put your questions in findings).
+End your final response with a standalone JSON object on its own line, with no prefix, labels, or surrounding prose on that line: {"verdict":"pass","findings":[]}. Use "pass" when every required story file and ticket is ready; use "fail" only when the brief is too unclear to plan (write and add nothing; put your questions in findings).
 
 {{task}}
