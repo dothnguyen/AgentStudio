@@ -10,12 +10,14 @@ import type {
   ManagementResult,
   MemberChanges,
   OverviewTeam,
+  OverviewMember,
   TeamOverview,
   Workspace,
 } from '../api';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
 import { boardControlView, boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
+import { assignmentConfirmation, lastSwitchSignature, matchingTerminalSwitch, memberAgentActions, SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT, type MemberActionInFlight } from './memberAgentActionsModel';
 import { MemberForm, TeamNameForm, WriteFeedbackView } from './TeamEditForms';
 import {
   addMemberInput,
@@ -91,6 +93,8 @@ function SectionError(props: { section: DashboardSectionController<unknown> }): 
   );
 }
 
+function actionKey(teamDefId: string, memberId: string): string { return JSON.stringify([teamDefId, memberId]); }
+
 function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const overview = useDashboardSection<TeamOverview>(props.management.overview, props.workspace.id);
   const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
@@ -104,10 +108,20 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [pending, setPending] = useState(false);
   const [creating, setCreating] = useState(false);
   const writeLock = useRef(false);
+  const actionLocks = useRef(new Set<string>());
+  const [actions, setActions] = useState<Record<string, MemberActionInFlight>>({});
+  const [polling, setPolling] = useState<Record<string, boolean>>({});
+  const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; changed: boolean } | null>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const timers = useRef(new Map<ReturnType<typeof setTimeout>, () => void>());
+  const lastData = useRef<TeamOverview | null>(null);
+  const actionRefreshQueue = useRef<Promise<void>>(Promise.resolve());
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => { mounted.current = false; timers.current.forEach((resolve, timer) => { clearTimeout(timer); resolve(); }); timers.current.clear(); };
   }, []);
 
   async function runWrite<T>(
@@ -140,6 +154,12 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     return true;
   }
 
+  useEffect(() => { if (confirmation && mounted.current) confirmRef.current?.focus(); else if (!confirmation && restoreFocus.current && mounted.current && restoreFocus.current.isConnected && !restoreFocus.current.disabled) { restoreFocus.current.focus(); restoreFocus.current = null; } }, [confirmation, actions]);
+  function closeConfirmation(trigger: HTMLButtonElement): void {
+    restoreFocus.current = trigger;
+    setConfirmation(null);
+    if (mounted.current && trigger.isConnected && !trigger.disabled) trigger.focus();
+  }
   const ws = props.workspace.id;
   const mgmt = props.management;
   const writes: TeamWrites = {
@@ -160,6 +180,77 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       text: `Removed ${d.removed.name} from ${teamLabel(team)}.${problemsSuffix(d.problems)}`,
     })),
   };
+
+  function lock(teamDefId: string, memberId: string, agentId: string, kind: 'switch' | 'resume'): boolean {
+    const key = actionKey(teamDefId, memberId);
+    if (actionLocks.current.has(key)) return false;
+    actionLocks.current.add(key);
+    setActions(a => ({ ...a, [key]: { memberId, agentId, kind } }));
+    setFeedback(null);
+    return true;
+  }
+  function unlock(teamDefId: string, memberId: string): void {
+    const key = actionKey(teamDefId, memberId);
+    actionLocks.current.delete(key);
+    if (mounted.current) setActions(a => { const next = { ...a }; delete next[key]; return next; });
+  }
+  async function waitForPoll(): Promise<void> {
+    await new Promise<void>(resolve => { const timer = setTimeout(() => { timers.current.delete(timer); resolve(); }, SWITCH_REFRESH_INTERVAL_MS); timers.current.set(timer, resolve); });
+  }
+  function refreshForAction() {
+    const refresh = actionRefreshQueue.current.then(() => {
+      if (!mounted.current) return { ok: false as const, error: { code: 'INTERNAL', message: 'Section is inactive.', retryable: false } };
+      return overview.reloadFresh!();
+    });
+    actionRefreshQueue.current = refresh.then(() => undefined, () => undefined);
+    return refresh;
+  }
+  async function switchAgent(context: { teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; trigger: HTMLButtonElement; signature: string | null }, assignmentId?: string): Promise<void> {
+    if (!lock(context.teamDefId, context.memberId, context.agentId, 'switch')) return;
+    try {
+      let result;
+      try { result = assignmentId === undefined ? await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId) : await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId, { cancelActive: true, assignmentId }); }
+      catch (reason) { result = { ok: false as const, error: thrownError(reason) }; }
+      if (!mounted.current) return;
+      if (!result.ok) {
+        const match = assignmentConfirmation(result.error);
+        if (match && (assignmentId === undefined || match.assignmentId !== assignmentId)) {
+          setConfirmation({ ...context, assignmentId: match.assignmentId, changed: assignmentId !== undefined });
+        } else {
+          if (assignmentId !== undefined) closeConfirmation(context.trigger);
+          setFeedback({ ...errorFeedback('Switch request failed.', result.error), dataText: result.error.data === undefined ? null : JSON.stringify(result.error.data) });
+        }
+        return;
+      }
+      if (assignmentId !== undefined) closeConfirmation(context.trigger);
+      setPolling(a => ({ ...a, [actionKey(context.teamDefId, context.memberId)]: true }));
+      for (let i = 0; i < SWITCH_REFRESH_LIMIT; i++) {
+        await waitForPoll();
+        if (!mounted.current) return;
+        const refreshed = await refreshForAction();
+        if (!mounted.current) return;
+        if (!refreshed.ok) { setFeedback(errorFeedback('Refresh failed.', refreshed.error)); return; }
+        const member = refreshed.data.teams.find(t => t.id === context.teamDefId)?.members.find(m => m.memberId === context.memberId);
+        if (member && matchingTerminalSwitch(member, context.agentId, context.signature)) return;
+      }
+      setFeedback({ kind: 'success', text: 'Switch accepted; completion is still pending. Refresh to check again.' });
+    } finally { if (mounted.current) setPolling(a => { const next = { ...a }; delete next[actionKey(context.teamDefId, context.memberId)]; return next; }); unlock(context.teamDefId, context.memberId); }
+  }
+  async function resumeAgent(teamDefId: string, memberId: string, agentId: string, label: string): Promise<void> {
+    if (!lock(teamDefId, memberId, agentId, 'resume')) return;
+    try {
+      let result;
+      try { result = await mgmt.resumeMemberAgent(ws, teamDefId, memberId, agentId); }
+      catch (reason) { result = { ok: false as const, error: thrownError(reason) }; }
+      if (!mounted.current) return;
+      if (!result.ok) { setFeedback({ ...errorFeedback('Resume request failed.', result.error), dataText: result.error.data === undefined ? null : JSON.stringify(result.error.data) }); return; }
+      const refreshed = await refreshForAction();
+      if (!mounted.current) return;
+      if (!refreshed.ok) { setFeedback(errorFeedback('Refresh failed.', refreshed.error)); return; }
+      const d = result.data;
+      setFeedback({ kind: 'success', text: !d.cleared ? `No recorded quota hold was cleared for ${label}; quota was not verified.` : d.activeAgent !== d.option ? `Quota hold cleared for inactive option ${label}; quota was not verified. The live agent and assignment were not changed.` : `Quota hold cleared for active option ${label}; quota was not verified. Availability is shown from refreshed backend state.` });
+    } finally { unlock(teamDefId, memberId); }
+  }
 
   async function boardWrite(action: BoardAction, team: OverviewTeam): Promise<void> {
     if (writeLock.current) return;
@@ -216,7 +307,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     if (connectionState === 'connected' && previous !== null && previous !== 'connected') void refreshAll();
   }, [connectionState]);
 
-  const data = overview.state === 'ready' ? overview.data : null;
+  if (overview.state === 'ready' && overview.data !== null) lastData.current = overview.data;
+  const data = overview.data ?? lastData.current;
   const ordered = data === null
     ? []
     : orderTeams(data.teams.map((team, index) => ({ key: teamKey(team, index), team })));
@@ -254,6 +346,10 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           {notices.map((n) => <li key={n}>{n}</li>)}
         </ul>
       )}
+      {confirmation && <div className="modal-overlay teams-live-modal"><div role="dialog" aria-modal="true" aria-labelledby="teams-switch-title" aria-describedby="teams-switch-description" onKeyDown={e => {
+        if (e.key === 'Escape') { e.preventDefault(); closeConfirmation(confirmation.trigger); }
+        if (e.key === 'Tab') { if (confirmRef.current?.disabled) { e.preventDefault(); cancelRef.current?.focus(); } else if (e.shiftKey && document.activeElement === confirmRef.current) { e.preventDefault(); cancelRef.current?.focus(); } else if (!e.shiftKey && document.activeElement === cancelRef.current) { e.preventDefault(); confirmRef.current?.focus(); } }
+      }}><h2 id="teams-switch-title">Confirm cancellation</h2><p id="teams-switch-description">Switch {confirmation.memberName} to {confirmation.agentLabel} and cancel assignment <code>{confirmation.assignmentId}</code>?</p>{confirmation.changed && <p role="alert">The assignment changed; fresh confirmation is required.</p>}<div className="dialog-actions"><button ref={confirmRef} type="button" disabled={!!actions[actionKey(confirmation.teamDefId, confirmation.memberId)]} onClick={() => { void switchAgent(confirmation, confirmation.assignmentId); }}>Confirm cancellation</button><button ref={cancelRef} type="button" onClick={() => closeConfirmation(confirmation.trigger)}>Cancel</button></div></div></div>}
       <div className="teams-layout">
         <section className="dashboard-panel teams-list-panel" aria-labelledby="teams-list-title">
           <h2 id="teams-list-title">Workspace teams</h2>
@@ -306,6 +402,11 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             overview={data}
             agents={agents.state === 'ready' && agents.data !== null ? agents.data.agents : null}
             writes={writes}
+            connected={connected}
+            actions={actions}
+            polling={polling}
+            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
+            onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
             pending={pending}
             board={{
               section: board,
@@ -328,6 +429,11 @@ function TeamDetailPanel(props: {
   overview: TeamOverview;
   agents: AgentDef[] | null;
   writes: TeamWrites;
+  connected: boolean;
+  actions: Record<string, MemberActionInFlight>;
+  polling: Record<string, boolean>;
+  onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void;
+  onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void;
   pending: boolean;
   board: {
     section: DashboardSectionController<BoardSettings>;
@@ -427,7 +533,11 @@ function TeamDetailPanel(props: {
                   <td>{m.source === 'runtime' ? 'Not available' : m.agentMode === 'inline'
                     ? `Inline — ${providerModelText(m.provider, m.model)}${m.reasoning ? ` · Reasoning: ${m.reasoning}` : ''}`
                     : <ol>{m.agentOptions.map((option, i) => <li key={`${option.id}-${i}`}>{savedAgentOptionText(option, i)}</li>)}</ol>}</td>
-                  <td>{liveAgentText(m)}</td>
+                  <td>{liveAgentText(m)}{(() => {
+                    const view = memberAgentActions(team, m, agents, props.connected, memberId ? props.actions[actionKey(team.id ?? '', memberId)] ?? null : null);
+                    if (!view.visible) return null;
+                    return <section className="teams-live-actions" aria-label={`Live agent actions for ${name}`}><h4>Live agent actions</h4><p>{view.activeText}</p><p>{view.availabilityText}</p><p>{view.assignmentText}</p>{view.pendingText && <p>{view.pendingText}</p>}{view.lastResultText && <p>{view.lastResultText}</p>}{view.notice && <p>{view.notice}</p>}{memberId && props.actions[actionKey(team.id ?? '', memberId)] && !props.polling[actionKey(team.id ?? '', memberId)] && <p role="status">Requesting…</p>}<ul>{view.options.map(option => <li key={option.id}><span>{option.label}{option.active && ' · Active'}{option.holdText && ` · ${option.holdText}`}</span>{!option.active && m.runtime?.configuredAgents?.includes(option.id) && <button type="button" disabled={!option.canSwitch || !team.id || !memberId} onClick={e => props.onSwitch(team, m, option.id, option.label, e.currentTarget)}>Switch</button>}{option.holdText && <button type="button" disabled={!option.canResume || !team.id || !memberId} onClick={() => props.onResume(team, m, option.id, option.label)}>Resume</button>}{option.disabledReason && !(memberId && props.polling[actionKey(team.id ?? '', memberId)] && option.disabledReason === 'Requesting…') && <p className="teams-live-reason">{option.disabledReason}</p>}</li>)}</ul></section>;
+                  })()}</td>
                   <td>
                     <span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}>
                       <span className="status-dot" aria-hidden="true" />

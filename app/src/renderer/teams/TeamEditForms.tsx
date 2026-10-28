@@ -216,6 +216,7 @@ export function WriteFeedbackView(props: { feedback: WriteFeedback | null; onDis
       <p><strong>{feedback.title}</strong></p>
       <p><code className="entity-id">{feedback.code}</code>: {feedback.message}</p>
       {feedback.remediation !== null && <p>{feedback.remediation}</p>}
+      {feedback.dataText && <p><code>{feedback.dataText}</code></p>}
       {feedback.hint !== null && <p>{feedback.hint}</p>}
       {feedback.problems.length > 0 && (
         <ul aria-label="Validation problems">

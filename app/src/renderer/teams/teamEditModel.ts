@@ -19,6 +19,7 @@ export type WriteFeedback =
       remediation: string | null;
       problems: string[];
       hint: string | null;
+      dataText?: string | null;
     };
 
 export interface MemberFormValues {
@@ -86,7 +87,7 @@ function problemLines(data: unknown): string[] {
   return lines;
 }
 
-export function errorFeedback(title: string, error: ManagementError): WriteFeedback {
+export function errorFeedback(title: string, error: ManagementError): Extract<WriteFeedback, { kind: 'error' }> {
   return {
     kind: 'error',
     title,

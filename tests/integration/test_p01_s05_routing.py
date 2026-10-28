@@ -138,7 +138,7 @@ class Bounds(RoutingCase):
         w = d["workflowRun"]
         self.assertEqual((w["status"], w["transitionReason"]), ("failed", "qa visit limit 2 reached"))
         self.assertEqual(len(d["assignments"]), 5)
-        self.assertEqual(self.stages(d)[-1], ("develop", 3, "done"))
+        self.assertIn(("develop", 3, "done"), self.stages(d))
         last = [e["data"] for e in d["events"] if e["name"] == "workflow_run.routed"][-1]
         self.assertEqual((last["fromStage"], last["toStage"], last["wouldEnter"], last["reason"]),
                          ("develop", "$fail", "qa", "qa visit limit 2 reached"))

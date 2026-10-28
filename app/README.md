@@ -117,3 +117,11 @@ commands with fresh idempotency keys. Switching an active assignment requires it
 an explicit cancellation confirmation; backend errors and cancellation results are passed through.
 
 Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details remain separate from saved configuration.
+
+The Teams view shows each running catalog member's live agent options and quota holds
+from runtime state. Switch requests with an active assignment require confirmation of
+its exact ID. Resume clears a recorded hold; it does not verify provider quota. Saved
+options apply on the next team start and do not determine live switch eligibility.
+Reset times without a valid explicit time zone are shown as unknown. Concurrent
+member switch requests refresh independently until their results appear or polling
+reaches its limit.

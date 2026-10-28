@@ -321,7 +321,11 @@ class StartupAndStop(Drill):
             tx.transition("team", self.team["teamId"], "stopped")
         conn.close()
         self.start_coordinator()
-        runtime = json.load(open(os.path.join(self.sb.state_dir, "runtime.json")))
+        runtime = wait_until(
+            lambda: (value if (value := procid.read_json(os.path.join(self.sb.state_dir, "runtime.json")))
+                     and "startupReconciliation" in value else None),
+            message="startup reconciliation to be recorded",
+        )
         orphans = {o["session_name"]: o["action"] for o in runtime["startupReconciliation"]["orphanSessions"]}
         self.assertEqual(orphans["as-0000000000000000"], "preserved")
         self.assertEqual(orphans["as-" + self.team["teamId"].replace("-", "")[:16]], "removed")

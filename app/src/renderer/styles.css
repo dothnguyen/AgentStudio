@@ -1215,3 +1215,11 @@ ul[aria-label="Workspaces"] {
 .teams-option-row { margin-bottom: .5rem; overflow-wrap: anywhere; }
 .teams-option-meta, .teams-option-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .teams-option-default, .teams-option-missing { font-weight: 600; }
+
+.teams-live-actions { margin-top: 0.75rem; }
+.teams-live-actions h4, .teams-live-actions p { margin: 0.25rem 0; }
+.teams-live-actions ul { padding-left: 1rem; }
+.teams-live-actions li { margin: 0.4rem 0; }
+.teams-live-actions button { margin-left: 0.4rem; }
+.teams-live-reason { font-size: 0.85em; }
+.teams-live-modal > div { background: var(--surface, #fff); color: var(--text, #111); padding: 1.5rem; max-width: 32rem; }

@@ -180,7 +180,7 @@ describe('team editing', () => {
     gate.resolve(ok(twoTeams()));
     await flush();
     const row = within(screen.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
-    expect(row.querySelectorAll('td')[3]?.textContent).toBe('opencode-sonnet · opencode · claude-sonnet');
+    expect(row.querySelectorAll('td')[3]?.textContent).toContain('opencode-sonnet · opencode · claude-sonnet');
   });
   it('missing_option_blocks_save_until_removed', async () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};

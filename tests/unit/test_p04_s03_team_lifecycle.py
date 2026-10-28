@@ -229,6 +229,16 @@ class StatusAndLookup(unittest.TestCase):
         self.assertEqual(teamstatus.team_status(self.conn, None, "/w", "beta"), {"team": None, "members": []})
         self.assertEqual(teamstatus.team_status(self.conn, None, "/other", "alpha"), {"team": None, "members": []})
 
+    def test_status_selects_restarted_team_when_creation_times_match(self):
+        with self.store.transaction() as tx:
+            restarted = tx.create("team", {"name": "Alpha", "workspace": "/w", "def_id": "alpha"})
+            tx.create("agent", {"team_id": restarted, "ordinal": 0, "provider_id": "codex",
+                                "role": "developer", "display_name": "Ryan Renamed", "member_id": "ryan-m"})
+        self.conn.execute("UPDATE teams SET created_at = ? WHERE id IN (?, ?)", (NOW, self.team, restarted))
+        result = teamstatus.team_status(self.conn, None, "/w", "alpha")
+        self.assertEqual(result["team"]["id"], restarted)
+        self.assertEqual([m["name"] for m in result["members"]], ["Ryan Renamed"])
+
     def test_status_module_imports_no_board_module(self):
         with open(teamstatus.__file__, encoding="utf-8") as f:
             tree = ast.parse(f.read())
