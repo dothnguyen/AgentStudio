@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentsScreen } from '../src/renderer/agents/AgentsScreen';
+import { AgentForm } from '../src/renderer/agents/AgentForm';
 import { catalogFixture, fakeManagement, member, overviewFixture, team } from './teamsFixtures';
 import type { Workspace } from '../src/renderer/api';
 const workspace: Workspace = { id: 'a', name: 'A', path: '/a', exists: true, missing: false };
@@ -180,14 +181,14 @@ describe('Agents browser edge cases', () => {
     expect(view.getByText('Check agents.json.')).toBeTruthy();
     expect(view.queryByRole('list', { name: 'Saved agents' })).toBeNull();
   });
-  it('shows saved details and the live-controls note without mutation controls', async () => {
+  it('shows saved details and the live-controls note with saved agent actions', async () => {
     const fake = fakeManagement();
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
     await view.findByRole('list', { name: 'Saved agents' });
     const details = view.getByRole('heading', { name: 'Agent details' }).closest('section')!;
     expect(within(details).getByRole('heading', { name: 'Used by' })).toBeTruthy();
     expect(within(details).getByText('Saved configuration only. Changes do not switch a running team member; live agent controls remain in Teams.')).toBeTruthy();
-    expect(view.queryByRole('button', { name: /^(new agent|edit|duplicate|delete|save|activate|resume|switch|cancel)$/i })).toBeNull();
+    expect(view.queryByRole('button', { name: /^(delete|save|activate|resume|switch|cancel)$/i })).toBeNull();
   });
 
   it('retains a selected row when a filter leaves it visible', async () => {
@@ -250,5 +251,246 @@ describe('Agents browser edge cases', () => {
     expect((view.getByLabelText('Search agents') as HTMLInputElement).value).toBe('');
     expect(view.queryByRole('heading', { name: 'Agent details' })).toBeNull();
     expect(fake.agents).toHaveBeenCalledWith('b'); expect(fake.overview).toHaveBeenCalledWith('b');
+  });
+});
+
+describe('saved agent forms', () => {
+  it('selects the saved agent when a failed refresh is retried successfully', async () => {
+    const agent = { id: 'new', name: 'New', provider: 'codex' };
+    const create = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent } }));
+    const fake = fakeManagement({ calls: { createAgent: create }, agents: [
+      { ok: true, data: catalogFixture() },
+      { ok: false, error: { code: 'FAIL', message: 'Refresh failed', retryable: true } },
+      { ok: true, data: catalogFixture({ agents: [...catalogFixture().agents, agent] }) },
+    ] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('button', { name: 'New agent' });
+    fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } });
+    fireEvent.submit(form);
+    fireEvent.click(await view.findByRole('button', { name: 'Retry catalog' }));
+    await waitFor(() => expect(view.getByRole('button', { name: /^New codex/ }).getAttribute('aria-pressed')).toBe('true'));
+  });
+  it('creates an agent with the exact six-field request and selects the refreshed result', async () => {
+    const agent = { id: 'new-agent', name: 'New Agent', provider: 'codex', model: 'custom', reasoning: 'high', description: 'Description' };
+    const create = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent } }));
+    const fake = fakeManagement({ calls: { createAgent: create }, agents: [{ ok: true, data: catalogFixture() }, { ok: true, data: catalogFixture({ agents: [...catalogFixture().agents, agent] }) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!; for (const [label, value] of Object.entries({ 'Agent id': agent.id, Name: agent.name, Model: agent.model, Reasoning: agent.reasoning, Description: agent.description })) fireEvent.change(within(form).getByLabelText(label), { target: { value } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Create agent' })); await waitFor(() => expect(create).toHaveBeenCalledWith('a', agent));
+    await waitFor(() => expect(view.getByRole('button', { name: /New Agent/ }).getAttribute('aria-pressed')).toBe('true'));
+    expect(view.getByRole('status').textContent).toContain('Created saved agent "New Agent" (new-agent). Saved configuration applies on the next team start; running agents are unchanged. Live switching remains in Teams.');
+  });
+  it('does not derive or write a create id', async () => { const fake = fakeManagement(); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Name' } }); fireEvent.submit(form); expect(view.getByText('Enter an agent id.')).toBeTruthy(); expect(fake.api.createAgent).not.toHaveBeenCalled(); });
+  it('edits with a readable immutable id and exact sparse changes', async () => { const agent = { id: 'one', name: 'One', provider: 'codex', model: 'gpt-6', reasoning: 'high', description: 'desc' }; const update = vi.fn(async () => ({ ok: false as const, error: { code: 'FAIL', message: 'failed', retryable: false } })); const fake = fakeManagement({ calls: { updateAgent: update }, agents: [{ ok: true, data: catalogFixture({ agents: [agent] }) }] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Edit' }); fireEvent.click(view.getByRole('button', { name: 'Edit' })); const form = view.container.querySelector('form')!; expect((within(form).getByLabelText('Agent id') as HTMLInputElement).readOnly).toBe(true); for (const [label, value] of Object.entries({ Name: 'New', Model: '', Reasoning: '', Description: '' })) fireEvent.change(within(form).getByLabelText(label), { target: { value } }); fireEvent.submit(form); await waitFor(() => expect(update).toHaveBeenCalledWith('a', 'one', { name: 'New', model: null, reasoning: null, description: null })); });
+  it('does not submit an unchanged edit', async () => { const fake = fakeManagement(); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Edit' }); fireEvent.click(view.getByRole('button', { name: 'Edit' })); fireEvent.submit(view.container.querySelector('form')!); expect(view.getByText('No changes to save.')).toBeTruthy(); expect(fake.api.updateAgent).not.toHaveBeenCalled(); });
+  it('prefills a duplicate without writing until submit', async () => { const create = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent: { id: 'opencode-sonnet-copy', name: 'OpenCode Sonnet copy', provider: 'opencode', model: 'claude-sonnet', description: 'Implements tickets.' } } })); const fake = fakeManagement({ calls: { createAgent: create } }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Duplicate' }); fireEvent.click(view.getByRole('button', { name: 'Duplicate' })); const form = view.container.querySelector('form')!; expect((within(form).getByLabelText('Agent id') as HTMLInputElement).value).toBe('opencode-sonnet-copy'); expect(create).not.toHaveBeenCalled(); fireEvent.submit(form); await waitFor(() => expect(create).toHaveBeenCalledWith('a', { id: 'opencode-sonnet-copy', name: 'OpenCode Sonnet copy', provider: 'opencode', model: 'claude-sonnet', description: 'Implements tickets.' })); expect(view.getByRole('status').textContent).toContain('Created saved duplicate'); });
+  it('blocks every mutation when the catalog has problems', async () => { const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ problems: [{ path: 'agents', message: 'bad' }] }) }] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Edit' }); for (const name of ['New agent', 'Edit', 'Duplicate']) expect((view.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true); expect(view.getByText('Saved agent changes are unavailable because agents.json has validation problems. Repair it on disk and refresh.')).toBeTruthy(); });
+  it('preserves draft and announces AGENT_EXISTS', async () => { const create = vi.fn(async () => ({ ok: false as const, error: { code: 'AGENT_EXISTS', message: 'Already exists.', retryable: false, remediation: 'Choose another.' } })); const fake = fakeManagement({ calls: { createAgent: create } }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } }); fireEvent.submit(form); await waitFor(() => expect(view.getByRole('alert').textContent).toContain('AGENT_EXISTS: Already exists.')); expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft'); expect(view.getByText('Choose another.')).toBeTruthy(); expect(fake.agents).toHaveBeenCalledTimes(1); });
+});
+
+describe('saved agent form safeguards', () => {
+  it('prevents duplicate submission while pending', async () => { let resolve!: (value: never) => void; const create = vi.fn(() => new Promise<never>(r => { resolve = r; })); const fake = fakeManagement({ calls: { createAgent: create } }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } }); fireEvent.submit(form); fireEvent.submit(form); expect(create).toHaveBeenCalledTimes(1); expect((within(form).getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(true); void resolve; });
+  it('cancel and Escape discard the draft and restore focus to the invoking action', async () => { const view = render(<AgentsScreen workspace={workspace} management={fakeManagement().api} />); const edit = await view.findByRole('button', { name: 'Edit' }); edit.focus(); fireEvent.click(edit); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } }); fireEvent.keyDown(form, { key: 'Escape' }); await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: 'Edit' }))); fireEvent.click(view.getByRole('button', { name: 'Edit' })); expect((within(view.container.querySelector('form')!).getByLabelText('Name') as HTMLInputElement).value).toBe('OpenCode Sonnet'); });
+  it('blocks submit for missing or unknown provider metadata', async () => { const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ editorOptions: { providers: [] } }) }] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Edit' }); fireEvent.click(view.getByRole('button', { name: 'Edit' })); fireEvent.submit(view.container.querySelector('form')!); expect(view.getByText('Choose a provider supplied by the backend.')).toBeTruthy(); expect(fake.api.updateAgent).not.toHaveBeenCalled(); });
+  it('preserves draft and maps AGENT_CATALOG_INVALID problems', async () => { const update = vi.fn(async () => ({ ok: false as const, error: { code: 'AGENT_CATALOG_INVALID', message: 'Invalid catalog', retryable: false, data: { problems: [{ path: 'changes.name', message: 'Bad name' }, { path: 'catalog', message: 'Broken' }] } } })); const fake = fakeManagement({ calls: { updateAgent: update } }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Edit' }); fireEvent.click(view.getByRole('button', { name: 'Edit' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } }); fireEvent.submit(form); await view.findByText('Bad name'); expect(within(form).getByText('catalog: Broken')).toBeTruthy(); expect(within(form).getByLabelText('Name').getAttribute('aria-invalid')).toBe('true'); expect(fake.agents).toHaveBeenCalledTimes(1); });
+  it('reports a completed save even when the catalog refresh fails', async () => { const agent = { id: 'new', name: 'New', provider: 'codex' }; const create = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent } })); const fake = fakeManagement({ calls: { createAgent: create }, agents: [{ ok: true, data: catalogFixture() }, { ok: false, error: { code: 'FAIL', message: 'Refresh failed', retryable: true } }] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } }); fireEvent.submit(form); await view.findByText(/Refresh failed/); expect(view.getByRole('status').textContent).toContain('Created saved agent "New" (new)'); });
+});
+
+describe('provider and failure behavior', () => {
+  it('uses backend provider reasoning and configured model metadata', async () => { const data = catalogFixture({ editorOptions: { providers: [{ id: 'p', modelSelectable: true, reasoningLevels: ['high'], configuredModels: ['suggested'] }, { id: 'q', modelSelectable: false, reasoningLevels: [], configuredModels: [] }] } }); const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ agents: [{ ok: true, data }] }).api} />); await view.findByRole('button', { name: 'New agent' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; const provider = within(form).getByLabelText('Provider') as HTMLSelectElement; expect([...provider.options].map(o => o.value)).toEqual(['p', 'q']); expect([...((within(form).getByLabelText('Reasoning') as HTMLSelectElement).options)].map(o => o.value)).toEqual(['', 'high']); expect(form.querySelector('datalist option')?.getAttribute('value')).toBe('suggested'); fireEvent.change(within(form).getByLabelText('Model'), { target: { value: 'custom' } }); fireEvent.change(within(form).getByLabelText('Reasoning'), { target: { value: 'high' } }); fireEvent.change(provider, { target: { value: 'q' } }); expect((within(form).getByLabelText('Model') as HTMLInputElement).value).toBe(''); expect((within(form).getByLabelText('Model') as HTMLInputElement).disabled).toBe(true); expect((within(form).getByLabelText('Reasoning') as HTMLSelectElement).value).toBe(''); expect((within(form).getByLabelText('Reasoning') as HTMLSelectElement).disabled).toBe(true); });
+  it('preserves draft for SETTING_UNSUPPORTED and rejected calls', async () => { for (const failure of [{ ok: false as const, error: { code: 'SETTING_UNSUPPORTED', message: 'Unsupported', retryable: false } }, new Error('Rejected')]) { const create = vi.fn(() => failure instanceof Error ? Promise.reject(failure) : Promise.resolve(failure)); const fake = fakeManagement({ calls: { createAgent: create } }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'New agent' }); fireEvent.click(view.getByRole('button', { name: 'New agent' })); const form = view.container.querySelector('form')!; fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } }); fireEvent.submit(form); await waitFor(() => expect(view.getByRole('alert').textContent).toContain(failure instanceof Error ? 'INTERNAL: Rejected' : 'SETTING_UNSUPPORTED: Unsupported')); expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft'); expect(fake.agents).toHaveBeenCalledTimes(1); view.unmount(); } });
+});
+
+describe('additional form safeguards', () => {
+  it('rejects invalid and duplicate ids, blank names, and over-limit descriptions without writing', async () => {
+    const fake = fakeManagement();
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('button', { name: 'New agent' });
+    fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    const id = within(form).getByLabelText('Agent id');
+    const name = within(form).getByLabelText('Name');
+    const description = within(form).getByLabelText('Description') as HTMLTextAreaElement;
+    fireEvent.change(id, { target: { value: 'BAD' } });
+    fireEvent.change(description, { target: { value: 'x'.repeat(4001) } });
+    fireEvent.submit(form);
+    expect(within(form).getByText(/Use 1–64 lowercase/)).toBeTruthy();
+    expect(within(form).getByText('Enter an agent name.')).toBeTruthy();
+    expect(within(form).getByText('Use 4000 characters or fewer.')).toBeTruthy();
+    expect(description.value).toHaveLength(4001);
+    expect(description.getAttribute('aria-describedby')).toBeTruthy();
+    fireEvent.change(id, { target: { value: 'opencode-sonnet' } });
+    fireEvent.submit(form);
+    expect(within(form).getByText('That agent id already exists.')).toBeTruthy();
+    expect(fake.api.createAgent).not.toHaveBeenCalled();
+  });
+  it('retains supported values across provider changes and submits a free-form model', async () => {
+    const create = vi.fn(async () => ({ ok: false as const, error: { code: 'FAIL', message: 'failed', retryable: false } }));
+    const data = catalogFixture({ editorOptions: { providers: [
+      { id: 'p', modelSelectable: true, reasoningLevels: ['high', 'low'], configuredModels: ['p-model'] },
+      { id: 'q', modelSelectable: true, reasoningLevels: ['high'], configuredModels: ['q-model'] },
+    ] } });
+    const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ calls: { createAgent: create }, agents: [{ ok: true, data }] }).api} />);
+    await view.findByRole('button', { name: 'New agent' }); fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    for (const [label, value] of Object.entries({ 'Agent id': 'new', Name: 'New', Model: 'custom/model', Reasoning: 'high', Provider: 'q' })) fireEvent.change(within(form).getByLabelText(label), { target: { value } });
+    expect((within(form).getByLabelText('Model') as HTMLInputElement).value).toBe('custom/model');
+    expect((within(form).getByLabelText('Reasoning') as HTMLSelectElement).value).toBe('high');
+    expect([...form.querySelectorAll('datalist option')].map(o => o.value)).toEqual(['q-model']);
+    fireEvent.submit(form);
+    await waitFor(() => expect(create).toHaveBeenCalledWith('a', { id: 'new', name: 'New', provider: 'q', model: 'custom/model', reasoning: 'high' }));
+  });
+  it('restores focus after Cancel and initializes a fresh duplicate draft', async () => {
+    const view = render(<AgentsScreen workspace={workspace} management={fakeManagement().api} />);
+    const duplicate = await view.findByRole('button', { name: 'Duplicate' }); duplicate.focus(); fireEvent.click(duplicate);
+    let form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: 'Duplicate' })));
+    fireEvent.click(view.getByRole('button', { name: 'Duplicate' })); form = view.container.querySelector('form')!;
+    expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('OpenCode Sonnet copy');
+  });
+  it('ignores a pending save result after changing workspaces', async () => {
+    let resolve!: (result: { ok: true; data: { workspace: string; agent: { id: string; name: string; provider: string } } }) => void;
+    const create = vi.fn(() => new Promise<{ ok: true; data: { workspace: string; agent: { id: string; name: string; provider: string } } }>(r => { resolve = r; }));
+    const fake = fakeManagement({ calls: { createAgent: create } });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('button', { name: 'New agent' }); fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } }); fireEvent.submit(form);
+    fireEvent.keyDown(form, { key: 'Escape' }); expect(view.container.querySelector('form')).toBe(form);
+    view.rerender(<AgentsScreen workspace={{ ...workspace, id: 'b' }} management={fake.api} />);
+    await waitFor(() => expect(fake.agents).toHaveBeenCalledWith('b'));
+    resolve({ ok: true, data: { workspace: 'a', agent: { id: 'new', name: 'New', provider: 'codex' } } });
+    await waitFor(() => expect(view.queryByText(/Created saved agent/)).toBeNull());
+    expect(fake.agents).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe('form metadata updates', () => {
+  it('preserves the screen draft through a refresh that finds catalog problems', async () => {
+    const fake = fakeManagement();
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('button', { name: 'New agent' });
+    fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'draft' } });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft name' } });
+    let resolve!: (result: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+    const agents = vi.fn(() => new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(r => { resolve = r; }));
+    view.rerender(<AgentsScreen workspace={workspace} management={{ ...fake.api, agents }} />);
+    await waitFor(() => expect(agents).toHaveBeenCalled());
+    expect(view.container.querySelector('form')).toBe(form);
+    expect((within(form).getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
+    resolve({ ok: true, data: catalogFixture({ problems: [{ path: 'agents', message: 'invalid' }] }) });
+    await view.findByText('agents.json has problems:');
+    expect(view.container.querySelector('form')).toBe(form);
+    expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft name');
+    expect((within(form).getByLabelText('Agent id') as HTMLInputElement).value).toBe('draft');
+    expect(within(form).getByText('Saved agent changes are unavailable because agents.json has validation problems. Repair it on disk and refresh.')).toBeTruthy();
+    expect((within(form).getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(form);
+    expect(fake.api.createAgent).not.toHaveBeenCalled();
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    expect(view.container.querySelector('form')).toBeNull();
+  });
+  it('keeps an open draft inspectable but blocks submission when catalog problems arrive', () => {
+    const submit = vi.fn(); const cancel = vi.fn();
+    const props = { mode: 'create' as const, source: null, existingIds: [], providers: [{ id: 'p', modelSelectable: true, reasoningLevels: [], configuredModels: [] }], pending: false, serverError: null, mutationsBlockedReason: null, onSubmit: submit, onCancel: cancel };
+    const view = render(<AgentForm {...props} />);
+    fireEvent.change(view.getByLabelText('Agent id'), { target: { value: 'new' } });
+    fireEvent.change(view.getByLabelText('Name'), { target: { value: 'Draft' } });
+    const reason = 'Saved agent changes are unavailable because agents.json has validation problems. Repair it on disk and refresh.';
+    view.rerender(<AgentForm {...props} mutationsBlockedReason={reason} />);
+    expect((view.getByLabelText('Name') as HTMLInputElement).value).toBe('Draft');
+    expect(view.getByText(reason)).toBeTruthy();
+    expect((view.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(view.container.querySelector('form')!); expect(submit).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' })); expect(cancel).toHaveBeenCalledOnce();
+  });
+  it('shows an unknown saved provider as disabled and requires a backend choice', () => {
+    const submit = vi.fn();
+    const view = render(<AgentForm mode="edit" source={{ id: 'a', name: 'A', provider: 'unknown' }} existingIds={['a']} providers={[{ id: 'p', modelSelectable: true, reasoningLevels: [], configuredModels: [] }]} pending={false} serverError={null} mutationsBlockedReason={null} onSubmit={submit} onCancel={() => {}} />);
+    const provider = view.getByLabelText('Provider') as HTMLSelectElement;
+    expect([...provider.options].map(o => [o.textContent, o.disabled])).toEqual([['Unknown provider: unknown', true], ['p', false]]);
+    fireEvent.submit(view.container.querySelector('form')!);
+    expect(view.getByText('Choose a provider supplied by the backend.')).toBeTruthy(); expect(submit).not.toHaveBeenCalled();
+    fireEvent.change(provider, { target: { value: 'p' } }); fireEvent.submit(view.container.querySelector('form')!);
+    expect(submit).toHaveBeenCalledWith({ kind: 'update', agentId: 'a', changes: { provider: 'p' } });
+  });
+});
+
+describe('saved agent workflow coverage', () => {
+  it('duplicates all settings with the first available id and reports the saved duplicate', async () => {
+    const source = { id: 'one', name: 'One', provider: 'codex', model: 'gpt-6', reasoning: 'high', description: 'A description' };
+    const copy = { ...source, id: 'one-copy-3', name: 'One copy' };
+    const data = catalogFixture({ agents: [source, { ...source, id: 'one-copy' }, { ...source, id: 'one-copy-2' }] });
+    const create = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent: copy } }));
+    const fake = fakeManagement({ calls: { createAgent: create }, agents: [{ ok: true, data }, { ok: true, data: catalogFixture({ agents: [...data.agents, copy] }) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    fireEvent.click(await view.findByRole('button', { name: 'Duplicate' }));
+    const form = view.container.querySelector('form')!;
+    for (const [label, value] of Object.entries({ 'Agent id': copy.id, Name: copy.name, Provider: copy.provider, Model: copy.model, Reasoning: copy.reasoning, Description: copy.description })) {
+      expect((within(form).getByLabelText(label) as HTMLInputElement).value).toBe(value);
+    }
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.submit(form);
+    await waitFor(() => expect(create).toHaveBeenCalledExactlyOnceWith('a', copy));
+    await waitFor(() => expect(view.getByRole('button', { name: /One copy/ }).getAttribute('aria-pressed')).toBe('true'));
+    expect(view.getByRole('status').textContent).toContain('Created saved duplicate "One copy" (one-copy-3). Saved configuration applies on the next team start; running agents are unchanged. Live switching remains in Teams.');
+  });
+
+  it('reports an edit success and selects the returned agent after refresh', async () => {
+    const original = { id: 'one', name: 'One', provider: 'codex' };
+    const saved = { ...original, name: 'Renamed' };
+    const update = vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent: saved } }));
+    const fake = fakeManagement({ calls: { updateAgent: update }, agents: [{ ok: true, data: catalogFixture({ agents: [original] }) }, { ok: true, data: catalogFixture({ agents: [saved] }) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    fireEvent.click(await view.findByRole('button', { name: 'Edit' }));
+    const form = view.container.querySelector('form')!;
+    const id = within(form).getByLabelText('Agent id') as HTMLInputElement;
+    expect(id.readOnly).toBe(true); expect(id.disabled).toBe(false);
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Renamed' } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(update).toHaveBeenCalledExactlyOnceWith('a', 'one', { name: 'Renamed' }));
+    await waitFor(() => expect(view.getByRole('button', { name: /Renamed/ }).getAttribute('aria-pressed')).toBe('true'));
+    expect(view.getByRole('status').textContent).toContain('Saved agent "Renamed" (one). Saved configuration applies on the next team start; running agents are unchanged. Live switching remains in Teams.');
+  });
+
+  it('blocks creation when provider metadata is empty', async () => {
+    const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ editorOptions: { providers: [] } }) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } });
+    fireEvent.submit(form);
+    const provider = within(form).getByLabelText('Provider');
+    expect(provider.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(provider.getAttribute('aria-describedby')!)?.textContent).toBe('Choose a provider.');
+    expect(fake.api.createAgent).not.toHaveBeenCalled();
+  });
+
+  it('keeps the pending form open through Escape and Cancel until the result arrives', async () => {
+    let resolve!: (result: { ok: false; error: { code: string; message: string; retryable: boolean } }) => void;
+    const create = vi.fn(() => new Promise<{ ok: false; error: { code: string; message: string; retryable: boolean } }>(r => { resolve = r; }));
+    const fake = fakeManagement({ calls: { createAgent: create } });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
+    const form = view.container.querySelector('form')!;
+    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
+    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Create agent' }));
+    fireEvent.keyDown(form, { key: 'Escape' });
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    fireEvent.submit(form);
+    expect(create).toHaveBeenCalledTimes(1); expect(view.container.querySelector('form')).toBe(form);
+    resolve({ ok: false, error: { code: 'FAIL', message: 'Failed', retryable: false } });
+    await view.findByText(/FAIL/);
+    expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft');
   });
 });

@@ -1233,3 +1233,9 @@ ul[aria-label="Workspaces"] {
 .teams-live-actions button { margin-left: 0.4rem; }
 .teams-live-reason { font-size: 0.85em; }
 .teams-live-modal > div { background: var(--surface, #fff); color: var(--text, #111); padding: 1.5rem; max-width: 32rem; }
+
+.agent-form { display: flex; flex-direction: column; gap: var(--space-3, 0.75rem); }
+.agent-form label { display: flex; flex-direction: column; gap: var(--space-1, 0.25rem); }
+.agent-form textarea { min-height: 7rem; resize: vertical; }
+.agent-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2, 0.5rem); }
+.agent-field-error { color: var(--color-danger, #b42318); }
