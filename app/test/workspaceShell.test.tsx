@@ -69,9 +69,13 @@ describe('WorkspaceShell', () => {
     expect(name.getAttribute('title')).toBe(workspace.name);
     expect(path.getAttribute('title')).toBe(workspace.path);
     expect(within(nav).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Home', 'Teams', 'Boards', 'Configuration',
+      'Home', 'Teams', 'Agents', 'Boards', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
+    const agents = within(nav).getAllByRole('button', { name: 'Agents' });
+    expect(agents).toHaveLength(1);
+    expect((agents[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(agents[0].querySelector('svg')?.getAttribute('data-icon')).toBe('agents');
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Home');
     expect(result.getByText(descriptions.Home)).toBeTruthy();
   });
@@ -82,7 +86,7 @@ describe('WorkspaceShell', () => {
     const name = result.getByText(workspace.name);
     const path = result.getByText(workspace.path);
 
-    for (const label of ['Teams', 'Boards', 'Configuration'] as const) {
+    for (const label of ['Teams', 'Agents', 'Boards', 'Configuration'] as const) {
       const button = result.getByRole('button', { name: label });
       button.focus();
       fireEvent.click(button);
@@ -90,7 +94,7 @@ describe('WorkspaceShell', () => {
       expect(result.getByText(workspace.name)).toBe(name);
       expect(result.getByText(workspace.path)).toBe(path);
       expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      if (label === 'Teams') expect(main.querySelector('[data-section="teams"]')).toBeTruthy();
+      if (label === 'Teams' || label === 'Agents') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
       else expect(result.getByText(descriptions[label])).toBeTruthy();
       expect(currentButtons(result.container)).toEqual([button]);
       expect(document.activeElement).toBe(button);
@@ -249,11 +253,11 @@ describe('WorkspaceShell', () => {
 
   it('resets to Home only when workspace id changes', async () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
-    fireEvent.click(result.getByRole('button', { name: 'Boards' }));
+    fireEvent.click(result.getByRole('button', { name: 'Agents' }));
     result.rerender(
       <WorkspaceShell workspace={{ ...workspace, name: 'Changed name' }} onSwitchWorkspace={vi.fn()} />,
     );
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Boards');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Agents');
 
     result.rerender(
       <WorkspaceShell workspace={{ ...workspace, id: 'b', name: 'Workspace B' }} onSwitchWorkspace={vi.fn()} />,
@@ -296,7 +300,7 @@ describe('WorkspaceShell', () => {
     const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
     const buttons = result.container.querySelectorAll('nav button');
-    expect(buttons).toHaveLength(5);
+    expect(buttons).toHaveLength(6);
     buttons.forEach((button, index) => {
       expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(button.textContent).toBe(items[index].label);
@@ -306,10 +310,10 @@ describe('WorkspaceShell', () => {
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(6);
+    expect(buttons).toHaveLength(7);
     expect(buttons[0].className).toContain('workspace-selector');
-    expect(buttons.slice(1, 5).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'Boards', 'Configuration']);
-    expect(buttons[5].className).toContain('switch-workspace');
+    expect(buttons.slice(1, 6).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'Agents', 'Boards', 'Configuration']);
+    expect(buttons[6].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');

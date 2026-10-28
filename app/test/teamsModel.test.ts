@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  agentUsage,
   orderTeams,
   overviewNotices,
   presenceLabel,
@@ -56,13 +55,6 @@ describe('teamsModel', () => {
     expect(workText({ state: 'working', assignment: null, ticket: null })).toBe('Working');
     expect(workText({ state: 'none' })).toBe('No current work');
     expect(workText({ state: 'unavailable', reason: 'x' })).toBe('Not available');
-  });
-
-  it('agent_usage_counts_catalog_members_only', () => {
-    expect(agentUsage(twoTeams(), 'opencode-sonnet')).toBe('Used by 1 member in 1 team');
-    expect(agentUsage(twoTeams(), 'spare')).toBe('Not used by any team');
-    expect(agentUsage(null, 'spare')).toBe('Usage unavailable');
-    expect(agentUsage({ ...twoTeams(), truncated: true }, 'opencode-sonnet')).toBe('Used by at least 1 member in 1 team');
   });
 
   it('overview_notices_in_order', () => {

@@ -489,7 +489,7 @@ describe('WorkspacesScreen', () => {
 
     expect(fake.list).toHaveBeenCalledTimes(1);
     expect(fake.create).toHaveBeenCalledTimes(0);
-    for (const label of ['Home', 'Teams', 'Boards', 'Configuration']) {
+    for (const label of ['Home', 'Teams', 'Agents', 'Boards', 'Configuration']) {
       fireEvent.click(result.getByRole('button', { name: label }));
     }
     expect(fake.list).toHaveBeenCalledTimes(1);

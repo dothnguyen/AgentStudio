@@ -37,9 +37,7 @@ import {
   type WriteFeedback,
 } from './teamEditModel';
 import {
-  MAX_CATALOG_PROBLEMS,
   RUNTIME_LABELS,
-  agentUsage,
   definitionBadge,
   memberCountText,
   memberName,
@@ -48,7 +46,6 @@ import {
   memberSourceNote,
   orderTeams,
   overviewNotices,
-  plural,
   presenceLabel,
   presenceTone,
   providerModelText,
@@ -321,7 +318,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         <div className="dashboard-title">
           <nav className="breadcrumb" aria-label="Breadcrumb"><ol><li>Workspace</li><li aria-current="page">Teams</li></ol></nav>
           <h1>Teams</h1>
-          <p className="teams-subtitle">Teams and reusable agents defined in this workspace.</p>
+          <p className="teams-subtitle">Manage team membership, routing, and live operation in this workspace.</p>
         </div>
         <div className="dashboard-actions">
           <button type="button" className="teams-new-button" disabled={pending} onClick={() => setCreating(true)}>
@@ -417,7 +414,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             }}
           />
         )}
-        <AgentCatalogPanel section={agents} overview={data} />
         <RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} />
       </div>
     </div>
@@ -665,55 +661,3 @@ function BoardControl(props: {
   );
 }
 
-function AgentCatalogPanel(props: {
-  section: DashboardSectionController<AgentCatalogList>;
-  overview: TeamOverview | null;
-}): JSX.Element {
-  const { section, overview } = props;
-  const data = section.state === 'ready' ? section.data : null;
-  const problems = data?.problems ?? [];
-  return (
-    <section className="dashboard-panel teams-catalog" aria-labelledby="teams-catalog-title">
-      <h2 id="teams-catalog-title">Agent catalog</h2>
-      {section.state === 'loading' && <p className="panel-loading" role="status">Loading agent catalog…</p>}
-      {section.state === 'error' && <SectionError section={section} />}
-      {data !== null && (
-        <>
-          {problems.length > 0 && (
-            <div className="panel-note teams-catalog-problems">
-              <p>agents.json has problems:</p>
-              <ul>
-                {problems.slice(0, MAX_CATALOG_PROBLEMS).map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
-              </ul>
-              {problems.length > MAX_CATALOG_PROBLEMS && (
-                <p>{`…and ${plural(problems.length - MAX_CATALOG_PROBLEMS, 'more problem', 'more problems')}`}</p>
-              )}
-            </div>
-          )}
-          {data.agents.length === 0 ? (
-            <p className="panel-empty">No reusable agents defined.</p>
-          ) : (
-            <ul className="teams-catalog-list">
-              {data.agents.map((a, index) => {
-                const id = text(a.id);
-                const reasoning = text(a.reasoning);
-                return (
-                  <li key={id ?? index} className="teams-agent">
-                    <h3 className="teams-agent-name">{text(a.name) ?? id ?? 'Unnamed agent'}</h3>
-                    {id !== null && <code className="entity-id">{id}</code>}
-                    <p className="teams-agent-meta">
-                      <span>{providerModelText(text(a.provider), text(a.model))}</span>
-                      {reasoning !== null && <span>{`Reasoning: ${reasoning}`}</span>}
-                    </p>
-                    <p className="teams-agent-description">{text(a.description) ?? 'No description'}</p>
-                    <p className="teams-agent-usage">{agentUsage(overview, id)}</p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
-      )}
-    </section>
-  );
-}

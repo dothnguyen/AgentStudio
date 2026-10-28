@@ -45,7 +45,8 @@ class Validation(RoutingCase):
     def test_passing_tests_let_the_pass_stand(self):
         wf, d = self.run_def("withtests", {"develop": fake("success", "fixed.txt"), "qa": fake("verdict_pass")})
         self.assertEqual(d["workflowRun"]["status"], "succeeded")
-        self.assertEqual(d["stageAttempts"][1]["outcome"], "validation_passed")
+        validation = next(s for s in d["stageAttempts"] if s["stage"] == "tests")
+        self.assertEqual(validation["outcome"], "validation_passed")
         self.assertEqual(len(d["assignments"]), 2)                            # validation is not an assignment
         qa_prompt = self.prompt(d, 2)
         self.assertIn("===== VALIDATION =====\nValidation PASSED.", qa_prompt)
@@ -53,7 +54,7 @@ class Validation(RoutingCase):
         validated = [e["data"] for e in d["events"] if e["name"] == "stage_attempt.validated"]
         self.assertEqual([(v["stage"], v["passed"]) for v in validated], [("tests", True)])
         self.assertEqual(validated[0]["sourceAssignmentId"], d["assignments"][0]["id"])
-        self.assertTrue(os.path.exists(d["stageAttempts"][1]["validation"]["outputPath"]))
+        self.assertTrue(os.path.exists(validation["validation"]["outputPath"]))
 
     def test_pass_requires_with_no_result_counts_as_failed(self):
         # a verdict stage that depends on a validation stage it never passed through

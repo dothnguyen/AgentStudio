@@ -101,18 +101,23 @@ describe('TeamsScreen', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it('catalog_lists_agent_definitions_with_usage', async () => {
-    const { result } = await renderScreen();
-    const items = within(result.getByRole('region', { name: 'Agent catalog' })).getAllByRole('listitem');
-    expect(items).toHaveLength(3);
-    for (const t of ['OpenCode Sonnet', 'opencode-sonnet', 'opencode · claude-sonnet', 'Implements tickets.', 'Used by 1 member in 1 team']) {
-      expect(items[0]!.textContent).toContain(t);
-    }
-    expect(items[1]!.textContent).toContain('Codex GPT');
-    expect(items[1]!.textContent).toContain('Used by 1 member in 1 team');
-    for (const t of ['Spare agent', 'claude · model not set', 'No description', 'Not used by any team']) {
-      expect(items[2]!.textContent).toContain(t);
-    }
+  it('does_not_render_catalog_region_but_still_loads_catalog_for_member_forms', async () => {
+    const { result, fake } = await renderScreen();
+    expect(result.queryByRole('region', { name: 'Agent catalog' })).toBeNull();
+    expect(result.queryByRole('heading', { name: 'Agent catalog' })).toBeNull();
+    expect(result.queryByRole('list', { name: 'Agent catalog' })).toBeNull();
+    expect(fake.agents).toHaveBeenCalledTimes(1);
+    fireEvent.click(result.getByRole('button', { name: 'Add member' }));
+    expect(result.getByRole('option', { name: 'OpenCode Sonnet (opencode-sonnet)' })).toBeTruthy();
+  });
+
+  it('keeps members visible and catalog choices unavailable when catalog loading fails', async () => {
+    const { result } = await renderScreen({ agents: [{ ok: false, error: { code: 'CATALOG_FAIL', message: 'failed', retryable: true } }] });
+    const detail = result.getByRole('region', { name: 'Dev Team' });
+    expect(within(detail).getAllByRole('row')[1]?.textContent).toContain('dev');
+    fireEvent.click(result.getByRole('button', { name: 'Add member' }));
+    expect(result.queryByRole('option', { name: 'OpenCode Sonnet (opencode-sonnet)' })).toBeNull();
+    expect(within(detail).getAllByRole('row')[1]?.textContent).toContain('dev');
   });
 
   it('empty_workspace_shows_empty_states_and_no_sample_agents', async () => {
@@ -121,7 +126,6 @@ describe('TeamsScreen', () => {
       agents: [{ ok: true, data: catalogFixture({ agents: [] }) }],
     });
     expect(result.getByText('No teams defined in this workspace.')).toBeTruthy();
-    expect(result.getByText('No reusable agents defined.')).toBeTruthy();
     expect(result.queryByRole('table')).toBeNull();
     expect(result.container.querySelector('.teams-card')).toBeNull();
     for (const sample of ['Agent Studio Dev Team', 'Research Team', 'Release Team', 'GPT-6', 'Claude Sonnet', 'OpenCode']) {
@@ -180,7 +184,6 @@ describe('TeamsScreen', () => {
     expect(result.getByText('16+ members', { selector: '.teams-card-facts' })).toBeTruthy();
     expect(result.getByText('Showing the first 16 members.')).toBeTruthy();
     expect(result.getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
-    expect(result.getByText(desc)).toBeTruthy();
   });
 
   it('loading_states_are_announced', async () => {
@@ -188,7 +191,6 @@ describe('TeamsScreen', () => {
     const { result } = await renderScreen({ overview: [never], agents: [never] });
     const texts = result.getAllByRole('status').map((s) => s.textContent);
     expect(texts).toContain('Loading teams…');
-    expect(texts).toContain('Loading agent catalog…');
     expect(result.queryByRole('table')).toBeNull();
   });
 
@@ -203,39 +205,11 @@ describe('TeamsScreen', () => {
     const alert = within(list).getByRole('alert');
     expect(alert.textContent).toContain('INTERNAL: boom');
     expect(alert.textContent).toContain('Restart the backend.');
-    const catalog = result.getByRole('region', { name: 'Agent catalog' });
-    expect(catalog.textContent).toContain('OpenCode Sonnet');
-    expect(within(catalog).getAllByText('Usage unavailable')).toHaveLength(3);
     fireEvent.click(within(list).getByRole('button', { name: 'Retry' }));
     await act(async () => {});
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.agents).toHaveBeenCalledTimes(1);
     expect(card(list, 'Dev Team')).toBeTruthy();
-  });
-
-  it('catalog_error_retries_only_catalog', async () => {
-    const { fake, result } = await renderScreen({
-      agents: [
-        { ok: false, error: { code: 'AGENT_CATALOG_INVALID', message: 'agents.json is not valid JSON', retryable: false } },
-        { ok: true, data: catalogFixture() },
-      ],
-    });
-    const catalog = result.getByRole('region', { name: 'Agent catalog' });
-    expect(within(catalog).getByRole('alert').textContent).toContain('AGENT_CATALOG_INVALID: agents.json is not valid JSON');
-    expect(card(result.getByRole('region', { name: 'Workspace teams' }), 'Dev Team')).toBeTruthy();
-    fireEvent.click(within(catalog).getByRole('button', { name: 'Retry' }));
-    await act(async () => {});
-    expect(fake.agents).toHaveBeenCalledTimes(2);
-    expect(fake.overview).toHaveBeenCalledTimes(1);
-  });
-
-  it('catalog_problems_are_capped', async () => {
-    const problems = Array.from({ length: 7 }, (_, i) => ({ path: `agents[${i}].provider`, message: 'must be a non-empty string' }));
-    const { result } = await renderScreen({ agents: [{ ok: true, data: catalogFixture({ problems }) }] });
-    const box = result.container.querySelector('.teams-catalog-problems')!;
-    expect(box.textContent).toContain('agents.json has problems:');
-    expect(box.querySelectorAll('li')).toHaveLength(5);
-    expect(box.textContent).toContain('…and 2 more problems');
   });
 
   it('refresh_reloads_both_and_keeps_selection', async () => {
@@ -263,7 +237,7 @@ describe('TeamsScreen', () => {
       overview: [{ ok: true, data: overviewFixture([team({ name: evil })]) }],
       agents: [{ ok: true, data: catalog }],
     });
-    expect(result.getAllByText(evil).length).toBeGreaterThanOrEqual(3);
+    expect(result.getAllByText(evil).length).toBeGreaterThanOrEqual(2);
     expect(result.container.querySelector('img, script')).toBeNull();
   });
 
@@ -274,7 +248,7 @@ describe('TeamsScreen', () => {
       expect(b.hasAttribute('tabindex')).toBe(false);
     }
     expect(result.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    for (const name of ['Workspace teams', 'Dev Team', 'Agent catalog']) {
+    for (const name of ['Workspace teams', 'Dev Team']) {
       expect(result.getByRole('region', { name })).toBeTruthy();
     }
   });

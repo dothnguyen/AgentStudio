@@ -1,6 +1,5 @@
 import type { ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
 
-export const MAX_CATALOG_PROBLEMS = 5;
 
 export function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
@@ -133,20 +132,6 @@ export function overviewNotices(o: TeamOverview): string[] {
   }
   if (o.partial && notices.length === 0) notices.push('Some team details could not be read.');
   return notices;
-}
-
-export function agentUsage(o: TeamOverview | null, agentId: string | null): string {
-  if (o === null || agentId === null) return 'Usage unavailable';
-  let members = 0;
-  let teams = 0;
-  for (const team of o.teams) {
-    const n = team.members.filter((m) => m.source === 'catalog' && m.agentDefId === agentId).length;
-    members += n;
-    if (n > 0) teams += 1;
-  }
-  if (members === 0) return 'Not used by any team';
-  const atLeast = o.truncated || o.teams.some((t) => t.membersTruncated) ? 'at least ' : '';
-  return `Used by ${atLeast}${plural(members, 'member', 'members')} in ${plural(teams, 'team', 'teams')}`;
 }
 
 export type Tone = 'ok' | 'busy' | 'warning' | 'danger' | 'muted';

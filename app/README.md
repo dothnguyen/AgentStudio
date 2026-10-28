@@ -118,6 +118,8 @@ an explicit cancellation confirmation; backend errors and cancellation results a
 
 Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details remain separate from saved configuration.
 
+The Agents screen browses saved agent configurations, with search, provider and reasoning filters, and saved team-member references. Live agent controls remain in Teams.
+
 The Teams view shows each running catalog member's live agent options and quota holds
 from runtime state. Switch requests with an active assignment require confirmation of
 its exact ID. Resume clears a recorded hold; it does not verify provider quota. Saved

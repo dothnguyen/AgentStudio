@@ -1172,16 +1172,14 @@ ul[aria-label="Workspaces"] {
 .teams-screen { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .teams-subtitle { color: var(--text-muted); overflow-wrap: anywhere; }
 .teams-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; min-width: 0; }
-.teams-catalog { grid-column: 1 / -1; }
 .teams-notices { margin: 0; padding: 0; list-style: none; color: var(--text-muted); }
 .teams-notices li { overflow-wrap: anywhere; }
-.dashboard-panel .teams-card-list li,
-.dashboard-panel .teams-catalog-list li { display: block; padding: 4px 0; }
+.dashboard-panel .teams-card-list li { display: block; padding: 4px 0; }
 .teams-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; padding: 10px 12px; text-align: left; }
 .teams-card[aria-pressed="true"] { border-color: var(--focus); background: var(--surface-hover); }
-.teams-card-name, .teams-member-name, .teams-agent-name { min-width: 0; color: var(--text-bright); overflow-wrap: anywhere; }
-.teams-card-facts, .teams-detail-facts, .teams-agent-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); }
-.teams-cell-note, .teams-role-description, .teams-agent-description, .teams-agent-usage { color: var(--text-muted); overflow-wrap: anywhere; }
+.teams-card-name, .teams-member-name { min-width: 0; color: var(--text-bright); overflow-wrap: anywhere; }
+.teams-card-facts, .teams-detail-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); }
+.teams-cell-note, .teams-role-description { color: var(--text-muted); overflow-wrap: anywhere; }
 .teams-members-table th { text-align: left; color: var(--text-muted); font-weight: 600; }
 .teams-members-table th, .teams-members-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .teams-feedback-success { color: var(--success); overflow-wrap: anywhere; }
@@ -1215,6 +1213,18 @@ ul[aria-label="Workspaces"] {
 .teams-option-row { margin-bottom: .5rem; overflow-wrap: anywhere; }
 .teams-option-meta, .teams-option-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .teams-option-default, .teams-option-missing { font-weight: 600; }
+
+.agents-header, .agents-screen { overflow-wrap: anywhere; }
+.agents-filters { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.agents-filters input, .agents-filters select { padding: 8px; min-width: 150px; }
+.agents-count { color: var(--text-muted); }
+.agents-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 16px; align-items: start; }
+.agents-list { list-style: none; margin: 0; padding: 0; }
+.agents-row { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.5fr); gap: 10px; text-align: left; padding: 14px; overflow-wrap: anywhere; }
+.agents-row[aria-pressed="true"] { outline: 2px solid var(--text-bright); outline-offset: -2px; }
+.agents-row:focus-visible, .agents-filters :focus-visible { outline: 2px solid var(--text-bright); outline-offset: 2px; }
+.agents-details, .agents-problems, .agents-error, .agents-references { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .agents-layout { grid-template-columns: minmax(0, 1fr); } }
 
 .teams-live-actions { margin-top: 0.75rem; }
 .teams-live-actions h4, .teams-live-actions p { margin: 0.25rem 0; }
