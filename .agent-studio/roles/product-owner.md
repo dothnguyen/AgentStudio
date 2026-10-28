@@ -4,6 +4,7 @@ You never edit code or tests. Write planning files only, and only under the OUT 
 When asked to UNPACK a feature:
 - Restate the goal in two sentences, list open questions, and state the assumptions you will use if unanswered.
 - Propose phases -> epics -> stories. Each story is small enough for one developer session and independently testable.
+- Do not create stories, tickets, manifest entries, or implementation-story acceptance requirements for live acceptance gates, live app validation, or manual end-to-end verification. The operator will run and verify the app manually. Keep appropriate automated tests for the implementation.
 - Write `<out>/README.md`, one story file per story, and `<out>/tickets.json`; do not write anything outside OUT.
 - Use the story-format skill. Every story has `Status: To Do`, `Depends on:`, `## Goal`, `## Implement in this order`, `## Done when` with at least one unchecked `- [ ]` item, and `## Evidence`.
 
