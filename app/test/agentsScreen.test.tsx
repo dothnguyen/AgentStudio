@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentsScreen } from '../src/renderer/agents/AgentsScreen';
 import { AgentForm } from '../src/renderer/agents/AgentForm';
+import { AgentDeleteDialog } from '../src/renderer/agents/AgentDeleteDialog';
 import { catalogFixture, fakeManagement, member, overviewFixture, team } from './teamsFixtures';
 import type { Workspace } from '../src/renderer/api';
 const workspace: Workspace = { id: 'a', name: 'A', path: '/a', exists: true, missing: false };
@@ -27,7 +28,7 @@ describe('AgentsScreen', () => {
   it('details_and_used_by_show_saved_non_default_references_not_live_agent', async () => {
     const m = member(); const opt = { ...m.agentOptions[0]!, id: 'codex-gpt' }; const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([team({ members: [member({ agentOptions: [m.agentOptions[0]!, opt, opt], runtime: { ...m.runtime!, activeAgent: 'live-only' } })] })]) }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' }); fireEvent.click(view.getByRole('button', { name: /Codex GPT/ }));
-    expect(view.getAllByText('Dev Team — dev (Developer)')).toHaveLength(1); expect(view.getAllByText('Used by 1 member in 1 team').length).toBeGreaterThan(0);
+    expect(view.getByText(/Dev Team.*dev/).textContent).toContain('dev'); expect(view.getAllByText('Used by 1 member in 1 team').length).toBeGreaterThan(0);
     expect(view.queryByText(/live-only/)).toBeNull();
   });
   it('catalog_problems_keep_invalid_rows_inspectable', async () => {
@@ -154,11 +155,11 @@ describe('Agents browser edge cases', () => {
     const data = overviewFixture([team({ id: null, name: ' ', membersTruncated: true, members: [member({ memberId: null, name: ' ', role: ' ' })] })]);
     const fake = fakeManagement({ overview: [{ ok: true, data }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByText('Unnamed team — Unnamed member');
+    await view.findByText('Unknown team — Unknown member');
     const details = view.getByRole('heading', { name: 'Agent details' }).closest('section')!;
-    expect(within(details).getByText('Used by at least 1 member in at least 1 team')).toBeTruthy();
+    expect(within(details).getByText('Unknown team — Unknown member')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: /Codex GPT/ }));
-    expect(within(details).getByText('Usage incomplete — no saved references are visible in the loaded teams.')).toBeTruthy();
+    expect(within(details).getByText('Saved references may be incomplete. The backend will verify deletion.')).toBeTruthy();
   });
 
   it('shows error details and allows usage to finish while catalog is loading', async () => {
@@ -188,7 +189,7 @@ describe('Agents browser edge cases', () => {
     const details = view.getByRole('heading', { name: 'Agent details' }).closest('section')!;
     expect(within(details).getByRole('heading', { name: 'Used by' })).toBeTruthy();
     expect(within(details).getByText('Saved configuration only. Changes do not switch a running team member; live agent controls remain in Teams.')).toBeTruthy();
-    expect(view.queryByRole('button', { name: /^(delete|save|activate|resume|switch|cancel)$/i })).toBeNull();
+    expect(view.getByRole('button', { name: 'Delete' })).toBeTruthy();
   });
 
   it('retains a selected row when a filter leaves it visible', async () => {
@@ -238,7 +239,7 @@ describe('Agents browser edge cases', () => {
     expect(within(details).getByText('Second')).toBeTruthy();
     expect(within(details).getByText('ID unavailable')).toBeTruthy();
     expect(within(details).getByText('No description')).toBeTruthy();
-    expect(within(details).getByText('Usage unavailable')).toBeTruthy();
+    expect(within(details).getByText('No saved team references found.')).toBeTruthy();
   });
 
   it('shows an empty catalog and resets browser state on workspace change', async () => {
@@ -493,4 +494,210 @@ describe('saved agent workflow coverage', () => {
     await view.findByText(/FAIL/);
     expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft');
   });
+});
+
+describe('saved agent deletion', () => {
+  it('cancels by button and Escape and restores focus without a call', async () => {
+    const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    const button = await view.findByRole('button', { name: 'Delete' }); button.focus(); fireEvent.click(button);
+    let dialog = view.getByRole('dialog', { name: 'Delete saved agent' });
+    expect(dialog.textContent).toContain('Delete saved agent "OpenCode Sonnet" (opencode-sonnet)?');
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })); expect(document.activeElement).toBe(button);
+    fireEvent.click(button); dialog = view.getByRole('dialog'); fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(document.activeElement).toBe(button); expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+  });
+  it('blocks known saved references', async () => {
+    const fake = fakeManagement(); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('list', { name: 'Saved agents' }); await waitFor(() => expect((view.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true));
+    expect(view.getByText(/Remove this saved agent from the listed/)).toBeTruthy(); fireEvent.click(view.getByRole('button', { name: 'Delete' })); expect(view.queryByRole('dialog')).toBeNull(); expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+  });
+  it('keeps a failed deletion in the dialog', async () => {
+    const remove = vi.fn(async () => ({ ok: false as const, error: { code: 'TEAM_CONFIG_INVALID', message: 'Invalid', retryable: false, remediation: 'Repair it' } }));
+    const fake = fakeManagement({ calls: { deleteAgent: remove }, overview: [{ ok: true, data: overviewFixture([]) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); fireEvent.click(await view.findByRole('button', { name: 'Delete' })); fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Delete saved agent' }));
+    await view.findByText('Repair it'); expect(within(view.getByRole('dialog')).getByRole('alert').textContent).toContain('TEAM_CONFIG_INVALID: Invalid'); expect(view.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-pressed')).toBe('true'); expect(remove).toHaveBeenCalledExactlyOnceWith('a', 'opencode-sonnet'); expect(fake.agents).toHaveBeenCalledTimes(1); expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+});
+
+it('refreshes racing references after AGENT_IN_USE without changing the catalog', async () => {
+  const option = { ...member().agentOptions[0]!, id: 'opencode-sonnet' };
+  const remove = vi.fn(async () => ({ ok: false as const, error: { code: 'AGENT_IN_USE', message: 'Agent is used', retryable: false, remediation: 'remove it from those teams first', data: { teams: ['core', 'qa'] } } }));
+  const fake = fakeManagement({ calls: { deleteAgent: remove }, overview: [{ ok: true, data: overviewFixture([]) }, { ok: true, data: overviewFixture([team({ members: [member({ agentOptions: [option] })] })]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); const button = await view.findByRole('button', { name: 'Delete' }); button.focus(); fireEvent.click(button); fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Delete saved agent' }));
+  await view.findByText('Referenced by backend team ids: core, qa.'); expect(document.activeElement).toBe(button); await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(true));
+  expect(view.getByRole('alert').textContent).toContain('AGENT_IN_USE: Agent is used'); expect(view.getByText('remove it from those teams first')).toBeTruthy(); expect(view.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-pressed')).toBe('true'); expect(remove).toHaveBeenCalledExactlyOnceWith(workspace.id, 'opencode-sonnet');
+  expect(view.queryByRole('dialog')).toBeNull(); expect(fake.agents).toHaveBeenCalledTimes(1); expect(fake.overview).toHaveBeenCalledTimes(2); expect(fake.api.updateMember).not.toHaveBeenCalled(); expect(fake.api.removeMember).not.toHaveBeenCalled();
+});
+
+it('makes one pending delete call and refreshes both saved sections on success', async () => {
+  const agent = { id: 'one', name: 'One', provider: 'p' };
+  const next = { id: 'two', name: 'Two', provider: 'p' };
+  let resolve!: (result: { ok: true; data: { workspace: string; deleted: typeof agent } }) => void;
+  const remove = vi.fn(() => new Promise<{ ok: true; data: { workspace: string; deleted: typeof agent } }>(r => { resolve = r; }));
+  const fake = fakeManagement({ calls: { deleteAgent: remove }, agents: [{ ok: true, data: catalogFixture({ agents: [agent, next] }) }, { ok: true, data: catalogFixture({ agents: [next] }) }], overview: [{ ok: true, data: overviewFixture([]) }, { ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'Delete' })); const dialog = view.getByRole('dialog'); const confirm = within(dialog).getByRole('button', { name: 'Delete saved agent' });
+  fireEvent.click(confirm); fireEvent.click(confirm); fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(view.getByRole('dialog')).toBe(dialog);
+  expect(remove).toHaveBeenCalledExactlyOnceWith('a', 'one'); expect((within(dialog).getByRole('button', { name: 'Deleting…' }) as HTMLButtonElement).disabled).toBe(true); expect((within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true);
+  resolve({ ok: true, data: { workspace: 'a', deleted: agent } });
+  await waitFor(() => expect(view.getByRole('button', { name: /Two/ }).getAttribute('aria-pressed')).toBe('true'));
+  expect(view.getByText('Deleted only the saved agent definition "One" (one). Team membership and live runtime were not changed.')).toBeTruthy(); expect(fake.agents).toHaveBeenCalledTimes(2); expect(fake.overview).toHaveBeenCalledTimes(2);
+});
+
+it('explains incomplete and unavailable usage before confirmation', async () => {
+  for (const [result, copy] of [
+    [{ ok: false as const, error: { code: 'FAIL', message: 'offline', retryable: false } }, 'Saved reference usage is unavailable. The backend will verify deletion.'],
+    [{ ok: true as const, data: overviewFixture([], { truncated: true }) }, 'Saved references may be incomplete. The backend will verify deletion.'],
+  ] as const) {
+    const fake = fakeManagement({ overview: [result] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByText(copy); const button = view.getByRole('button', { name: 'Delete' }) as HTMLButtonElement; expect(button.disabled).toBe(false); expect(view.container.textContent?.toLowerCase()).not.toContain('unused'); expect(fake.api.deleteAgent).not.toHaveBeenCalled(); fireEvent.click(button); expect(view.getByRole('dialog')).toBeTruthy(); view.unmount();
+  }
+});
+
+it('shows incomplete catalog usage for a partial overview', async () => {
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([], { partial: true, truncated: false }) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByText('Saved references may be incomplete. The backend will verify deletion.');
+  const row = view.getByRole('button', { name: /OpenCode Sonnet/ });
+  expect(row.textContent).toContain('Usage incomplete');
+  expect(row.textContent).not.toContain('Not used');
+});
+
+it('treats truncated team members as incomplete usage', async () => {
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([team({ members: [], membersTruncated: true })]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByText('Saved references may be incomplete. The backend will verify deletion.');
+  expect((view.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(false);
+  expect(view.container.textContent?.toLowerCase()).not.toContain('unused');
+  expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+});
+
+it('blocks deletion when the catalog has problems even with no references', async () => {
+  const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ problems: [{ path: 'agents', message: 'bad' }] }) }], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByText('No saved team references found.');
+  const button = view.getByRole('button', { name: 'Delete' }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toContain('agents.json has validation problems');
+  fireEvent.click(button);
+  expect(view.queryByRole('dialog')).toBeNull();
+  expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+});
+
+it.each(['  Friendly name  ', '   '])('uses the trimmed name or id in deletion wording for %j', async name => {
+  const agent = { id: 'saved-id', name, provider: 'p' };
+  const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ agents: [agent] }) }], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'Delete' }));
+  const dialog = view.getByRole('dialog', { name: 'Delete saved agent' });
+  expect(dialog.textContent).toContain(`Delete saved agent "${name.trim() || agent.id}" (${agent.id})?`);
+  expect(within(dialog).getByText(agent.id).tagName).toBe('CODE');
+  expect(dialog.textContent).toContain('Only the saved definition will be deleted. Team membership and live runtime will not be changed.');
+});
+
+it('keeps a thrown error in the confirmation without refreshing', async () => {
+  const remove = vi.fn(async () => { throw new Error('offline'); });
+  const fake = fakeManagement({ calls: { deleteAgent: remove }, overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); fireEvent.click(await view.findByRole('button', { name: 'Delete' })); fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Delete saved agent' }));
+  await waitFor(() => expect(within(view.getByRole('dialog')).getByRole('alert').textContent).toContain('INTERNAL: offline')); expect(fake.agents).toHaveBeenCalledTimes(1); expect(fake.overview).toHaveBeenCalledTimes(1);
+});
+
+it('lists distinct saved references including non-default options and blocks deletion even when truncated', async () => {
+  const option = member().agentOptions[0]!;
+  const other = { ...option, id: 'other' };
+  const runtime = { agentId: 'live', availability: 'busy' as const, paneState: null, provider: null, model: null, reasoning: null, stale: false, configuredAgents: [], activeAgent: 'opencode-sonnet', quotaHolds: {}, pendingAgent: null, lastSwitch: null, assignment: null };
+  const overview = overviewFixture([
+    team({ id: 'core', name: 'Core', members: [member({ memberId: 'one', name: 'One', agentOptions: [option, option] }), member({ memberId: 'two', name: 'Two', agentOptions: [other, option] }), member({ memberId: 'one', name: 'One', agentOptions: [option] })] }),
+    team({ id: 'qa', name: 'Quality', members: [member({ memberId: 'three', name: 'Three', agentOptions: [option] }), member({ memberId: 'live', name: 'Live only', agentOptions: [], runtime })] }),
+  ], { truncated: true });
+  const fake = fakeManagement({ overview: [{ ok: true, data: overview }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByText(/Core.*One/);
+  const details = view.getByRole('heading', { name: 'Agent details' }).closest('section')!;
+  for (const label of [/Core.*One/, /Core.*Two/, /Quality.*Three/]) expect(within(details).getAllByText(label)).toHaveLength(1);
+  expect(within(details).queryByText(/Live only/)).toBeNull();
+  for (const id of ['core', 'one', 'two', 'qa', 'three']) expect(within(details).getAllByText(id).length).toBeGreaterThan(0);
+  const button = within(details).getByRole('button', { name: 'Delete' }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  expect(document.getElementById(button.getAttribute('aria-describedby')!)?.textContent).toBe('Remove this saved agent from the listed team members in Teams before deleting it.');
+  fireEvent.click(button); expect(view.queryByRole('dialog')).toBeNull(); expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+});
+
+it('traps keyboard focus within the confirmation', async () => {
+  const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] }).api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'Delete' }));
+  const dialog = view.getByRole('dialog');
+  expect(dialog.getAttribute('aria-modal')).toBe('true');
+  const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+  const confirm = within(dialog).getByRole('button', { name: 'Delete saved agent' });
+  fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true }); expect(document.activeElement).toBe(confirm);
+  fireEvent.keyDown(confirm, { key: 'Tab' }); expect(document.activeElement).toBe(cancel);
+});
+
+it('uses saved ids and unknown labels when reference names are missing', async () => {
+  const overview = overviewFixture([
+    team({ id: 'core', name: '', members: [member({ memberId: 'worker', name: '' })] }),
+    team({ id: '', name: '', members: [member({ memberId: '', name: '' })] }),
+  ]);
+  const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ overview: [{ ok: true, data: overview }] }).api} />);
+  const details = (await view.findByRole('heading', { name: 'Agent details' })).closest('section')!;
+  await waitFor(() => expect(within(details).getByText('core — worker')).toBeTruthy());
+  expect(within(details).getByText('Unknown team — Unknown member')).toBeTruthy();
+  expect((within(details).getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('does not restore focus to a disconnected dialog opener', () => {
+  const opener = document.createElement('button');
+  document.body.appendChild(opener);
+  opener.focus();
+  const focus = vi.spyOn(opener, 'focus');
+  const view = render(<AgentDeleteDialog agent={{ id: 'one', name: 'One' }} pending={false} error={null} onCancel={() => {}} onConfirm={() => {}} />);
+  opener.remove();
+  view.unmount();
+  expect(focus).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['first', 'one', '', 'two'], ['middle', 'two', '', 'three'], ['last', 'three', '', 'two'],
+  ['filtered', 'one', 'match', 'three'], ['sole', 'one', 'One', null],
+])('selects the visible neighbor after deleting the %s entry', async (_case, removed, query, expected) => {
+  const agents = [{ id: 'one', name: 'One match', provider: 'p' }, { id: 'two', name: 'Two', provider: 'p' }, { id: 'three', name: 'Three match', provider: 'p' }];
+  const target = agents.find(a => a.id === removed)!;
+  const remove = vi.fn(async () => ({ ok: true as const, data: { workspace: '/work/alpha', deleted: target } }));
+  const fake = fakeManagement({ calls: { deleteAgent: remove }, agents: [{ ok: true, data: catalogFixture({ agents }) }, { ok: true, data: catalogFixture({ agents: agents.filter(a => a.id !== removed) }) }], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByRole('list', { name: 'Saved agents' });
+  if (query) fireEvent.change(view.getByLabelText('Search agents'), { target: { value: query } });
+  fireEvent.click(view.getByRole('button', { name: new RegExp(target.name) }));
+  fireEvent.click(view.getByRole('button', { name: 'Delete' }));
+  fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Delete saved agent' }));
+  await waitFor(() => expect(fake.agents).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fake.overview).toHaveBeenCalledTimes(2));
+  expect(remove).toHaveBeenCalledExactlyOnceWith(workspace.id, removed);
+  if (expected) expect(view.getByRole('button', { name: new RegExp(agents.find(a => a.id === expected)!.name) }).getAttribute('aria-pressed')).toBe('true');
+  else expect(view.queryByRole('heading', { name: 'Agent details' })).toBeNull();
+  expect(view.getByText(`Deleted only the saved agent definition "${target.name}" (${target.id}). Team membership and live runtime were not changed.`)).toBeTruthy();
+});
+
+it.each(['success', 'race'])('does not write membership or runtime on %s', async outcome => {
+  const writes = { addMember: vi.fn(), updateMember: vi.fn(), removeMember: vi.fn(), switchMemberAgent: vi.fn(), resumeMemberAgent: vi.fn(), runBoard: vi.fn(), stopBoard: vi.fn() };
+  const agent = catalogFixture().agents[0]!;
+  const remove = vi.fn(async () => outcome === 'success' ? { ok: true as const, data: { workspace: '/work/alpha', deleted: agent } } : { ok: false as const, error: { code: 'AGENT_IN_USE', message: 'Used', retryable: false, remediation: 'Remove references', data: { teams: 'malformed' } } });
+  const fake = fakeManagement({ calls: { ...writes, deleteAgent: remove }, agents: [{ ok: true, data: catalogFixture() }, { ok: true, data: catalogFixture({ agents: catalogFixture().agents.slice(1) }) }], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'Delete' }));
+  fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Delete saved agent' }));
+  await waitFor(() => expect(fake.overview).toHaveBeenCalledTimes(2));
+  expect(remove).toHaveBeenCalledExactlyOnceWith(workspace.id, agent.id);
+  for (const spy of Object.values(writes)) expect(spy).not.toHaveBeenCalled();
+  if (outcome === 'race') {
+    expect(view.getByRole('alert').textContent).toContain('AGENT_IN_USE: Used');
+    expect(view.getByText('Remove references')).toBeTruthy();
+    expect(view.queryByText(/Referenced by backend team ids:/)).toBeNull();
+    expect(fake.agents).toHaveBeenCalledTimes(1);
+    expect(view.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-pressed')).toBe('true');
+  }
 });

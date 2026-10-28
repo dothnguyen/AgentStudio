@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentFilterOptions, agentUsage, catalogRows, filterAgentRows, selectedAgentKey } from '../src/renderer/agents/agentsModel';
+import { agentFilterOptions, agentUsage, savedAgentUsage, selectionAfterRemoval, agentInUseTeamIds, catalogRows, filterAgentRows, selectedAgentKey } from '../src/renderer/agents/agentsModel';
 import { catalogFixture, member, overviewFixture, team } from './teamsFixtures';
 
 const agents = catalogFixture().agents;
@@ -35,6 +35,7 @@ describe('agents model', () => {
     expect(agentUsage(overviewFixture([]), ' ').state).toBe('unavailable');
     expect(agentUsage(overviewFixture([]), 'x').summary).toBe('Not used by any saved team member');
     expect(agentUsage(overviewFixture([], { truncated: true }), 'x').summary).toBe('Usage incomplete — no saved references are visible in the loaded teams.');
+    expect(agentUsage(overviewFixture([], { partial: true, truncated: false }), 'x')).toMatchObject({ state: 'truncated', summary: 'Usage incomplete — no saved references are visible in the loaded teams.' });
   });
   it('usage_marks_member_truncation_and_uses_missing_label_fallbacks', () => {
     const data = overviewFixture([team({ id: null, name: ' ', membersTruncated: true, members: [member({ memberId: null, name: ' ', role: ' ' })] })]);
@@ -100,5 +101,24 @@ describe('catalog edge cases', () => {
     ] });
     expect(agentUsage(data, '')).toEqual({ state: 'unavailable', memberCount: null, teamCount: null, references: [], summary: 'Usage unavailable' });
     expect(agentUsage(overviewFixture([team({ membersTruncated: true, members: [] })]), 'target').summary).toBe('Usage incomplete — no saved references are visible in the loaded teams.');
+  });
+});
+
+describe('delete helpers', () => {
+  it('deduplicates repeated saved team member records in order', () => {
+    const option = { ...member().agentOptions[0]!, id: 'target' };
+    const first = member({ memberId: 'one', name: 'First', agentOptions: [option] });
+    const second = member({ memberId: 'two', name: 'Second', agentOptions: [option] });
+    const data = overviewFixture([team({ id: 'core', members: [first, second, { ...first }] }), team({ id: 'qa', members: [first] })]);
+    expect(savedAgentUsage(data, 'target').references.map(ref => [ref.teamId, ref.memberId])).toEqual([['core', 'one'], ['core', 'two'], ['qa', 'one']]);
+  });
+  it('selects a visible neighbor', () => {
+    for (const [ids, removed, expected] of [[['a','b','c'],'a','b'], [['a','b','c'],'b','c'], [['a','b','c'],'c','b'], [['b'],'b',null], [['a','c'],'a','c'], [['a','c'],'x','a']] as const) expect(selectionAfterRemoval(ids, removed)).toBe(expected);
+  });
+  it('accepts only ordered unique team ids', () => {
+    const error = { code: 'AGENT_IN_USE', message: '', retryable: false, data: { teams: [' alpha ', 'beta', 'alpha', 3, ''] } };
+    expect(agentInUseTeamIds(error)).toEqual(['alpha', 'beta']);
+    for (const data of [undefined, [], { teams: 'x' }]) expect(agentInUseTeamIds({ ...error, data })).toEqual([]);
+    expect(agentInUseTeamIds({ ...error, code: 'OTHER' })).toEqual([]);
   });
 });

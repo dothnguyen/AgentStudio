@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+import { flushSync } from 'react-dom';
 import type { AgentCatalogList, AgentDef, ManagementApi, ManagementError, TeamOverview, Workspace } from '../api';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
+import { AgentDeleteDialog } from './AgentDeleteDialog';
 import { AgentForm } from './AgentForm';
 import type { AgentFormMode, AgentFormRequest } from './agentFormModel';
-import { agentFilterOptions, agentUsage, catalogRows, filterAgentRows, selectedAgentKey, value } from './agentsModel';
+import { agentFilterOptions, agentUsage, agentInUseTeamIds, savedAgentUsage, selectionAfterRemoval, catalogRows, filterAgentRows, selectedAgentKey, value } from './agentsModel';
 
 export interface AgentsScreenProps { workspace: Workspace; management: ManagementApi }
 export function AgentsScreen(props: AgentsScreenProps): JSX.Element { return <AgentsBrowser key={props.workspace.id} {...props} />; }
@@ -22,13 +24,18 @@ function AgentsBrowser(props: AgentsScreenProps): JSX.Element {
   const [query, setQuery] = useState(''); const [provider, setProvider] = useState(''); const [reasoning, setReasoning] = useState(''); const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [form, setForm] = useState<{ mode: AgentFormMode; source: AgentDef | null; key: number } | null>(null);
   const [pending, setPending] = useState(false); const [serverError, setServerError] = useState<ManagementError | null>(null); const [success, setSuccess] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AgentDef | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<ManagementError | null>(null);
+  const [deleteAlert, setDeleteAlert] = useState<ManagementError | null>(null);
+  const deleteInFlight = useRef(false);
   const writeLock = useRef(false); const mounted = useRef(true); const opener = useRef<HTMLElement | null>(null); const formKey = useRef(0);
   const savedSelection = useRef<string | null>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const blocked = displayedCatalog?.problems.length ? 'Saved agent changes are unavailable because agents.json has validation problems. Repair it on disk and refresh.' : null;
   const unavailable = !catalog.data ? 'Saved agent changes are unavailable until the catalog has refreshed successfully.' : null;
   const mutationBlock = blocked ?? unavailable;
-  const openForm = (mode: AgentFormMode, source: AgentDef | null) => { if (writeLock.current || blocked) return; opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setServerError(null); setForm({ mode, source, key: ++formKey.current }); };
+  const openForm = (mode: AgentFormMode, source: AgentDef | null) => { if (writeLock.current || deleteInFlight.current || blocked) return; opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setServerError(null); setForm({ mode, source, key: ++formKey.current }); };
   const cancel = () => { if (writeLock.current) return; const mode = form?.mode; setForm(null); requestAnimationFrame(() => { if (opener.current?.isConnected) opener.current.focus(); else { const label = mode === 'edit' ? 'Edit' : mode === 'duplicate' ? 'Duplicate' : 'New agent'; const button = [...document.querySelectorAll<HTMLButtonElement>('.agents-screen button')].find(item => item.textContent === label); button?.focus(); } }); };
   const submit = async (request: AgentFormRequest) => {
     if (writeLock.current || mutationBlock || !form) return;
@@ -56,11 +63,36 @@ function AgentsBrowser(props: AgentsScreenProps): JSX.Element {
   }, [catalog.data]);
   const selected = visible.find(row => row.key === selectedAgentKey(visible, selectedKey));
   const usage = (id: string | null) => overview.loading ? 'Loading usage…' : agentUsage(overview.data, id).summary;
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteInFlight.current || writeLock.current) return;
+    deleteInFlight.current = true; setDeletePending(true); setDeleteError(null);
+    const target = deleteTarget;
+    const fallback = selectionAfterRemoval(visible.map(row => row.agent.id), target.id);
+    try {
+      let result;
+      try { result = await props.management.deleteAgent(props.workspace.id, target.id); }
+      catch (reason) { result = { ok: false as const, error: { code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false } }; }
+      if (!mounted.current) return;
+      if (result.ok) {
+        setDeleteTarget(null); setDeleteAlert(null);
+        savedSelection.current = fallback;
+        setSelectedKey(visible.find(row => row.agent.id === fallback)?.key ?? null);
+        setSuccess(`Deleted only the saved agent definition "${value(target.name) ?? target.id}" (${target.id}). Team membership and live runtime were not changed.`);
+        await Promise.all([catalog.reloadFresh?.() ?? catalog.reload(), overview.reloadFresh?.() ?? overview.reload()]);
+      } else if (result.error.code === 'AGENT_IN_USE') {
+        flushSync(() => { setDeletePending(false); });
+        flushSync(() => { setDeleteTarget(null); setDeleteAlert(result.error); setSuccess(''); });
+        await (overview.reloadFresh?.() ?? overview.reload());
+      } else setDeleteError(result.error);
+    } finally { deleteInFlight.current = false; if (mounted.current) setDeletePending(false); }
+  };
+  const savedUsage = selected ? savedAgentUsage(overview.data, selected.agent.id) : null;
   const detailsUsage = selected ? agentUsage(overview.data, selected.agent.id) : null;
   return <div className="agents-screen" data-section="agents">
-    <header className="dashboard-header agents-header"><div><nav aria-label="Breadcrumb" className="breadcrumb"><ol><li>Workspace</li><li aria-current="page">Agents</li></ol></nav><h1>Agents</h1><p>Browse reusable agent configurations saved in this workspace.</p></div><button type="button" disabled={!!blocked || pending || !catalog.data} aria-describedby={blocked ? "agents-blocked" : undefined} onClick={() => openForm('create', null)}>New agent</button></header>
+    <header className="dashboard-header agents-header"><div><nav aria-label="Breadcrumb" className="breadcrumb"><ol><li>Workspace</li><li aria-current="page">Agents</li></ol></nav><h1>Agents</h1><p>Browse reusable agent configurations saved in this workspace.</p></div><button type="button" disabled={!!blocked || pending || deletePending || !catalog.data} aria-describedby={blocked ? "agents-blocked" : undefined} onClick={() => openForm('create', null)}>New agent</button></header>
     {blocked && <p id="agents-blocked" className="panel-note">{blocked}</p>}
     {success && <div role="status" className="panel-note">{success} <button type="button" onClick={() => setSuccess('')}>Dismiss</button></div>}
+    {deleteAlert && <div role="alert" className="panel-error agents-error"><p><code>{deleteAlert.code}</code>: {deleteAlert.message}</p>{deleteAlert.remediation?.trim() && <p>{deleteAlert.remediation}</p>}{agentInUseTeamIds(deleteAlert).length > 0 && <p>Referenced by backend team ids: {agentInUseTeamIds(deleteAlert).join(', ')}.</p>}</div>}
     {catalog.loading && <p role="status">Loading agent catalog…</p>}
     <ErrorNote section={catalog} label="catalog" />
     <ErrorNote section={overview} label="usage" />
@@ -70,8 +102,9 @@ function AgentsBrowser(props: AgentsScreenProps): JSX.Element {
       <p className="agents-count">{visible.length} {visible.length === 1 ? 'agent' : 'agents'}</p>
       {rows.length === 0 && <p>No reusable agents are defined in this workspace.</p>}{rows.length > 0 && visible.length === 0 && <p>No agents match the current search and filters.</p>}<div className="agents-layout">
         <ul className="agents-list" aria-label="Saved agents">{visible.map(row => <li key={row.key}><button type="button" className="agents-row" aria-pressed={selected?.key === row.key} onClick={() => setSelectedKey(row.key)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(row.key); } }}><strong>{value(row.agent.name) ?? 'Unnamed agent'}</strong><span>{value(row.agent.provider) ?? 'Provider unavailable'}</span><span>{value(row.agent.model) ?? 'Model not set'}</span><span>{value(row.agent.reasoning) ?? 'Reasoning not set'}</span><span>{usage(row.agent.id)}</span></button></li>)}</ul>
-        {form ? <section className="dashboard-panel agents-details"><AgentForm key={form.key} mode={form.mode} source={form.source} existingIds={displayedCatalog.agents.map(a => a.id)} providers={displayedCatalog.editorOptions?.providers ?? []} pending={pending} serverError={serverError} mutationsBlockedReason={mutationBlock} onSubmit={request => void submit(request)} onCancel={cancel} /></section> : selected && detailsUsage && <section className="dashboard-panel agents-details"><h2>Agent details</h2><div className="agent-form-actions"><button type="button" disabled={!!mutationBlock || pending} aria-describedby={blocked ? 'agents-blocked' : undefined} onClick={() => openForm('edit', selected.agent)}>Edit</button><button type="button" disabled={!!mutationBlock || pending} aria-describedby={blocked ? 'agents-blocked' : undefined} onClick={() => openForm('duplicate', selected.agent)}>Duplicate</button></div><h3>{value(selected.agent.name) ?? 'Unnamed agent'}</h3><p>{value(selected.agent.id) ?? 'ID unavailable'}</p><p>{value(selected.agent.description) ?? 'No description'}</p><p>{value(selected.agent.provider) ?? 'Provider unavailable'} · {value(selected.agent.model) ?? 'Model not set'} · {value(selected.agent.reasoning) ?? 'Reasoning not set'}</p><h3>Used by</h3><p>{usage(selected.agent.id)}</p>{detailsUsage.references.length > 0 && <ul className="agents-references">{detailsUsage.references.map((ref, i) => <li key={i}>{ref.teamLabel} — {ref.memberLabel}{ref.role ? ` (${ref.role})` : ''}</li>)}</ul>}<p>Saved configuration only. Changes do not switch a running team member; live agent controls remain in Teams.</p></section>}
+        {form ? <section className="dashboard-panel agents-details"><AgentForm key={form.key} mode={form.mode} source={form.source} existingIds={displayedCatalog.agents.map(a => a.id)} providers={displayedCatalog.editorOptions?.providers ?? []} pending={pending} serverError={serverError} mutationsBlockedReason={mutationBlock} onSubmit={request => void submit(request)} onCancel={cancel} /></section> : selected && detailsUsage && <section className="dashboard-panel agents-details"><h2>Agent details</h2><div className="agent-form-actions"><button type="button" disabled={!!mutationBlock || pending || deletePending} aria-describedby={blocked ? 'agents-blocked' : undefined} onClick={() => openForm('edit', selected.agent)}>Edit</button><button type="button" disabled={!!mutationBlock || pending || deletePending} aria-describedby={blocked ? 'agents-blocked' : undefined} onClick={() => openForm('duplicate', selected.agent)}>Duplicate</button><button type="button" disabled={!!mutationBlock || pending || deletePending || !!savedUsage?.references.length} aria-describedby={savedUsage?.references.length ? 'agents-delete-referenced' : blocked ? 'agents-blocked' : undefined} onClick={() => { if (deleteInFlight.current || writeLock.current || mutationBlock || savedUsage?.references.length) return; setDeleteError(null); setDeleteTarget(selected.agent); }}>Delete</button></div>{!!savedUsage?.references.length && <p id="agents-delete-referenced">Remove this saved agent from the listed team members in Teams before deleting it.</p>}<h3>{value(selected.agent.name) ?? 'Unnamed agent'}</h3><p>{value(selected.agent.id) ?? 'ID unavailable'}</p><p>{value(selected.agent.description) ?? 'No description'}</p><p>{value(selected.agent.provider) ?? 'Provider unavailable'} · {value(selected.agent.model) ?? 'Model not set'} · {value(selected.agent.reasoning) ?? 'Reasoning not set'}</p><h3>Used by</h3>{savedUsage && (savedUsage.references.length ? <ul className="agents-references">{savedUsage.references.map((ref, i) => <li key={i}>{ref.teamName ?? ref.teamId ?? 'Unknown team'}{ref.teamName && ref.teamId && ref.teamName !== ref.teamId && <> (<code>{ref.teamId}</code>)</>} — {ref.memberName ?? ref.memberId ?? 'Unknown member'}{ref.memberName && ref.memberId && ref.memberName !== ref.memberId && <> (<code>{ref.memberId}</code>)</>}</li>)}</ul> : <p>{savedUsage.completeness === 'complete' ? 'No saved team references found.' : savedUsage.completeness === 'truncated' ? 'Saved references may be incomplete. The backend will verify deletion.' : 'Saved reference usage is unavailable. The backend will verify deletion.'}</p>)}<p>Saved configuration only. Changes do not switch a running team member; live agent controls remain in Teams.</p></section>}
       </div>
     </>}
+    {deleteTarget && <AgentDeleteDialog agent={deleteTarget} pending={deletePending} error={deleteError} onCancel={() => { if (!deleteInFlight.current) setDeleteTarget(null); }} onConfirm={() => void confirmDelete()} />}
   </div>;
 }
