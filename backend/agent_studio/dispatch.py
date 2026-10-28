@@ -318,6 +318,15 @@ def _validate_member_resume(args):
             "memberId": _slug(args.get("memberId"), "memberId"), "agent": _slug(args.get("agent"), "agent")}
 
 
+def _validate_provider_usage_reset(args):
+    from . import providers
+    _only("team.usage.reset", args, {"workspace", "teamDefId", "provider"})
+    provider = req_text(args, "provider", 64, allow_empty=False)
+    if provider not in providers.PEERS and provider not in providers.TEST_ONLY:
+        raise AsError(BAD_REQUEST, f"Unknown provider {provider!r}.")
+    return {"workspace": _workspace_arg(args), "teamDefId": _slug(args.get("teamDefId"), "teamDefId"),
+            "provider": provider}
+
 def _slug_arg(value, name):
     if not isinstance(value, str) or not DEFINITION_NAME.match(value):
         raise AsError(BAD_REQUEST, f"Argument '{name}' must be a slug (lowercase letters, digits, '-'; at "
@@ -885,6 +894,7 @@ COMMANDS = {
     "teamdef.member.remove": _teamdef_member_remove,
     "team.member.switch": _inbox("team.member.switch", _validate_agent_switch),
     "team.member.resume": _inbox("team.member.resume", _validate_member_resume),
+    "team.usage.reset": _inbox("team.usage.reset", _validate_provider_usage_reset),
     "agentdef.list": _agentdef_list,
     "agentdef.create": _agentdef_create,
     "agentdef.update": _agentdef_update,

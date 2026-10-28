@@ -12,7 +12,7 @@ from . import PROTOCOL, dispatch, teams, watch
 from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_NOT_RUNNING, envelope
 
 ACTIONS = ("ask", "run-workflow", "workflows", "check", "retry", "blocked", "resolve", "run-board",
-           "stop-board", "switch-agent", "resume")
+           "stop-board", "switch-agent", "resume", "usage-reset")
 NOT_FOUND = "NOT_FOUND"
 POLICIES = ("read_only", "workspace_write")
 STUCK = ("waiting_input", "reconciling")
@@ -77,6 +77,8 @@ def _parser(action):
     elif action == "resume":
         p.add_argument("--member", required=True)
         p.add_argument("--agent", required=True)
+    elif action == "usage-reset":
+        p.add_argument("provider")
     return p
 
 
@@ -415,9 +417,23 @@ def _resume_agent(ns):
                             if d["cleared"] else f"{who['name']}: {d['option']} has no quota hold")
 
 
+def _usage_reset(ns):
+    team, _ = _running_team(ns, "usage-reset")
+    if not team.get("teamDefId"):
+        raise AsError(BAD_REQUEST, "Usage reset requires a team definition.")
+    data = _write_call("team.usage.reset", {"workspace": team["workspace"], "teamDefId": team["teamDefId"],
+                                             "provider": ns.provider})
+    def render(result):
+        lines = [f"{item['memberId']}: cleared {', '.join(item['cleared']) or 'no holds'}; "
+                 f"active {item.get('activeAgent') or 'unknown'}"
+                 + (" (switched)" if item.get("switched") else "")
+                 + (f"; {item['error']}" if item.get("error") else "") for item in result["members"]]
+        return "\n".join(lines) if lines else f"No members have a {result['provider']} agent."
+    return data, render
+
 _HANDLERS = {"ask": _ask, "run-workflow": _run_workflow, "workflows": _workflows, "check": _check,
              "retry": _retry, "blocked": _blocked, "resolve": _resolve, "run-board": _run_board,
-             "stop-board": _stop_board, "switch-agent": _switch_agent, "resume": _resume_agent}
+             "stop-board": _stop_board, "switch-agent": _switch_agent, "resume": _resume_agent, "usage-reset": _usage_reset}
 
 
 def run(argv, pretty) -> int:

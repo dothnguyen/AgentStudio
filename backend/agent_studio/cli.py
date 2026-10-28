@@ -37,6 +37,7 @@ USAGE = """agent-studio <command>
   team remove-member [--team ID] --member ID|NAME [--workspace PATH]
   team switch-agent --team ID --member ID|NAME --agent CATALOG_ID [--cancel-active] [--workspace PATH]
                                            switch agents; confirm before cancelling an active assignment
+  team usage-reset PROVIDER [--team ID] [--workspace PATH]   clear provider quota holds and recover held members
   team resume --member ID|NAME --agent CATALOG_ID [--team ID] [--workspace PATH]
                                            clear a specific agent's quota hold without switching
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)

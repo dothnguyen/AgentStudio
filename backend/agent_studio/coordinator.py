@@ -210,6 +210,7 @@ HANDLERS = {
     "board.resume": _handle_board_resume,
     "team.member.switch": lambda args, tx, ctx: teams.switch_member_agent(tx, args, ctx),
     "team.member.resume": lambda args, tx, ctx: teams.resume_member_agent(tx, args),
+    "team.usage.reset": lambda args, tx, ctx: teams.reset_provider_usage(tx, args, ctx),
 }
 MONITOR_INTERVAL_S = 2.0
 

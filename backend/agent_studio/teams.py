@@ -114,6 +114,53 @@ def resume_member_agent(tx: Tx, args: dict) -> dict:
             "cleared": cleared, "activeAgent": agent["active_catalog_agent"]}
 
 
+def reset_provider_usage(tx: Tx, args: dict, ctx: dict) -> dict:
+    """Clear one provider's configured holds and recover members waiting on quota."""
+    from . import teamdefs
+    workspace, fid, provider = (args[k] for k in ("workspace", "teamDefId", "provider"))
+    row = tx.conn.execute("SELECT * FROM teams WHERE workspace = ? AND def_id = ? AND status = 'running' "
+                          "ORDER BY created_at DESC, rowid DESC LIMIT 1", (workspace, fid)).fetchone()
+    if row is None:
+        raise AsError(TEAM_NOT_RUNNING, f"Team {fid!r} is not running.")
+    definition = teamdefs.load(workspace, fid)
+    catalog = teamdefs._catalog(workspace)
+    results = []
+    for member in definition.get("members", []):
+        mid = member.get("id")
+        choices = [option for option in (member.get("agents") or [])
+                   if catalog.get(option, {}).get("provider") == provider]
+        if not choices:
+            continue
+        current = tx.conn.execute("SELECT * FROM agents WHERE team_id = ? AND member_id = ?", (row["id"], mid)).fetchone()
+        if current is None:
+            results.append({"memberId": mid, "cleared": [], "error": "Member is not running."})
+            continue
+        agent = dict(current)
+        was_held = agent["availability"] == "limit_reached"
+        cleared = []
+        for option in choices:
+            result = resume_member_agent(tx, {"workspace": workspace, "teamDefId": fid, "memberId": mid, "agent": option})
+            if result["cleared"]:
+                cleared.append(option)
+        agent = tx.get("agent", agent["id"])
+        entry = {"memberId": mid, "cleared": cleared, "activeAgent": agent["active_catalog_agent"], "switched": False}
+        # An already-running assignment or usable member is never interrupted or switched.
+        if was_held and agent["availability"] == "limit_reached" and not agent.get("pending_agent"):
+            for option in choices:
+                if option in quota_holds(agent) or option == agent["active_catalog_agent"]:
+                    continue
+                try:
+                    result = switch_member_agent(tx, {"workspace": workspace, "teamDefId": fid,
+                                                       "memberId": mid, "agent": option}, ctx)
+                    entry.update(activeAgent=result["activeAgent"], switched=True)
+                    break
+                except AsError as e:
+                    entry["error"] = e.message
+            if entry["switched"]:
+                entry.pop("error", None)
+        results.append(entry)
+    return {"teamId": row["id"], "provider": provider, "members": results}
+
 def switch_member_agent(tx: Tx, args: dict, ctx: dict) -> dict:
     from . import teamdefs
     workspace, fid, mid, choice = (args[k] for k in ("workspace", "teamDefId", "memberId", "agent"))
