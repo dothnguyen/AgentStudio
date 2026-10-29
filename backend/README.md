@@ -152,6 +152,7 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   `board.json`, validates it (schema, rules check, protected routes) and writes atomically. Invalid edits
   (`BOARD_CONFIG_INVALID` with `data.problems`) and a stale `expectedSha256` (`CONFIG_CHANGED`) write nothing.
 - `role.list {workspace}` returns a read-only role catalog with ordered roles, bounded instruction text, full-file tokens, skill availability, warnings, and structured problems. Each role includes bounded saved and live usage, an exact reference count, runtime connectivity, and fail-closed partial/blocking status. An absent legacy roster is valid; an invalid or unreadable entry at its path, including a directory, makes usage partial. Catalog validation and resolver warnings use the same catalog snapshot; invalid catalog contents are reported as data. Catalog, instruction, and warning-resolution reads use confined, nonblocking opens and reject non-regular files.
+- `role.create {workspace, role, expectedSha256?}` creates a role with an immutable slug id and optional description and skills. `role.update {workspace, roleId, changes, expectedSha256?}` edits its display name, description, and ordered skills; null removes a name or description. Both return a SHA token and missing-skill warnings.
 - `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
   (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
 

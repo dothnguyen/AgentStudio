@@ -150,13 +150,32 @@ def _board_settings_update(args, req):
     return boardsettings.update_board(ws, args["changes"], _sha_arg(args))
 
 
+def _role_create(args, req):
+    ws = _catalog_workspace(args, {"workspace", "role", "expectedSha256"}, "role.create")
+    if "role" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'role'.")
+    if not isinstance(args["role"], dict):
+        raise AsError(BAD_REQUEST, "role must be an object.")
+    return roles.create_role(ws, args["role"], _sha_arg(args))
+
+
 def _role_update(args, req):
-    ws = _catalog_workspace(args, {"workspace", "role", "description", "expectedSha256"}, "role.update")
+    ws = _catalog_workspace(args, {"workspace", "role", "description", "roleId", "changes", "expectedSha256"}, "role.update")
+    canonical = "roleId" in args or "changes" in args
+    legacy = "role" in args or "description" in args
+    if canonical and legacy:
+        raise AsError(BAD_REQUEST, "role.update must use either {roleId, changes} or legacy {role, description}, not both.")
+    if canonical:
+        role_id = _slug(args.get("roleId"), "roleId")
+        if "changes" not in args:
+            raise AsError(BAD_REQUEST, "Missing required argument 'changes'.")
+        if not isinstance(args["changes"], dict) or not args["changes"]:
+            raise AsError(BAD_REQUEST, "changes must be a non-empty object.")
+        return roles.update_role(ws, role_id, args["changes"], _sha_arg(args))
     role = req_text(args, "role", 200, allow_empty=False)
     if "description" not in args:
         raise AsError(BAD_REQUEST, "Missing required argument 'description'.")
-    description = None if args["description"] is None else req_text(args, "description", roles.LIMITS["description"])
-    return boardsettings.update_role(ws, role, description, _sha_arg(args))
+    return boardsettings.update_role(ws, role, args["description"], _sha_arg(args))
 
 
 def _catalog_workspace(args, allowed, command):
@@ -938,6 +957,7 @@ COMMANDS = {
     "board.summary": _board_summary,
     "board.settings": _board_settings,
     "board.settings.update": _board_settings_update,
+    "role.create": _role_create,
     "role.update": _role_update,
     "role.list": _role_list,
     "board.run": _inbox("board.run", _validate_board_run),

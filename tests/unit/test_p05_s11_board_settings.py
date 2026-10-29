@@ -245,7 +245,7 @@ class BoardSettingsTests(unittest.TestCase):
             self.write("roles.json", {"version": 2})
         cases = [("ghost", None, "ROLE_NOT_FOUND", "Role 'ghost' is not defined in .agent-studio/roles.json.", "ghost", None),
                  ("sha", None, "CONFIG_CHANGED", None, "worker", "0" * 64),
-                 ("missing", missing, "ROLES_CONFIG_INVALID", ".agent-studio/roles.json does not exist.", "worker", None),
+                 ("missing", missing, "ROLE_NOT_FOUND", "Role 'worker' is not defined in .agent-studio/roles.json.", "worker", None),
                  ("bad", bad, "ROLES_CONFIG_INVALID", None, "worker", None)]
         for label, prep, code, message, role, expected in cases:
             with self.subTest(label):

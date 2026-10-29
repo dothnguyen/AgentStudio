@@ -213,22 +213,7 @@ def update_board(workspace, changes, expected_sha256=None):
 
 
 def update_role(workspace, role_id, description, expected_sha256=None):
-    ws = workspace
-    path = _path(ws, "roles.json")
-    raw = roles.load_config(ws)
-    if raw is None:
-        raise AsError(roles.ROLES_CONFIG_INVALID, ".agent-studio/roles.json does not exist.")
-    _check_expected(expected_sha256, _read_bytes(path), "roles.json")
-    if role_id not in raw["roles"]:
-        raise AsError(ROLE_NOT_FOUND, f"Role {role_id!r} is not defined in .agent-studio/roles.json.")
-    candidate = copy.deepcopy(raw)
-    if description is None:
-        candidate["roles"][role_id].pop("description", None)
-    else:
-        candidate["roles"][role_id]["description"] = description
-    if candidate == raw:
-        return {"workspace": ws, "file": "roles.json", "sha256": _sha(_read_bytes(path) or b""),
-                "role": {"id": role_id, "description": description}, "changed": False}
-    sha = _write_json(path, candidate)
-    return {"workspace": ws, "file": "roles.json", "sha256": sha,
-            "role": {"id": role_id, "description": description}, "changed": True}
+    result = roles.update_role(workspace, role_id, {"description": description}, expected_sha256)
+    result["role"] = {"id": result["role"]["id"], "description": result["role"]["description"]}
+    result.pop("warnings")
+    return result

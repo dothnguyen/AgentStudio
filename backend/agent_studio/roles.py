@@ -16,6 +16,8 @@ its own native files (AGENTS.md, CLAUDE.md, ...) from the workspace as usual.
 """
 from __future__ import annotations
 
+import copy
+import tempfile
 import hashlib
 import contextvars
 import json
@@ -23,8 +25,9 @@ import os
 import re
 from typing import Optional
 
-from .protocol import AsError
+from .protocol import AsError, CONFIG_CHANGED, ROLE_EXISTS, ROLE_NOT_FOUND
 
+MAX_NAME_CHARS = 80
 ROLES_CONFIG_INVALID = "ROLES_CONFIG_INVALID"
 CONFIG_DIR = ".agent-studio"
 SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -193,3 +196,178 @@ def load_team(workspace: str) -> list:
     if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("agents"), list):
         raise AsError(ROLES_CONFIG_INVALID, f'{CONFIG_DIR}/team.json must be {{"version": 1, "agents": [...]}}.')
     return raw["agents"]
+
+
+def _invalid_mutation(problems):
+    raise AsError(ROLES_CONFIG_INVALID, "Invalid role configuration.", data={"problems": problems})
+
+
+def _mutation_input(values, prefix, create=False):
+    problems = []
+    if not isinstance(values, dict):
+        _invalid_mutation([{"path": prefix, "message": "must be an object"}])
+    allowed = {"name", "description", "skills"} | ({"id"} if create else set())
+    for key in values.keys() - allowed:
+        problems.append({"path": f"{prefix}.{key}", "message": "unknown field"})
+    if not create and not values:
+        problems.append({"path": prefix, "message": "must not be empty"})
+    if create and "name" not in values:
+        problems.append({"path": f"{prefix}.name", "message": "is required"})
+    cleaned = dict(values)
+    for key, limit in (("name", MAX_NAME_CHARS), ("description", LIMITS["description"])):
+        if key not in values:
+            continue
+        value = values[key]
+        if value is None and (key == "description" or not create):
+            continue
+        if not isinstance(value, str) or not 1 <= len(value.strip()) <= limit:
+            problems.append({"path": f"{prefix}.{key}", "message": f"must be text containing 1..{limit} characters after trimming"})
+        else:
+            cleaned[key] = value.strip()
+    if "skills" in values:
+        skills = values["skills"]
+        if not isinstance(skills, list):
+            problems.append({"path": f"{prefix}.skills", "message": "must be an array"})
+        else:
+            seen = set()
+            for i, skill in enumerate(skills):
+                if not isinstance(skill, str) or not SKILL_RE.fullmatch(skill):
+                    problems.append({"path": f"{prefix}.skills[{i}]", "message": "invalid skill id"})
+                elif skill in seen:
+                    problems.append({"path": f"{prefix}.skills[{i}]", "message": "duplicate skill id"})
+                else:
+                    seen.add(skill)
+    if problems:
+        _invalid_mutation(problems)
+    return cleaned
+
+
+def _mutation_load(workspace, expected):
+    path = os.path.join(workspace, CONFIG_DIR, "roles.json")
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except FileNotFoundError:
+        data = None
+    sha = hashlib.sha256(data).hexdigest() if data is not None else None
+    if expected is not None and expected != sha:
+        raise AsError(CONFIG_CHANGED, ".agent-studio/roles.json changed since it was read; reload and retry.", data={"sha256": sha})
+    if data is None:
+        return path, data, {"version": 1, "roles": {}}
+    try:
+        raw = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeError, RecursionError) as exc:
+        raise AsError(ROLES_CONFIG_INVALID, f".agent-studio/roles.json is not valid JSON: {exc}")
+    token = _catalog_snapshot.set((workspace, raw))
+    try:
+        load_config(workspace)
+    finally:
+        _catalog_snapshot.reset(token)
+    return path, data, raw
+
+
+def _catalog_problems(workspace, raw, creating):
+    problems = []
+    names = {}
+    for role_id, spec in raw["roles"].items():
+        name = spec.get("name", role_id)
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_NAME_CHARS:
+            problems.append({"path": f"roles.{role_id}.name", "message": "Display name must contain 1–80 characters."})
+        else:
+            normalized = name.strip().casefold()
+            if creating and normalized in names:
+                problems.append({"path": f"roles.{role_id}.name", "message": "Display name is duplicated."})
+            names[normalized] = role_id
+        if len(spec.get("description", "")) > LIMITS["description"]:
+            problems.append({"path": f"roles.{role_id}.description", "message": "Description exceeds the limit."})
+        skills = spec.get("skills", [])
+        if len(skills) != len(set(skills)):
+            problems.append({"path": f"roles.{role_id}.skills", "message": "A skill id is duplicated."})
+        instruction = spec.get("instructions")
+        if instruction and _inside(os.path.join(workspace, CONFIG_DIR), instruction) is None:
+            problems.append({"path": f"roles.{role_id}.instructions", "message": "Role instructions are invalid."})
+    if problems:
+        _invalid_mutation(problems)
+
+
+def _save_role(workspace, path, old, raw, role_id):
+    data = (json.dumps(raw, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    changed = data != old
+    if changed:
+        fd, tmp = tempfile.mkstemp(prefix=".roles.json.", suffix=".tmp", dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            raise
+    spec = raw["roles"][role_id]
+    skills = spec.get("skills", [])
+    base = os.path.join(workspace, CONFIG_DIR)
+    warnings = [f"skill '{skill}' not found at .agent-studio/skills/{skill}/SKILL.md" for skill in skills
+                if not (lambda p: p is not None and os.path.isfile(p))(_inside(base, f"skills/{skill}/SKILL.md"))]
+    return {"workspace": workspace, "file": "roles.json", "sha256": hashlib.sha256(data).hexdigest(),
+            "role": {"id": role_id, "name": spec.get("name", role_id).strip(),
+                     "description": spec.get("description"), "skills": skills},
+            "changed": changed, "warnings": warnings}
+
+
+def _check_name(raw, role_id, name, prefix):
+    for other, spec in raw["roles"].items():
+        if other != role_id and spec.get("name", other).strip().casefold() == name.strip().casefold():
+            _invalid_mutation([{"path": f"{prefix}.name", "message": f"display name conflicts with role '{other}' (case-insensitive after trimming)"}])
+
+
+def create_role(workspace: str, role_input: dict, expected_sha256: Optional[str] = None) -> dict:
+    from . import teamdefs
+    path, old, raw = _mutation_load(workspace, expected_sha256)
+    values = _mutation_input(role_input, "role", True)
+    role_id = values.get("id", teamdefs.slug(values["name"]))
+    if not isinstance(role_id, str) or not teamdefs.SLUG_RE.fullmatch(role_id):
+        _invalid_mutation([{"path": "role.id", "message": "must be a lowercase role slug"}])
+    if role_id in raw["roles"]:
+        raise AsError(ROLE_EXISTS, f"Role '{role_id}' already exists.")
+    _catalog_problems(workspace, raw, True)
+    _check_name(raw, role_id, values["name"], "role")
+    candidate = copy.deepcopy(raw)
+    spec = {"name": values["name"], "skills": values.get("skills", [])}
+    if values.get("description") is not None:
+        spec["description"] = values["description"]
+    candidate["roles"][role_id] = spec
+    return _save_role(workspace, path, old, candidate, role_id)
+
+
+def update_role(workspace: str, role_id: str, changes: dict, expected_sha256: Optional[str] = None) -> dict:
+    path, old, raw = _mutation_load(workspace, expected_sha256)
+    values = _mutation_input(changes, "changes")
+    if role_id not in raw["roles"]:
+        raise AsError(ROLE_NOT_FOUND, f"Role '{role_id}' is not defined in .agent-studio/roles.json.")
+    _catalog_problems(workspace, raw, False)
+    candidate = copy.deepcopy(raw)
+    spec = candidate["roles"][role_id]
+    for key, value in values.items():
+        if value is None:
+            spec.pop(key, None)
+        else:
+            spec[key] = value
+    _check_name(candidate, role_id, spec.get("name", role_id), "changes")
+    # A semantic no-op must retain the original bytes and inode.
+    if candidate == raw:
+        result = _save_role_result_noop(workspace, old, candidate, role_id)
+        return result
+    return _save_role(workspace, path, old, candidate, role_id)
+
+
+def _save_role_result_noop(workspace, old, raw, role_id):
+    spec = raw["roles"][role_id]
+    skills = spec.get("skills", [])
+    base = os.path.join(workspace, CONFIG_DIR)
+    warnings = [f"skill '{skill}' not found at .agent-studio/skills/{skill}/SKILL.md" for skill in skills
+                if not (lambda p: p is not None and os.path.isfile(p))(_inside(base, f"skills/{skill}/SKILL.md"))]
+    return {"workspace": workspace, "file": "roles.json", "sha256": hashlib.sha256(old).hexdigest(),
+            "role": {"id": role_id, "name": spec.get("name", role_id).strip(), "description": spec.get("description"), "skills": skills},
+            "changed": False, "warnings": warnings}
