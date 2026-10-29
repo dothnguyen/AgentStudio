@@ -120,7 +120,7 @@
       "onPass": "merge-ready",
       "onFail": "dev-ready",
       "onFailPriority": 0,
-      "maxRounds": 3
+      "onFailureLimit": { "count": 3, "status": "need-escalate" }
     },
     {
       "when": {
