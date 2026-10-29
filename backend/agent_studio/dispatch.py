@@ -171,7 +171,17 @@ def _catalog_workspace(args, allowed, command):
 
 def _role_list(args, req):
     ws = _catalog_workspace(args, {"workspace"}, "role.list")
-    return dict(rolecatalog.list_roles(ws), workspace=ws)
+    running, conn, error = False, None, None
+    try:
+        running = coordinator.running_info(paths.ensure_state_dir()) is not None
+        conn = _reader()
+    except AsError as e:
+        error = {"code": e.code, "message": e.message}
+    try:
+        return rolecatalog.attach_usage(dict(rolecatalog.list_roles(ws), workspace=ws), ws, conn, running, error)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _agentdef_list(args, req):

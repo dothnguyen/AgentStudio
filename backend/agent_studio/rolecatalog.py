@@ -237,3 +237,180 @@ def _project(workspace, base, catalog, result):
                 break
     result["state"] = "problems" if result["problems"] or any(i["problems"] for i in result["items"]) else "ok"
     return result
+
+# Reference projections are bounded independently of the complete scan.
+MAX_REFERENCE_ITEMS = 500
+MAX_REFERENCE_PROBLEMS = 100
+MAX_REFERENCE_LABEL = 200
+
+
+def _label(value):
+    from . import textsafe
+    return textsafe.one_line(value, MAX_REFERENCE_LABEL)[:MAX_REFERENCE_LABEL] if isinstance(value, str) else None
+
+
+def _scan_saved_references(workspace: str, role_id: str, keep_members: bool = False) -> dict:
+    from . import boardmodel, teamdefs, workflowdef
+
+    result = {key: [] for key in ("members", "boardRules", "workflows", "legacyRoster", "problems")}
+
+    def problem(source, path, error, code=None):
+        message = error.message if isinstance(error, AsError) else str(error)
+        message = message.replace(workspace, "<workspace>")
+        result["problems"].append({"source": source, "path": path,
+                                   "code": error.code if isinstance(error, AsError) else (code or "SOURCE_UNREADABLE"),
+                                   "message": _label(message)})
+
+    def check_dir(path):
+        try:
+            with os.scandir(os.path.join(workspace, path)) as entries:
+                list(entries)
+        except FileNotFoundError:
+            pass
+
+    teams_path = ".agent-studio/teams"
+    try:
+        check_dir(teams_path)
+        ids = teamdefs.list_ids(workspace)
+    except (AsError, OSError) as e:
+        problem("teams", teams_path, e)
+        ids = []
+    for team_id in ids:
+        path = f"{teams_path}/{team_id}.json"
+        try:
+            team = teamdefs.load(workspace, team_id)
+            members = team.get("members")
+            if not isinstance(members, list):
+                raise AsError("TEAM_CONFIG_INVALID", "members must be a list")
+            seen = set()
+            for index, member in enumerate(members):
+                if not isinstance(member, dict) or ("role" in member and not isinstance(member["role"], str)):
+                    problem("teams", path, AsError("TEAM_CONFIG_INVALID", f"members[{index}] is invalid"))
+                    continue
+                mid = member.get("id")
+                if not isinstance(mid, str) or not mid.strip() or mid in seen:
+                    problem("teams", path, AsError("TEAM_CONFIG_INVALID", f"members[{index}] has an invalid or duplicate id"))
+                    continue
+                seen.add(mid)
+                if member.get("role") == role_id:
+                    result["members"].append({"teamDefId": team_id, "teamName": _label(team.get("name")),
+                        "memberId": mid, "memberName": _label(member.get("name")),
+                        "saved": {"path": path, "memberIndex": index}, "live": None})
+        except (AsError, OSError) as e:
+            problem("teams", path, e)
+
+    legacy_path = ".agent-studio/team.json"
+    try:
+        exists = teamdefs.legacy_exists(workspace)
+        if not exists and os.path.lexists(os.path.join(workspace, legacy_path)):
+            raise AsError("ROLES_CONFIG_INVALID", f"{legacy_path} is not a readable roster file")
+        if exists:
+            for index, member in enumerate(roles.load_team(workspace)):
+                if not isinstance(member, dict) or ("role" in member and not isinstance(member["role"], str)):
+                    problem("legacyRoster", legacy_path, AsError("ROLES_CONFIG_INVALID", f"agents[{index}] is invalid"))
+                    continue
+                if member.get("role") == role_id:
+                    name = member.get("name") or member.get("displayName") or f"{member.get('role')}-{index + 1}"
+                    try:
+                        mid = teamdefs.slug(str(name))
+                    except AsError as e:
+                        problem("legacyRoster", legacy_path, e)
+                        mid = None
+                    result["legacyRoster"].append({"memberIndex": index, "memberId": mid,
+                                                   "memberName": _label(name), "path": legacy_path})
+    except (AsError, OSError) as e:
+        problem("legacyRoster", legacy_path, e)
+
+    board_path = ".agent-studio/board.json"
+    try:
+        board = boardmodel.load_config(workspace)
+        for index, rule in enumerate(board.get("rules", [])):
+            if rule.get("role") == role_id:
+                result["boardRules"].append({"index": index, "status": _label(rule["when"]["status"]),
+                                             "workflow": _label(rule["workflow"]), "path": f"rules[{index}].role"})
+    except (AsError, OSError) as e:
+        problem("board", board_path, e)
+
+    workflow_path = ".agent-studio/workflows"
+    try:
+        check_dir(workflow_path)
+        definitions = workflowdef.list_definitions(workspace, builtin_dir=None)
+    except (AsError, OSError) as e:
+        problem("workflows", workflow_path, e)
+        definitions = []
+    for entry in definitions:
+        path = entry["files"][0]
+        if entry["errors"]:
+            for error in entry["errors"]:
+                problem("workflows", path, AsError("WORKFLOW_DEFINITION_INVALID", error["message"]))
+            continue
+        try:
+            definition = workflowdef.load(workspace, entry["name"], builtin_dir=None)
+            for stage in definition.stages:
+                if stage.type == "agent" and stage.role == role_id:
+                    result["workflows"].append({"name": _label(entry["name"]), "path": path, "stageId": stage.id})
+        except (AsError, OSError) as e:
+            problem("workflows", path, e)
+    result["count"] = sum(len(result[k]) for k in ("members", "boardRules", "workflows", "legacyRoster"))
+    result["truncated"] = any(len(result[k]) > (MAX_REFERENCE_PROBLEMS if k == "problems" else MAX_REFERENCE_ITEMS)
+                              for k in ("members", "boardRules", "workflows", "legacyRoster", "problems"))
+    # Members stay complete until runtime rows have been joined.
+    for key in ("boardRules", "workflows", "legacyRoster", "problems"):
+        result[key] = result[key][:(MAX_REFERENCE_PROBLEMS if key == "problems" else MAX_REFERENCE_ITEMS)]
+    if not keep_members:
+        result["members"] = result["members"][:MAX_REFERENCE_ITEMS]
+    return result
+
+
+def scan_saved_references(workspace: str, role_id: str) -> dict:
+    return _scan_saved_references(workspace, role_id)
+
+
+def scan_live_references(conn, workspace: str, role_id: str) -> list:
+    from .teams import ACTIVE
+    rows = conn.execute("SELECT t.id AS team_id, t.def_id, t.name AS team_name, t.status AS team_status, "
+                        "a.id AS agent_id, a.member_id, a.display_name, a.availability FROM teams t "
+                        "JOIN agents a ON a.team_id = t.id WHERE t.workspace = ? AND a.role = ? "
+                        "AND t.status IN ('starting','running') ORDER BY t.created_at, t.rowid, a.ordinal", (workspace, role_id))
+    out = []
+    marks = ",".join("?" * len(ACTIVE))
+    for row in rows:
+        assignment = conn.execute(f"SELECT id, status, task_id FROM assignments WHERE agent_id = ? AND status IN ({marks}) "
+                                  "ORDER BY created_at DESC, rowid DESC LIMIT 1", (row["agent_id"],) + ACTIVE).fetchone()
+        out.append({"teamDefId": row["def_id"], "teamName": _label(row["team_name"]),
+                    "memberId": row["member_id"], "memberName": _label(row["display_name"]), "saved": None,
+                    "live": {"teamId": row["team_id"], "agentId": row["agent_id"], "teamStatus": row["team_status"],
+                             "availability": _label(row["availability"]), "assignment":
+                             {"id": assignment["id"], "status": assignment["status"], "taskId": assignment["task_id"]} if assignment else None}})
+    return out
+
+
+def attach_usage(catalog: dict, workspace: str, conn, coordinator_running: bool, runtime_error: dict | None) -> dict:
+    result = dict(catalog)
+    result["items"] = []
+    for item in catalog["items"]:
+        usage = _scan_saved_references(workspace, item["id"], keep_members=True)
+        members = usage["members"]
+        if conn is not None:
+            for live in scan_live_references(conn, workspace, item["id"]):
+                match = next ( (m for m in members if live["teamDefId"] is not None and live["memberId"] is not None
+                                 and m["teamDefId"] == live["teamDefId"] and m["memberId"] == live["memberId"]
+                                 and m["saved"] is not None and m["live"] is None), None)
+                if match is None:
+                    members.append(live)
+                    usage["count"] += 1
+                else:
+                    match["live"] = live["live"]
+        else:
+            error = runtime_error or {"code": "BACKEND_UNAVAILABLE", "message": "State database unavailable"}
+            error = {"code": error["code"], "message": _label(error["message"].replace(workspace, "<workspace>"))}
+            usage["problems"].append({"source": "runtime", "path": "", **error})
+        usage["liveRuntime"] = {"state": ("unavailable" if conn is None else "connected" if coordinator_running else "disconnected"),
+                                "error": error if conn is None else None}
+        usage["partial"] = bool(usage["problems"]) or conn is None
+        usage["blocking"] = usage["count"] > 0 or usage["partial"]
+        usage["truncated"] |= len(members) > MAX_REFERENCE_ITEMS or len(usage["problems"]) > MAX_REFERENCE_PROBLEMS
+        usage["members"] = members[:MAX_REFERENCE_ITEMS]
+        usage["problems"] = usage["problems"][:MAX_REFERENCE_PROBLEMS]
+        result["items"].append(dict(item, usage=usage))
+    return result

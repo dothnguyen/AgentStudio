@@ -313,7 +313,10 @@ class RoleCatalogTests(unittest.TestCase):
         for _ in range(2):
             response = dispatch.handle_request(request, True)
             self.assertTrue(response['ok'])
-            self.assertEqual(response['data'], dict(one, workspace=os.path.realpath(self.ws)))
+            data = response['data']
+            self.assertIn('usage', data['items'][0])
+            data['items'] = [{k: v for k, v in item.items() if k != 'usage'} for item in data['items']]
+            self.assertEqual(data, dict(one, workspace=os.path.realpath(self.ws)))
         self.assertEqual(before, snapshot())
         self.assertEqual(entries, sorted(str(p.relative_to(self.ws)) for p in Path(self.ws).rglob('*')))
         self.assertEqual(context, roles.context_for(self.ws, 'worker'))
@@ -462,7 +465,7 @@ class RoleCatalogTests(unittest.TestCase):
             return dispatch.handle_request({'protocol': PROTOCOL, 'id': 'r', 'command': 'role.list', 'args': args}, True)
         data = call({'workspace': self.ws + '/.'})['data']
         self.assertEqual(set(data), {'state', 'sha256', 'bytes', 'items', 'problems', 'availableSkills', 'workspace'})
-        self.assertEqual(set(data['items'][0]), {'id', 'name', 'description', 'instructions', 'skills', 'warnings', 'problems'})
+        self.assertEqual(set(data['items'][0]), {'id', 'name', 'description', 'instructions', 'skills', 'warnings', 'problems', 'usage'})
         self.assertEqual(set(data['items'][0]['instructions']), {'path', 'state', 'text', 'sha256', 'bytes'})
         for args, code, message in [
             ({}, 'BAD_REQUEST', "Missing required argument 'workspace'."),
