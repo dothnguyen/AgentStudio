@@ -142,3 +142,48 @@ Move reusable agent catalog management out of Teams into a dedicated workspace A
 | Completion | [P05-S28](./stories/P05-S28-agents-states-responsive-accessibility.md) | Automated loading/empty/disconnected/error/narrow-layout and accessibility coverage |
 
 These stories intentionally add no live acceptance gate. The operator owns manual application verification; implementation tickets require only focused backend, renderer, IPC, accessibility, typecheck, and build automation.
+
+## Roles catalog and shared role instructions — T-062
+
+**Goal.** Add a dedicated workspace Roles destination where operators can browse, search, create, edit, and safely delete reusable roles, including their descriptions, instruction files, and configured skills. A role can be assigned to many team members; its shared instructions are resolved for each new assignment while member permissions, ordered agent options, live switching, and quota controls remain independent.
+
+**Goal, restated.** Make the existing `.agent-studio/roles.json`, role Markdown, skill, team, workflow, and board-routing semantics visible and safely editable without inventing a second role store. Connect Teams to that catalog with a constrained role selector and a link to the selected role, while preserving frozen dispatch evidence and existing team/agent behavior.
+
+### Open questions and planning assumptions
+
+| Question | Assumption used by these stories |
+|---|---|
+| Is a role's identifier renameable? | No. The `roles.json` object key is the stable role id used by teams, workflow stages, board rules, running agents, and direct tasks. Add an optional mutable `name` for the user-facing label; “rename” edits that label and therefore cannot break references. Existing roles without `name` display their id. |
+| Must display names be unique? | New and updated explicit names must be non-empty and case-insensitively unique after trimming. Legacy duplicate/missing names remain inspectable by stable id and are reported as catalog problems; an affected role can still be edited to repair its name. |
+| How are existing instruction files handled? | Preserve each valid existing `instructions` relative path and edit that file in place with confinement, UTF-8, and size checks. A newly created role receives `.agent-studio/roles/<id>.md`; a role with no path gets that conventional path only when instructions are first saved. Never rewrite custom paths merely by reading or editing other fields. |
+| When does an instruction edit take effect? | It affects assignments created after the successful save. Existing assignments and workflow attempts keep their frozen `roleContext`, hashes, and sources; a running team need not restart. Team member role changes continue to apply on the next team start under the existing contract. |
+| Which references block deletion? | Any saved team definition, legacy `.agent-studio/team.json` member, board rule, loadable workspace workflow stage, or live runtime agent using the stable id blocks deletion and returns structured references. Invalid/unreadable reference sources make deletion fail closed. Historical stopped runtimes and already-frozen completed/current assignments do not require rewriting. |
+| Are role skills managed here? | Yes. The Roles detail shows configured skill ids, whether each `.agent-studio/skills/<id>/SKILL.md` exists, and warnings from normal role resolution. Editing changes only the ordered role `skills` list; it never creates, edits, or deletes skill files. Missing skills stay visible for repair. |
+| What happens to the existing role editor in routing settings? | Remove the duplicate description editor from `RoutingSettingsPanel`, but retain its role choices and routing validation. All role metadata, instructions, skills, and deletion live in Roles. |
+| Does a role inherit permissions or agents? | No. `canAddTickets`, ordered agent options, active-agent switching, and quota controls remain member/runtime settings in Teams. The member sketch's inheritance wording is corrected in the implementation copy and tests. |
+
+### Verified architecture and contract gaps
+
+- `backend/agent_studio/roles.py` already validates `.agent-studio/roles.json`, confines instruction and skill paths, bounds content, resolves legacy `.agent-studio/roles/<role>.md`, and builds a hashed role context. `tasks.build_request` freezes that context when an assignment is created; `teams.start_team` reads it only for start feedback.
+- `teamdefs.py` validates member role ids; `boardmodel.check_rules` validates board-rule roles and workflow compatibility; `workflowdef.list_definitions` exposes workspace workflow roles. There is no combined role usage index or safe delete command, and live runtime agents must also be checked through the read-only state connection.
+- `boardsettings.py` exposes only role id/description and can update only a description in `roles.json`. It has optimistic SHA checking for that file but no instruction-file token, role create/delete, display name, skill projection, reference details, or partial instruction warnings.
+- `team.overview` already exposes each member's stable role and role state, and Teams already edits role text fields. The member editor needs catalog choices, undefined-reference preservation, and a Roles deep link without changing member agent, permission, switching, or quota contracts.
+- `WorkspaceShell.tsx` routes Home, Teams, and Agents in local section state. Add Roles beside Teams/Agents and extend the navigation callback with an optional selected role id; do not introduce URL routing or arbitrary renderer commands.
+- The design references provide hierarchy and dark-theme direction only. All names, counts, status, skills, assignments, and warnings come from workspace configuration/runtime responses.
+
+### Epics → stories
+
+| Epic | Story | Outcome |
+|---|---|---|
+| Catalog reads | [P05-S29](./stories/P05-S29-role-catalog-read-model.md) | Full role, instruction, skill, warning, and catalog-problem projection |
+| Reference safety | [P05-S30](./stories/P05-S30-role-reference-index.md) | Saved and live usage index with fail-closed partial states |
+| Backend mutations | [P05-S31](./stories/P05-S31-role-metadata-and-skills-mutations.md) | Stable-id create and metadata/skill editing with safe display-name rename |
+| | [P05-S32](./stories/P05-S32-role-instructions-mutation-and-dispatch.md) | Concurrency-safe instruction-file editing and frozen-dispatch proof |
+| | [P05-S33](./stories/P05-S33-role-delete-guards.md) | Referenced-role protection and safe unused-role cleanup |
+| Desktop boundary | [P05-S34](./stories/P05-S34-role-management-ipc.md) | Typed, named, allowlisted Roles IPC |
+| Roles UI | [P05-S35](./stories/P05-S35-roles-navigation-and-browser.md) | Roles navigation, search, selection, details, assignments, and states |
+| | [P05-S36](./stories/P05-S36-role-create-and-edit-ui.md) | Accessible create/edit flows for metadata, instructions, and skills |
+| | [P05-S37](./stories/P05-S37-role-delete-ui.md) | Explicit deletion confirmation and in-use safeguards |
+| Teams integration | [P05-S38](./stories/P05-S38-team-member-role-integration.md) | Existing-role selection and deep link with member settings kept separate |
+
+These stories add no live acceptance gate or manual evidence requirement. Focused backend, integration, renderer, IPC, typecheck, and build automation are the implementation acceptance evidence.

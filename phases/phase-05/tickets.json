@@ -253,6 +253,98 @@
         "phases/phase-05/stories/P05-S27-agent-delete-guards.md"
       ],
       "priority": 4
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S29-role-catalog-read-model.md",
+      "title": "Project the workspace role catalog",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S10-management-read-model.md",
+        "phases/phase-05/stories/P05-S24-agent-editor-options-contract.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S30-role-reference-index.md",
+      "title": "Index saved and live role references",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S29-role-catalog-read-model.md",
+        "phases/phase-05/stories/P05-S19-multi-agent-management-read-model.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S31-role-metadata-and-skills-mutations.md",
+      "title": "Create roles and edit metadata and skills",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S29-role-catalog-read-model.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S32-role-instructions-mutation-and-dispatch.md",
+      "title": "Save shared role instructions safely",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S31-role-metadata-and-skills-mutations.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S33-role-delete-guards.md",
+      "title": "Guard role deletion by references",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S30-role-reference-index.md",
+        "phases/phase-05/stories/P05-S32-role-instructions-mutation-and-dispatch.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S34-role-management-ipc.md",
+      "title": "Expose typed role management IPC",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S29-role-catalog-read-model.md",
+        "phases/phase-05/stories/P05-S30-role-reference-index.md",
+        "phases/phase-05/stories/P05-S31-role-metadata-and-skills-mutations.md",
+        "phases/phase-05/stories/P05-S32-role-instructions-mutation-and-dispatch.md",
+        "phases/phase-05/stories/P05-S33-role-delete-guards.md",
+        "phases/phase-05/stories/P05-S12-management-ipc.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S35-roles-navigation-and-browser.md",
+      "title": "Add Roles navigation and catalog browser",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S25-agents-navigation-and-browser.md",
+        "phases/phase-05/stories/P05-S34-role-management-ipc.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S36-role-create-and-edit-ui.md",
+      "title": "Create and edit roles in the catalog",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S35-roles-navigation-and-browser.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S37-role-delete-ui.md",
+      "title": "Add safe role deletion UI",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S33-role-delete-guards.md",
+        "phases/phase-05/stories/P05-S35-roles-navigation-and-browser.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S38-team-member-role-integration.md",
+      "title": "Integrate role selection and deep links in Teams",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S21-ordered-member-options-ui.md",
+        "phases/phase-05/stories/P05-S35-roles-navigation-and-browser.md",
+        "phases/phase-05/stories/P05-S36-role-create-and-edit-ui.md"
+      ],
+      "priority": 3
     }
   ],
   "questions": [
