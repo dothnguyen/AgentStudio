@@ -275,4 +275,13 @@ describe('board controls', () => {
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
   });
+
+  it('role_integration_preserves_live_and_agents_controls', async () => {
+    await renderScreen();
+    expect(screen.getAllByText(/Live agent actions/).length).toBeGreaterThan(0);
+    expect(button('Refresh')).toBeTruthy();
+    const text = document.body.textContent ?? '';
+    expect(text).not.toMatch(/role (grants|owns|sets|chooses|provides|inherits)/i);
+    expect(text).not.toMatch(/inherited from (the|a) role/i);
+  });
 });

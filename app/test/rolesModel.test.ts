@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, selectedRoleId } from '../src/renderer/roles/rolesModel';
+import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, requestedRoleSelection, roleRows, selectedRoleId } from '../src/renderer/roles/rolesModel';
 import { MEMBERS, roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 describe('rolesModel', () => {
@@ -54,5 +54,14 @@ describe('rolesModel', () => {
     expect(labels.map(l => l.memberId)).toEqual(['dev-1', 'dev-2', 'dev-3', null]);
     const idOnly = assignedMemberLabels(roleItem('a', { usage: usageOf({}, [{ teamDefId: 't', teamName: null, memberId: 'm', memberName: null, saved: true, live: null }]) }));
     expect([idOnly[0].team, idOnly[0].member]).toEqual(['t', 'm']);
+  });
+
+  it('requested_role_selection_is_exact_id_only', () => {
+    const items = [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })];
+    expect(requestedRoleSelection(items, 'qa-b')).toBe('qa-b');
+    expect(requestedRoleSelection(items, 'QA')).toBe('qa-a');
+    expect(requestedRoleSelection(items, 'retired')).toBe('qa-a');
+    expect(requestedRoleSelection(items, null)).toBe('qa-a');
+    expect(requestedRoleSelection([], 'qa-b')).toBeNull();
   });
 });

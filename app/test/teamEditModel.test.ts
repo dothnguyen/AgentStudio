@@ -4,13 +4,15 @@ import {
   canEditMember,
   canEditTeam,
   errorFeedback,
-  knownRoles,
+  findCatalogRole,
+  memberRoleChoices,
+  roleChoiceLabel,
   memberChanges,
   nextStartSuffix,
   problemsSuffix,
   validateMemberForm,
 } from '../src/renderer/teams/teamEditModel';
-import { member, team, twoTeams } from './teamsFixtures';
+import { member, team } from './teamsFixtures';
 
 describe('teamEditModel', () => {
   it('ordered_add_remove_reorder_default', () => {
@@ -98,9 +100,31 @@ describe('teamEditModel', () => {
     expect(canEditMember(team(), member())).toBe(true);
   });
 
-  it('known_roles_unique_sorted', () => {
-    expect(knownRoles(twoTeams())).toEqual(['Developer', 'QA', 'TeamLead']);
-    expect(knownRoles(null)).toEqual([]);
+  const dup = [{ id: 'qa-a', name: 'QA' }, { id: 'qa-b', name: 'QA' }];
+  it('role_choices_keep_backend_order_and_stable_ids', () => {
+    const choices = memberRoleChoices(dup, 'qa-b');
+    expect(choices.map((c) => c.label)).toEqual(['QA (qa-a)', 'QA (qa-b)']);
+    expect(choices.map((c) => c.id)).toEqual(['qa-a', 'qa-b']);
+    expect(roleChoiceLabel({ id: 'Dev', name: 'Dev' })).toBe('Dev');
+  });
+  it('missing_current_role_is_preserved_for_repair', () => {
+    const choices = memberRoleChoices(dup, 'retired');
+    expect(choices[0]).toEqual({ id: 'retired', label: 'retired — missing from role catalog', state: 'missing' });
+    expect(choices).toHaveLength(3);
+    expect(memberRoleChoices(dup, '')).toHaveLength(2);
+  });
+  it('find_catalog_role_matches_exact_id_only', () => {
+    const items = [{ id: 'qa-a', name: 'QA' }] as never[];
+    expect(findCatalogRole(items, 'qa-a')).not.toBeNull();
+    expect(findCatalogRole(items, 'QA')).toBeNull();
+    expect(findCatalogRole(items, 'QA-A')).toBeNull();
+    expect(findCatalogRole(items, null)).toBeNull();
+  });
+  it('role_only_change_has_no_member_agent_or_runtime_fields', () => {
+    const initial = { name: 'dev', role: 'qa-a', agents: ['a'], useCatalogAgents: true };
+    const changes = memberChanges(initial, { ...initial, role: 'qa-b' });
+    expect(changes).toEqual({ role: 'qa-b' });
+    expect(Object.keys(changes ?? {})).toEqual(['role']);
   });
 
   it('suffixes', () => {

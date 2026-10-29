@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { roleItem, rolesFixture } from './rolesFixtures';
 import type {
   AgentCatalogList,
   BoardRunner,
@@ -7,6 +8,7 @@ import type {
   OverviewMember,
   OverviewTeam,
   Result,
+  RoleCatalogList,
   TeamDefinition,
   TeamOverview,
 } from '../src/renderer/api';
@@ -144,27 +146,42 @@ export function catalogFixture(overrides: Partial<AgentCatalogList> = {}): Agent
   };
 }
 
+export function teamRolesFixture(): RoleCatalogList {
+  return rolesFixture({
+    items: [
+      roleItem('Developer', { description: 'Implements scoped tickets.' }),
+      roleItem('QA', { description: 'Validates changes.' }),
+      roleItem('Reviewer', { description: 'Reviews changes.' }),
+      roleItem('TeamLead'),
+    ],
+  });
+}
+
 export function fakeManagement(opts: {
   overview?: Array<Response<TeamOverview>>;
   agents?: Array<Response<AgentCatalogList>>;
   boardSettings?: Array<Response<BoardSettings>>;
+  roles?: Array<Response<RoleCatalogList>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   calls?: Partial<Record<keyof ManagementApi, (...args: any[]) => unknown>>;
 } = {}) {
   const overviewList = opts.overview ?? [{ ok: true, data: twoTeams() }];
   const agentList = opts.agents ?? [{ ok: true, data: catalogFixture() }];
   const boardList = opts.boardSettings ?? [{ ok: true, data: boardSettingsFixture() }];
+  const roleList = opts.roles ?? [{ ok: true, data: teamRolesFixture() }];
+  let rl = 0;
   let b = 0;
   let o = 0;
   let a = 0;
   const overview = vi.fn((_id: string) => Promise.resolve(overviewList[Math.min(o++, overviewList.length - 1)]!));
   const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
   const boardSettings = vi.fn((_id: string) => Promise.resolve(boardList[Math.min(b++, boardList.length - 1)]!));
+  const roles = vi.fn((_id: string) => Promise.resolve(roleList[Math.min(rl++, roleList.length - 1)]!));
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
-  const api = new Proxy({ overview, agents, boardSettings, ...opts.calls } as Record<string, unknown>, {
+  const api = new Proxy({ overview, agents, boardSettings, roles, ...opts.calls } as Record<string, unknown>, {
     get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
   }) as unknown as ManagementApi;
-  return { api, overview, agents, boardSettings };
+  return { api, overview, agents, boardSettings, roles };
 }
 
 export function teamDefinition(overrides: Partial<TeamDefinition> = {}): TeamDefinition {

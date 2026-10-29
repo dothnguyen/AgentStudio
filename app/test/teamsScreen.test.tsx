@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
+import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import { catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams } from './teamsFixtures';
 
@@ -22,6 +23,37 @@ const card = (root: HTMLElement, name: string) =>
   within(root).getByRole('button', { name: new RegExp(`^${name}`) });
 
 describe('TeamsScreen', () => {
+  it('defined_member_shows_role_metadata_and_deep_link', async () => {
+    const onViewRole = vi.fn();
+    const fake = fakeManagement({
+      overview: [{ ok: true, data: overviewFixture([team({ members: [member({ role: 'qa-b' })] })]) }],
+      roles: [{ ok: true, data: rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA', description: 'Second QA' })] }) }],
+    });
+    const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
+    await act(async () => {});
+    const row = within(result.getByRole('region', { name: 'Dev Team' })).getAllByRole('row')[1]!;
+    expect(cells(row)[1]).toContain('qa-b');
+    expect(cells(row)[1]).toContain('Second QA');
+    expect(result.getByText(/Member role changes apply the next time the team starts/)).toBeTruthy();
+    fireEvent.click(within(row).getByRole('button', { name: 'View QA in Roles' }));
+    expect(onViewRole).toHaveBeenCalledWith('qa-b');
+    expect(onViewRole).toHaveBeenCalledTimes(1);
+  });
+
+  it('undefined_or_unavailable_role_has_diagnostic_without_link', async () => {
+    const overview = overviewFixture([team({ members: [member({ role: 'retired' }), member({ memberId: 'x', name: 'x', role: 'Developer', roleState: 'undefined' })] })]);
+    const missing = await renderScreen({ overview: [{ ok: true, data: overview }] });
+    expect(missing.result.queryByRole('button', { name: /in Roles/ })).toBeNull();
+    missing.result.unmount();
+    const failed = await renderScreen({ roles: [{ ok: false, error: { code: 'INTERNAL', message: 'roles down', retryable: false } }] });
+    expect(failed.result.queryByRole('button', { name: /in Roles/ })).toBeNull();
+    expect(failed.result.getByRole('button', { name: 'Retry loading roles' })).toBeTruthy();
+    const row = within(failed.result.getByRole('region', { name: 'Dev Team' })).getAllByRole('row')[1]!;
+    expect(cells(row)[1]).toContain('Developer');
+    expect(cells(row)[2]).toContain('OpenCode Sonnet');
+    expect(failed.result.getByRole('button', { name: 'Edit dev' })).toBeTruthy();
+  });
+
   it('saved_options_are_distinct_from_live_agent', async () => {
     const live = twoTeams().teams[1]!.members[0]!.runtime!;
     const saved = {id: 'saved', name: 'Saved choice', provider: 'saved-provider', model: 'saved-model', reasoning: null, description: null, state: 'ok' as const};

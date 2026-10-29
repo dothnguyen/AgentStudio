@@ -30,6 +30,10 @@ export function filterRoleRows(rows: readonly RoleCatalogRow[], query: string): 
 export function selectedRoleId(rows: readonly RoleCatalogRow[], currentId: string | null): string | null {
   return rows.some(row => row.role.id === currentId) ? currentId : rows[0]?.role.id ?? null;
 }
+export function requestedRoleSelection(items: readonly RoleCatalogItem[], requestedRoleId: string | null): string | null {
+  if (requestedRoleId !== null && items.some(item => item.id === requestedRoleId)) return requestedRoleId;
+  return selectedRoleId(roleRows(items), null);
+}
 export function roleDisplayLabel(role: RoleCatalogItem): string {
   return text(role.name)?.trim() ?? text(role.id)?.trim() ?? '';
 }

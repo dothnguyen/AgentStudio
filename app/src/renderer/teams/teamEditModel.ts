@@ -5,7 +5,7 @@ import type {
   OverviewMember,
   OverviewTeam,
   Problem,
-  TeamOverview,
+  RoleCatalogItem,
 } from '../api';
 import { plural } from './teamsModel';
 
@@ -55,15 +55,30 @@ export function canEditMember(team: OverviewTeam, m: OverviewMember): boolean {
   return canEditTeam(team) && m.memberId !== null && m.source !== 'runtime';
 }
 
-export function knownRoles(o: TeamOverview | null): string[] {
-  if (o === null) return [];
-  const roles = new Set<string>();
-  for (const t of o.teams) {
-    for (const m of t.members) {
-      if (m.roleState === 'defined' && m.role !== null) roles.add(m.role);
-    }
+export interface TeamRoleChoice {
+  id: string;
+  label: string;
+  state: 'defined' | 'missing';
+}
+
+export function roleChoiceLabel(role: Pick<RoleCatalogItem, 'id' | 'name'>): string {
+  return role.name === role.id ? role.id : `${role.name} (${role.id})`;
+}
+
+export function memberRoleChoices(
+  roles: readonly Pick<RoleCatalogItem, 'id' | 'name'>[],
+  currentRole: string,
+): TeamRoleChoice[] {
+  const choices: TeamRoleChoice[] = roles.map((r) => ({ id: r.id, label: roleChoiceLabel(r), state: 'defined' }));
+  if (currentRole !== '' && !roles.some((r) => r.id === currentRole)) {
+    choices.unshift({ id: currentRole, label: `${currentRole} — missing from role catalog`, state: 'missing' });
   }
-  return [...roles].sort((a, b) => a.localeCompare(b));
+  return choices;
+}
+
+export function findCatalogRole(roles: readonly RoleCatalogItem[], roleId: string | null): RoleCatalogItem | null {
+  if (roleId === null) return null;
+  return roles.find((r) => r.id === roleId) ?? null;
 }
 
 export function thrownError(reason: unknown): ManagementError {

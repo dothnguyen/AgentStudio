@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
+import { roleItem, rolesFixture } from './rolesFixtures';
 import {
   deferred,
   fakeManagement,
@@ -363,7 +364,7 @@ describe('team editing', () => {
 
   it('invalid_reference_lists_problems', async () => {
     const path = 'members[2].role';
-    const message = "role 'Ghost' is not defined in .agent-studio/roles.json";
+    const message = "role 'QA' was deleted from in .agent-studio/roles.json";
     const addMember = vi.fn(async () => fail({
       code: 'TEAM_CONFIG_INVALID',
       message: `team dev-team: ${path}: ${message}`,
@@ -372,12 +373,48 @@ describe('team editing', () => {
     await renderScreen({ calls: { addMember } });
     await click('Add member');
     fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
-    type('Role', 'Ghost');
+    type('Role', 'QA');
     await submitAddMember();
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toContain('Member was not added.');
     expect(within(alert).getByText(`${path}: ${message}`)).toBeTruthy();
-    expect((screen.getByLabelText('Role') as HTMLInputElement).value).toBe('Ghost');
+    expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
+  });
+
+  it('member_form_uses_catalog_selector_and_blocks_add_when_unavailable', async () => {
+    const dup = rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })] });
+    const first = await renderScreen({ roles: [ok(dup)] });
+    await click('Add member');
+    const select = screen.getByLabelText('Role') as HTMLSelectElement;
+    expect(select.tagName).toBe('SELECT');
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent])).toEqual([
+      ['', 'Choose a role'], ['qa-a', 'QA (qa-a)'], ['qa-b', 'QA (qa-b)'],
+    ]);
+    expect(screen.getByText(/Role metadata and instructions are shared\. Ticket permission and saved agent options remain settings of this member\./)).toBeTruthy();
+    first.result.unmount();
+    const down = await renderScreen({ roles: [fail({ code: 'INTERNAL', message: 'roles down' })] });
+    await click('Add member');
+    expect(screen.getByText('The role catalog could not be loaded. Retry loading it to choose or change a role.')).toBeTruthy();
+    expect((screen.getByLabelText('Role') as HTMLSelectElement).disabled).toBe(true);
+    expect((within(screen.getByRole('form', { name: 'Add member' })).getByRole('button', { name: 'Add member' }) as HTMLButtonElement).disabled).toBe(true);
+    down.result.unmount();
+    const edit = await renderScreen({ roles: [fail({ code: 'INTERNAL', message: 'roles down' })] });
+    await click('Edit dev');
+    const kept = screen.getByLabelText('Role') as HTMLSelectElement;
+    expect(kept.value).toBe('Developer');
+    expect(kept.disabled).toBe(true);
+    expect(edit.fake.roles).toHaveBeenCalled();
+  });
+
+  it('role_only_save_sends_exact_patch_and_next_start_notice', async () => {
+    const dup = rolesFixture({ items: [roleItem('Developer'), roleItem('qa-b', { name: 'QA' })] });
+    const updateMember = vi.fn(async () => ok({ team: teamDefinition(), member: { id: 'dev', name: 'dev', role: 'qa-b', agent: 'opencode-sonnet' }, problems: [], appliesOnNextStart: true }));
+    await renderScreen({ roles: [ok(dup)], calls: { updateMember } });
+    await click('Edit dev');
+    type('Role', 'qa-b');
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { role: 'qa-b' });
+    expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
   });
 
   it('duplicate_member_shows_backend_error', async () => {

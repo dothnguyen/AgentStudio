@@ -4,9 +4,9 @@ import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { RoleDeleteDialog } from './RoleDeleteDialog';
 import { RoleForm, type RoleFormConflict, type RoleFormPhase } from './RoleForm';
 import { buildRoleSavePlan, type RoleFormField, type RoleFormMode, type RoleFormValues } from './roleEditModel';
-import { ROLE_DATA_CHANGED_REASON, assignedMemberLabels, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, roleUsageProblems, selectedRoleId } from './rolesModel';
+import { ROLE_DATA_CHANGED_REASON, assignedMemberLabels, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, requestedRoleSelection, roleUsageProblems, selectedRoleId } from './rolesModel';
 
-export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus }
+export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus; requestedRoleId?: string | null }
 export function RolesScreen(props: RolesScreenProps): JSX.Element { return <RolesBrowser key={props.workspace.id} {...props} />; }
 
 const INSTRUCTION_MESSAGES: Record<string, string> = {
@@ -106,6 +106,19 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
   const edit = useRoleEditing(props, catalog, setSelectedId, setQuery, search, deletePending || refreshRequired || deleteTarget !== null);
   const data = edit.displayed;
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
+
+  const requestedRoleId = props.requestedRoleId ?? null;
+  const handledRequest = useRef<string | null>(null);
+  const [missingRequest, setMissingRequest] = useState<string | null>(null);
+  useEffect(() => {
+    if (requestedRoleId === null) { handledRequest.current = null; setMissingRequest(null); return; }
+    if (data === null || handledRequest.current === requestedRoleId) return;
+    handledRequest.current = requestedRoleId;
+    const found = data.items.some(item => item.id === requestedRoleId);
+    setSelectedId(requestedRoleSelection(data.items, requestedRoleId));
+    setMissingRequest(found ? null : requestedRoleId);
+    if (found) setQuery('');
+  }, [requestedRoleId, data]);
 
   if (data) lastData.current = data;
   queryRef.current = query;
@@ -209,6 +222,7 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
     {announcement && <p role="status" className="roles-announcement">{announcement}</p>}
     {refreshFailure && <p role="alert">{REFRESH_FAILED}</p>}
     {error && <div className="panel-error roles-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; void catalog.reload(); }}>Retry loading roles</button></div>}
+    {missingRequest !== null && <p role="status" className="roles-missing-request">{`Role "${missingRequest}" is unavailable in this workspace.`}</p>}
     {edit.announcement && <p role="status" className="roles-saved">{edit.announcement}</p>}
     {showCatalog && shown && <>
       <div className="roles-toolbar"><button type="button" className="roles-new-button" disabled={edit.mutationBlock !== null} aria-describedby={edit.mutationBlock ? 'roles-mutation-reason' : undefined} onClick={() => edit.open('create', null)}>New role</button>

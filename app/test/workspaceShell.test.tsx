@@ -6,7 +6,8 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
-import { fakeManagement } from './teamsFixtures';
+import { fakeManagement, member, overviewFixture, team } from './teamsFixtures';
+import { roleItem, rolesFixture } from './rolesFixtures';
 
 afterEach(cleanup);
 
@@ -362,5 +363,38 @@ describe('WorkspaceShell', () => {
     expect(result.getAllByRole('main')).toHaveLength(1);
     expect(result.getByRole('navigation', { name: 'Workspace' })).toBeTruthy();
     expect(result.getByRole('complementary', { name: 'Workspace sidebar' })).toBeTruthy();
+  });
+
+  function deepLinkShell(ws: Workspace = workspace) {
+    const fake = fakeManagement({
+      overview: [{ ok: true, data: overviewFixture([team({ members: [member({ role: 'qa-b' })] })]) }],
+      roles: [{ ok: true, data: rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })] }) }],
+    });
+    const ui = (w: Workspace) => <WorkspaceShellComponent workspace={w} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />;
+    return { ui, view: render(ui(ws)) };
+  }
+
+  it('direct_roles_navigation_clears_requested_role', async () => {
+    const { view } = deepLinkShell();
+    fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+    fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
+    await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
+    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
+    fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+    fireEvent.click(view.getByRole('button', { name: 'Roles' }));
+    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-a'));
+    expect(view.queryByText(/is unavailable in this workspace/)).toBeNull();
+  });
+
+  it('workspace_change_clears_section_and_role_request', async () => {
+    const { view, ui } = deepLinkShell();
+    fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+    fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
+    await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
+    view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));
+    await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeNull());
+    expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(view.getByRole('button', { name: 'Roles' }));
+    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-a'));
   });
 });

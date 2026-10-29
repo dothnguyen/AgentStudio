@@ -250,4 +250,28 @@ describe('RolesScreen', () => {
       expect(selector).toMatch(/\.roles-/);
     }
   });
+
+  it('requested_role_selection_is_exact_and_clears_search', async () => {
+    const data = rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' }), roleItem('dev', { name: 'Dev' })] });
+    const fake = fakeManagement({ calls: { roles: vi.fn(async () => ok(data)) } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} requestedRoleId={null} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    fireEvent.change(view.getByLabelText('Search roles'), { target: { value: 'dev' } });
+    view.rerender(<main><RolesScreen workspace={workspace} management={fake.api} requestedRoleId="qa-b" /></main>);
+    await waitFor(() => expect((view.getByLabelText('Search roles') as HTMLInputElement).value).toBe(''));
+    expect(details(view).getByText('qa-b')).toBeTruthy();
+    expect(view.queryByText(/is unavailable in this workspace/)).toBeNull();
+    const current = view.getAllByRole('button').filter(b => b.getAttribute('aria-current') === 'true');
+    expect(current.map(b => b.lastElementChild!.textContent)).toEqual(['qa-b']);
+  });
+
+  it('missing_requested_role_reports_fallback', async () => {
+    const data = rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })] });
+    const fake = fakeManagement({ calls: { roles: vi.fn(async () => ok(data)) } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} requestedRoleId="retired" /></main>);
+    expect(await view.findByText('Role "retired" is unavailable in this workspace.')).toBeTruthy();
+    expect(details(view).getByText('qa-a')).toBeTruthy();
+    view.rerender(<main><RolesScreen workspace={workspace} management={fake.api} requestedRoleId={null} /></main>);
+    await waitFor(() => expect(view.queryByText(/is unavailable in this workspace/)).toBeNull());
+  });
 });

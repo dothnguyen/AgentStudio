@@ -11,6 +11,8 @@ import type {
   MemberChanges,
   OverviewTeam,
   OverviewMember,
+  RoleCatalogItem,
+  RoleCatalogList,
   TeamOverview,
   Workspace,
 } from '../api';
@@ -25,7 +27,7 @@ import {
   canEditTeam,
   emptyMemberForm,
   errorFeedback,
-  knownRoles,
+  findCatalogRole,
   liveNote,
   memberChanges,
   memberFormInitial,
@@ -62,6 +64,7 @@ export interface TeamsScreenProps {
   workspace: Workspace;
   management: ManagementApi;
   connection?: ConnectionStatus;
+  onViewRole?(roleId: string): void;
 }
 
 export interface TeamWrites {
@@ -96,11 +99,12 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const overview = useDashboardSection<TeamOverview>(props.management.overview, props.workspace.id);
   const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
   const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
+  const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const [boardAction, setBoardAction] = useState<BoardAction | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const refreshLock = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
-  const busy = refreshing || overview.loading || agents.loading || board.loading;
+  const busy = refreshing || overview.loading || agents.loading || board.loading || roleCatalog.loading;
   const [feedback, setFeedback] = useState<WriteFeedback | null>(null);
   const [pending, setPending] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -288,7 +292,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     refreshLock.current = true;
     setRefreshing(true);
     try {
-      await Promise.all([overview.reload(), agents.reload(), board.reload()]);
+      await Promise.all([overview.reload(), agents.reload(), board.reload(), roleCatalog.reload()]);
     } finally {
       refreshLock.current = false;
       setRefreshing(false);
@@ -306,6 +310,14 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
 
   if (overview.state === 'ready' && overview.data !== null) lastData.current = overview.data;
   const data = overview.data ?? lastData.current;
+  const roleItems: RoleCatalogItem[] | null = roleCatalog.state === 'ready' && roleCatalog.data !== null && roleCatalog.data.state !== 'invalid'
+    ? roleCatalog.data.items
+    : null;
+  const roleCatalogMessage = roleItems !== null ? null
+    : roleCatalog.loading ? 'Loading the role catalog…'
+    : roleCatalog.error !== null ? 'The role catalog could not be loaded. Retry loading it to choose or change a role.'
+    : roleCatalog.data?.state === 'invalid' ? 'The role catalog is invalid. Fix it in Roles before choosing a role.'
+    : 'The role catalog is unavailable. Retry loading it to choose or change a role.';
   const ordered = data === null
     ? []
     : orderTeams(data.teams.map((team, index) => ({ key: teamKey(team, index), team })));
@@ -330,6 +342,13 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           </button>
         </div>
       </header>
+      {roleCatalog.error !== null && (
+        <div className="panel-error" role="alert">
+          <p>Role catalog: <code className="entity-id">{roleCatalog.error.code}</code>: {roleCatalog.error.message}</p>
+          {typeof roleCatalog.error.remediation === 'string' && roleCatalog.error.remediation !== '' && <p>{roleCatalog.error.remediation}</p>}
+          <button type="button" onClick={() => { void roleCatalog.reload(); }}>Retry loading roles</button>
+        </div>
+      )}
       <WriteFeedbackView feedback={feedback} onDismiss={() => setFeedback(null)} />
       {!connected && (
         <p className="panel-note teams-connection-note">
@@ -398,6 +417,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             team={selected.team}
             overview={data}
             agents={agents.state === 'ready' && agents.data !== null ? agents.data.agents : null}
+            roleItems={roleItems}
+            roleCatalogMessage={roleCatalogMessage}
+            onViewRole={props.onViewRole}
             writes={writes}
             connected={connected}
             actions={actions}
@@ -424,6 +446,9 @@ function TeamDetailPanel(props: {
   team: OverviewTeam;
   overview: TeamOverview;
   agents: AgentDef[] | null;
+  roleItems: RoleCatalogItem[] | null;
+  roleCatalogMessage: string | null;
+  onViewRole?(roleId: string): void;
   writes: TeamWrites;
   connected: boolean;
   actions: Record<string, MemberActionInFlight>;
@@ -498,6 +523,8 @@ function TeamDetailPanel(props: {
       {team.members.length === 0 ? (
         <p className="panel-empty">This team has no members.</p>
       ) : (
+        <>
+        <p className="panel-note">Member role changes apply the next time the team starts. Edits to shared role instructions apply to new assignments and do not change current assignments.</p>
         <table className="teams-members-table">
           <thead>
             <tr>
@@ -514,6 +541,7 @@ function TeamDetailPanel(props: {
             {team.members.map((m, index) => {
               const source = memberSourceNote(m);
               const role = roleNote(m);
+              const catalogRole = m.roleState === 'undefined' || props.roleItems === null ? null : findCatalogRole(props.roleItems, m.role);
               const name = memberName(m);
               const memberId = m.memberId;
               return (
@@ -523,8 +551,21 @@ function TeamDetailPanel(props: {
                     {source !== null && <p className="teams-cell-note">{source}</p>}
                   </td>
                   <td>
-                    {roleText(m)}
-                    {role !== null && <p className="teams-role-description">{role}</p>}
+                    {catalogRole === null ? (
+                      <>
+                        {roleText(m)}
+                        {role !== null && <p className="teams-role-description">{role}</p>}
+                      </>
+                    ) : (
+                      <>
+                        <span className="teams-role-name">{catalogRole.name}</span>
+                        {catalogRole.id !== catalogRole.name && <code className="entity-id">{catalogRole.id}</code>}
+                        <p className="teams-role-description">{catalogRole.description ?? 'No description'}</p>
+                        {props.onViewRole !== undefined && (
+                          <button type="button" onClick={() => props.onViewRole?.(catalogRole.id)}>{`View ${catalogRole.name} in Roles`}</button>
+                        )}
+                      </>
+                    )}
                   </td>
                   <td>{m.source === 'runtime' ? 'Not available' : m.agentMode === 'inline'
                     ? `Inline — ${providerModelText(m.provider, m.model)}${m.reasoning ? ` · Reasoning: ${m.reasoning}` : ''}`
@@ -584,6 +625,7 @@ function TeamDetailPanel(props: {
             })}
           </tbody>
         </table>
+        </>
       )}
       {team.membersTruncated && <p className="panel-note">{`Showing the first ${team.members.length} members.`}</p>}
       {memberForm?.mode === 'add' && (
@@ -594,7 +636,8 @@ function TeamDetailPanel(props: {
           originalOptions={[]}
           inlineContext={null}
           agents={agents}
-          roles={knownRoles(overview)}
+          roles={props.roleItems}
+          roleCatalogMessage={props.roleCatalogMessage}
           pending={pending}
           onSubmit={(values) => { void writes.addMember(team, values).then((ok) => { if (ok) setMemberForm(null); }); }}
           onCancel={() => setMemberForm(null)}
@@ -609,7 +652,8 @@ function TeamDetailPanel(props: {
           originalOptions={editing.agentOptions}
           inlineContext={editing.agentMode === 'inline' ? { provider: editing.provider, model: editing.model, reasoning: editing.reasoning } : null}
           agents={agents}
-          roles={knownRoles(overview)}
+          roles={props.roleItems}
+          roleCatalogMessage={props.roleCatalogMessage}
           pending={pending}
           onSubmit={(values) => {
             const changes = memberChanges(memberFormInitial(editing), values);

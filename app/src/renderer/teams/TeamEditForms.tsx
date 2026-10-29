@@ -1,8 +1,9 @@
 import { useId, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
-import type { AgentDef, ResolvedAgentOption } from '../api';
+import type { AgentDef, ResolvedAgentOption, RoleCatalogItem } from '../api';
 import {
   addAgentOption, removeAgentOption, moveAgentOption,
   memberChanges,
+  memberRoleChoices,
   validateMemberForm,
   type MemberFormValues,
   type WriteFeedback,
@@ -82,12 +83,13 @@ export function MemberForm(props: {
   originalOptions: ResolvedAgentOption[];
   inlineContext: { provider: string | null; model: string | null; reasoning: string | null } | null;
   agents: AgentDef[] | null;
-  roles: string[];
+  roles: readonly RoleCatalogItem[] | null;
+  roleCatalogMessage: string | null;
   pending: boolean;
   onSubmit(values: MemberFormValues): void;
   onCancel(): void;
 }): JSX.Element {
-  const { mode, heading, initial, originalOptions, inlineContext, agents, roles, pending, onSubmit, onCancel } = props;
+  const { mode, heading, initial, originalOptions, inlineContext, agents, roles, roleCatalogMessage, pending, onSubmit, onCancel } = props;
   const uid = useId();
   const [values, setValues] = useState<MemberFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormValues, string>>>({});
@@ -124,7 +126,8 @@ export function MemberForm(props: {
   const agentF = field('agents');
   const roleF = field('role');
   const nameF = field('name');
-  const listId = `${uid}-roles`;
+  const roleChoices = roles === null ? [] : memberRoleChoices(roles, values.role);
+  const roleHintId = `${uid}-role-hint`;
   const set = (key: 'name' | 'role', value: string) => setValues((v) => ({ ...v, [key]: value }));
 
   return (
@@ -171,18 +174,26 @@ export function MemberForm(props: {
         </div>
       )}
       <label htmlFor={roleF.id}>Role</label>
-      <input
-        id={roleF.id}
-        type="text"
-        list={listId}
-        value={values.role}
-        aria-invalid={roleF.invalid}
-        aria-describedby={roleF.described}
-        onChange={(e) => set('role', e.target.value)}
-      />
-      <datalist id={listId}>
-        {roles.map((r) => <option key={r} value={r} />)}
-      </datalist>
+      {roles !== null ? (
+        <select
+          id={roleF.id}
+          value={values.role}
+          disabled={pending}
+          aria-invalid={roleF.invalid}
+          aria-describedby={[roleF.described, roleHintId].filter(Boolean).join(' ')}
+          onChange={(e) => set('role', e.target.value)}
+        >
+          {mode === 'add' && <option value="">Choose a role</option>}
+          {roleChoices.map((c) => <option key={`${c.state}:${c.id}`} value={c.id}>{c.label}</option>)}
+        </select>
+      ) : (
+        <select id={roleF.id} value={values.role} disabled aria-describedby={roleHintId}>
+          {values.role === '' ? <option value="">No role available</option> : <option value={values.role}>{values.role}</option>}
+        </select>
+      )}
+      {roles === null && roleCatalogMessage !== null && <p className="panel-note">{roleCatalogMessage}</p>}
+      {roles !== null && roles.length === 0 && <p className="panel-note">No roles are configured.</p>}
+      <p id={roleHintId} className="panel-note">Role metadata and instructions are shared. Ticket permission and saved agent options remain settings of this member.</p>
       <FieldError id={roleF.err} message={errors.role} />
       <label htmlFor={nameF.id}>{mode === 'add' ? 'Member name (optional)' : 'Member name'}</label>
       <input
@@ -196,7 +207,7 @@ export function MemberForm(props: {
       <FieldError id={nameF.err} message={errors.name} />
       {formError !== null && <p className="teams-field-error" role="alert">{formError}</p>}
       <div className="teams-team-actions">
-        <button type="submit" disabled={pending}>
+        <button type="submit" disabled={pending || (mode === 'add' && roles === null)}>
           {pending ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save member'}
         </button>
         <button type="button" onClick={onCancel}>Cancel</button>

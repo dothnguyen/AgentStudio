@@ -26,17 +26,23 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const items = props.items ?? NAV_ITEMS;
   const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
 
+  const [requestedRoleId, setRequestedRoleId] = useState<string | null>(null);
+
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
+    setRequestedRoleId(null);
   }, [props.workspace.id]);
 
-  const navigate = (nextId: string) => {
+  function navigate(nextId: string, options?: { roleId?: string }): void {
     const item = items.find((candidate) => candidate.id === nextId);
-    if (item !== undefined && item.disabled !== true) setSectionId(nextId);
-  };
+    if (item === undefined || item.disabled === true) return;
+    const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
+    setRequestedRoleId(roleId);
+    setSectionId(nextId);
+  }
 
   const selectedItem = items.find((item) => item.id === sectionId);
-  const section = props.renderSection?.(sectionId, navigate);
+  const section = props.renderSection?.(sectionId, (nextId) => navigate(nextId));
   const content = getSectionContent(sectionId, selectedItem?.label ?? sectionId);
   const defaultSection = sectionId === 'home' ? (
     <DashboardHome
@@ -46,11 +52,21 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onNavigate={(nextId) => navigate(nextId)}
     />
   ) : sectionId === 'teams' ? (
-    <TeamsScreen workspace={props.workspace} management={props.management} connection={props.connection} />
+    <TeamsScreen
+      workspace={props.workspace}
+      management={props.management}
+      connection={props.connection}
+      onViewRole={(roleId) => navigate('roles', { roleId })}
+    />
   ) : sectionId === 'agents' ? (
     <AgentsScreen workspace={props.workspace} management={props.management} connection={props.connection} />
   ) : sectionId === 'roles' ? (
-    <RolesScreen workspace={props.workspace} management={props.management} connection={props.connection} />
+    <RolesScreen
+      workspace={props.workspace}
+      management={props.management}
+      connection={props.connection}
+      requestedRoleId={requestedRoleId}
+    />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
   );
