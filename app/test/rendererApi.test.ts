@@ -133,7 +133,7 @@ describe('getManagementApi', () => {
   const METHODS = [
     'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-    'updateRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
+    'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
   ];
   const fakes = () => {
     const fns: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -155,6 +155,27 @@ describe('getManagementApi', () => {
       expect(await api[m](...args)).toEqual({ ok: true, data: { m } });
       expect(fns[m]).toHaveBeenCalledWith(...args);
     }
+  });
+
+  it('forwards role methods with their arguments and returns success and error results unchanged', async () => {
+    const error = { ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'm', retryable: false, data: { sha256: 'x' } } };
+    const fns = fakes();
+    for (const m of ['roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole']) fns[m] = vi.fn(async () => error);
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: { ...fns, extra: vi.fn() } as never };
+    const api = getManagementApi();
+    const sha = 'a'.repeat(64);
+    const conf = { expectedRolesSha256: sha, expectedInstructionsSha256: null };
+    expect(await api.roles('ws')).toBe(error);
+    expect(await api.createRole('ws', { name: 'QA' }, null)).toBe(error);
+    expect(await api.updateRole('ws', 'QA', { skills: [] }, sha)).toBe(error);
+    expect(await api.updateRoleInstructions('ws', 'QA', '', sha, null)).toBe(error);
+    expect(await api.deleteRole('ws', 'QA', conf)).toBe(error);
+    expect(fns.roles).toHaveBeenCalledWith('ws');
+    expect(fns.createRole).toHaveBeenCalledWith('ws', { name: 'QA' }, null);
+    expect(fns.updateRole).toHaveBeenCalledWith('ws', 'QA', { skills: [] }, sha);
+    expect(fns.updateRoleInstructions).toHaveBeenCalledWith('ws', 'QA', '', sha, null);
+    expect(fns.deleteRole).toHaveBeenCalledWith('ws', 'QA', conf);
+    expect('extra' in api).toBe(false);
   });
 
   it('forwards switch confirmation', async () => {

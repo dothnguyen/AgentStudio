@@ -17,7 +17,11 @@ export const MANAGEMENT_CHANNELS = {
   managementUpdateMember: 'management:updateMember',
   managementRemoveMember: 'management:removeMember',
   managementUpdateBoardSettings: 'management:updateBoardSettings',
+  managementRoles: 'management:roles',
+  managementCreateRole: 'management:createRole',
   managementUpdateRole: 'management:updateRole',
+  managementUpdateRoleInstructions: 'management:updateRoleInstructions',
+  managementDeleteRole: 'management:deleteRole',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
@@ -42,8 +46,12 @@ export function isPlainObject(v: unknown): v is Record<string, unknown> {
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA = /^[0-9a-f]{64}$/;
+const SKILL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const MAX_INSTRUCTION_BYTES = 16384;
 
-type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true';
+type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
+  | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull';
 
 interface Field {
   kind: Kind;
@@ -73,7 +81,34 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
     case 'true':
       return value === true ? null : `${label}: ${field} must be true.`;
     case 'sha':
-      return typeof value === 'string' && SHA.test(value) ? null : `${label}: expectedSha256 must be a lowercase hex sha256.`;
+      return typeof value === 'string' && SHA.test(value) ? null : `${label}: ${field} must be a lowercase hex sha256.`;
+    case 'shaOrNull':
+      return value === null || (typeof value === 'string' && SHA.test(value)) ? null : `${label}: ${field} must be a lowercase hex sha256 or null.`;
+    case 'roleId':
+      return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 64
+        ? null
+        : `${label}: ${field} must be a non-empty string of at most 64 characters.`;
+    case 'roleName':
+      return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 128
+        ? null
+        : `${label}: ${field} must be a non-empty string of at most 128 characters.`;
+    case 'roleDescription':
+    case 'roleDescriptionOrNull':
+      if (value === null && kind === 'roleDescriptionOrNull') return null;
+      if (typeof value !== 'string') return `${label}: ${field} must be a string${kind === 'roleDescriptionOrNull' ? ' or null' : ''}.`;
+      return value.length <= 2000 ? null : `${label}: ${field} must be at most 2000 characters.`;
+    case 'instructionText':
+      if (typeof value !== 'string') return `${label}: ${field} must be a string.`;
+      if (LONE_SURROGATE.test(value)) return `${label}: ${field} must not contain unpaired surrogates.`;
+      return new TextEncoder().encode(value).length <= MAX_INSTRUCTION_BYTES
+        ? null
+        : `${label}: ${field} must be at most ${MAX_INSTRUCTION_BYTES} UTF-8 bytes.`;
+    case 'skillIds':
+      if (!Array.isArray(value)) return `${label}: ${field} must be an array of skill ids.`;
+      for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] !== 'string' || !SKILL_ID.test(value[i])) return `${label}: ${field}[${i}] must be a valid skill id.`;
+      }
+      return new Set(value).size === value.length ? null : `${label}: ${field} must not contain duplicates.`;
     case 'nonEmpty':
       return typeof value === 'string' && value.trim().length > 0 ? null : `${label}: ${field} must be a non-empty string.`;
     case 'string':
@@ -121,7 +156,7 @@ function parseObject(
     } else {
       const err = checkValue(spec.kind, value, name, label);
       if (err) return err;
-      out[key] = spec.kind === 'stringArrayOfSlugs' ? [...value as string[]] : value;
+      out[key] = spec.kind === 'stringArrayOfSlugs' || spec.kind === 'skillIds' ? [...value as string[]] : value;
     }
   }
   return out;
@@ -138,7 +173,7 @@ function spec(
   method: string,
   command: string,
   schema: Record<string, FieldSpec>,
-  opts: { mutating?: boolean; flatten?: string } = {},
+  opts: { mutating?: boolean; flatten?: string; map?: (flat: Record<string, unknown>) => Record<string, unknown> } = {},
 ): ManagementSpec {
   const label = `management.${method}`;
   return {
@@ -148,7 +183,8 @@ function spec(
     mutating: opts.mutating === true,
     parse: (request) => {
       const parsed = parseObject(request, schema, '', label);
-      return opts.flatten ? flat(parsed, opts.flatten) : parsed;
+      const out = opts.flatten ? flat(parsed, opts.flatten) : parsed;
+      return opts.map && typeof out !== 'string' ? opts.map(out) : out;
     },
   };
 }
@@ -265,10 +301,58 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
     },
     expectedSha256: sha,
   }),
+  spec(C.managementRoles, 'roles', 'role.list', {}),
+  spec(C.managementCreateRole, 'createRole', 'role.create', {
+    input: {
+      required: true,
+      object: {
+        id: { kind: 'slug' },
+        name: { kind: 'roleName', required: true },
+        description: { kind: 'roleDescription' },
+        skills: { kind: 'skillIds' },
+      },
+    },
+    expectedRolesSha256: { kind: 'shaOrNull', required: true },
+  }, {
+    flatten: 'input',
+    map: ({ expectedRolesSha256, ...rest }) => ({ ...rest, expectedSha256: expectedRolesSha256 }),
+  }),
   spec(C.managementUpdateRole, 'updateRole', 'role.update', {
-    role: { kind: 'nonEmpty', required: true },
-    description: { kind: 'stringOrNull', required: true },
-    expectedSha256: sha,
+    roleId: { kind: 'roleId', required: true },
+    changes: {
+      required: true,
+      nonEmpty: true,
+      object: {
+        name: { kind: 'roleName' },
+        description: { kind: 'roleDescriptionOrNull' },
+        skills: { kind: 'skillIds' },
+      },
+    },
+    expectedRolesSha256: { kind: 'sha', required: true },
+  }, {
+    flatten: 'changes',
+    map: ({ roleId, expectedRolesSha256, ...rest }) => ({ role: roleId, ...rest, expectedSha256: expectedRolesSha256 }),
+  }),
+  spec(C.managementUpdateRoleInstructions, 'updateRoleInstructions', 'role.instructions.update', {
+    roleId: { kind: 'roleId', required: true },
+    text: { kind: 'instructionText', required: true },
+    expectedRolesSha256: { kind: 'sha', required: true },
+    expectedInstructionsSha256: { kind: 'shaOrNull', required: true },
+  }, {
+    map: ({ roleId, ...rest }) => ({ role: roleId, ...rest }),
+  }),
+  spec(C.managementDeleteRole, 'deleteRole', 'role.delete', {
+    roleId: { kind: 'roleId', required: true },
+    confirmation: {
+      required: true,
+      object: {
+        expectedRolesSha256: { kind: 'sha', required: true },
+        expectedInstructionsSha256: { kind: 'shaOrNull', required: true },
+      },
+    },
+  }, {
+    flatten: 'confirmation',
+    map: ({ roleId, ...rest }) => ({ role: roleId, ...rest }),
   }),
   spec(C.managementRunBoard, 'runBoard', 'board.run', { teamId: { kind: 'uuid', required: true } }, { mutating: true }),
   spec(C.managementSwitchMemberAgent, 'switchMemberAgent', 'team.member.switch', {

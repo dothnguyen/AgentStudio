@@ -21,7 +21,7 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-  'updateRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
+  'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
 ];
 
 describe('preload', () => {
@@ -72,8 +72,13 @@ describe('preload', () => {
     m.removeMember('ws', 'core', 'm1', x);
     m.updateBoardSettings('ws', { baseBranch: 'main' }, undefined, x);
     m.updateBoardSettings('ws', { baseBranch: 'main' }, sha);
-    m.updateRole('ws', 'TeamLead', null, undefined, x);
-    m.updateRole('ws', 'TeamLead', 'desc', sha);
+    m.roles('ws', x);
+    m.createRole('ws', { name: 'QA' }, null, x);
+    m.createRole('ws', { id: 'qa', name: 'QA', description: 'd', skills: [] }, sha, x);
+    m.updateRole('ws', 'TeamLead', { description: null }, sha, x);
+    m.updateRoleInstructions('ws', 'TeamLead', '', sha, null, x);
+    m.updateRoleInstructions('ws', 'TeamLead', 'text', sha, sha, x);
+    m.deleteRole('ws', 'TeamLead', { expectedRolesSha256: sha, expectedInstructionsSha256: null }, x);
     m.runBoard('ws', uuid, x);
     m.stopBoard('ws', x);
     m.switchMemberAgent('ws', 'core', 'm1', 'ada');
@@ -98,8 +103,13 @@ describe('preload', () => {
       [P.managementRemoveMember, 'ws', { teamDefId: 'core', memberId: 'm1' }],
       [P.managementUpdateBoardSettings, 'ws', { changes: { baseBranch: 'main' } }],
       [P.managementUpdateBoardSettings, 'ws', { changes: { baseBranch: 'main' }, expectedSha256: sha }],
-      [P.managementUpdateRole, 'ws', { role: 'TeamLead', description: null }],
-      [P.managementUpdateRole, 'ws', { role: 'TeamLead', description: 'desc', expectedSha256: sha }],
+      [P.managementRoles, 'ws', {}],
+      [P.managementCreateRole, 'ws', { input: { name: 'QA' }, expectedRolesSha256: null }],
+      [P.managementCreateRole, 'ws', { input: { id: 'qa', name: 'QA', description: 'd', skills: [] }, expectedRolesSha256: sha }],
+      [P.managementUpdateRole, 'ws', { roleId: 'TeamLead', changes: { description: null }, expectedRolesSha256: sha }],
+      [P.managementUpdateRoleInstructions, 'ws', { roleId: 'TeamLead', text: '', expectedRolesSha256: sha, expectedInstructionsSha256: null }],
+      [P.managementUpdateRoleInstructions, 'ws', { roleId: 'TeamLead', text: 'text', expectedRolesSha256: sha, expectedInstructionsSha256: sha }],
+      [P.managementDeleteRole, 'ws', { roleId: 'TeamLead', confirmation: { expectedRolesSha256: sha, expectedInstructionsSha256: null } }],
       [P.managementRunBoard, 'ws', { teamId: uuid }],
       [P.managementStopBoard, 'ws', {}],
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],

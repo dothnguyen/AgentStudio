@@ -77,7 +77,7 @@ it.each(['merge-conflict', 'plan-merge-conflict'])('shows the protected role pro
 it('saves role descriptions with roles SHA', async () => {
   const update = vi.fn(async () => ({ ok: true as const, data: {} })); const { panel, fake } = await setup({ updateRole: update });
   fireEvent.click(panel.getAllByRole('button', { name: 'Edit description' })[1]); fireEvent.change(panel.getByLabelText('Description for TeamLead'), { target: { value: ' new text ' } });
-  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); }); expect(update).toHaveBeenCalledWith('ws-a', 'TeamLead', 'new text', 'b'.repeat(64)); expect(fake.boardSettings).toHaveBeenCalledTimes(2); expect(panel.getByText('Role description saved.')).toBeTruthy();
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); }); expect(update).toHaveBeenCalledWith('ws-a', 'TeamLead', { description: 'new text' }, 'b'.repeat(64)); expect(fake.boardSettings).toHaveBeenCalledTimes(2); expect(panel.getByText('Role description saved.')).toBeTruthy();
 });
 it('shows backend validation inline without reloading', async () => {
   const update = vi.fn(async () => ({ ok: false as const, error: { code: 'BOARD_CONFIG_INVALID', message: 'invalid', retryable: false, data: { problems: [{ path: 'rules[0].role', message: 'Rejected role' }] } } }));
@@ -124,7 +124,7 @@ it('sends a blank role description as null', async () => {
   fireEvent.click(panel.getAllByRole('button', { name: 'Edit description' })[1]);
   fireEvent.change(panel.getByLabelText('Description for TeamLead'), { target: { value: '  ' } });
   await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
-  expect(update).toHaveBeenCalledWith('ws-a', 'TeamLead', null, 'b'.repeat(64));
+  expect(update).toHaveBeenCalledWith('ws-a', 'TeamLead', { description: null }, 'b'.repeat(64));
 });
 
 it.each(['ROLE_NOT_FOUND', 'ROLES_CONFIG_INVALID', 'CONFIG_CHANGED'])('keeps role form and displays %s details', async code => {
@@ -334,7 +334,7 @@ it.each(['routing', 'role'] as const)('uses the original %s snapshot after a bac
   await act(async () => {});
   await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
   if (kind === 'routing') expect(updateBoardSettings).toHaveBeenCalledWith('ws-a', { baseBranch: 'draft' }, initial.board.sha256);
-  else expect(updateRole).toHaveBeenCalledWith('ws-a', 'TeamLead', 'draft', initial.roles.sha256);
+  else expect(updateRole).toHaveBeenCalledWith('ws-a', 'TeamLead', { description: 'draft' }, initial.roles.sha256);
   expect(panel.getByText('CONFIG_CHANGED: changed since read')).toBeTruthy();
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
 });

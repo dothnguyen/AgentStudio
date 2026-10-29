@@ -27,7 +27,11 @@ export const PRELOAD_CHANNELS = {
   managementUpdateMember: 'management:updateMember',
   managementRemoveMember: 'management:removeMember',
   managementUpdateBoardSettings: 'management:updateBoardSettings',
+  managementRoles: 'management:roles',
+  managementCreateRole: 'management:createRole',
   managementUpdateRole: 'management:updateRole',
+  managementUpdateRoleInstructions: 'management:updateRoleInstructions',
+  managementDeleteRole: 'management:deleteRole',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
@@ -78,12 +82,15 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
           w,
           expectedSha256 === undefined ? { changes } : { changes, expectedSha256 },
         ),
-      updateRole: (w, role, description, expectedSha256) =>
-        ipc.invoke(
-          PRELOAD_CHANNELS.managementUpdateRole,
-          w,
-          expectedSha256 === undefined ? { role, description } : { role, description, expectedSha256 },
-        ),
+      roles: (w) => ipc.invoke(PRELOAD_CHANNELS.managementRoles, w, {}),
+      createRole: (w, input, expectedRolesSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementCreateRole, w, { input, expectedRolesSha256 }),
+      updateRole: (w, roleId, changes, expectedRolesSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateRole, w, { roleId, changes, expectedRolesSha256 }),
+      updateRoleInstructions: (w, roleId, text, expectedRolesSha256, expectedInstructionsSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateRoleInstructions, w, { roleId, text, expectedRolesSha256, expectedInstructionsSha256 }),
+      deleteRole: (w, roleId, confirmation) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementDeleteRole, w, { roleId, confirmation }),
       runBoard: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementRunBoard, w, { teamId }),
       switchMemberAgent: (w, teamDefId, memberId, agent, confirmation) =>
         ipc.invoke(PRELOAD_CHANNELS.managementSwitchMemberAgent, w, confirmation === undefined ? { teamDefId, memberId, agent } : { teamDefId, memberId, agent, confirmation }),

@@ -45,7 +45,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
     try {
       const result = kind === 'routing'
         ? await management.updateBoardSettings(workspaceId, changes!, snapshot.board.sha256!)
-        : await management.updateRole(workspaceId, role!, normalized, snapshot.roles.sha256!);
+        : await management.updateRole(workspaceId, role!, { description: normalized }, snapshot.roles.sha256!);
       if (!result.ok) { setError(result.error); return; }
       setSavedKind(kind);
       if (await refreshLatest()) { setDraft(null); setRole(null); setSavedKind(null); setNotice(kind === 'routing' ? 'Routing settings saved.' : 'Role description saved.'); }

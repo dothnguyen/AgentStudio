@@ -303,12 +303,90 @@ export interface ConfigWriteResult {
   sha256: string;
   changed: string[];
 }
-export interface RoleWriteResult {
+export type RoleCatalogState = 'ok' | 'missing' | 'invalid';
+export type RoleInstructionState = 'ok' | 'none' | 'missing' | 'invalid' | 'truncated';
+export type RoleSkillState = 'ok' | 'missing';
+export interface RoleInstructions {
+  state: RoleInstructionState;
+  path: string | null;
+  text: string | null;
+  sha256: string | null;
+  bytes: number | null;
+}
+export interface RoleSkill { id: string; state: RoleSkillState }
+export interface RoleUsageAssignment { id: string; status: string }
+export interface RoleUsageMember {
+  teamDefId: string | null;
+  teamName: string | null;
+  memberId: string;
+  memberName: string | null;
+  saved: boolean;
+  live: boolean;
+  availability: string | null;
+  assignment: RoleUsageAssignment | null;
+}
+export interface RoleUsageReference {
+  sourceId: string;
+  label: string | null;
+  path: string | null;
+}
+export interface RoleUsage {
+  members: RoleUsageMember[];
+  boardRules: RoleUsageReference[];
+  workflows: RoleUsageReference[];
+  legacyRoster: RoleUsageReference[];
+  liveRuntime: RoleUsageReference[];
+  count: number;
+  blocking: boolean;
+  partial: boolean;
+}
+export interface RoleCatalogItem {
+  id: string;
+  name: string;
+  description: string | null;
+  instructions: RoleInstructions;
+  skills: RoleSkill[];
+  warnings: string[];
+  problems: Problem[];
+  usage: RoleUsage;
+}
+export interface RoleCatalogList {
   workspace: string;
-  file: 'roles.json';
+  state: RoleCatalogState;
+  sha256: string | null;
+  items: RoleCatalogItem[];
+  problems: Problem[];
+  availableSkills: string[];
+}
+export interface RoleCreateInput {
+  id?: string;
+  name: string;
+  description?: string;
+  skills?: string[];
+}
+export interface RoleChanges {
+  name?: string;
+  description?: string | null;
+  skills?: string[];
+}
+export interface RoleMutationResult {
+  workspace: string;
   sha256: string;
-  role: { id: string; description: string | null };
-  changed: boolean;
+  role: RoleCatalogItem;
+  warnings: string[];
+  appliesToNewAssignments: true;
+}
+export interface RoleInstructionsMutationResult extends RoleMutationResult {
+  instructions: RoleInstructions;
+}
+export interface RoleDeleteResult {
+  workspace: string;
+  sha256: string | null;
+  deleted: { id: string; instructions: 'deleted' | 'preserved' | 'missing' };
+}
+export interface RoleDeleteConfirmation {
+  expectedRolesSha256: string;
+  expectedInstructionsSha256: string | null;
 }
 export interface BoardRunResult {
   board: { workspace: string; status: 'running' | 'stopped'; teamId: string | null };
@@ -342,7 +420,11 @@ export interface ManagementApi {
   updateMember(workspaceId: string, teamDefId: string, memberId: string, changes: MemberChanges): R<MemberEditResult>;
   removeMember(workspaceId: string, teamDefId: string, memberId: string): R<MemberRemoved>;
   updateBoardSettings(workspaceId: string, changes: BoardSettingsChanges, expectedSha256?: string): R<ConfigWriteResult>;
-  updateRole(workspaceId: string, role: string, description: string | null, expectedSha256?: string): R<RoleWriteResult>;
+  roles(workspaceId: string): R<RoleCatalogList>;
+  createRole(workspaceId: string, input: RoleCreateInput, expectedRolesSha256: string | null): R<RoleMutationResult>;
+  updateRole(workspaceId: string, roleId: string, changes: RoleChanges, expectedRolesSha256: string): R<RoleMutationResult>;
+  updateRoleInstructions(workspaceId: string, roleId: string, text: string, expectedRolesSha256: string, expectedInstructionsSha256: string | null): R<RoleInstructionsMutationResult>;
+  deleteRole(workspaceId: string, roleId: string, confirmation: RoleDeleteConfirmation): R<RoleDeleteResult>;
   runBoard(workspaceId: string, teamId: string): R<BoardRunResult>;
   switchMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string, confirmation?: { cancelActive: true; assignmentId: string }): R<MemberSwitchResult>;
   resumeMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string): R<MemberResumeResult>;
