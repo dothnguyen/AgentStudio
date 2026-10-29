@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useEffect, useRef, useState, type JSX, type ReactNode, type RefObject } from 'react';
 import type { ConnectionStatus, ManagementApi, ManagementError, RoleCatalogItem, RoleCatalogList, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
+import { RoleDeleteDialog } from './RoleDeleteDialog';
 import { RoleForm, type RoleFormConflict, type RoleFormPhase } from './RoleForm';
 import { buildRoleSavePlan, type RoleFormField, type RoleFormMode, type RoleFormValues } from './roleEditModel';
-import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, roleUsageProblems, selectedRoleId } from './rolesModel';
+import { ROLE_DATA_CHANGED_REASON, assignedMemberLabels, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, roleUsageProblems, selectedRoleId } from './rolesModel';
 
 export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus }
 export function RolesScreen(props: RolesScreenProps): JSX.Element { return <RolesBrowser key={props.workspace.id} {...props} />; }
@@ -19,7 +20,26 @@ function ProblemList(props: { title: string; items: Array<{ path: string; messag
   return <><h4>{props.title}</h4><ul>{props.items.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></>;
 }
 
-function RoleDetails(props: { role: RoleCatalogItem; onEdit(): void; editDisabled: boolean; editReasonId: string | null }): JSX.Element {
+interface DeleteAlert { roleId: string; error: ManagementError }
+interface DeleteTarget { role: RoleCatalogItem; catalogSha256: string | null; instructionsSha256: string | null; beforeIds: string[]; shared: boolean }
+const REFRESH_FAILED = 'Role was deleted, but Roles could not be refreshed. Retry Roles before making another change.';
+
+function DeleteAlert(props: { alert: DeleteAlert }): JSX.Element {
+  const { error } = props.alert;
+  const usage = roleUsageFromDeleteError(error);
+  const problems = roleUsageProblemsFromDeleteError(error);
+  return <div className="panel-error roles-delete-alert" role="alert">
+    <p><code>{error.code}</code>: {error.message}</p>
+    {error.remediation && <p>{error.remediation}</p>}
+    {error.code === 'ROLE_IN_USE' && <p>The role was not deleted. Remove these references elsewhere, then reload Roles.</p>}
+    {usage && roleBlockerGroups(usage).map(g => <section key={g.key} className="roles-delete-group"><h4>{g.title}</h4><ul>{g.items.map((item, i) => <li key={i}>{item}</li>)}</ul></section>)}
+    {error.code === 'ROLE_USAGE_UNAVAILABLE' && <><p>Role usage could not be checked completely. Fix the listed sources, then retry the scan and confirm again.</p>
+      {problems.length > 0 && <ul>{problems.map((p, i) => <li key={i}><code>{p.source}</code>: {p.message}</li>)}</ul>}</>}
+    {error.code === 'CONFIG_CHANGED' && <p>Role files changed. Reload Roles and confirm again.</p>}
+  </div>;
+}
+
+function RoleDetails(props: { role: RoleCatalogItem; actions?: ReactNode; onEdit(): void; editDisabled: boolean; editReasonId: string | null }): JSX.Element {
   const { role } = props;
   const label = roleDisplayLabel(role);
   const instructions = role.instructions;
@@ -32,6 +52,7 @@ function RoleDetails(props: { role: RoleCatalogItem; onEdit(): void; editDisable
     <h3>{label}</h3>
     <p><button type="button" className="roles-edit-button" disabled={props.editDisabled} aria-describedby={props.editReasonId ?? undefined} onClick={props.onEdit}>Edit role</button></p>
     <p>ID: <code>{role.id}</code></p>
+    {props.actions}
     {label !== role.id && <p>Display name: {label}</p>}
     <p>{role.description?.trim() ? role.description : 'No description'}</p>
     <h3>Shared instructions</h3>
@@ -63,38 +84,139 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
   const connected = !props.connection || props.connection.state === 'connected';
   const heading = useRef<HTMLHeadingElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const retried = useRef(false);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const edit = useRoleEditing(props, catalog, setSelectedId, setQuery, search);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteAlert, setDeleteAlert] = useState<DeleteAlert | null>(null);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
+  const [refreshFailure, setRefreshFailure] = useState(false);
+  const deleteButton = useRef<HTMLButtonElement>(null);
+  const deleteLock = useRef(false);
+  const active = useRef(true);
+  const committed = useRef<{ roleId: string; label: string; disposition: ReturnType<typeof roleDeleteDisposition>; beforeIds: string[] } | null>(null);
+  const reloading = useRef(false);
+  const lastData = useRef<RoleCatalogList | null>(null);
+  const queryRef = useRef('');
+  const [focusTrigger, setFocusTrigger] = useState(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const edit = useRoleEditing(props, catalog, setSelectedId, setQuery, search, deletePending || refreshRequired || deleteTarget !== null);
   const data = edit.displayed;
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
 
-  const rows = roleRows(data?.items ?? []);
+  if (data) lastData.current = data;
+  queryRef.current = query;
+  const shown = data ?? (refreshRequired ? lastData.current : null);
+  const rows = roleRows(shown?.items ?? []);
   const visible = filterRoleRows(rows, query);
   const currentId = selectedRoleId(visible, selectedId);
   const selected = visible.find(row => row.role.id === currentId) ?? null;
   const error = catalog.error;
-  const showCatalog = data !== null;
-  const invalid = data?.state === 'invalid';
+  const showCatalog = shown !== null;
+  const invalid = shown?.state === 'invalid';
+
+  const finalize = (fresh: RoleCatalogList) => {
+    const done = committed.current;
+    if (!done) return;
+    committed.current = null;
+    const afterIds = filterRoleRows(roleRows(fresh.items), queryRef.current).map(row => row.role.id);
+    setSelectedId(selectionAfterRoleDeletion(done.beforeIds, afterIds, done.roleId));
+    setRefreshRequired(false);
+    setRefreshFailure(false);
+    setDeleteTarget(null);
+    setDeleteAlert(null);
+    setAnnouncement(roleDeleteAnnouncement(done.label, done.disposition));
+    setFocusTrigger(true);
+  };
+  useEffect(() => {
+    if (committed.current && !reloading.current && catalog.state === 'ready' && data) finalize(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog.state, data]);
+  useEffect(() => {
+    if (!focusTrigger) return;
+    setFocusTrigger(false);
+    (deleteButton.current ?? heading.current ?? title.current)?.focus();
+  }, [focusTrigger]);
+
+  const selectedRole = selected?.role ?? null;
+  const disabledReason = selectedRole ? roleDeleteDisabledReason({ role: selectedRole, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: deletePending || edit.busy, refreshRequired }) : null;
+  const targetCurrent = deleteTarget ? shown?.items.find(r => r.id === deleteTarget.role.id) : undefined;
+  const targetChanged = !!deleteTarget && (!targetCurrent || currentId !== deleteTarget.role.id
+    || shown?.sha256 !== deleteTarget.catalogSha256 || (targetCurrent.instructions.sha256 ?? null) !== deleteTarget.instructionsSha256
+    || !data || roleDeleteDisabledReason({ role: targetCurrent, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: false, refreshRequired }) !== null);
+
+  const openDelete = () => {
+    if (!selectedRole || disabledReason || !shown) return;
+    setDeleteAlert(null);
+    setAnnouncement('');
+    setDeleteTarget({
+      role: selectedRole, catalogSha256: shown.sha256, instructionsSha256: selectedRole.instructions.sha256 ?? null,
+      beforeIds: visible.map(row => row.role.id), shared: isInstructionFileShared(selectedRole, shown.items),
+    });
+  };
+  const closeDelete = () => { setDeleteTarget(null); };
+  const confirmDelete = async () => {
+    const target = deleteTarget;
+    if (!target || deleteLock.current || targetChanged || !target.catalogSha256) return;
+    deleteLock.current = true;
+    setDeletePending(true);
+    const label = roleDisplayLabel(target.role) || target.role.id;
+    let result;
+    try {
+      result = await props.management.deleteRole(props.workspace.id, target.role.id, {
+        expectedRolesSha256: target.catalogSha256, expectedInstructionsSha256: target.instructionsSha256,
+      });
+    } catch (reason) {
+      result = { ok: false as const, error: { code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false } };
+    }
+    if (!active.current) return;
+    if (!result.ok) {
+      deleteLock.current = false;
+      setDeletePending(false);
+      setDeleteTarget(null);
+      setDeleteAlert({ roleId: target.role.id, error: result.error });
+      return;
+    }
+    committed.current = { roleId: target.role.id, label, disposition: roleDeleteDisposition(result.data), beforeIds: target.beforeIds };
+    setRefreshRequired(true);
+    reloading.current = true;
+    const fresh = await (catalog.reloadFresh ? catalog.reloadFresh() : catalog.reload().then(() => ({ ok: false as const })));
+    reloading.current = false;
+    if (!active.current) return;
+    deleteLock.current = false;
+    setDeletePending(false);
+    if (fresh.ok) finalize(fresh.data);
+    else { setDeleteTarget(null); setRefreshFailure(true); setFocusTrigger(true); }
+  };
+
+  const deleteDescribedBy = disabledReason ? 'roles-delete-reason' : undefined;
+  const actions = selectedRole && <div className="roles-actions">
+    <button ref={deleteButton} type="button" className="roles-delete-trigger" aria-disabled={disabledReason ? true : undefined} aria-describedby={deleteDescribedBy} onClick={openDelete}>Delete role</button>
+    {disabledReason && <p id="roles-delete-reason" className="roles-delete-reason">{disabledReason}</p>}
+  </div>;
 
   return <div className="roles-screen" data-section="roles">
     <header className="dashboard-header roles-header"><div>
       <nav aria-label="Breadcrumb" className="breadcrumb"><ol><li>Workspace</li><li aria-current="page">Roles</li></ol></nav>
-      <h1>Roles</h1>
+      <h1 tabIndex={-1} ref={title}>Roles</h1>
       <p>Browse reusable roles saved in this workspace. Shared instructions are read when an assignment starts.</p>
     </div></header>
     {!connected && <p role="status">{props.connection?.state === 'lost' ? 'Connection to the backend was lost. Saved role data stays visible but may be out of date.' : 'Connecting to the backend… Saved role data may be out of date.'}</p>}
-    {catalog.loading && <p role="status">Loading roles…</p>}
+    {catalog.loading && !refreshRequired && <p role="status">Loading roles…</p>}
+    {announcement && <p role="status" className="roles-announcement">{announcement}</p>}
+    {refreshFailure && <p role="alert">{REFRESH_FAILED}</p>}
     {error && <div className="panel-error roles-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; void catalog.reload(); }}>Retry loading roles</button></div>}
     {edit.announcement && <p role="status" className="roles-saved">{edit.announcement}</p>}
-    {showCatalog && <>
+    {showCatalog && shown && <>
       <div className="roles-toolbar"><button type="button" className="roles-new-button" disabled={edit.mutationBlock !== null} aria-describedby={edit.mutationBlock ? 'roles-mutation-reason' : undefined} onClick={() => edit.open('create', null)}>New role</button>
         {edit.mutationBlock && <span id="roles-mutation-reason">{edit.mutationBlock}</span>}</div>
-      {data.state === 'missing' && <p>No roles catalog is configured for this workspace.</p>}
-      {invalid && <div className="panel-note roles-problems" role="alert"><p>Roles catalog is invalid.</p><ul>{data.problems.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></div>}
-      {!invalid && data.problems.length > 0 && <div className="panel-note roles-problems"><p>Roles catalog problems</p><ul>{data.problems.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></div>}
-      {data.state === 'ok' && rows.length === 0 && <p>No roles are configured yet.</p>}
+      {shown.state === 'missing' && <p>No roles catalog is configured for this workspace.</p>}
+      {invalid && <div className="panel-note roles-problems" role="alert"><p>Roles catalog is invalid.</p><ul>{shown.problems.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></div>}
+      {!invalid && shown.problems.length > 0 && <div className="panel-note roles-problems"><p>Roles catalog problems</p><ul>{shown.problems.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></div>}
+      {shown.state === 'ok' && rows.length === 0 && <p>No roles are configured yet.</p>}
       {rows.length > 0 && <>
         <h2 tabIndex={-1} ref={heading}>Role catalog</h2>
         <div className="roles-search"><label>Search roles<input ref={search} type="search" placeholder="Search roles…" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
@@ -107,11 +229,15 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
               <strong>{roleDisplayLabel(row.role)}</strong>
               <span>{row.role.id}</span>
             </button></li>)}</ul>
-          {selected && <RoleDetails role={selected.role} editDisabled={edit.mutationBlock !== null || data.state !== 'ok'} editReasonId={edit.mutationBlock ? 'roles-mutation-reason' : null} onEdit={() => edit.open('edit', selected.role)} />}
+          {selected && <div className="roles-detail-pane">
+            {deleteAlert?.roleId === selected.role.id && <DeleteAlert alert={deleteAlert} />}
+            <RoleDetails role={selected.role} actions={actions} editDisabled={edit.mutationBlock !== null || shown.state !== 'ok'} editReasonId={edit.mutationBlock ? 'roles-mutation-reason' : null} onEdit={() => edit.open('edit', selected.role)} />
+          </div>}
         </div>
       </>}
     </>}
     {edit.dialog}
+    {deleteTarget && <RoleDeleteDialog role={deleteTarget.role} shared={deleteTarget.shared} pending={deletePending} blockedReason={targetChanged ? ROLE_DATA_CHANGED_REASON : null} onCancel={closeDelete} onConfirm={() => void confirmDelete()} />}
   </div>;
 }
 
@@ -147,6 +273,7 @@ function useRoleEditing(
   select: (id: string) => void,
   setQuery: (query: string) => void,
   search: RefObject<HTMLInputElement | null>,
+  deleteBusy: boolean,
 ) {
   const lastData = useRef<RoleCatalogList | null>(null);
   if (catalog.data) lastData.current = catalog.data;
@@ -186,6 +313,7 @@ function useRoleEditing(
   const mutationBlock = !connected ? 'Role changes are unavailable while the backend is disconnected.'
     : !data ? 'Role changes are unavailable until the catalog loads.'
     : data.state === 'invalid' || data.problems.length > 0 ? 'Role changes are unavailable while the roles catalog has problems.'
+    : deleteBusy ? 'A role deletion is in progress.'
     : pending || session ? 'Another role change is in progress.' : null;
 
   const patch = (change: Partial<Session>) => {
@@ -331,5 +459,5 @@ function useRoleEditing(
     mutationsBlockedReason={!connected ? 'Role changes are unavailable while the backend is disconnected.' : null}
     onSubmit={values => void submit(values)} onCancel={() => close('opener')} onReloadConflict={() => void reloadReview()} onKeepDraft={keepDraft} onUseServer={useServer} /></div> : null;
 
-  return { displayed, mutationBlock, open, dialog, announcement };
+  return { displayed, mutationBlock, open, dialog, announcement, busy: pending || session !== null };
 }

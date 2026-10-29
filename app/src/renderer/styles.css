@@ -1250,7 +1250,7 @@ ul[aria-label="Workspaces"] {
 .agents-screen button:focus-visible, .agents-screen a:focus-visible, .agents-screen input:focus-visible, .agents-screen select:focus-visible, .agents-screen textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* Roles browser (P05-S35) */
-.roles-screen, .roles-layout > *, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
+.roles-screen, .roles-layout > *, .roles-detail-pane, .roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
 .roles-search { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
 .roles-search input { padding: 8px; min-width: 0; max-width: 100%; }
 .roles-count { color: var(--text-muted); }
@@ -1263,7 +1263,16 @@ ul[aria-label="Workspaces"] {
 .roles-screen :is(button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .roles-screen :is(button, input[type="search"]) { min-height: 36px; }
 @media (max-width: 900px) { .roles-layout { grid-template-columns: minmax(0, 1fr); } }
-
+.roles-detail-pane { display: grid; gap: 12px; }
+.roles-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
+.roles-delete-reason, .roles-delete-copy, .roles-delete-name { min-width: 0; overflow-wrap: anywhere; margin: 0; }
+.roles-delete-trigger, .roles-delete-confirm { border-color: var(--danger, #e5534b); color: var(--danger, #e5534b); }
+.roles-delete-trigger[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+.roles-delete-alert ul { margin: 4px 0 8px; padding-left: 20px; }
+.roles-delete-group h4 { margin: 8px 0 4px; }
+.roles-delete-dialog { max-width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
+.roles-delete-dialog :is(button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 560px) { .roles-delete-actions { flex-direction: column-reverse; align-items: stretch; } .roles-delete-dialog { width: calc(100vw - 32px); } }
 .roles-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; min-width: 0; overflow-wrap: anywhere; }
 .roles-saved { overflow-wrap: anywhere; }
 .roles-form { display: flex; flex-direction: column; gap: 12px; width: min(640px, 100%); max-height: 100%; min-width: 0; padding: 20px; overflow: auto; overflow-wrap: anywhere; background: var(--surface, #fff); color: var(--text, #111); }

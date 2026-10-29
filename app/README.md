@@ -137,3 +137,7 @@ options apply on the next team start and do not determine live switch eligibilit
 Reset times without a valid explicit time zone are shown as unknown. Concurrent
 member switch requests refresh independently until their results appear or polling
 reaches its limit.
+
+### Deleting a role
+
+The Roles screen offers **Delete role** for the selected role only when its usage was scanned completely and shows no references, its catalog and instruction version tokens are present, and the backend connection is ready. The confirmation dialog states whether the instruction file is removed (conventional, unshared file) or preserved (custom or shared file). The backend rescans usage on delete; if it reports `ROLE_IN_USE`, every reference group is listed and nothing is changed — there is no force-delete or reference rewrite. The role list updates only after the delete succeeds and Roles reloads; if the reload fails, further role changes stay disabled until Roles is retried.
