@@ -187,3 +187,46 @@ These stories intentionally add no live acceptance gate. The operator owns manua
 | Teams integration | [P05-S38](./stories/P05-S38-team-member-role-integration.md) | Existing-role selection and deep link with member settings kept separate |
 
 These stories add no live acceptance gate or manual evidence requirement. Focused backend, integration, renderer, IPC, typecheck, and build automation are the implementation acceptance evidence.
+
+## Focused Teams views (T-073)
+
+**Goal.** Replace the long, crowded Teams management page with focused team overview, members, member-detail, and routing views while preserving all existing workspace team, board, member, and live-agent operations.
+
+**Goal, restated.** Operators can browse teams, understand the selected team's definition/runtime and board state, scan its members, open one member for saved and live controls, and inspect or edit workspace routing without losing context. The redesign keeps the existing dark Agent Studio shell and uses only real management responses; it does not duplicate the standalone Agents or Roles catalogs.
+
+### Open questions and planning assumptions
+
+| Question | Assumption used by these stories |
+|---|---|
+| Do focused views require URL routing or browser history? | No. Extend the existing workspace-local section state with a selected team, selected child view, and optional selected member. Reset invalid selections when the workspace or returned definitions change, and keep direct Teams navigation deterministic without adding a router. |
+| Is routing configured per selected team? | No. `board.settings` is workspace-wide. Present routing inside the selected-team experience for discoverability, but label its workspace-wide effect and never imply the rules are stored on that team. |
+| What belongs in the overview view? | Show definition/runtime health, member summary, board runner state, and common team/board actions. Team creation remains available from the team browser; rename/delete and board run/stop remain selected-team actions with their current backend restrictions. |
+| What does a role provide to a member? | Shared role metadata and instructions only. Member name, `canAddTickets`, ordered catalog agent options/default, active agent, quota holds, switching, and resume are independent member/runtime settings. Role instructions continue to be edited only in Roles. |
+| When do saved changes apply? | Team/member definition changes and saved agent-option changes apply on the next team start under the existing mutation results. Role instruction edits apply to new assignments as defined by T-062. Live switch/resume actions affect the running member through their existing coordinator commands. |
+| How should failure escalation appear? | Expose the existing `onFailureLimit: {count, status}` rule policy in the board-settings projection and editor. Preserve the configured QA and review failure thresholds that route to `need-escalate`, and show that status's `SeniorDeveloper` workflow route; do not add new scheduler behavior or hard-code those ids into general-purpose components. |
+| Are the design sketches authoritative? | No. Use their compact hierarchy, focused detail, tab, table, and expandable-section ideas. Names, roles, agents, statuses, counts, availability, work, and transitions come from current workspace responses, including missing/partial/unavailable states. |
+
+### Verified architecture and constraints
+
+- `app/src/renderer/teams/TeamsScreen.tsx` currently owns all four management reads, selected-team state, team/member mutations, board controls, switch/resume polling, cancellation confirmation, and one combined detail table. Refactor this behavior into focused components without changing the named `ManagementApi` calls or adding renderer access to arbitrary commands.
+- `team.overview` already supplies bounded definitions, member roles, saved ordered agent options/defaults, live configured/active agent state, availability, current work, quota holds, pending/last switch evidence, partial notices, and truthful unavailable states. Keep saved and live values visibly distinct.
+- `board.settings` already supplies runner state, statuses, agent/action rules, workflow availability, worktree settings, protected conflict routes, and the raw validated config. Its typed `BoardRuleView` omits the existing `onFailureLimit` policy; add only that projection and editor field while retaining `boardmodel.py` as validation and runtime authority.
+- `teamdef.create/rename/delete`, member mutations, `board.run/stop`, `team.member.switch/resume`, and `board.settings.update` already enforce active-team, assignment, conflict, provider, SHA, graph, and protected-route safety. The focused UI must surface those exact outcomes and must not reproduce their authority client-side.
+- T-062 stories P05-S29–P05-S38 provide the shared Roles catalog, role usage/deep links, and Teams role separation. Reuse `onViewRole` and the stable role id; routing and member views must not regain role-description or instruction editing.
+- Reuse `WorkspaceShell.tsx`, `useDashboardSection`, `TeamEditForms.tsx`, `boardControlModel.ts`, `memberAgentActionsModel.ts`, `routingSettingsModel.ts`, dark tokens in `styles.css`, and existing component fixtures. Preserve stale-response protection, reconnection refresh, write locks, switch polling, and focus restoration.
+
+### Epics → stories
+
+| Epic | Story | Outcome |
+|---|---|---|
+| Focused shell | [P05-S39](./stories/P05-S39-teams-focused-navigation.md) | Stable team selection and accessible overview/members/routing child navigation |
+| Team overview | [P05-S40](./stories/P05-S40-team-overview-actions.md) | Compact status summary with preserved team and board actions |
+| Members | [P05-S41](./stories/P05-S41-compact-member-list.md) | Scannable role, active-agent, availability, and current-work list |
+| | [P05-S42](./stories/P05-S42-member-detail-and-editing.md) | Focused member settings, saved options, role link, and membership edits |
+| | [P05-S43](./stories/P05-S43-member-live-agent-actions.md) | Focused switch, resume, quota, assignment, and cancellation controls |
+| Routing contract | [P05-S44](./stories/P05-S44-routing-failure-escalation-contract.md) | Typed projection and draft validation for existing failure escalation |
+| Routing UI | [P05-S45](./stories/P05-S45-focused-routing-view.md) | Readable workspace routing table and expandable configuration summaries |
+| | [P05-S46](./stories/P05-S46-focused-routing-editor.md) | Safe focused editor for transitions, worktrees, escalation, and protected routes |
+| Completion | [P05-S47](./stories/P05-S47-teams-states-accessibility-responsive.md) | Automated state, regression, keyboard, focus, and responsive coverage |
+
+These stories intentionally add no live acceptance gate or manual end-to-end requirement. The operator owns running-app verification; story evidence is focused backend, model, renderer, IPC regression, accessibility, typecheck, and production-build automation.

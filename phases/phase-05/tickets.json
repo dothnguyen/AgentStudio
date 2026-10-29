@@ -47,7 +47,7 @@
         "phases/phase-05/stories/P05-S04-team-status.md",
         "phases/phase-05/stories/P05-S05-activity-feed.md"
       ],
-      "priority": 6
+      "priority": 5
     },
     {
       "path": "phases/phase-05/stories/P05-S07-responsive-accessibility.md",
@@ -59,7 +59,7 @@
         "phases/phase-05/stories/P05-S05-activity-feed.md",
         "phases/phase-05/stories/P05-S06-refresh-coordination.md"
       ],
-      "priority": 7
+      "priority": 5
     },
     {
       "path": "phases/phase-05/stories/P05-S08-agent-catalog.md",
@@ -345,6 +345,88 @@
         "phases/phase-05/stories/P05-S36-role-create-and-edit-ui.md"
       ],
       "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S39-teams-focused-navigation.md",
+      "title": "Add focused Teams navigation",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S28-agents-states-responsive-accessibility.md",
+        "phases/phase-05/stories/P05-S38-team-member-role-integration.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S40-team-overview-actions.md",
+      "title": "Build the focused team overview and actions",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S39-teams-focused-navigation.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S41-compact-member-list.md",
+      "title": "Add the compact member list",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S39-teams-focused-navigation.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S42-member-detail-and-editing.md",
+      "title": "Build member detail and membership editing",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S41-compact-member-list.md",
+        "phases/phase-05/stories/P05-S38-team-member-role-integration.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S43-member-live-agent-actions.md",
+      "title": "Preserve live agent actions in member detail",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S42-member-detail-and-editing.md",
+        "phases/phase-05/stories/P05-S22-live-agent-switch-controls.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S44-routing-failure-escalation-contract.md",
+      "title": "Expose routing failure escalation",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S11-board-settings-contract.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S45-focused-routing-view.md",
+      "title": "Build the focused routing view",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S39-teams-focused-navigation.md",
+        "phases/phase-05/stories/P05-S44-routing-failure-escalation-contract.md",
+        "phases/phase-05/stories/P05-S38-team-member-role-integration.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S46-focused-routing-editor.md",
+      "title": "Refactor the focused routing editor",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S45-focused-routing-view.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S47-teams-states-accessibility-responsive.md",
+      "title": "Finish Teams states, accessibility, and responsive behavior",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S40-team-overview-actions.md",
+        "phases/phase-05/stories/P05-S41-compact-member-list.md",
+        "phases/phase-05/stories/P05-S42-member-detail-and-editing.md",
+        "phases/phase-05/stories/P05-S43-member-live-agent-actions.md",
+        "phases/phase-05/stories/P05-S45-focused-routing-view.md",
+        "phases/phase-05/stories/P05-S46-focused-routing-editor.md"
+      ],
+      "priority": 4
     }
   ],
   "questions": [
