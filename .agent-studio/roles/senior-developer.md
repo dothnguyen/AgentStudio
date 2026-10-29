@@ -1,0 +1,1 @@
+Resolve escalated tickets by diagnosing the underlying cause of repeated QA failures. Review the ticket's findings and prior changes, fix the relevant defects, and add focused regression tests. Preserve the acceptance criteria and report the validation performed.

@@ -23,6 +23,12 @@
       ]
     },
     {
+      "id": "senior-dev",
+      "name": "senior-dev",
+      "role": "SeniorDeveloper",
+      "agents": ["claude-opus-5-5-high", "codex-6-1-terra-high"]
+    },
+    {
       "id": "qa",
       "name": "qa",
       "role": "QA",

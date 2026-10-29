@@ -240,6 +240,14 @@ the current phase, registered to that branch/worktree. A board rule can assign t
 workflow and return it to the appropriate merge action after resolution.
 The task's permission is unchanged: pass `--policy workspace_write` when the agent must edit files.
 
+### Escalating repeated workflow failures
+
+An agent workflow rule can set `"onFailureLimit": {"count": 3, "status": "need-escalate"}`.
+After three failed runs for that rule, the ticket moves to the configured status instead of the normal
+`onFail` status. A successful run clears the failure count, and escalation starts a fresh count for the
+next cycle. Paused or cancelled runs do not increment it. The destination needs its own board rule;
+the separate `maxRounds` setting continues to block tickets when its limit is reached.
+
 ### Switching a member's AI agent
 
 Define reusable options in `.agent-studio/agents.json`, then replace a team member's single `agent` or inline

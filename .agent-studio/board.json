@@ -26,6 +26,10 @@
       "name": "QA ready"
     },
     {
+      "id": "need-escalate",
+      "name": "Needs escalation"
+    },
+    {
       "id": "review-ready",
       "name": "Review ready"
     },
@@ -128,7 +132,18 @@
       "onPass": "review-ready",
       "onFail": "dev-ready",
       "onFailPriority": 0,
-      "maxRounds": 6
+      "onFailureLimit": { "count": 3, "status": "need-escalate" }
+    },
+    {
+      "when": { "status": "need-escalate" },
+      "role": "SeniorDeveloper",
+      "workflow": "board-senior-develop",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "qa-ready",
+      "onFail": "need-escalate",
+      "maxRounds": 3,
+      "priority": 0
     },
     {
       "when": {

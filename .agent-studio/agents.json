@@ -9,6 +9,20 @@
       "reasoning": "medium"
     },
     {
+      "id": "claude-opus-5-5-high",
+      "name": "Claude Opus 5.5 high",
+      "provider": "claude",
+      "model": "claude-opus-5-5",
+      "reasoning": "high"
+    },
+    {
+      "id": "codex-6-1-terra-high",
+      "name": "Codex 6.1 Terra high",
+      "provider": "codex",
+      "model": "gpt-6.1-terra",
+      "reasoning": "high"
+    },
+    {
       "id": "claude-sonnet-5-5-medium",
       "name": "Claude Sonnet 5.5 medium",
       "provider": "claude",

@@ -182,6 +182,48 @@ class ApplierCase(RulesCase):
 
 
 class OutcomeApplier(ApplierCase):
+    def test_failure_limit_routes_third_failure_and_resets_after_pass(self):
+        config = json.loads(json.dumps(RULES_CONFIG))
+        config["rules"][1]["onFailureLimit"] = {"count": 3, "status": "hold"}
+        self.write_config(config)
+        self.add("escalation")
+        self.move("T-001", "review")
+        for failure in range(1, 4):
+            result = self.apply("T-001", self.make_run("failed"))
+            self.assertEqual(result["ticket"]["status"], "hold" if failure == 3 else "todo")
+            if failure < 3:
+                self.move("T-001", "review")
+        self.assertEqual(result["reason"], "FAILURE_LIMIT:review")
+        self.move("T-001", "review")
+        result = self.apply("T-001", self.make_run("failed"))
+        self.assertEqual(result["ticket"]["status"], "todo")
+        self.move("T-001", "review")
+        self.apply("T-001", self.make_run("succeeded"))
+        self.move("T-001", "review", force=True)
+        result = self.apply("T-001", self.make_run("failed"))
+        self.assertEqual(result["ticket"]["status"], "todo")
+
+    def test_failure_limit_schema_rejects_invalid_threshold_and_status(self):
+        config = json.loads(json.dumps(RULES_CONFIG))
+        config["rules"][1]["onFailureLimit"] = {"count": 0, "status": "missing"}
+        paths = [problem["path"] for problem in self.problems_with(config)]
+        self.assertIn("rules[1].onFailureLimit.count", paths)
+        self.assertIn("rules[1].onFailureLimit.status", paths)
+
+    def test_failure_limit_does_not_count_paused_runs_or_replays(self):
+        config = json.loads(json.dumps(RULES_CONFIG))
+        config["rules"][1]["onFailureLimit"] = {"count": 2, "status": "hold"}
+        self.write_config(config)
+        self.add("pause and retry")
+        self.move("T-001", "review")
+        self.assertEqual(self.apply("T-001", self.make_run("paused"))["ticket"]["status"], "hold")
+        self.move("T-001", "review")
+        first = self.make_run("failed")
+        self.assertEqual(self.apply("T-001", first)["ticket"]["status"], "todo")
+        self.assertFalse(self.apply("T-001", first)["applied"])
+        self.move("T-001", "review")
+        self.assertEqual(self.apply("T-001", self.make_run("failed"))["ticket"]["status"], "hold")
+
     def test_pass_fail_and_round_limit(self):
         ticket = self.add("work")
         run = self.make_run("succeeded")

@@ -1,0 +1,14 @@
+version: 1
+description: Resolve escalated tickets in an isolated worktree and return them to QA.
+maxSteps: 12
+stages:
+  - id: develop
+    role: SeniorDeveloper
+    permission: workspace_write
+    maxVisits: 4
+    promptFile: workflows/prompts/board-develop.md
+    next: { done: tests }
+  - id: tests
+    type: validation
+    maxVisits: 4
+    next: { pass: $succeed, fail: develop }

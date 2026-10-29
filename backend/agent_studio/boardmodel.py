@@ -41,7 +41,7 @@ _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
              "requiresDeps", "workspace", "action", "priority", "onFailPriority", "syncBase",
-             "createdTicketStatus", "onPassCreatedTickets")
+             "createdTicketStatus", "onPassCreatedTickets", "onFailureLimit")
 RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
@@ -214,6 +214,15 @@ def parse_config(raw) -> dict:
         for key, minimum in (("maxRounds", 1), ("cap", 1), ("priority", 0), ("onFailPriority", 0)):
             if key in rule:
                 rule_int(rule[key], f"{path}.{key}", minimum)
+        if "onFailureLimit" in rule:
+            policy = rule["onFailureLimit"]
+            if not isinstance(policy, dict) or set(policy) != {"count", "status"}:
+                problems.append((f"{path}.onFailureLimit", 'must be {"count": positive integer, "status": STATUS}'))
+            else:
+                rule_int(policy["count"], f"{path}.onFailureLimit.count", 1)
+                rule_status(policy["status"], f"{path}.onFailureLimit.status")
+            if has_action:
+                problems.append((f"{path}.onFailureLimit", "is only valid on an agent workflow rule"))
         if "requiresDeps" in rule and not isinstance(rule["requiresDeps"], bool):
             problems.append((f"{path}.requiresDeps", "must be true or false"))
         if "workspace" in rule and rule["workspace"] not in WORKSPACE_MODES:
@@ -826,6 +835,8 @@ def check_rules(workspace: str, config: dict) -> list:
         edges = {}
         for rule in config["rules"]:
             targets = [rule["onPass"], rule["onFail"]] + ([rule["onBlocked"]] if "onBlocked" in rule else [])
+            if rule.get("onFailureLimit"):
+                targets.append(rule["onFailureLimit"]["status"])
             edges.setdefault(rule["when"]["status"], set()).update(t for t in targets if t)
         # tickets enter at the initial status (the operator moves them on) and at the agent status
         reachable, pending = set(), [config["initial"], config["agentStatus"]]
@@ -877,7 +888,19 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
         target = rule["onBlocked"]
     else:
         target, reason = BLOCKED_STATUS, f"RUN_BLOCKED:{run['id']}"
-    if target != BLOCKED_STATUS and outcome != "pass" and rule.get("maxRounds") \
+    policy = rule.get("onFailureLimit")
+    if policy:
+        failure_key = f"failures:{rule_status_id}"
+        if outcome == "pass":
+            rounds.pop(failure_key, None)
+        elif outcome == "fail":
+            failures = rounds.get(failure_key, 0) + 1
+            if failures >= policy["count"]:
+                target, reason = policy["status"], f"FAILURE_LIMIT:{rule_status_id}"
+                rounds.pop(failure_key, None)
+            else:
+                rounds[failure_key] = failures
+    if reason != f"FAILURE_LIMIT:{rule_status_id}" and target != BLOCKED_STATUS and outcome != "pass" and rule.get("maxRounds") \
             and rounds[rule_status_id] >= rule["maxRounds"]:
         target, reason = BLOCKED_STATUS, f"ROUND_LIMIT:{rule_status_id}"
     now = utcnow()

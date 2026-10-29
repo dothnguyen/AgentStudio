@@ -18,6 +18,11 @@
         "code-search"
       ]
     },
+    "SeniorDeveloper": {
+      "description": "Senior developer: resolves escalated tickets and recurring QA failures.",
+      "instructions": "roles/senior-developer.md",
+      "skills": ["story-format", "python-testing", "code-search"]
+    },
     "QA": {
       "description": "QA: checks a story's implementation against its acceptance criteria and the test results, and reports bugs precisely.",
       "instructions": "roles/qa.md",
