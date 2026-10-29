@@ -118,9 +118,17 @@ an explicit cancellation confirmation; backend errors and cancellation results a
 
 Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details remain separate from saved configuration.
 
-The Agents screen browses saved agent configurations, with search, provider and reasoning filters, and saved team-member references. Saved agents can be created, edited, and duplicated using backend-provided provider options. Deleting a saved definition requires confirmation and is blocked when saved team-member references are known; the backend also checks references when usage is incomplete or changes. Deletion does not change team membership or live runtime. Other saved changes apply on a future team start; live agent controls remain in Teams.
+The Agents screen loads the saved catalog and team usage independently, reports connection and configuration problems, and browses saved agent configurations, with search, provider and reasoning filters, and saved team-member references. Saved agents can be created, edited, and duplicated using backend-provided provider options. Deleting a saved definition requires confirmation and is blocked when saved team-member references are known; the backend also checks references when usage is incomplete or changes. Deletion does not change team membership or live runtime. Other saved changes apply on a future team start; live agent controls remain in Teams.
 
-An open agent draft remains available during a catalog refresh. Saving is unavailable until the refresh succeeds, and catalog validation problems must be repaired on disk before saved agents can be changed.
+The agent form scrolls within the viewport when needed. If a pending save fails after its form is cancelled, the failure remains visible on the Agents screen.
+
+An open agent draft and selection remain available during a catalog refresh. Saving is unavailable until the refresh succeeds, and catalog validation problems must be repaired on disk before saved agents can be changed. Keyboard focus stays within the form until it is closed; validation focuses the first invalid field.
+
+When a form is cancelled while disconnected, focus returns to its action after reconnection and a successful catalog refresh, unless the user has moved focus elsewhere.
+
+When a form is cancelled while its invoking action is disabled by a pending save or a lost connection, focus moves to Search and returns to the action when it is available again, provided focus has not moved elsewhere.
+
+Saved values are displayed with their original whitespace. When a new submission fails client validation, its validation message replaces any previous server error in the form.
 
 The Teams view shows each running catalog member's live agent options and quota holds
 from runtime state. Switch requests with an active assignment require confirmation of

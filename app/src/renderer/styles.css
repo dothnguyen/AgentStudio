@@ -1216,9 +1216,9 @@ ul[aria-label="Workspaces"] {
 
 .agents-header, .agents-screen { overflow-wrap: anywhere; }
 .agents-filters { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
-.agents-filters input, .agents-filters select { padding: 8px; min-width: 150px; }
+.agents-filters input, .agents-filters select { padding: 8px; min-width: 0; }
 .agents-count { color: var(--text-muted); }
-.agents-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 16px; align-items: start; }
+.agents-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .agents-list { list-style: none; margin: 0; padding: 0; }
 .agents-row { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.5fr); gap: 10px; text-align: left; padding: 14px; overflow-wrap: anywhere; }
 .agents-row[aria-pressed="true"] { outline: 2px solid var(--text-bright); outline-offset: -2px; }
@@ -1234,8 +1234,17 @@ ul[aria-label="Workspaces"] {
 .teams-live-reason { font-size: 0.85em; }
 .teams-live-modal > div { background: var(--surface, #fff); color: var(--text, #111); padding: 1.5rem; max-width: 32rem; }
 
-.agent-form { display: flex; flex-direction: column; gap: var(--space-3, 0.75rem); }
+.agent-form { display: flex; flex-direction: column; gap: var(--space-3, 0.75rem); max-height: 100%; overflow: auto; }
 .agent-form label { display: flex; flex-direction: column; gap: var(--space-1, 0.25rem); }
 .agent-form textarea { min-height: 7rem; resize: vertical; }
 .agent-form-actions { display: flex; flex-wrap: wrap; gap: var(--space-2, 0.5rem); }
 .agent-field-error { color: var(--color-danger, #b42318); }
+
+.agents-layout { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); min-width: 0; }
+.agents-screen, .agents-layout > *, .agents-list, .agents-list li, .agents-row, .agents-details, .agents-filters, .agents-filters label, .agent-form, .agent-form label, .agent-form-actions, .agents-references, .agents-error, .agents-problems { min-width: 0; overflow-wrap: anywhere; }
+.agents-filters, .agent-form-actions { display: flex; flex-wrap: wrap; gap: 16px; }
+.agents-screen :is(button, a, input, select, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 900px) { .agents-layout { grid-template-columns: minmax(0, 1fr); } .agents-filters { flex-wrap: wrap; } }
+@media (max-width: 560px) { .agent-form-actions, .agents-screen .dialog-actions, .agents-filters { display: grid; grid-template-columns: minmax(0, 1fr); } .agent-form label { min-width: 0; } }
+
+.agents-screen button:focus-visible, .agents-screen a:focus-visible, .agents-screen input:focus-visible, .agents-screen select:focus-visible, .agents-screen textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

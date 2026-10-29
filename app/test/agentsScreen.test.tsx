@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import React from "react";
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentsScreen } from '../src/renderer/agents/AgentsScreen';
@@ -17,7 +18,7 @@ describe('AgentsScreen', () => {
   it('search_and_combined_filters_keep_catalog_order_and_show_no_match_state', async () => {
     const fake = fakeManagement(); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('list', { name: 'Saved agents' });
     fireEvent.change(view.getByLabelText('Provider'), { target: { value: 'codex' } }); expect(view.getByText('1 agent')).toBeTruthy();
-    fireEvent.change(view.getByLabelText('Search agents'), { target: { value: 'missing' } }); expect(view.getByText('No agents match the current search and filters.')).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Search agents'), { target: { value: 'missing' } }); expect(view.getByText('No agents match these filters.')).toBeTruthy();
     fireEvent.change(view.getByLabelText('Provider'), { target: { value: '' } }); fireEvent.change(view.getByLabelText('Search agents'), { target: { value: '' } }); expect(within(view.getByRole('list', { name: 'Saved agents' })).getAllByRole('button')).toHaveLength(3);
   });
   it('selection_is_retained_while_visible_and_falls_back_after_filtering', async () => {
@@ -33,18 +34,18 @@ describe('AgentsScreen', () => {
   });
   it('catalog_problems_keep_invalid_rows_inspectable', async () => {
     const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ agents: [{ id: '', name: '', provider: '' }, { id: '', name: '', provider: '' }], problems: [{ path: 'agents[0]', message: 'invalid' }] }) }] });
-    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByText('agents.json has problems:'); expect(view.getAllByRole('button', { name: /Unnamed agent/ })).toHaveLength(2);
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByText('Agent catalog has configuration problems.'); expect(view.getAllByRole('button', { name: /Unnamed agent/ })).toHaveLength(2);
   });
   it('catalog_and_usage_errors_retry_independently', async () => {
     const error = { ok: false as const, error: { code: 'FAIL', message: 'failed', retryable: true } }; const fake = fakeManagement({ agents: [error, { ok: true, data: catalogFixture() }], overview: [error, { ok: true, data: overviewFixture([]) }] });
-    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Retry catalog' }); fireEvent.click(view.getByRole('button', { name: 'Retry catalog' })); await view.findByRole('list', { name: 'Saved agents' }); expect(fake.overview).toHaveBeenCalledTimes(1); expect(view.getAllByText('Usage unavailable').length).toBeGreaterThan(0); fireEvent.click(view.getByRole('button', { name: 'Retry usage' })); await waitFor(() => expect(fake.overview).toHaveBeenCalledTimes(2)); expect(fake.agents).toHaveBeenCalledTimes(2);
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />); await view.findByRole('button', { name: 'Retry loading agents' }); fireEvent.click(view.getByRole('button', { name: 'Retry loading agents' })); await view.findByRole('list', { name: 'Saved agents' }); expect(fake.overview).toHaveBeenCalledTimes(1); expect(view.getAllByText('Usage unavailable').length).toBeGreaterThan(0); fireEvent.click(view.getByRole('button', { name: 'Retry loading usage' })); await waitFor(() => expect(fake.overview).toHaveBeenCalledTimes(2)); expect(fake.agents).toHaveBeenCalledTimes(2);
   });
   it('catalog_and_overview_loading_are_independent', async () => {
     const never = new Promise<never>(() => {});
     const fake = fakeManagement({ overview: [never] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
     await view.findByRole('list', { name: 'Saved agents' });
-    expect(view.getAllByText('Loading usage…').length).toBeGreaterThan(0);
+    expect(view.getAllByText('Loading saved usage…').length).toBeGreaterThan(0);
   });
   it('native_row_buttons_support_keyboard_selection', async () => {
     const fake = fakeManagement(); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
@@ -52,12 +53,12 @@ describe('AgentsScreen', () => {
     const button = view.getByRole('button', { name: /Codex GPT/ }) as HTMLButtonElement;
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.type).toBe('button'); button.focus(); expect(document.activeElement).toBe(button);
-    fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' }); fireEvent.keyUp(button, { key: 'Enter', code: 'Enter' });
+    fireEvent.click(button); // jsdom does not synthesize native keyboard clicks
     expect(button.getAttribute('aria-pressed')).toBe('true');
     const other = view.getByRole('button', { name: /Spare agent/ }) as HTMLButtonElement;
     expect(other.getAttribute('aria-pressed')).toBe('false');
     other.focus(); expect(document.activeElement).toBe(other);
-    fireEvent.keyDown(other, { key: ' ', code: 'Space' }); fireEvent.keyUp(other, { key: ' ', code: 'Space' });
+    fireEvent.click(other);
     expect(other.getAttribute('aria-pressed')).toBe('true'); expect(button.getAttribute('aria-pressed')).toBe('false');
   });
 
@@ -82,10 +83,9 @@ describe('Agents browser edge cases', () => {
     const problems = Array.from({ length: 6 }, (_, i) => ({ path: `path${i}`, message: `problem${i}` }));
     const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ problems }) }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByText('agents.json has problems:');
+    await view.findByText('Agent catalog has configuration problems.');
     expect(view.getByText('path4: problem4')).toBeTruthy();
-    expect(view.queryByText('path5: problem5')).toBeNull();
-    expect(view.getByText('…and 1 more problem')).toBeTruthy();
+    expect(view.getByText('path5: problem5')).toBeTruthy();
     expect(view.getByRole('list', { name: 'Saved agents' })).toBeTruthy();
   });
 
@@ -95,7 +95,7 @@ describe('Agents browser edge cases', () => {
       { id: 'duplicate', name: 'Second duplicate', provider: 'p', description: 'Second details' },
     ], problems: [{ path: 'agents', message: 'duplicate id' }] });
     const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ agents: [{ ok: true, data }] }).api} />);
-    await view.findByText('agents.json has problems:');
+    await view.findByText('Agent catalog has configuration problems.');
     const first = view.getByRole('button', { name: /First duplicate/ });
     const second = view.getByRole('button', { name: /Second duplicate/ });
     fireEvent.click(second);
@@ -166,9 +166,9 @@ describe('Agents browser edge cases', () => {
     const never = new Promise<never>(() => {});
     const fake = fakeManagement({ agents: [never], overview: [{ ok: false, error: { code: 'USAGE_FAIL', message: 'usage failed', remediation: 'Check teams.', retryable: true } }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByText('Check teams.');
-    expect(view.getByRole('alert').textContent).toContain('USAGE_FAIL: usage failed');
-    expect(view.getByText('Loading agent catalog…')).toBeTruthy();
+    await waitFor(() => expect(fake.overview).toHaveBeenCalledTimes(1));
+    expect(view.queryByText('Check teams.')).toBeNull();
+    expect(view.getByText('Loading saved agents…')).toBeTruthy();
     expect(view.queryByRole('list', { name: 'Saved agents' })).toBeNull();
     expect(fake.agents).toHaveBeenCalledTimes(1);
     expect(fake.overview).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe('Agents browser edge cases', () => {
   it('shows catalog error code, message and remediation', async () => {
     const fake = fakeManagement({ agents: [{ ok: false, error: { code: 'CATALOG_FAIL', message: 'catalog failed', remediation: 'Check agents.json.', retryable: true } }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByRole('button', { name: 'Retry catalog' });
+    await view.findByRole('button', { name: 'Retry loading agents' });
     expect(view.getByRole('alert').textContent).toContain('CATALOG_FAIL: catalog failed');
     expect(view.getByText('Check agents.json.')).toBeTruthy();
     expect(view.queryByRole('list', { name: 'Saved agents' })).toBeNull();
@@ -218,7 +218,7 @@ describe('Agents browser edge cases', () => {
     fireEvent.change(view.getByLabelText('Reasoning'), { target: { value: 'high' } });
     expect(within(list).getAllByRole('button').map(b => b.textContent)).toEqual([expect.stringContaining('Alpha'), expect.stringContaining('Gamma')]);
     fireEvent.change(view.getByLabelText('Search agents'), { target: { value: 'no match' } });
-    expect(view.getByText('No agents match the current search and filters.')).toBeTruthy();
+    expect(view.getByText('No agents match these filters.')).toBeTruthy();
     expect(view.queryByRole('heading', { name: 'Agent details' })).toBeNull();
     fireEvent.change(view.getByLabelText('Search agents'), { target: { value: '' } });
     fireEvent.change(view.getByLabelText('Provider'), { target: { value: '' } });
@@ -231,9 +231,8 @@ describe('Agents browser edge cases', () => {
     const problems = Array.from({ length: 7 }, (_, i) => ({ path: `path${i}`, message: `problem${i}` }));
     const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ agents: [{ id: '', name: 'First', provider: '' }, { id: '', name: 'Second', provider: '' }], problems }) }] });
     const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByText('agents.json has problems:');
-    expect(view.getByText('path4: problem4')).toBeTruthy(); expect(view.queryByText('path5: problem5')).toBeNull();
-    expect(view.getByText('…and 2 more problems')).toBeTruthy();
+    await view.findByText('Agent catalog has configuration problems.');
+    expect(view.getByText('path4: problem4')).toBeTruthy(); expect(view.getByText('path5: problem5')).toBeTruthy(); expect(view.getByText('path6: problem6')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: /Second/ }));
     const details = view.getByRole('heading', { name: 'Agent details' }).closest('section')!;
     expect(within(details).getByText('Second')).toBeTruthy();
@@ -248,7 +247,7 @@ describe('Agents browser edge cases', () => {
     await view.findByRole('list', { name: 'Saved agents' });
     fireEvent.change(view.getByLabelText('Search agents'), { target: { value: 'Codex' } });
     view.rerender(<AgentsScreen workspace={{ ...workspace, id: 'b' }} management={fake.api} />);
-    await view.findByText('No reusable agents are defined in this workspace.');
+    await view.findByText('No saved agents yet.');
     expect((view.getByLabelText('Search agents') as HTMLInputElement).value).toBe('');
     expect(view.queryByRole('heading', { name: 'Agent details' })).toBeNull();
     expect(fake.agents).toHaveBeenCalledWith('b'); expect(fake.overview).toHaveBeenCalledWith('b');
@@ -271,7 +270,7 @@ describe('saved agent forms', () => {
     fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
     fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } });
     fireEvent.submit(form);
-    fireEvent.click(await view.findByRole('button', { name: 'Retry catalog' }));
+    fireEvent.click(await view.findByRole('button', { name: 'Retry loading agents' }));
     await waitFor(() => expect(view.getByRole('button', { name: /^New codex/ }).getAttribute('aria-pressed')).toBe('true'));
   });
   it('creates an agent with the exact six-field request and selects the refreshed result', async () => {
@@ -362,7 +361,7 @@ describe('additional form safeguards', () => {
     await view.findByRole('button', { name: 'New agent' }); fireEvent.click(view.getByRole('button', { name: 'New agent' }));
     const form = view.container.querySelector('form')!;
     fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } }); fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } }); fireEvent.submit(form);
-    fireEvent.keyDown(form, { key: 'Escape' }); expect(view.container.querySelector('form')).toBe(form);
+    fireEvent.keyDown(form, { key: 'Escape' }); expect(view.container.querySelector('form')).toBeNull();
     view.rerender(<AgentsScreen workspace={{ ...workspace, id: 'b' }} management={fake.api} />);
     await waitFor(() => expect(fake.agents).toHaveBeenCalledWith('b'));
     resolve({ ok: true, data: { workspace: 'a', agent: { id: 'new', name: 'New', provider: 'codex' } } });
@@ -373,32 +372,6 @@ describe('additional form safeguards', () => {
 
 
 describe('form metadata updates', () => {
-  it('preserves the screen draft through a refresh that finds catalog problems', async () => {
-    const fake = fakeManagement();
-    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    await view.findByRole('button', { name: 'New agent' });
-    fireEvent.click(view.getByRole('button', { name: 'New agent' }));
-    const form = view.container.querySelector('form')!;
-    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'draft' } });
-    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft name' } });
-    let resolve!: (result: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
-    const agents = vi.fn(() => new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(r => { resolve = r; }));
-    view.rerender(<AgentsScreen workspace={workspace} management={{ ...fake.api, agents }} />);
-    await waitFor(() => expect(agents).toHaveBeenCalled());
-    expect(view.container.querySelector('form')).toBe(form);
-    expect((within(form).getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
-    resolve({ ok: true, data: catalogFixture({ problems: [{ path: 'agents', message: 'invalid' }] }) });
-    await view.findByText('agents.json has problems:');
-    expect(view.container.querySelector('form')).toBe(form);
-    expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft name');
-    expect((within(form).getByLabelText('Agent id') as HTMLInputElement).value).toBe('draft');
-    expect(within(form).getByText('Saved agent changes are unavailable because agents.json has validation problems. Repair it on disk and refresh.')).toBeTruthy();
-    expect((within(form).getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.submit(form);
-    expect(fake.api.createAgent).not.toHaveBeenCalled();
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
-    expect(view.container.querySelector('form')).toBeNull();
-  });
   it('keeps an open draft inspectable but blocks submission when catalog problems arrive', () => {
     const submit = vi.fn(); const cancel = vi.fn();
     const props = { mode: 'create' as const, source: null, existingIds: [], providers: [{ id: 'p', modelSelectable: true, reasoningLevels: [], configuredModels: [] }], pending: false, serverError: null, mutationsBlockedReason: null, onSubmit: submit, onCancel: cancel };
@@ -476,24 +449,7 @@ describe('saved agent workflow coverage', () => {
     expect(fake.api.createAgent).not.toHaveBeenCalled();
   });
 
-  it('keeps the pending form open through Escape and Cancel until the result arrives', async () => {
-    let resolve!: (result: { ok: false; error: { code: string; message: string; retryable: boolean } }) => void;
-    const create = vi.fn(() => new Promise<{ ok: false; error: { code: string; message: string; retryable: boolean } }>(r => { resolve = r; }));
-    const fake = fakeManagement({ calls: { createAgent: create } });
-    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
-    fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
-    const form = view.container.querySelector('form')!;
-    fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
-    fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft' } });
-    fireEvent.click(within(form).getByRole('button', { name: 'Create agent' }));
-    fireEvent.keyDown(form, { key: 'Escape' });
-    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
-    fireEvent.submit(form);
-    expect(create).toHaveBeenCalledTimes(1); expect(view.container.querySelector('form')).toBe(form);
-    resolve({ ok: false, error: { code: 'FAIL', message: 'Failed', retryable: false } });
-    await view.findByText(/FAIL/);
-    expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft');
-  });
+
 });
 
 describe('saved agent deletion', () => {
@@ -549,7 +505,7 @@ it('makes one pending delete call and refreshes both saved sections on success',
 
 it('explains incomplete and unavailable usage before confirmation', async () => {
   for (const [result, copy] of [
-    [{ ok: false as const, error: { code: 'FAIL', message: 'offline', retryable: false } }, 'Saved reference usage is unavailable. The backend will verify deletion.'],
+    [{ ok: false as const, error: { code: 'FAIL', message: 'offline', retryable: false } }, 'Usage unavailable.'],
     [{ ok: true as const, data: overviewFixture([], { truncated: true }) }, 'Saved references may be incomplete. The backend will verify deletion.'],
   ] as const) {
     const fake = fakeManagement({ overview: [result] }); const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
@@ -679,6 +635,7 @@ it.each([
   expect(remove).toHaveBeenCalledExactlyOnceWith(workspace.id, removed);
   if (expected) expect(view.getByRole('button', { name: new RegExp(agents.find(a => a.id === expected)!.name) }).getAttribute('aria-pressed')).toBe('true');
   else expect(view.queryByRole('heading', { name: 'Agent details' })).toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(expected ? view.getByRole('button', { name: new RegExp(agents.find(a => a.id === expected)!.name) }) : view.getByRole('button', { name: 'New agent' })));
   expect(view.getByText(`Deleted only the saved agent definition "${target.name}" (${target.id}). Team membership and live runtime were not changed.`)).toBeTruthy();
 });
 
@@ -700,4 +657,436 @@ it.each(['success', 'race'])('does not write membership or runtime on %s', async
     expect(fake.agents).toHaveBeenCalledTimes(1);
     expect(view.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-pressed')).toBe('true');
   }
+});
+
+describe('T-061 independent states', () => {
+  it('catalog_and_usage_load_independently', async () => {
+    let resolveCatalog!: (value: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+    let resolveUsage!: (value: { ok: true; data: ReturnType<typeof overviewFixture> }) => void;
+    const fake = fakeManagement({ agents: [new Promise(r => { resolveCatalog = r; })], overview: [new Promise(r => { resolveUsage = r; })] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    expect(view.getByRole('status').textContent).toContain('Loading saved agents…');
+    resolveCatalog({ ok: true, data: catalogFixture() });
+    await view.findByRole('list', { name: 'Saved agents' });
+    expect(view.queryByText('Loading saved agents…')).toBeNull();
+    expect(view.getByText('Loading saved usage…')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('Used by 1 member');
+    resolveUsage({ ok: true, data: overviewFixture([team()]) });
+    await view.findByText(/Dev Team.*dev/);
+  });
+
+  it('catalog_error_owns_its_retry', async () => {
+    const fake = fakeManagement({ agents: [{ ok: false, error: { code: 'BROKEN', message: 'catalog failed', remediation: 'Repair catalog', retryable: true } }, { ok: true, data: catalogFixture() }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    const retry = await view.findByRole('button', { name: 'Retry loading agents' });
+    expect(view.getAllByRole('alert')).toHaveLength(1);
+    expect(view.getByRole('alert').textContent).toContain('BROKEN');
+    expect(view.getByRole('alert').textContent).toContain('catalog failed');
+    expect(view.getByRole('alert').textContent).toContain('Repair catalog');
+    expect(view.queryByRole('list', { name: 'Saved agents' })).toBeNull();
+    fireEvent.click(retry);
+    await view.findByRole('list', { name: 'Saved agents' });
+    expect(fake.agents).toHaveBeenCalledTimes(2); expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(document.activeElement).toBe(view.getByRole('heading', { name: /catalog/i }));
+  });
+
+  it('usage_error_is_partial_and_retries_independently', async () => {
+    const overview = vi.fn().mockRejectedValueOnce(new Error('overview exploded')).mockResolvedValueOnce({ ok: true, data: overviewFixture([]) });
+    const fake = fakeManagement({ calls: { overview } });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByText('Usage unavailable.');
+    expect(view.container.textContent).toContain('overview exploded');
+    expect(view.container.textContent?.toLowerCase()).not.toContain('unused');
+    for (const name of ['New agent', 'Edit', 'Duplicate']) expect((view.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(view.getByRole('button', { name: 'Retry loading usage' }));
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Used by' })));
+    expect(overview).toHaveBeenCalledTimes(2); expect(fake.agents).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders_empty_and_filtered_empty_differently', async () => {
+    const empty = render(<AgentsScreen workspace={workspace} management={fakeManagement({ agents: [{ ok: true, data: catalogFixture({ agents: [] }) }] }).api} />);
+    await empty.findByText('No saved agents yet.'); empty.unmount();
+    const view = render(<AgentsScreen workspace={workspace} management={fakeManagement().api} />);
+    const list = await view.findByRole('list', { name: 'Saved agents' });
+    const original = within(list).getAllByRole('button').map(b => b.textContent);
+    const search = view.getByLabelText('Search agents'); fireEvent.change(search, { target: { value: 'no match' } });
+    expect(view.getByText('No agents match these filters.')).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Clear filters' }));
+    expect(within(view.getByRole('list', { name: 'Saved agents' })).getAllByRole('button').map(b => b.textContent)).toEqual(original);
+    expect(document.activeElement).toBe(search);
+  });
+
+  it('catalog_problems_are_inspectable_but_block_writes', async () => {
+    const problems = Array.from({ length: 6 }, (_, i) => ({ path: `agents[${i}]`, message: `problem ${i}` }));
+    const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture({ problems }) }], overview: [{ ok: true, data: overviewFixture([]) }] });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    await view.findByRole('list', { name: 'Saved agents' });
+    const alert = view.getByRole('alert');
+    expect(alert.textContent).toContain('Agent catalog has configuration problems.');
+    for (const problem of problems) { expect(alert.textContent).toContain(problem.path); expect(alert.textContent).toContain(problem.message); }
+    expect(alert.textContent).toContain('Repair .agent-studio/agents.json before making changes.');
+    fireEvent.click(view.getByRole('button', { name: /Codex GPT/ }));
+    for (const name of ['New agent', 'Edit', 'Duplicate', 'Delete']) {
+      const button = view.getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true); expect(button.getAttribute('aria-describedby')).toBeTruthy();
+    }
+  });
+
+  it.each(['lost', 'connecting'] as const)('keeps reads and disables writes while %s', async state => {
+    const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+    const connection = { state, error: null, distro: null, command: null };
+    const view = render(<AgentsScreen {...{ workspace, management: fake.api, connection }} />);
+    await view.findByRole('list', { name: 'Saved agents' });
+    expect(view.getByText(state === 'lost' ? 'Connection to the backend was lost. Saved agents can be inspected, but changes are disabled until it reconnects.' : 'Connecting to the backend… Saved agents can be inspected, but changes are disabled.')).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Search agents'), { target: { value: 'Codex' } });
+    fireEvent.click(view.getByRole('button', { name: /Codex GPT/ }));
+    for (const name of ['New agent', 'Edit', 'Duplicate', 'Delete']) {
+      const button = view.getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true); expect(button.getAttribute('aria-describedby')).toBeTruthy();
+    }
+  });
+
+  it('thrown_catalog_request_can_retry_successfully', async () => {
+    const agents = vi.fn().mockRejectedValueOnce(new Error('catalog exploded')).mockResolvedValueOnce({ ok: true, data: catalogFixture() });
+    const fake = fakeManagement({ calls: { agents } });
+    const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+    const retry = await view.findByRole('button', { name: 'Retry loading agents' });
+    expect(view.getByRole('alert').textContent).toContain('INTERNAL'); expect(view.getByRole('alert').textContent).toContain('catalog exploded');
+    fireEvent.click(retry); await view.findByRole('list', { name: 'Saved agents' }); expect(view.queryByRole('alert')).toBeNull();
+  });
+});
+
+it('reconnect_refreshes_each_section_once', async () => {
+  const fake = fakeManagement();
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<React.StrictMode><AgentsScreen {...{ workspace, management: fake.api, connection: connection('connected') }} /></React.StrictMode>);
+  await view.findByRole('list', { name: 'Saved agents' });
+  const beforeAgents = fake.agents.mock.calls.length; const beforeUsage = fake.overview.mock.calls.length;
+  view.rerender(<React.StrictMode><AgentsScreen {...{ workspace, management: fake.api, connection: connection('lost') }} /></React.StrictMode>);
+  view.rerender(<React.StrictMode><AgentsScreen {...{ workspace, management: fake.api, connection: connection('connected') }} /></React.StrictMode>);
+  await waitFor(() => { expect(fake.agents).toHaveBeenCalledTimes(beforeAgents + 1); expect(fake.overview).toHaveBeenCalledTimes(beforeUsage + 1); });
+  view.rerender(<React.StrictMode><AgentsScreen {...{ workspace, management: fake.api, connection: connection('connected') }} /></React.StrictMode>);
+  expect(fake.agents).toHaveBeenCalledTimes(beforeAgents + 1); expect(fake.overview).toHaveBeenCalledTimes(beforeUsage + 1);
+});
+
+it('pending_write_blocks_duplicate_mutations_and_retains_draft', async () => {
+  const create = vi.fn(() => new Promise<never>(() => {}));
+  const fake = fakeManagement({ calls: { createAgent: create }, overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
+  const form = view.container.querySelector('form')!;
+  fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new-id' } });
+  fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Draft name' } });
+  fireEvent.submit(form); fireEvent.submit(form);
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(within(form).getByRole('button', { name: /Saving/ }).getAttribute('aria-busy')).toBe('true');
+  expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft name');
+  expect((within(form).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(false);
+  for (const name of ['New agent', 'Edit', 'Duplicate', 'Delete']) expect((view.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('pending_update_and_delete_block_concurrent_mutations', async () => {
+  const update = vi.fn(() => new Promise<never>(() => {}));
+  const remove = vi.fn(() => new Promise<never>(() => {}));
+  const fake = fakeManagement({ calls: { updateAgent: update, deleteAgent: remove }, overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'Edit' }));
+  const form = view.getByRole('dialog');
+  fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'Edited draft' } });
+  fireEvent.submit(form); fireEvent.submit(form);
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(within(form).getByRole('button', { name: 'Saving…' }).getAttribute('aria-busy')).toBe('true');
+  expect((within(form).getByLabelText('Name') as HTMLInputElement).value).toBe('Edited draft');
+  for (const name of ['New agent', 'Edit', 'Duplicate', 'Delete']) expect((view.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+  view.unmount();
+  const next = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await next.findByRole('button', { name: 'Delete' }));
+  const dialog = next.getByRole('dialog');
+  const confirm = within(dialog).getByRole('button', { name: 'Delete saved agent' });
+  fireEvent.click(confirm); fireEvent.click(confirm);
+  expect(remove).toHaveBeenCalledTimes(1);
+  expect(confirm.getAttribute('aria-busy')).toBe('true');
+  expect(next.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-current')).toBe('true');
+  for (const name of ['New agent', 'Edit', 'Duplicate', 'Delete']) expect((next.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it.each(['New agent', 'Edit'])('cancelled_pending_%s_failure_is_announced', async action => {
+  let resolve!: (value: { ok: false; error: { code: string; message: string; remediation: string; retryable: boolean } }) => void;
+  const write = vi.fn(() => new Promise<{ ok: false; error: { code: string; message: string; remediation: string; retryable: boolean } }>(r => { resolve = r; }));
+  const fake = fakeManagement({ calls: { createAgent: write, updateAgent: write }, overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: action }));
+  const dialog = view.getByRole('dialog');
+  if (action === 'New agent') fireEvent.change(within(dialog).getByLabelText('Agent id'), { target: { value: 'new-id' } });
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Changed name' } });
+  fireEvent.submit(dialog);
+  expect(write).toHaveBeenCalledTimes(1);
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  resolve({ ok: false, error: { code: 'BROKEN', message: 'Save failed', remediation: 'Try again.', retryable: true } });
+  const alert = await view.findByRole('alert');
+  expect(alert.textContent).toContain('BROKEN: Save failed');
+  expect(alert.textContent).toContain('Try again.');
+});
+
+it('failed_reconnect_discards_previously_loaded_catalog_and_dialog', async () => {
+  const fake = fakeManagement({ agents: [
+    { ok: true, data: catalogFixture() },
+    { ok: false, error: { code: 'BROKEN', message: 'refresh failed', retryable: true } },
+  ], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
+  expect(view.getByRole('dialog')).toBeTruthy();
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  const dialog = view.getByRole('dialog');
+  expect((within(dialog).getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(false);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await view.findByText(/refresh failed/);
+  expect(view.queryByRole('list', { name: 'Saved agents' })).toBeNull();
+  expect(view.queryByRole('dialog')).toBeNull();
+});
+
+it.each(['Edit', 'Duplicate'] as const)('cancel_%s_while_disconnected_restores_its_opener_after_reconnect', async action => {
+  let resolveCatalog!: (value: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+  const refreshed = new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(resolve => { resolveCatalog = resolve; });
+  const fake = fakeManagement();
+  fake.agents.mockImplementationOnce(async () => ({ ok: true, data: catalogFixture() })).mockImplementationOnce(() => refreshed);
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  const opener = await view.findByRole('button', { name: action });
+  opener.focus(); fireEvent.click(opener);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  fireEvent.keyDown(view.getByRole('dialog'), { key: 'Escape' });
+  await waitFor(() => expect(document.activeElement).toBe(view.getByLabelText('Search agents')));
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  resolveCatalog({ ok: true, data: catalogFixture() });
+  await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: action })));
+});
+
+it('cancel_delete_while_disconnected_restores_its_opener_after_reconnect', async () => {
+  let resolveCatalog!: (value: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+  const refreshed = new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(resolve => { resolveCatalog = resolve; });
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+  fake.agents.mockImplementationOnce(async () => ({ ok: true, data: catalogFixture() })).mockImplementationOnce(() => refreshed);
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  const opener = await view.findByRole('button', { name: 'Delete' });
+  opener.focus(); fireEvent.click(opener);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  fireEvent.keyDown(view.getByRole('dialog'), { key: 'Escape' });
+  await waitFor(() => expect(document.activeElement).toBe(view.getByLabelText('Search agents')));
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  resolveCatalog({ ok: true, data: catalogFixture() });
+  await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: 'Delete' })));
+  expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+});
+
+it('workspace_change_discards_open_draft_and_selection', async () => {
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: /Codex GPT/ }));
+  fireEvent.click(view.getByRole('button', { name: 'New agent' }));
+  fireEvent.change(within(view.getByRole('dialog')).getByLabelText('Name'), { target: { value: 'Workspace A draft' } });
+  view.rerender(<AgentsScreen workspace={{ ...workspace, id: 'b' }} management={fake.api} />);
+  await view.findByRole('list', { name: 'Saved agents' });
+  expect(view.queryByRole('dialog')).toBeNull();
+  expect(view.container.textContent).not.toContain('Workspace A draft');
+  expect(view.getByRole('button', { name: /OpenCode Sonnet/ }).getAttribute('aria-current')).toBe('true');
+  expect(fake.api.createAgent).not.toHaveBeenCalled();
+});
+
+it('reconnects from connecting with one refresh per section', async () => {
+  const fake = fakeManagement();
+  const connection = (state: 'connecting' | 'connected') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connecting')} />);
+  await view.findByRole('list', { name: 'Saved agents' });
+  const agentsBefore = fake.agents.mock.calls.length;
+  const overviewBefore = fake.overview.mock.calls.length;
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await waitFor(() => {
+    expect(fake.agents).toHaveBeenCalledTimes(agentsBefore + 1);
+    expect(fake.overview).toHaveBeenCalledTimes(overviewBefore + 1);
+  });
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  expect(fake.agents).toHaveBeenCalledTimes(agentsBefore + 1);
+  expect(fake.overview).toHaveBeenCalledTimes(overviewBefore + 1);
+});
+
+it.each(['agents', 'overview'] as const)('deduplicates repeated %s retry while loading', async section => {
+  const failure = { ok: false as const, error: { code: 'BROKEN', message: 'Failed', retryable: true } };
+  const pending = new Promise<never>(() => {});
+  const request = vi.fn().mockResolvedValueOnce(failure).mockReturnValue(pending);
+  const fake = fakeManagement({ calls: { [section]: request } });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  const retry = await view.findByRole('button', { name: section === 'agents' ? 'Retry loading agents' : 'Retry loading usage' });
+  fireEvent.click(retry);
+  fireEvent.click(retry);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+it.each([{ partial: true }, { truncated: true }])('warns_when_usage_is_incomplete_with_saved_references: %o', async (flags) => {
+  const data = overviewFixture([team({ members: [member()] })], flags);
+  const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ overview: [{ ok: true, data }] }).api} />);
+  await view.findByText('Saved references may be incomplete. The backend will verify deletion.');
+  expect(view.getByText(/Remove this saved agent from the listed team members/)).toBeTruthy();
+});
+
+it('warns_when_team_members_are_truncated_with_saved_references', async () => {
+  const data = overviewFixture([team({ members: [member()], membersTruncated: true })]);
+  const view = render(<AgentsScreen workspace={workspace} management={fakeManagement({ overview: [{ ok: true, data }] }).api} />);
+  await view.findByText(/Dev Team.*dev/);
+  expect(view.getByText('Saved references may be incomplete. The backend will verify deletion.')).toBeTruthy();
+  expect(view.container.textContent?.toLowerCase()).not.toContain('unused');
+});
+
+it('structured_usage_failure_preserves_error_and_allows_independent_retry', async () => {
+  const fake = fakeManagement({ overview: [
+    { ok: false, error: { code: 'USAGE_BROKEN', message: 'Usage failed', remediation: 'Repair overview', retryable: true } },
+    { ok: true, data: overviewFixture([]) },
+  ] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  await view.findByText('Usage unavailable.');
+  expect(view.container.textContent).toContain('USAGE_BROKEN');
+  expect(view.container.textContent).toContain('Usage failed');
+  expect(view.container.textContent).toContain('Repair overview');
+  expect((view.getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(view.getByRole('button', { name: 'Retry loading usage' }));
+  await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Used by' })));
+  expect(fake.agents).toHaveBeenCalledTimes(1);
+  expect(fake.overview).toHaveBeenCalledTimes(2);
+});
+
+it('reconnect_preserves_open_edit_draft_and_selection_during_loading', async () => {
+  let resolve!: (value: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+  const refresh = new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(r => { resolve = r; });
+  const fake = fakeManagement({ agents: [{ ok: true, data: catalogFixture() }, refresh], overview: [{ ok: true, data: overviewFixture([]) }] });
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  fireEvent.click(await view.findByRole('button', { name: /Codex GPT/ }));
+  fireEvent.click(view.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(within(view.getByRole('dialog')).getByLabelText('Name'), { target: { value: 'Draft retained' } });
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  expect((within(view.getByRole('dialog')).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft retained');
+  resolve({ ok: true, data: catalogFixture() });
+  await view.findByRole('list', { name: 'Saved agents' });
+  expect((within(view.getByRole('dialog')).getByLabelText('Name') as HTMLInputElement).value).toBe('Draft retained');
+  expect(view.getByRole('button', { name: /Codex GPT/ }).getAttribute('aria-current')).toBe('true');
+});
+
+it('retry_after_save_refresh_failure_keeps_focus_on_catalog_heading', async () => {
+  const agent = { id: 'new', name: 'New', provider: 'codex' };
+  const fake = fakeManagement({ calls: { createAgent: vi.fn(async () => ({ ok: true as const, data: { workspace: 'a', agent } })) }, agents: [{ ok: true, data: catalogFixture() }, { ok: false, error: { code: 'FAIL', message: 'Refresh failed', retryable: true } }, { ok: true, data: catalogFixture({ agents: [agent] }) }] });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} />);
+  fireEvent.click(await view.findByRole('button', { name: 'New agent' }));
+  const form = view.getByRole('dialog');
+  fireEvent.change(within(form).getByLabelText('Agent id'), { target: { value: 'new' } });
+  fireEvent.change(within(form).getByLabelText('Name'), { target: { value: 'New' } });
+  fireEvent.submit(form);
+  fireEvent.click(await view.findByRole('button', { name: 'Retry loading agents' }));
+  await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Agent catalog' })));
+  await new Promise(r => requestAnimationFrame(r));
+  expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Agent catalog' }));
+});
+
+it.each(['lost', 'connecting'] as const)('disables an open delete confirmation while %s and preserves selection', async state => {
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+  const connection = (value: 'connected' | 'lost' | 'connecting') => ({ state: value, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  fireEvent.click(await view.findByRole('button', { name: /Codex GPT/ }));
+  fireEvent.click(view.getByRole('button', { name: 'Delete' }));
+  const dialog = view.getByRole('dialog');
+  const confirm = within(dialog).getByRole('button', { name: 'Delete saved agent' }) as HTMLButtonElement;
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection(state)} />);
+  expect(confirm.disabled).toBe(true);
+  const reason = confirm.getAttribute('aria-describedby');
+  expect(reason).toBeTruthy();
+  expect(reason!.split(/\s+/).some(id => document.getElementById(id)?.textContent?.includes('changes are disabled'))).toBe(true);
+  fireEvent.click(confirm);
+  expect(fake.api.deleteAgent).not.toHaveBeenCalled();
+  expect(view.getByRole('button', { name: /Codex GPT/ }).getAttribute('aria-current')).toBe('true');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(view.queryByRole('dialog')).toBeNull();
+});
+
+it.each([
+  ['New agent', 'Create agent', 'lost'],
+  ['Edit', 'Save changes', 'connecting'],
+  ['Duplicate', 'Create duplicate', 'lost'],
+] as const)('keeps the %s draft and blocks %s when connection becomes %s', async (action, submitLabel, state) => {
+  const fake = fakeManagement({ overview: [{ ok: true, data: overviewFixture([]) }] });
+  const connection = (value: 'connected' | 'lost' | 'connecting') => ({ state: value, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  fireEvent.click(await view.findByRole('button', { name: action }));
+  const dialog = view.getByRole('dialog');
+  const name = within(dialog).getByLabelText('Name') as HTMLInputElement;
+  fireEvent.change(name, { target: { value: 'Retained draft' } });
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection(state)} />);
+  const submit = within(dialog).getByRole('button', { name: submitLabel }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  const reason = submit.getAttribute('aria-describedby');
+  expect(reason).toBeTruthy();
+  expect(reason!.split(/\s+/).some(id => document.getElementById(id)?.textContent?.includes('changes are disabled'))).toBe(true);
+  fireEvent.submit(dialog);
+  expect(fake.api.createAgent).not.toHaveBeenCalled();
+  expect(fake.api.updateAgent).not.toHaveBeenCalled();
+  expect(name.value).toBe('Retained draft');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  expect(view.queryByRole('dialog')).toBeNull();
+});
+
+it.each(['agents', 'overview'] as const)('reconnect refreshes the completed section while %s remains in flight', async slowSection => {
+  let resolveSlow!: (value: any) => void;
+  const slow = new Promise<any>(resolve => { resolveSlow = resolve; });
+  const agents = vi.fn().mockResolvedValue({ ok: true, data: catalogFixture() });
+  const overview = vi.fn().mockResolvedValue({ ok: true, data: overviewFixture([]) });
+  const slowCall = slowSection === 'agents' ? agents : overview;
+  const fastCall = slowSection === 'agents' ? overview : agents;
+  const fake = fakeManagement({ calls: { agents, overview } });
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await view.findByRole('list', { name: 'Saved agents' });
+  await waitFor(() => expect(overview).toHaveBeenCalledTimes(1));
+  slowCall.mockReturnValueOnce(slow);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await waitFor(() => { expect(slowCall).toHaveBeenCalledTimes(2); expect(fastCall).toHaveBeenCalledTimes(2); });
+  await waitFor(() => expect(slowSection === 'agents' ? view.queryByText('Loading saved usage…') : view.queryByText('Loading saved agents…')).toBeNull());
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await waitFor(() => expect(fastCall).toHaveBeenCalledTimes(3));
+  expect(slowCall).toHaveBeenCalledTimes(2);
+  resolveSlow({ ok: true, data: slowSection === 'agents' ? catalogFixture() : overviewFixture([]) });
+  await view.findByRole('list', { name: 'Saved agents' });
+});
+
+it('refreshes both sections on a later reconnect after overlapping refreshes settle', async () => {
+  let resolveCatalog!: (value: { ok: true; data: ReturnType<typeof catalogFixture> }) => void;
+  let resolveUsage!: (value: { ok: true; data: ReturnType<typeof overviewFixture> }) => void;
+  const catalogPending = new Promise<{ ok: true; data: ReturnType<typeof catalogFixture> }>(resolve => { resolveCatalog = resolve; });
+  const usagePending = new Promise<{ ok: true; data: ReturnType<typeof overviewFixture> }>(resolve => { resolveUsage = resolve; });
+  const agents = vi.fn().mockResolvedValue({ ok: true, data: catalogFixture() });
+  const overview = vi.fn().mockResolvedValue({ ok: true, data: overviewFixture([]) });
+  const fake = fakeManagement({ calls: { agents, overview } });
+  const connection = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: null });
+  const view = render(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await view.findByRole('list', { name: 'Saved agents' });
+  await waitFor(() => expect(overview).toHaveBeenCalledTimes(1));
+  agents.mockReturnValueOnce(catalogPending);
+  overview.mockReturnValueOnce(usagePending);
+  for (let i = 0; i < 2; i++) {
+    view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+    view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  }
+  expect(agents).toHaveBeenCalledTimes(2);
+  expect(overview).toHaveBeenCalledTimes(2);
+  resolveCatalog({ ok: true, data: catalogFixture() });
+  resolveUsage({ ok: true, data: overviewFixture([]) });
+  await view.findByRole('list', { name: 'Saved agents' });
+  await waitFor(() => expect(view.queryByText('Loading saved usage…')).toBeNull());
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('lost')} />);
+  view.rerender(<AgentsScreen workspace={workspace} management={fake.api} connection={connection('connected')} />);
+  await waitFor(() => { expect(agents).toHaveBeenCalledTimes(3); expect(overview).toHaveBeenCalledTimes(3); });
 });

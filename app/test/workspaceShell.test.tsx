@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/api';
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
@@ -253,7 +254,11 @@ describe('WorkspaceShell', () => {
 
   it('resets to Home only when workspace id changes', async () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
-    fireEvent.click(result.getByRole('button', { name: 'Agents' }));
+    result.getByRole('button', { name: 'Agents' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(currentButtons(result.container)).toEqual([result.getByRole('button', { name: 'Agents' })]);
+    expect(result.getAllByRole('main')).toHaveLength(1);
+    expect(result.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     result.rerender(
       <WorkspaceShell workspace={{ ...workspace, name: 'Changed name' }} onSwitchWorkspace={vi.fn()} />,
     );

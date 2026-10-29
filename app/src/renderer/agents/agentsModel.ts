@@ -7,7 +7,7 @@ export type AgentUsage =
   | { state: 'unavailable'; memberCount: null; teamCount: null; references: []; summary: 'Usage unavailable' }
   | { state: 'complete' | 'truncated'; memberCount: number; teamCount: number; references: AgentUsageReference[]; summary: string };
 
-export function value(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null; }
+export function value(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v : null; }
 export function catalogRows(agents: readonly AgentDef[]): AgentCatalogRow[] {
   return agents.map((agent, catalogIndex) => ({ key: `catalog:${catalogIndex}`, catalogIndex, agent }));
 }

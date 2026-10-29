@@ -47,7 +47,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   ) : sectionId === 'teams' ? (
     <TeamsScreen workspace={props.workspace} management={props.management} connection={props.connection} />
   ) : sectionId === 'agents' ? (
-    <AgentsScreen workspace={props.workspace} management={props.management} />
+    <AgentsScreen workspace={props.workspace} management={props.management} connection={props.connection} />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
   );

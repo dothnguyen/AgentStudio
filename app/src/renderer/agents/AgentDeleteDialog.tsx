@@ -4,11 +4,12 @@ import type { AgentDef, ManagementError } from '../api';
 export interface AgentDeleteDialogProps {
   agent: Pick<AgentDef, 'id' | 'name'>;
   pending: boolean;
+  blockedReason?: string | null;
   error: ManagementError | null;
   onCancel(): void;
   onConfirm(): void;
 }
-export function AgentDeleteDialog({ agent, pending, error, onCancel, onConfirm }: AgentDeleteDialogProps): JSX.Element {
+export function AgentDeleteDialog({ agent, pending, blockedReason, error, onCancel, onConfirm }: AgentDeleteDialogProps): JSX.Element {
   const heading = useId();
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
@@ -17,6 +18,9 @@ export function AgentDeleteDialog({ agent, pending, error, onCancel, onConfirm }
     cancel.current?.focus();
     return () => { if (opener?.isConnected) opener.focus(); };
   }, []);
+  useEffect(() => {
+    if (error) dialog.current?.querySelector<HTMLButtonElement>('button:last-child')?.focus();
+  }, [error]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') { event.preventDefault(); if (!pending) onCancel(); return; }
     if (event.key !== 'Tab') return;
@@ -27,11 +31,11 @@ export function AgentDeleteDialog({ agent, pending, error, onCancel, onConfirm }
       event.preventDefault(); (event.shiftKey ? buttons[buttons.length - 1] : buttons[0])?.focus();
     }
   };
-  return <div className="modal-overlay"><div className="create-workspace-dialog" role="dialog" aria-modal="true" aria-labelledby={heading} ref={dialog} onKeyDown={keyDown}>
+  return <div className="modal-overlay"><div className="create-workspace-dialog" role="dialog" aria-modal="true" aria-labelledby={heading} aria-describedby={`${heading}-description`} ref={dialog} onKeyDown={keyDown}>
     <h2 id={heading}>Delete saved agent</h2>
     <p>Delete saved agent "{agent.name?.trim() || agent.id}" (<code>{agent.id}</code>)?</p>
-    <p>Only the saved definition will be deleted. Team membership and live runtime will not be changed.</p>
+    <p id={`${heading}-description`}>Only the saved definition will be deleted. Team membership and live runtime will not be changed.</p>
     {error && <div className="dialog-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation?.trim() && <p>{error.remediation}</p>}</div>}
-    <div className="dialog-actions"><button ref={cancel} type="button" disabled={pending} onClick={onCancel}>Cancel</button><button type="button" disabled={pending} onClick={onConfirm}>{pending ? 'Deleting…' : 'Delete saved agent'}</button></div>
+    {blockedReason && <p id={`${heading}-blocked`}>{blockedReason}</p>}<div className="dialog-actions"><button ref={cancel} type="button" disabled={pending} onClick={onCancel}>Cancel</button><button type="button" aria-busy={pending} aria-describedby={blockedReason ? `${heading}-blocked` : undefined} disabled={pending || !!blockedReason} onClick={onConfirm}>{pending ? 'Deleting…' : 'Delete saved agent'}</button></div>
   </div></div>;
 }
