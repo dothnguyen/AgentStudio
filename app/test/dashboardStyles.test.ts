@@ -224,3 +224,12 @@ describe('icon tones', () => {
     expect(rule).not.toMatch(/(^|[\s{;])(width|height):/);
   });
 });
+
+describe('teams navigation', () => {
+  it('teams_tabs_have_selected_state_and_visible_focus', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.teams-view-tab[aria-selected="true"] { border-bottom-color: var(--focus);');
+    expect(flat).toContain('.teams-view-tab:focus-visible, .teams-card:focus-visible, .teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
+    expect(/\.teams-view-tabs \{[^}]*flex-wrap: wrap/.test(flat)).toBe(true);
+  });
+});

@@ -1197,6 +1197,11 @@ ul[aria-label="Workspaces"] {
 .teams-board { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); }
 .teams-board-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .teams-connection-note { color: var(--warning); overflow-wrap: anywhere; }
+.teams-view-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 12px; border-bottom: 1px solid var(--border); }
+.teams-view-tab { border-bottom: 2px solid transparent; overflow-wrap: anywhere; }
+.teams-view-tab[aria-selected="true"] { border-bottom-color: var(--focus); color: var(--text-bright); }
+.teams-view-panel { min-width: 0; }
+.teams-view-tab:focus-visible, .teams-card:focus-visible, .teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (max-width: 900px) { .teams-layout { grid-template-columns: minmax(0, 1fr); } }
 
 /* Routing settings (P05-S16) */

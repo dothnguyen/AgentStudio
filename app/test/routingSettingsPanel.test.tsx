@@ -28,6 +28,7 @@ it.each(['board', 'roles'] as const)('blocks an open routing editor when refresh
 async function setup(calls: Parameters<typeof fakeManagement>[0]['calls'] = {}, boards = [routingSettingsFixture()]) {
   const fake = fakeManagement({ calls, boardSettings: boards.map(data => ({ ok: true as const, data })) });
   const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
   return { fake, panel: within(view.getByRole('region', { name: 'Worktree and routing settings' })) };
 }
 it('renders live paths and protected routes', async () => {
@@ -135,6 +136,7 @@ it('waits for an in-flight settings refresh before reporting a saved route', asy
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings } });
   const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Worktree and routing settings' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new-base' } });
@@ -157,6 +159,7 @@ it.each(['write', 'conflict'])('keeps the %s draft when latest settings fail to 
   const updateBoardSettings = vi.fn(async () => kind === 'write' ? { ok: true as const, data: {} } : { ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings } });
   const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Worktree and routing settings' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
@@ -212,6 +215,7 @@ it('locks the saved routing draft after a reload failure until retry succeeds', 
   const updateRole = vi.fn(async () => ({ ok: true as const, data: {} }));
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings, updateRole } });
   const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Worktree and routing settings' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   const control = panel.getByLabelText('Base branch') as HTMLInputElement;

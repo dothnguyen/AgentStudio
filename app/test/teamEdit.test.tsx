@@ -24,7 +24,14 @@ async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
 }
 
 const flush = () => act(async () => {});
+const openTab = async (name: string) => {
+  fireEvent.click(screen.getByRole('tab', { name }));
+  await flush();
+};
+const MEMBER_ACTION = /^(Add member|Edit |Remove |Confirm remove )/;
 const click = async (name: string | RegExp) => {
+  if (typeof name === 'string' && MEMBER_ACTION.test(name)
+    && screen.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected') !== 'true') await openTab('Members');
   fireEvent.click(screen.getByRole('button', { name }));
   await flush();
 };
@@ -507,9 +514,13 @@ describe('team editing', () => {
       members: [member({ source: 'runtime', memberId: 'x', name: 'x' })],
     })]);
     await renderScreen({ overview: [ok(o)] });
-    for (const name of ['Rename team', 'Delete team', 'Add member', 'Edit x']) {
-      expect(screen.queryByRole('button', { name })).toBeNull();
+    for (const view of ['Overview', 'Members']) {
+      await openTab(view);
+      for (const name of ['Rename team', 'Delete team', 'Add member', 'Edit x']) {
+        expect(screen.queryByRole('button', { name })).toBeNull();
+      }
     }
+    await openTab('Overview');
     expect(screen.getByText('This team has no definition file; it cannot be edited here.')).toBeTruthy();
   });
 

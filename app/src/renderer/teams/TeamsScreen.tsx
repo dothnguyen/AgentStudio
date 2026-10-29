@@ -1,4 +1,7 @@
 import { RoutingSettingsPanel } from './RoutingSettingsPanel';
+import { TeamChooser } from './TeamChooser';
+import { TeamViewTabs } from './TeamViewTabs';
+import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, resolveTeamsView, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
@@ -101,7 +104,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
   const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const [boardAction, setBoardAction] = useState<BoardAction | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [viewState, setViewState] = useState<TeamsViewState>(INITIAL_TEAMS_VIEW);
   const refreshLock = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const busy = refreshing || overview.loading || agents.loading || board.loading || roleCatalog.loading;
@@ -150,7 +153,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     }
     const { text: message, selectKey } = onOk(result.data);
     setFeedback({ kind: 'success', text: message });
-    if (selectKey !== undefined) setSelectedKey(selectKey);
+    if (selectKey !== undefined) setViewState(current => selectTeamView(current, selectKey));
     void overview.reload();
     return true;
   }
@@ -321,7 +324,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const ordered = data === null
     ? []
     : orderTeams(data.teams.map((team, index) => ({ key: teamKey(team, index), team })));
-  const selected = ordered.find((item) => item.key === selectedKey) ?? ordered[0] ?? null;
+  const view = resolveTeamsView(viewState, data === null ? null : ordered);
+  const selected = view.teamKey === null ? null : ordered.find((item) => item.key === view.teamKey) ?? null;
   const notices = data === null ? [] : overviewNotices(data);
 
   return (
@@ -384,32 +388,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           {data !== null && ordered.length === 0 && (
             <p className="panel-empty">No teams defined in this workspace.</p>
           )}
-          {data !== null && selected !== null && (
-            <ul className="teams-card-list">
-              {ordered.map((item) => {
-                const { team } = item;
-                const badge = definitionBadge(team);
-                return (
-                  <li key={item.key}>
-                    <button
-                      type="button"
-                      className="teams-card"
-                      aria-pressed={item.key === selected.key}
-                      onClick={() => setSelectedKey(item.key)}
-                    >
-                      <span className="teams-card-name">{teamLabel(team)}</span>
-                      <span className={`status-badge teams-runtime teams-runtime-${team.runtime.state} teams-tone-${runtimeTone(team.runtime.state)}`}>
-                        <span className="status-dot" aria-hidden="true" />
-                        {RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}
-                      </span>
-                      <span className="teams-card-facts">{memberCountText(team)}</span>
-                      {badge !== null && <span className="status-badge teams-definition">{badge}</span>}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {data !== null && selected !== null && <TeamChooser items={ordered} selectedKey={selected.key} onSelect={(key) => setViewState(selectTeamView(view, key))} />}
         </section>
         {data !== null && selected !== null && (
           <TeamDetailPanel
@@ -427,6 +406,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
             onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
             pending={pending}
+            view={view.view}
+            onSelectView={(next) => setViewState(selectChildView(view, next))}
+            routing={<RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} />}
             board={{
               section: board,
               connected,
@@ -436,7 +418,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             }}
           />
         )}
-        <RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} />
       </div>
     </div>
   );
@@ -456,6 +437,9 @@ function TeamDetailPanel(props: {
   onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void;
   onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void;
   pending: boolean;
+  view: TeamsChildView;
+  onSelectView(view: TeamsChildView): void;
+  routing: JSX.Element;
   board: {
     section: DashboardSectionController<BoardSettings>;
     connected: boolean;
@@ -474,195 +458,218 @@ function TeamDetailPanel(props: {
   const editing = memberForm?.mode === 'edit'
     ? team.members.find((m) => m.memberId === memberForm.memberId) ?? null
     : null;
+  const panel = (id: TeamsChildView): JSX.Element | null => {
+    if (id === 'routing') return props.routing;
+    if (id === 'overview') return (
+      <>
+        <p className="teams-detail-facts">
+          <span>{memberCountText(team)}</span>
+          <span>{`Runtime: ${RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}`}</span>
+          {team.runtime.teamId !== null && <code className="entity-id">{team.runtime.teamId}</code>}
+        </p>
+        {unNote !== null && <p className="panel-note">{unNote}</p>}
+        {runNote !== null && <p className="panel-note">{runNote}</p>}
+        <BoardControl team={team} pending={pending} {...board} />
+        {editable && (
+          <div className="teams-team-actions">
+            <button type="button" disabled={pending} onClick={() => setTeamForm('rename')}>Rename team</button>
+            <button type="button" disabled={pending} onClick={() => setTeamForm('delete')}>Delete team</button>
+          </div>
+        )}
+        {teamForm === 'rename' && (
+          <TeamNameForm
+            heading="Rename team"
+            submitLabel="Save name"
+            initialName={team.name ?? ''}
+            pending={pending}
+            onSubmit={(name) => { void writes.rename(team, name).then((ok) => { if (ok) setTeamForm(null); }); }}
+            onCancel={() => setTeamForm(null)}
+          />
+        )}
+        {teamForm === 'delete' && (
+          <div className="teams-confirm" role="group" aria-label="Confirm team deletion">
+            <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => { void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
+            >
+              Confirm delete
+            </button>
+            <button type="button" onClick={() => setTeamForm(null)}>Cancel</button>
+          </div>
+        )}
+        {team.definition.problems.length > 0 && (
+          <ul className="teams-problems" aria-label="Definition problems">
+            {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
+          </ul>
+        )}
+      </>
+    );
+    return (
+      <>
+        {unNote !== null && <p className="panel-note">{unNote}</p>}
+        {runNote !== null && <p className="panel-note">{runNote}</p>}
+        {editable && (
+          <div className="teams-team-actions">
+            <button type="button" disabled={pending} onClick={() => setMemberForm({ mode: 'add' })}>Add member</button>
+          </div>
+        )}
+        {team.members.length === 0 ? (
+          <p className="panel-empty">This team has no members.</p>
+        ) : (
+          <>
+          <p className="panel-note">Member role changes apply the next time the team starts. Edits to shared role instructions apply to new assignments and do not change current assignments.</p>
+          <table className="teams-members-table">
+            <thead>
+              <tr>
+                <th scope="col">Agent</th>
+                <th scope="col">Role</th>
+                <th scope="col">Saved options</th>
+                <th scope="col">Live agent</th>
+                <th scope="col">Status</th>
+                <th scope="col">Current work</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {team.members.map((m, index) => {
+                const source = memberSourceNote(m);
+                const role = roleNote(m);
+                const catalogRole = m.roleState === 'undefined' || props.roleItems === null ? null : findCatalogRole(props.roleItems, m.role);
+                const name = memberName(m);
+                const memberId = m.memberId;
+                return (
+                  <tr key={memberId ?? index}>
+                    <td>
+                      <span className="teams-member-name">{name}</span>
+                      {source !== null && <p className="teams-cell-note">{source}</p>}
+                    </td>
+                    <td>
+                      {catalogRole === null ? (
+                        <>
+                          {roleText(m)}
+                          {role !== null && <p className="teams-role-description">{role}</p>}
+                        </>
+                      ) : (
+                        <>
+                          <span className="teams-role-name">{catalogRole.name}</span>
+                          {catalogRole.id !== catalogRole.name && <code className="entity-id">{catalogRole.id}</code>}
+                          <p className="teams-role-description">{catalogRole.description ?? 'No description'}</p>
+                          {props.onViewRole !== undefined && (
+                            <button type="button" onClick={() => props.onViewRole?.(catalogRole.id)}>{`View ${catalogRole.name} in Roles`}</button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td>{m.source === 'runtime' ? 'Not available' : m.agentMode === 'inline'
+                      ? `Inline — ${providerModelText(m.provider, m.model)}${m.reasoning ? ` · Reasoning: ${m.reasoning}` : ''}`
+                      : <ol>{m.agentOptions.map((option, i) => <li key={`${option.id}-${i}`}>{savedAgentOptionText(option, i)}</li>)}</ol>}</td>
+                    <td>{liveAgentText(m)}{(() => {
+                      const view = memberAgentActions(team, m, agents, props.connected, memberId ? props.actions[actionKey(team.id ?? '', memberId)] ?? null : null);
+                      if (!view.visible) return null;
+                      return <section className="teams-live-actions" aria-label={`Live agent actions for ${name}`}><h4>Live agent actions</h4><p>{view.activeText}</p><p>{view.availabilityText}</p><p>{view.assignmentText}</p>{view.pendingText && <p>{view.pendingText}</p>}{view.lastResultText && <p>{view.lastResultText}</p>}{view.notice && <p>{view.notice}</p>}{memberId && props.actions[actionKey(team.id ?? '', memberId)] && !props.polling[actionKey(team.id ?? '', memberId)] && <p role="status">Requesting…</p>}<ul>{view.options.map(option => <li key={option.id}><span>{option.label}{option.active && ' · Active'}{option.holdText && ` · ${option.holdText}`}</span>{!option.active && m.runtime?.configuredAgents?.includes(option.id) && <button type="button" disabled={!option.canSwitch || !team.id || !memberId} onClick={e => props.onSwitch(team, m, option.id, option.label, e.currentTarget)}>Switch</button>}{option.holdText && <button type="button" disabled={!option.canResume || !team.id || !memberId} onClick={() => props.onResume(team, m, option.id, option.label)}>Resume</button>}{option.disabledReason && !(memberId && props.polling[actionKey(team.id ?? '', memberId)] && option.disabledReason === 'Requesting…') && <p className="teams-live-reason">{option.disabledReason}</p>}</li>)}</ul></section>;
+                    })()}</td>
+                    <td>
+                      <span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}>
+                        <span className="status-dot" aria-hidden="true" />
+                        {presenceLabel(m.presence)}
+                      </span>
+                    </td>
+                    <td>{workText(m.work)}</td>
+                    <td className="teams-member-actions">
+                      {memberId !== null && canEditMember(team, m) && (confirmRemove === memberId ? (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Confirm remove ${name}`}
+                            disabled={pending}
+                            onClick={() => {
+                              void writes.removeMember(team, memberId).then((ok) => { if (ok) setConfirmRemove(null); });
+                            }}
+                          >
+                            Confirm remove
+                          </button>
+                          <button type="button" aria-label={`Cancel removing ${name}`} onClick={() => setConfirmRemove(null)}>
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Edit ${name}`}
+                            disabled={pending}
+                            onClick={() => setMemberForm({ mode: 'edit', memberId })}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${name}`}
+                            disabled={pending}
+                            onClick={() => setConfirmRemove(memberId)}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          </>
+        )}
+        {team.membersTruncated && <p className="panel-note">{`Showing the first ${team.members.length} members.`}</p>}
+        {memberForm?.mode === 'add' && (
+          <MemberForm
+            mode="add"
+            heading="Add member"
+            initial={emptyMemberForm()}
+            originalOptions={[]}
+            inlineContext={null}
+            agents={agents}
+            roles={props.roleItems}
+            roleCatalogMessage={props.roleCatalogMessage}
+            pending={pending}
+            onSubmit={(values) => { void writes.addMember(team, values).then((ok) => { if (ok) setMemberForm(null); }); }}
+            onCancel={() => setMemberForm(null)}
+          />
+        )}
+        {editing !== null && memberForm?.mode === 'edit' && (
+          <MemberForm
+            key={memberForm.memberId}
+            mode="edit"
+            heading={`Edit ${memberName(editing)}`}
+            initial={memberFormInitial(editing)}
+            originalOptions={editing.agentOptions}
+            inlineContext={editing.agentMode === 'inline' ? { provider: editing.provider, model: editing.model, reasoning: editing.reasoning } : null}
+            agents={agents}
+            roles={props.roleItems}
+            roleCatalogMessage={props.roleCatalogMessage}
+            pending={pending}
+            onSubmit={(values) => {
+              const changes = memberChanges(memberFormInitial(editing), values);
+              if (changes === null) return;
+              void writes.updateMember(team, memberForm.memberId, changes).then((ok) => { if (ok) setMemberForm(null); });
+            }}
+            onCancel={() => setMemberForm(null)}
+          />
+        )}
+      </>
+    );
+  };
   return (
     <section className="dashboard-panel teams-detail" aria-labelledby="teams-detail-title">
       <h2 id="teams-detail-title">{teamLabel(team)}</h2>
-      <p className="teams-detail-facts">
-        <span>{memberCountText(team)}</span>
-        <span>{`Runtime: ${RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}`}</span>
-        {team.runtime.teamId !== null && <code className="entity-id">{team.runtime.teamId}</code>}
-      </p>
-      {unNote !== null && <p className="panel-note">{unNote}</p>}
-      {runNote !== null && <p className="panel-note">{runNote}</p>}
-      <BoardControl team={team} pending={pending} {...board} />
-      {editable && (
-        <div className="teams-team-actions">
-          <button type="button" disabled={pending} onClick={() => setTeamForm('rename')}>Rename team</button>
-          <button type="button" disabled={pending} onClick={() => setTeamForm('delete')}>Delete team</button>
-          <button type="button" disabled={pending} onClick={() => setMemberForm({ mode: 'add' })}>Add member</button>
+      <TeamViewTabs teamName={teamLabel(team)} selected={props.view} onSelect={props.onSelectView} />
+      {TEAMS_CHILD_VIEWS.map(({ id }) => (
+        <div key={id} role="tabpanel" id={teamsPanelId(id)} aria-labelledby={teamsTabId(id)} className="teams-view-panel" hidden={id !== props.view} tabIndex={id === props.view ? 0 : undefined}>
+          {id === props.view && panel(id)}
         </div>
-      )}
-      {teamForm === 'rename' && (
-        <TeamNameForm
-          heading="Rename team"
-          submitLabel="Save name"
-          initialName={team.name ?? ''}
-          pending={pending}
-          onSubmit={(name) => { void writes.rename(team, name).then((ok) => { if (ok) setTeamForm(null); }); }}
-          onCancel={() => setTeamForm(null)}
-        />
-      )}
-      {teamForm === 'delete' && (
-        <div className="teams-confirm" role="group" aria-label="Confirm team deletion">
-          <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => { void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
-          >
-            Confirm delete
-          </button>
-          <button type="button" onClick={() => setTeamForm(null)}>Cancel</button>
-        </div>
-      )}
-      {team.definition.problems.length > 0 && (
-        <ul className="teams-problems" aria-label="Definition problems">
-          {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
-        </ul>
-      )}
-      {team.members.length === 0 ? (
-        <p className="panel-empty">This team has no members.</p>
-      ) : (
-        <>
-        <p className="panel-note">Member role changes apply the next time the team starts. Edits to shared role instructions apply to new assignments and do not change current assignments.</p>
-        <table className="teams-members-table">
-          <thead>
-            <tr>
-              <th scope="col">Agent</th>
-              <th scope="col">Role</th>
-              <th scope="col">Saved options</th>
-              <th scope="col">Live agent</th>
-              <th scope="col">Status</th>
-              <th scope="col">Current work</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {team.members.map((m, index) => {
-              const source = memberSourceNote(m);
-              const role = roleNote(m);
-              const catalogRole = m.roleState === 'undefined' || props.roleItems === null ? null : findCatalogRole(props.roleItems, m.role);
-              const name = memberName(m);
-              const memberId = m.memberId;
-              return (
-                <tr key={memberId ?? index}>
-                  <td>
-                    <span className="teams-member-name">{name}</span>
-                    {source !== null && <p className="teams-cell-note">{source}</p>}
-                  </td>
-                  <td>
-                    {catalogRole === null ? (
-                      <>
-                        {roleText(m)}
-                        {role !== null && <p className="teams-role-description">{role}</p>}
-                      </>
-                    ) : (
-                      <>
-                        <span className="teams-role-name">{catalogRole.name}</span>
-                        {catalogRole.id !== catalogRole.name && <code className="entity-id">{catalogRole.id}</code>}
-                        <p className="teams-role-description">{catalogRole.description ?? 'No description'}</p>
-                        {props.onViewRole !== undefined && (
-                          <button type="button" onClick={() => props.onViewRole?.(catalogRole.id)}>{`View ${catalogRole.name} in Roles`}</button>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td>{m.source === 'runtime' ? 'Not available' : m.agentMode === 'inline'
-                    ? `Inline — ${providerModelText(m.provider, m.model)}${m.reasoning ? ` · Reasoning: ${m.reasoning}` : ''}`
-                    : <ol>{m.agentOptions.map((option, i) => <li key={`${option.id}-${i}`}>{savedAgentOptionText(option, i)}</li>)}</ol>}</td>
-                  <td>{liveAgentText(m)}{(() => {
-                    const view = memberAgentActions(team, m, agents, props.connected, memberId ? props.actions[actionKey(team.id ?? '', memberId)] ?? null : null);
-                    if (!view.visible) return null;
-                    return <section className="teams-live-actions" aria-label={`Live agent actions for ${name}`}><h4>Live agent actions</h4><p>{view.activeText}</p><p>{view.availabilityText}</p><p>{view.assignmentText}</p>{view.pendingText && <p>{view.pendingText}</p>}{view.lastResultText && <p>{view.lastResultText}</p>}{view.notice && <p>{view.notice}</p>}{memberId && props.actions[actionKey(team.id ?? '', memberId)] && !props.polling[actionKey(team.id ?? '', memberId)] && <p role="status">Requesting…</p>}<ul>{view.options.map(option => <li key={option.id}><span>{option.label}{option.active && ' · Active'}{option.holdText && ` · ${option.holdText}`}</span>{!option.active && m.runtime?.configuredAgents?.includes(option.id) && <button type="button" disabled={!option.canSwitch || !team.id || !memberId} onClick={e => props.onSwitch(team, m, option.id, option.label, e.currentTarget)}>Switch</button>}{option.holdText && <button type="button" disabled={!option.canResume || !team.id || !memberId} onClick={() => props.onResume(team, m, option.id, option.label)}>Resume</button>}{option.disabledReason && !(memberId && props.polling[actionKey(team.id ?? '', memberId)] && option.disabledReason === 'Requesting…') && <p className="teams-live-reason">{option.disabledReason}</p>}</li>)}</ul></section>;
-                  })()}</td>
-                  <td>
-                    <span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}>
-                      <span className="status-dot" aria-hidden="true" />
-                      {presenceLabel(m.presence)}
-                    </span>
-                  </td>
-                  <td>{workText(m.work)}</td>
-                  <td className="teams-member-actions">
-                    {memberId !== null && canEditMember(team, m) && (confirmRemove === memberId ? (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={`Confirm remove ${name}`}
-                          disabled={pending}
-                          onClick={() => {
-                            void writes.removeMember(team, memberId).then((ok) => { if (ok) setConfirmRemove(null); });
-                          }}
-                        >
-                          Confirm remove
-                        </button>
-                        <button type="button" aria-label={`Cancel removing ${name}`} onClick={() => setConfirmRemove(null)}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={`Edit ${name}`}
-                          disabled={pending}
-                          onClick={() => setMemberForm({ mode: 'edit', memberId })}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${name}`}
-                          disabled={pending}
-                          onClick={() => setConfirmRemove(memberId)}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    ))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </>
-      )}
-      {team.membersTruncated && <p className="panel-note">{`Showing the first ${team.members.length} members.`}</p>}
-      {memberForm?.mode === 'add' && (
-        <MemberForm
-          mode="add"
-          heading="Add member"
-          initial={emptyMemberForm()}
-          originalOptions={[]}
-          inlineContext={null}
-          agents={agents}
-          roles={props.roleItems}
-          roleCatalogMessage={props.roleCatalogMessage}
-          pending={pending}
-          onSubmit={(values) => { void writes.addMember(team, values).then((ok) => { if (ok) setMemberForm(null); }); }}
-          onCancel={() => setMemberForm(null)}
-        />
-      )}
-      {editing !== null && memberForm?.mode === 'edit' && (
-        <MemberForm
-          key={memberForm.memberId}
-          mode="edit"
-          heading={`Edit ${memberName(editing)}`}
-          initial={memberFormInitial(editing)}
-          originalOptions={editing.agentOptions}
-          inlineContext={editing.agentMode === 'inline' ? { provider: editing.provider, model: editing.model, reasoning: editing.reasoning } : null}
-          agents={agents}
-          roles={props.roleItems}
-          roleCatalogMessage={props.roleCatalogMessage}
-          pending={pending}
-          onSubmit={(values) => {
-            const changes = memberChanges(memberFormInitial(editing), values);
-            if (changes === null) return;
-            void writes.updateMember(team, memberForm.memberId, changes).then((ok) => { if (ok) setMemberForm(null); });
-          }}
-          onCancel={() => setMemberForm(null)}
-        />
-      )}
+      ))}
     </section>
   );
 }

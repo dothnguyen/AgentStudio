@@ -55,6 +55,7 @@ describe('live team state', () => {
       ],
     })]);
     await renderScreen({ overview: [ok(o)] });
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
     const rows = within(screen.getByRole('region', { name: 'Dev Team' })).getAllByRole('row').slice(1);
     const status = rows.map((r) => cells(r)[4]!);
     expect(status.map((c) => c.textContent)).toEqual(['Available', 'Working', 'Waiting for input', 'Offline']);
@@ -67,6 +68,7 @@ describe('live team state', () => {
   it('stopped_team_members_say_unavailable', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
     const row = within(screen.getByRole('region', { name: 'Release Team' })).getAllByRole('row')[1]!;
     expect(cells(row)[4]!.textContent).toBe('Stopped');
     expect(cells(row)[4]!.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
@@ -203,7 +205,11 @@ describe('board controls', () => {
     });
     expect(within(board()).getByRole('alert').textContent).toContain('BOARD_CONFIG_INVALID: board.json is invalid');
     expect(within(board()).queryByRole('button', { name: 'Run board' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    await flush();
     expect(screen.getByRole('table')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+    await flush();
     fireEvent.click(within(board()).getByRole('button', { name: 'Retry' }));
     await flush();
     expect(fake.boardSettings).toHaveBeenCalledTimes(2);
@@ -278,6 +284,7 @@ describe('board controls', () => {
 
   it('role_integration_preserves_live_and_agents_controls', async () => {
     await renderScreen();
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
     expect(screen.getAllByText(/Live agent actions/).length).toBeGreaterThan(0);
     expect(button('Refresh')).toBeTruthy();
     const text = document.body.textContent ?? '';

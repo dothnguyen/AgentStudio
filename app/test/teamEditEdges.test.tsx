@@ -35,6 +35,10 @@ describe('team editing edge cases', () => {
     expect(screen.getByText(/could not be read; fix the file/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    await flush();
+    expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
   });
 
   it('write_result_after_unmount_is_ignored', async () => {
