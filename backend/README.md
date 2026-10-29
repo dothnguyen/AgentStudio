@@ -329,7 +329,7 @@ validated command path as the CLI: agents never touch the database, and the coor
 `ticket_add` from an agent is checked by the coordinator: the assignment must be active and its member allowed
 (`FORBIDDEN`); a worktree assignment still targets the team's canonical board; the ticket lands in the claiming
 rule's `createdTicketStatus`, falling back to `agentTicketStatus`, and the requested phase (default when omitted). The
-assignment can add at most 10 tickets (`TICKET_CAP_REACHED`), an open ticket with the same title is refused
+an open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.
 

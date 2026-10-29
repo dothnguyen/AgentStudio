@@ -354,8 +354,6 @@ def _validate_ticket_add(args):
                 raise AsError(BAD_REQUEST, "dependsOn must be a list of ticket keys (at most 20).")
             if on:
                 out["dependsOn"] = on
-        cap = req_int(args, "cap", 1, 100, boardmodel.MCP_TICKET_CAP)
-        out["cap"] = cap
     return out
 
 

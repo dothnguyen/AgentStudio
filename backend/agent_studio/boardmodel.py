@@ -15,7 +15,7 @@ import re
 from . import roles as rolefiles, workflowdef
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
     PHASE_CLOSED, PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, \
-    TICKET_CAP_REACHED, TICKET_DEPENDENCY_CYCLE, TICKET_DUPLICATE, TICKET_NOT_FOUND, \
+    TICKET_DEPENDENCY_CYCLE, TICKET_DUPLICATE, TICKET_NOT_FOUND, \
     TICKET_TRANSITION_INVALID
 from .state import utcnow
 from .store import new_id
@@ -46,7 +46,6 @@ RULE_ACTIONS = ("merge",)
 DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
 BODY_LIMIT = 32 * 1024         # a ticket body is the next agent's task text, so it is capped
-MCP_TICKET_CAP = 10            # per assignment, unless the call says otherwise (§G)
 ACTIVE_ASSIGNMENT_STATES = ("queued", "claimed", "running", "waiting_input", "reconciling")
 
 
@@ -592,7 +591,7 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     The call rides the normal command path and names the assignment it belongs to. The coordinator checks
     that the assignment is active and its member may add tickets, resolves the team's canonical board
     workspace, records `createdBy`, puts the ticket in the claiming rule's configured status (falling back
-    to the board default) and requested phase, enforces a per-assignment cap and duplicate check, and links
+    to the board default) and requested phase, enforces a duplicate check, and links
     dependencies. The server sends the same idempotency key for a retried call, so the coordinator's receipt
     deduplicates it."""
     assignment_id = args["assignment"]
@@ -614,12 +613,6 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     workspace = row["team_workspace"]
     config = load_config(workspace)
     member_id = row["member_id"] or row["agent_id"]
-    existing = tx.conn.execute("SELECT COUNT(*) FROM tickets WHERE created_by_assignment = ?",
-                               (assignment_id,)).fetchone()[0]
-    if existing >= int(args.get("cap", MCP_TICKET_CAP)):
-        raise AsError(TICKET_CAP_REACHED, f"The assignment already added {existing} ticket(s) "
-                                          f"(cap {args.get('cap', MCP_TICKET_CAP)}).",
-                      data={"assignment": assignment_id, "cap": args.get("cap", MCP_TICKET_CAP)})
     title = args["title"].strip()
     terminal = {s["id"] for s in config["statuses"] if s["kind"] in TERMINAL_KINDS}
     duplicate = tx.conn.execute(

@@ -138,7 +138,7 @@ class TicketAddRules(ServerCase):
             self.add(self.asg_ok, "closed phase", phase="nowhere")
         self.assertEqual(caught.exception.code, "PHASE_NOT_FOUND")
 
-    def test_forbidden_inactive_and_cap(self):
+    def test_forbidden_inactive_and_multiple_tickets(self):
         with self.assertRaises(AsError) as caught:
             self.add(self.asg_no, "not allowed")
         self.assertEqual(caught.exception.code, "FORBIDDEN")
@@ -148,11 +148,9 @@ class TicketAddRules(ServerCase):
         with self.assertRaises(AsError) as caught:
             self.add("8" * 8 + "-0000-4000-8000-" + "8" * 12, "no such assignment")
         self.assertEqual(caught.exception.code, "FORBIDDEN")
-        for n in range(boardmodel.MCP_TICKET_CAP):
-            self.add(self.asg_ok, f"capped ticket {n}")
-        with self.assertRaises(AsError) as caught:
-            self.add(self.asg_ok, "one too many")
-        self.assertEqual(caught.exception.code, "TICKET_CAP_REACHED")
+        for n in range(12):
+            result = self.add(self.asg_ok, f"ticket {n}")
+            self.assertEqual(result["ticket"]["title"], f"ticket {n}")
 
     def test_duplicate_open_title(self):
         got = self.add(self.asg_ok, "same title")
