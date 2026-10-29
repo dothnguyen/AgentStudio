@@ -37,12 +37,6 @@
       "reasoning": "medium"
     },
     {
-      "id": "agy-default",
-      "name": "Antigravity (default model)",
-      "provider": "agy",
-      "description": "Write-capable roles only; workspace isolation is not guaranteed."
-    },
-    {
       "id": "agy-gemini-3-8-flash-medium",
       "name": "Antigravity Gemini 3.8 Flash medium",
       "provider": "agy",
