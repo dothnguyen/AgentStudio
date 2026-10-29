@@ -34,7 +34,7 @@ describe('RolesScreen', () => {
     expect(within(view.getByRole('main')).getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Roles');
     expect(view.getAllByRole('main')).toHaveLength(1);
-    expect(view.queryByRole('button', { name: /create|edit|delete|new role/i })).toBeNull();
+    expect(view.queryByRole('button', { name: /delete/i })).toBeNull();
     expect(view.queryAllByRole('alert')).toHaveLength(0);
   });
 

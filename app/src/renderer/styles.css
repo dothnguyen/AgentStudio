@@ -1263,3 +1263,25 @@ ul[aria-label="Workspaces"] {
 .roles-screen :is(button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .roles-screen :is(button, input[type="search"]) { min-height: 36px; }
 @media (max-width: 900px) { .roles-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.roles-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; min-width: 0; overflow-wrap: anywhere; }
+.roles-saved { overflow-wrap: anywhere; }
+.roles-form { display: flex; flex-direction: column; gap: 12px; width: min(640px, 100%); max-height: 100%; min-width: 0; padding: 20px; overflow: auto; overflow-wrap: anywhere; background: var(--surface, #fff); color: var(--text, #111); }
+.roles-field, .roles-form fieldset, .roles-form-alert, .roles-conflict, .roles-conflict-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.roles-form :is(input, textarea, select) { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 8px; }
+.roles-form textarea { min-height: 6rem; resize: vertical; }
+.roles-form .roles-instructions-input { min-height: 12rem; font-family: var(--font-mono, monospace); }
+.roles-form :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.roles-form button { min-height: 36px; }
+.roles-field-error { color: var(--color-danger, #b42318); overflow-wrap: anywhere; }
+.roles-form-actions, .roles-skill-add, .roles-skill-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+.roles-skill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.roles-skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.roles-skill-row code { min-width: 0; overflow-wrap: anywhere; }
+.roles-skill-missing { font-weight: 600; }
+.roles-conflict dl { margin: 0; display: grid; gap: 8px; }
+.roles-conflict dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .roles-form { padding: 12px; }
+  .roles-form-actions, .roles-skill-add, .roles-skill-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
