@@ -6,7 +6,7 @@ import os
 import stat
 
 from . import roles
-from .protocol import AsError
+from .protocol import AsError, CONFIG_CHANGED, ROLE_NOT_FOUND, ROLE_IN_USE, ROLE_USAGE_UNAVAILABLE
 
 ROLE_NAME_LIMIT = 80
 CATALOG_FILE = "roles.json"
@@ -414,3 +414,152 @@ def attach_usage(catalog: dict, workspace: str, conn, coordinator_running: bool,
         usage["problems"] = usage["problems"][:MAX_REFERENCE_PROBLEMS]
         result["items"].append(dict(item, usage=usage))
     return result
+
+
+def scan_role_usage(workspace: str, role_id: str, conn) -> dict:
+    """One complete usage object for a role id; a missing or failing runtime reader makes it partial."""
+    usage = _scan_saved_references(workspace, role_id, keep_members=True)
+    members = usage["members"]
+    runtime_error = None
+    if conn is not None:
+        try:
+            lives = scan_live_references(conn, workspace, role_id)
+        except Exception as e:  # sqlite3.Error and anything the reader raises
+            lives = []
+            runtime_error = {"code": "BACKEND_UNAVAILABLE", "message": str(e)}
+        for live in lives:
+            match = next((m for m in members if live["teamDefId"] is not None and live["memberId"] is not None
+                          and m["teamDefId"] == live["teamDefId"] and m["memberId"] == live["memberId"]
+                          and m["saved"] is not None and m["live"] is None), None)
+            if match is None:
+                members.append(live)
+                usage["count"] += 1
+            else:
+                match["live"] = live["live"]
+    else:
+        runtime_error = {"code": "BACKEND_UNAVAILABLE", "message": "State database unavailable"}
+    if runtime_error is not None:
+        usage["problems"].append({"source": "runtime", "path": "", "code": runtime_error["code"],
+                                  "message": _label(runtime_error["message"].replace(workspace, "<workspace>"))})
+    usage["liveRuntime"] = {"state": "unavailable" if runtime_error else "connected", "error": runtime_error}
+    usage["partial"] = bool(usage["problems"])
+    usage["blocking"] = usage["count"] > 0
+    usage["truncated"] |= len(members) > MAX_REFERENCE_ITEMS or len(usage["problems"]) > MAX_REFERENCE_PROBLEMS
+    usage["members"] = members[:MAX_REFERENCE_ITEMS]
+    usage["problems"] = usage["problems"][:MAX_REFERENCE_PROBLEMS]
+    return usage
+
+
+def _fresh_usage(workspace: str, role_id: str, reader) -> dict:
+    conn = None
+    try:
+        if reader is None:
+            raise AsError("BACKEND_UNAVAILABLE", "State database unavailable")
+        conn = reader()
+    except Exception as e:
+        if conn is not None:
+            conn.close()
+        conn = None
+        usage = scan_role_usage(workspace, role_id, None)
+        message = e.message if isinstance(e, AsError) else str(e)
+        usage["problems"][-1].update(code=e.code if isinstance(e, AsError) else "BACKEND_UNAVAILABLE",
+                                     message=_label(message.replace(workspace, "<workspace>")))
+        usage["liveRuntime"]["error"] = {"code": usage["problems"][-1]["code"], "message": usage["problems"][-1]["message"]}
+        return usage
+    try:
+        return scan_role_usage(workspace, role_id, conn)
+    finally:
+        conn.close()
+
+
+def _owned_file(base: str, role_id: str, others: dict, spec: dict):
+    """(relative path or None, real path or None, action-if-kept reason or None, owned?)."""
+    rel = spec.get("instructions")
+    if not isinstance(rel, str) or not rel:
+        return None, None, None, False
+    real = roles._inside(base, rel)
+    lexical = os.path.join(os.path.realpath(base), *rel.replace("\\", "/").split("/"))
+    if rel != f"roles/{role_id}.md":
+        return rel, real, "custom_path", False
+    if real is None or os.path.realpath(lexical) != os.path.normpath(lexical) or (
+            os.path.lexists(real) and not os.path.isfile(real)):
+        return rel, None, "unsafe_path", False
+    for other_spec in others.values():
+        other = other_spec.get("instructions") if isinstance(other_spec, dict) else None
+        if isinstance(other, str) and other and roles._inside(base, other) == real:
+            return rel, real, "shared_path", False
+    return rel, real, None, True
+
+
+def delete_role(workspace: str, role_id: str, expected_roles_sha256: str,
+                expected_instructions_sha256, reader=None) -> dict:
+    base = os.path.join(workspace, roles.CONFIG_DIR)
+    roles_path = os.path.join(base, "roles.json")
+    roles_data = roles._read_raw(roles_path)
+    if roles_data is None:
+        raise AsError(ROLE_NOT_FOUND, f"Role '{role_id}' is not defined in {roles.CONFIG_DIR}/roles.json.")
+    raw = roles._validated_catalog(workspace, roles_data)
+    spec = raw["roles"].get(role_id)
+    if spec is None:
+        raise AsError(ROLE_NOT_FOUND, f"Role '{role_id}' is not defined in {roles.CONFIG_DIR}/roles.json.")
+    rel, real, kept, owned = _owned_file(base, role_id, {k: v for k, v in raw["roles"].items() if k != role_id}, spec)
+
+    def read_target():
+        if real is None:
+            return None
+        try:
+            return roles._read_raw(real)
+        except (IsADirectoryError, PermissionError):
+            return None
+
+    target = read_target()
+    roles_sha, target_sha = roles._sha(roles_data), roles._sha(target)
+    if roles_sha != expected_roles_sha256:
+        raise roles._conflict(f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.", roles_data, target)
+    if target_sha != expected_instructions_sha256:
+        raise roles._conflict(f"{roles.CONFIG_DIR}/{rel} changed since it was read; reload and retry.", roles_data, target)
+
+    usage = _fresh_usage(workspace, role_id, reader)
+    if usage["partial"]:
+        raise AsError(ROLE_USAGE_UNAVAILABLE, "Role usage could not be checked completely; fix or reconnect the "
+                      "reported sources and retry.", data={"roleId": role_id, "usage": usage})
+    if usage["blocking"] or usage["count"]:
+        raise AsError(ROLE_IN_USE, f"Role '{role_id}' is still referenced; remove those references before deleting it.",
+                      data={"roleId": role_id, "usage": usage})
+
+    del raw["roles"][role_id]
+    new_roles = (json.dumps(raw, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    instructions = {"path": f"{roles.CONFIG_DIR}/{rel}" if rel else None, "action": "none" if rel is None else "preserved",
+                    "reason": kept}
+    delete_file = owned and target is not None
+    if owned and target is None:
+        instructions["action"] = "missing"
+    staged, rollback = [], None
+    try:
+        roles_tmp = roles._stage(base, new_roles, roles._mode_of(roles_path))
+        staged.append(roles_tmp)
+        if delete_file:
+            rollback = roles._stage(os.path.dirname(real), target, roles._mode_of(real))
+            staged.append(rollback)
+        now_roles, now_target = roles._read_raw(roles_path), (read_target() if owned else target)
+        if now_roles != roles_data:
+            raise roles._conflict(f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.", now_roles, now_target)
+        if now_target != target:
+            raise roles._conflict(f"{roles.CONFIG_DIR}/{rel} changed since it was read; reload and retry.", now_roles, now_target)
+        if delete_file:
+            os.unlink(real)
+        try:
+            roles._replace(roles_tmp, roles_path)
+            staged.remove(roles_tmp)
+        except BaseException:
+            if delete_file:
+                os.replace(rollback, real)
+                staged.remove(rollback)
+            raise
+    finally:
+        for tmp in staged:
+            roles._discard(tmp)
+    if delete_file:
+        instructions["action"] = "deleted"
+    return {"workspace": workspace, "roleId": role_id, "deleted": True, "rolesSha256": roles._sha(new_roles),
+            "instructions": instructions}

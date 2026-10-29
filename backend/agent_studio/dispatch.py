@@ -199,6 +199,23 @@ def _role_instructions_update(args, req):
     return roles.update_instructions(ws, role, text, roles_sha, file_sha)
 
 
+def _role_delete(args, req):
+    ws = _catalog_workspace(args, {"workspace", "roleId", "expectedRolesSha256", "expectedInstructionsSha256"}, "role.delete")
+    role = args.get("roleId")
+    if not isinstance(role, str) or not role or len(role.encode("utf-8", "replace")) > 200:
+        raise AsError(BAD_REQUEST, "roleId must be a non-empty string of at most 200 bytes.")
+    for name in ("expectedRolesSha256", "expectedInstructionsSha256"):
+        if name not in args:
+            raise AsError(BAD_REQUEST, f"Missing required argument '{name}'.")
+    roles_sha, file_sha = args["expectedRolesSha256"], args["expectedInstructionsSha256"]
+    if not isinstance(roles_sha, str) or not _SHA_RE.fullmatch(roles_sha):
+        raise AsError(BAD_REQUEST, "expectedRolesSha256 must be a lowercase hex sha256.")
+    if file_sha is not None and (not isinstance(file_sha, str) or not _SHA_RE.fullmatch(file_sha)):
+        raise AsError(BAD_REQUEST, "expectedInstructionsSha256 must be a lowercase hex sha256 or null.")
+    result = rolecatalog.delete_role(ws, role, roles_sha, file_sha, reader=_reader)
+    return result if "workspace" in result else dict(result, workspace=ws)
+
+
 def _catalog_workspace(args, allowed, command):
     unknown = sorted(set(args) - allowed)
     if unknown:
@@ -982,6 +999,7 @@ COMMANDS = {
     "role.update": _role_update,
     "role.instructions.update": _role_instructions_update,
     "role.list": _role_list,
+    "role.delete": _role_delete,
     "board.run": _inbox("board.run", _validate_board_run),
     "board.stop": _inbox("board.stop", _validate_board_show),
     "phase.add": _inbox("phase.add", _validate_phase_add),
