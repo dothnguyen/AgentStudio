@@ -178,6 +178,27 @@ def _role_update(args, req):
     return boardsettings.update_role(ws, role, args["description"], _sha_arg(args))
 
 
+_SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _role_instructions_update(args, req):
+    ws = _catalog_workspace(args, {"workspace", "role", "text", "expectedRolesSha256",
+                                   "expectedInstructionsSha256"}, "role.instructions.update")
+    role = args.get("role")
+    if not isinstance(role, str) or not role or len(role.encode("utf-8", "replace")) > 200:
+        raise AsError(BAD_REQUEST, "role must be a non-empty string of at most 200 bytes.")
+    text = req_text(args, "text", roles.LIMITS["instructions"], allow_empty=True)
+    for name in ("expectedRolesSha256", "expectedInstructionsSha256"):
+        if name not in args:
+            raise AsError(BAD_REQUEST, f"Missing required argument '{name}'.")
+    roles_sha, file_sha = args["expectedRolesSha256"], args["expectedInstructionsSha256"]
+    if not isinstance(roles_sha, str) or not _SHA_RE.fullmatch(roles_sha):
+        raise AsError(BAD_REQUEST, "expectedRolesSha256 must be a lowercase hex sha256.")
+    if file_sha is not None and (not isinstance(file_sha, str) or not _SHA_RE.fullmatch(file_sha)):
+        raise AsError(BAD_REQUEST, "expectedInstructionsSha256 must be a lowercase hex sha256 or null.")
+    return roles.update_instructions(ws, role, text, roles_sha, file_sha)
+
+
 def _catalog_workspace(args, allowed, command):
     unknown = sorted(set(args) - allowed)
     if unknown:
@@ -959,6 +980,7 @@ COMMANDS = {
     "board.settings.update": _board_settings_update,
     "role.create": _role_create,
     "role.update": _role_update,
+    "role.instructions.update": _role_instructions_update,
     "role.list": _role_list,
     "board.run": _inbox("board.run", _validate_board_run),
     "board.stop": _inbox("board.stop", _validate_board_show),

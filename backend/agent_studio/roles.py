@@ -371,3 +371,203 @@ def _save_role_result_noop(workspace, old, raw, role_id):
     return {"workspace": workspace, "file": "roles.json", "sha256": hashlib.sha256(old).hexdigest(),
             "role": {"id": role_id, "name": spec.get("name", role_id).strip(), "description": spec.get("description"), "skills": skills},
             "changed": False, "warnings": warnings}
+
+
+# ---- shared role instruction saves (P05-S32) ----
+
+def _sha(data: Optional[bytes]) -> Optional[str]:
+    return hashlib.sha256(data).hexdigest() if data is not None else None
+
+
+def _read_raw(path: str) -> Optional[bytes]:
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _unsafe_instructions(role_id):
+    return AsError(ROLES_CONFIG_INVALID, f"Role '{role_id}' instructions path must be a regular file inside {CONFIG_DIR}.")
+
+
+def _instruction_target(base: str, role_id: str, spec: dict):
+    """(relative path, real absolute path) of the role's instruction file; raises when it is unsafe to write."""
+    if "instructions" in spec:
+        rel = spec["instructions"]
+    else:
+        if not ROLE_FILE_RE.match(role_id):
+            raise _unsafe_instructions(role_id)
+        rel = f"roles/{role_id}.md"
+    if not isinstance(rel, str) or not rel.strip() or rel.startswith(("/", "\\")) or os.path.isabs(rel):
+        raise _unsafe_instructions(role_id)
+    if ".." in rel.replace("\\", "/").split("/"):
+        raise _unsafe_instructions(role_id)
+    path = _inside(base, rel)
+    if path is None or os.path.isdir(path) or (os.path.lexists(path) and not os.path.isfile(path)):
+        raise _unsafe_instructions(role_id)
+    parent = os.path.dirname(path)
+    probe = parent
+    while not os.path.lexists(probe):  # the nearest existing ancestor must be a directory
+        probe = os.path.dirname(probe)
+    if not os.path.isdir(probe):
+        raise _unsafe_instructions(role_id)
+    return rel, path
+
+
+def _stage(directory: str, data: bytes, mode: Optional[int]) -> str:
+    fd, tmp = tempfile.mkstemp(prefix=".as-stage.", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        if mode is None:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
+        os.chmod(tmp, mode)
+    except BaseException:
+        _discard(tmp)
+        raise
+    return tmp
+
+
+def _discard(path: Optional[str]):
+    if path:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
+def _replace(src: str, dst: str):
+    """The single atomic same-directory replace used by instruction saves (a seam for failure injection)."""
+    os.replace(src, dst)
+
+
+def _mode_of(path: str) -> Optional[int]:
+    try:
+        return os.stat(path).st_mode & 0o777
+    except FileNotFoundError:
+        return None
+
+
+def _validated_catalog(workspace: str, data: bytes) -> dict:
+    try:
+        raw = json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeError, RecursionError) as exc:
+        raise AsError(ROLES_CONFIG_INVALID, f".agent-studio/roles.json is not valid JSON: {exc}")
+    token = _catalog_snapshot.set((workspace, raw))
+    try:
+        load_config(workspace)
+    finally:
+        _catalog_snapshot.reset(token)
+    return raw
+
+
+def _conflict(message, roles_data, target_data):
+    return AsError(CONFIG_CHANGED, message, data={"rolesSha256": _sha(roles_data), "instructionsSha256": _sha(target_data)})
+
+
+def _best_effort_target(workspace, base, role_id, roles_data):
+    try:
+        raw = _validated_catalog(workspace, roles_data)
+        spec = raw["roles"].get(role_id)
+        if spec is None:
+            return None
+        return _read_raw(_instruction_target(base, role_id, spec)[1])
+    except (AsError, OSError):
+        return None
+
+
+def update_instructions(workspace: str, role_id: str, text: str, expected_roles_sha256: str,
+                        expected_instructions_sha256: Optional[str]) -> dict:
+    base = os.path.join(workspace, CONFIG_DIR)
+    roles_path = os.path.join(base, "roles.json")
+    roles_data = _read_raw(roles_path)
+    if _sha(roles_data) != expected_roles_sha256:
+        raise _conflict(f"{CONFIG_DIR}/roles.json changed since it was read; reload and retry.", roles_data,
+                        _best_effort_target(workspace, base, role_id, roles_data) if roles_data is not None else None)
+    if roles_data is None:  # unreachable with a valid token; kept for safety
+        raise AsError(ROLES_CONFIG_INVALID, f"{CONFIG_DIR}/roles.json is missing.")
+    raw = _validated_catalog(workspace, roles_data)
+    spec = raw["roles"].get(role_id)
+    if spec is None:
+        raise AsError(ROLE_NOT_FOUND, f"Role '{role_id}' is not defined in {CONFIG_DIR}/roles.json.")
+    rel, target = _instruction_target(base, role_id, spec)
+    pathless = "instructions" not in spec
+    old_target = _read_raw(target)
+    if _sha(old_target) != expected_instructions_sha256:
+        raise _conflict(f"Role '{role_id}' instructions changed since they were read; reload and retry.",
+                        roles_data, old_target)
+    new_bytes = text.encode("utf-8")
+    new_roles = None
+    if pathless:
+        candidate = copy.deepcopy(raw)
+        candidate["roles"][role_id]["instructions"] = rel
+        new_roles = (json.dumps(candidate, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+    real_base = os.path.realpath(base)
+    made = []
+    parent = os.path.dirname(target)
+    missing = []
+    probe = parent
+    while not os.path.isdir(probe):
+        missing.append(probe)
+        probe = os.path.dirname(probe)
+    staged, rollback = [], None
+    try:
+        for d in reversed(missing):
+            if not d.startswith(real_base + os.sep):
+                raise _unsafe_instructions(role_id)
+            os.mkdir(d)
+            made.append(d)
+        new_tmp = _stage(parent, new_bytes, _mode_of(target))
+        staged.append(new_tmp)
+        roles_tmp = None
+        if pathless:
+            roles_tmp = _stage(base, new_roles, _mode_of(roles_path))
+            staged.append(roles_tmp)
+            if old_target is not None:
+                rollback = _stage(parent, old_target, _mode_of(target))
+                staged.append(rollback)
+        # Recheck both sources immediately before the first replace.
+        now_roles, now_target = _read_raw(roles_path), _read_raw(target)
+        if now_roles != roles_data:
+            raise _conflict(f"{CONFIG_DIR}/roles.json changed since it was read; reload and retry.", now_roles, now_target)
+        if now_target != old_target:
+            raise _conflict(f"Role '{role_id}' instructions changed since they were read; reload and retry.",
+                            now_roles, now_target)
+        _replace(new_tmp, target)
+        staged.remove(new_tmp)
+        if pathless:
+            try:
+                _replace(roles_tmp, roles_path)
+                staged.remove(roles_tmp)
+            except BaseException:
+                if rollback is not None:
+                    os.replace(rollback, target)
+                    staged.remove(rollback)
+                else:
+                    _discard(target)
+                raise
+    except BaseException:
+        for tmp in staged:
+            _discard(tmp)
+        for d in reversed(made):
+            try:
+                os.rmdir(d)
+            except OSError:
+                pass
+        raise
+    finally:
+        if rollback is not None:
+            _discard(rollback)
+    committed_roles = new_roles if pathless else roles_data
+    return {"roleId": role_id, "rolesSha256": _sha(committed_roles),
+            "instructions": {"path": rel, "state": "ok", "text": text, "sha256": _sha(new_bytes),
+                             "bytes": len(new_bytes)},
+            "appliesTo": "new_assignments",
+            "message": "Saved role instructions. Changes apply to new assignments; "
+                       "existing assignments keep their frozen role context."}
