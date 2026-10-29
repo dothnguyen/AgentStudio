@@ -151,6 +151,7 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   `ticketFields`, `rules`, `leaseSeconds`, `baseBranch`, `agentTicketStatus`; `null` removes a key) into the raw
   `board.json`, validates it (schema, rules check, protected routes) and writes atomically. Invalid edits
   (`BOARD_CONFIG_INVALID` with `data.problems`) and a stale `expectedSha256` (`CONFIG_CHANGED`) write nothing.
+- `role.list {workspace}` returns a read-only role catalog with ordered roles, bounded instruction text, full-file tokens, skill availability, warnings, and structured problems. Catalog validation and resolver warnings use the same catalog snapshot; invalid catalog contents are reported as data. Catalog, instruction, and warning-resolution reads use confined, nonblocking opens and reject non-regular files.
 - `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
   (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
 

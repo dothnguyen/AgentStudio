@@ -298,6 +298,20 @@ class Roles(unittest.TestCase):
         self.assertTrue(any("missing-skill" in w for w in rc["warnings"]))
         self.assertEqual(len(rc["sha256"]), 64)
 
+    def test_optional_display_name_does_not_change_legacy_context(self):
+        self.write("roles/dev.md", "Write tests first.")
+        self.write("skills/python-style/SKILL.md", "Use type hints.")
+        spec = {"description": "Implements features", "instructions": "roles/dev.md",
+                "skills": ["python-style", "missing-skill"]}
+        self.write("roles.json", json.dumps({"version": 1, "roles": {"Developer": spec}}))
+        legacy = roles.context_for(self.ws, "Developer")
+        self.assertIn("Write tests first.", legacy["text"])
+        self.assertIn("Use type hints.", legacy["text"])
+        self.assertEqual(len(legacy["sha256"]), 64)
+        spec["name"] = "  Display name  "
+        self.write("roles.json", json.dumps({"version": 1, "roles": {"Developer": spec}}))
+        self.assertEqual(roles.context_for(self.ws, "Developer"), legacy)
+
     def test_paths_cannot_escape_the_config_dir(self):
         outside = os.path.join(self.ws, "secret.txt")
         with open(outside, "w") as f:

@@ -17,6 +17,7 @@ its own native files (AGENTS.md, CLAUDE.md, ...) from the workspace as usual.
 from __future__ import annotations
 
 import hashlib
+import contextvars
 import json
 import os
 import re
@@ -31,6 +32,8 @@ ROLE_FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$")
 BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
 DIRECT_TASK_KEYS = {"workspace", "mergeOnSuccess", "baseBranch", "onMergeConflict"}
 LIMITS = {"description": 2000, "instructions": 16 * 1024, "skill": 32 * 1024, "total": 96 * 1024}
+_catalog_snapshot = contextvars.ContextVar("role_catalog_snapshot", default=None)
+_catalog_reader = contextvars.ContextVar("role_catalog_reader", default=None)
 
 
 def _inside(base: str, rel: str) -> Optional[str]:
@@ -49,15 +52,26 @@ def _read(path: str, limit: int):
     return data.decode("utf-8", "replace"), hashlib.sha256(data).hexdigest(), len(data), truncated
 
 
+def _context_read(path, limit):
+    reader = _catalog_reader.get()
+    if reader is None:
+        return _read(path, limit)
+    return reader(path, limit)
+
+
 def load_config(workspace: str) -> Optional[dict]:
     path = os.path.join(workspace, CONFIG_DIR, "roles.json")
-    if not os.path.exists(path):
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except (OSError, ValueError) as e:
-        raise AsError(ROLES_CONFIG_INVALID, f"{CONFIG_DIR}/roles.json is not valid JSON: {e}")
+    snapshot = _catalog_snapshot.get()
+    if snapshot is not None and snapshot[0] == workspace:
+        raw = snapshot[1]
+    else:
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+        except (OSError, ValueError) as e:
+            raise AsError(ROLES_CONFIG_INVALID, f"{CONFIG_DIR}/roles.json is not valid JSON: {e}")
     if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("roles"), dict):
         raise AsError(ROLES_CONFIG_INVALID, f'{CONFIG_DIR}/roles.json must be {{"version": 1, "roles": {{...}}}}.')
     for name, spec in raw["roles"].items():
@@ -132,9 +146,13 @@ def context_for(workspace: str, role: str) -> dict:
         elif not os.path.isfile(path):
             warnings.append(f"role instructions file {CONFIG_DIR}/{instructions_rel} not found")
         else:
-            text, sha, n, cut = _read(path, LIMITS["instructions"])
-            body.append(text + ("\n[instructions truncated by Agent Studio]" if cut else ""))
-            sources.append({"kind": "role", "path": f"{CONFIG_DIR}/{instructions_rel}", "sha256": sha, "bytes": n})
+            content = _context_read(path, LIMITS["instructions"])
+            if content is None:
+                warnings.append(f"role instructions file {CONFIG_DIR}/{instructions_rel} not found")
+            else:
+                text, sha, n, cut = content
+                body.append(text + ("\n[instructions truncated by Agent Studio]" if cut else ""))
+                sources.append({"kind": "role", "path": f"{CONFIG_DIR}/{instructions_rel}", "sha256": sha, "bytes": n})
     if not body:
         body.append("(no role description or instructions are configured in this workspace)")
     parts.append(head + "\n" + "\n\n".join(body) + "\n===== END ROLE =====\n")
@@ -144,7 +162,11 @@ def context_for(workspace: str, role: str) -> dict:
         if path is None or not os.path.isfile(path):
             warnings.append(f"skill {name!r} not found at {CONFIG_DIR}/skills/{name}/SKILL.md")
             continue
-        text, sha, n, cut = _read(path, LIMITS["skill"])
+        content = _context_read(path, LIMITS["skill"])
+        if content is None:
+            warnings.append(f"skill {name!r} not found at {CONFIG_DIR}/skills/{name}/SKILL.md")
+            continue
+        text, sha, n, cut = content
         block = f"===== SKILL: {name} =====\n{text}" + ("\n[skill truncated by Agent Studio]" if cut else "") + \
                 "\n===== END SKILL =====\n"
         if total + len(block.encode()) > LIMITS["total"]:
