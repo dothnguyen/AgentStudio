@@ -9,14 +9,13 @@ const val = (v: unknown) => typeof v === 'string' ? v : '';
 export function RoutingSettingsPanel({ workspaceId, management, section, connected }: RoutingSettingsPanelProps): JSX.Element {
   const [draft, setDraft] = useState<RoutingDraft | null>(null);
   const [editSettings, setEditSettings] = useState<BoardSettings | null>(null);
-  const [role, setRole] = useState<string | null>(null); const [description, setDescription] = useState('');
   const [pending, setPending] = useState(false); const lock = useRef(false);
   const [error, setError] = useState<ManagementError | null>(null); const [notice, setNotice] = useState('');
   const lastSettings = useRef<BoardSettings | null>(null);
   if (section.data) lastSettings.current = section.data;
   const settings = section.data ?? lastSettings.current;
   const [reloadError, setReloadError] = useState<ManagementError | null>(null);
-  const [savedKind, setSavedKind] = useState<'routing' | 'role' | null>(null);
+  const [savedKind, setSavedKind] = useState<'routing' | null>(null);
   const canEdit = !!(connected && settings && settings.board.state === 'ok' && settings.roles.state === 'ok' && settings.board.sha256 && settings.roles.sha256 && createRoutingDraft(settings));
   const problems = draft && editSettings ? [...validateRoutingDraft(draft, editSettings), ...(error ? errorProblems(error) : [])] : [];
   function change(index: number, field: EditableRuleField, value: string) { if (draft) setDraft(updateRuleField(draft, index, field, value)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }
@@ -32,23 +31,19 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
       return false;
     }
   }
-  async function reload() { if (lock.current) return; lock.current = true; setPending(true); try { if (await refreshLatest()) { setDraft(null); setRole(null); setError(null); setNotice(savedKind ? (savedKind === 'routing' ? 'Routing settings saved.' : 'Role description saved.') : ''); setSavedKind(null); } } catch (reason) { setReloadError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); } finally { lock.current = false; setPending(false); } }
-  async function save(kind: 'routing' | 'role') {
+  async function reload() { if (lock.current) return; lock.current = true; setPending(true); try { if (await refreshLatest()) { setDraft(null); setError(null); setNotice(savedKind ? 'Routing settings saved.' : ''); setSavedKind(null); } } catch (reason) { setReloadError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); } finally { lock.current = false; setPending(false); } }
+  async function save() {
     if (lock.current || !editSettings || !canEdit || savedKind || error?.code === 'CONFIG_CHANGED') return;
     const snapshot = editSettings;
-    if (kind === 'routing' && (!draft || validateRoutingDraft(draft, snapshot).length)) return;
+    if (!draft || validateRoutingDraft(draft, snapshot).length) return;
     const changes = draft ? boardSettingsChanges(draft, snapshot) : null;
-    const normalized = description.trim() || null;
-    if (kind === 'routing' && !changes) { setNotice('No routing changes to save.'); return; }
-    if (kind === 'role' && normalized === (snapshot.roles.items.find(r => r.id === role)?.description?.trim() || null)) { setNotice('No role description changes to save.'); return; }
+    if (!changes) { setNotice('No routing changes to save.'); return; }
     lock.current = true; setPending(true); setError(null); setNotice('');
     try {
-      const result = kind === 'routing'
-        ? await management.updateBoardSettings(workspaceId, changes!, snapshot.board.sha256!)
-        : await management.updateRole(workspaceId, role!, { description: normalized }, snapshot.roles.sha256!);
+      const result = await management.updateBoardSettings(workspaceId, changes, snapshot.board.sha256!);
       if (!result.ok) { setError(result.error); return; }
-      setSavedKind(kind);
-      if (await refreshLatest()) { setDraft(null); setRole(null); setSavedKind(null); setNotice(kind === 'routing' ? 'Routing settings saved.' : 'Role description saved.'); }
+      setSavedKind('routing');
+      if (await refreshLatest()) { setDraft(null); setSavedKind(null); setNotice('Routing settings saved.'); }
     } catch (reason) { setError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); }
     finally { lock.current = false; setPending(false); }
   }
@@ -73,10 +68,9 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
       <p>Base branch: {settings.worktree.baseBranch ?? 'main'}</p>
       <ul>{settings.rules.map(r => <li key={r.index}>{r.status} → {r.type === 'action' ? 'merge' : `${r.role} → ${r.workflow}`} → pass: {r.onPass} / fail: {r.onFail}{r.type === 'agent' && r.onBlocked ? ` / blocked: ${r.onBlocked}` : ''}{r.type === 'agent' && ` (${modes[r.workspace ?? ''] ?? r.workspace})`}</li>)}</ul>
       <h3>Protected merge-conflict routing</h3><ul aria-label="Protected merge-conflict routing">{settings.protectedRoutes.map(r => <li key={r.status}>{r.status} → TeamLead — {r.satisfied ? 'Protected' : 'Needs repair'}</li>)}</ul>
-      <h3>Roles</h3><ul>{settings.roles.items.map(r => <li key={r.id}><strong>{r.id}</strong>: {r.description ?? 'No description'} <button type="button" disabled={!canEdit || pending || !!draft || !!role} onClick={() => { setEditSettings(settings); setRole(r.id); setDescription(r.description ?? ''); setError(null); setNotice(''); }}>Edit description</button></li>)}</ul>
       <h3>Workflows</h3><ul>{settings.workflows.map(w => <li key={w.name}>{w.name}{w.errors.length > 0 && ' — unavailable'}</li>)}</ul>
-      {!draft && <button type="button" disabled={!canEdit || pending || !!role} onClick={() => { setEditSettings(settings); setDraft(createRoutingDraft(settings)); setError(null); setNotice(''); }}>Edit routing settings</button>}
-      {draft && <form onSubmit={e => { e.preventDefault(); void save('routing'); }}>
+      {!draft && <button type="button" disabled={!canEdit || pending} onClick={() => { setEditSettings(settings); setDraft(createRoutingDraft(settings)); setError(null); setNotice(''); }}>Edit routing settings</button>}
+      {draft && <form onSubmit={e => { e.preventDefault(); void save(); }}>
         <label htmlFor="routing-base">Base branch<input id="routing-base" value={draft.baseBranch} disabled={pending || !connected || !!savedKind} aria-invalid={problems.some(p => p.path === 'baseBranch')} aria-describedby={problems.some(p => p.path === 'baseBranch') ? 'routing-base-error' : undefined} onChange={e => { setDraft({ ...draft, baseBranch: e.target.value }); setError(previous => previous?.code === 'CONFIG_CHANGED' ? previous : null); }} /></label>
         {problems.filter(p => p.path === 'baseBranch').map(p => <p id="routing-base-error" className="routing-problem" key={p.message}>{p.path}: {p.message}</p>)}
         <div className="routing-rule-grid">{draft.rules.map((r, i) => { const when = r.when && typeof r.when === 'object' ? r.when as Record<string, unknown> : {}; return <fieldset key={i}><legend>Rule {i + 1} — {val(r.type)}</legend>
@@ -87,7 +81,6 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
         {summaryProblems.length > 0 && <div role="alert" className="routing-problem">{summaryProblems.map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}</div>}
         <button type="submit" disabled={!canEdit || pending || !!savedKind || problems.length > 0 || error?.code === 'CONFIG_CHANGED'}>Save</button> <button type="button" disabled={pending || !!savedKind} onClick={() => { setDraft(null); setError(null); setNotice(''); }}>Cancel</button>
       </form>}
-      {role && <form onSubmit={e => { e.preventDefault(); void save('role'); }}><label htmlFor="role-description">Description for {role}<textarea id="role-description" value={description} disabled={pending || !connected || !!savedKind} onChange={e => setDescription(e.target.value)} /></label><button type="submit" disabled={pending || !canEdit || !!savedKind || error?.code === 'CONFIG_CHANGED'}>Save</button> <button type="button" disabled={pending || !!savedKind} onClick={() => { setRole(null); setError(null); setNotice(''); }}>Cancel</button></form>}
       {reloadError && <div className="panel-error" role="alert"><p>Reload failed: {reloadError.code}: {reloadError.message}</p><button type="button" disabled={pending || !connected} onClick={() => void reload()}>Retry latest settings</button></div>}
       {error && <div className="panel-error" role="alert"><p>{error.code}: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}{(!draft || error.code !== 'BOARD_CONFIG_INVALID') && errorProblems(error).map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}{error.code === 'CONFIG_CHANGED' && <button type="button" disabled={pending || !connected} onClick={() => void reload()}>Reload latest settings</button>}</div>}
     </>}

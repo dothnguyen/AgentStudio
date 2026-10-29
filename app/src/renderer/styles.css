@@ -1248,3 +1248,18 @@ ul[aria-label="Workspaces"] {
 @media (max-width: 560px) { .agent-form-actions, .agents-screen .dialog-actions, .agents-filters { display: grid; grid-template-columns: minmax(0, 1fr); } .agent-form label { min-width: 0; } }
 
 .agents-screen button:focus-visible, .agents-screen a:focus-visible, .agents-screen input:focus-visible, .agents-screen select:focus-visible, .agents-screen textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Roles browser (P05-S35) */
+.roles-screen, .roles-layout > *, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
+.roles-search { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.roles-search input { padding: 8px; min-width: 0; max-width: 100%; }
+.roles-count { color: var(--text-muted); }
+.roles-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; align-items: start; }
+.roles-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.roles-row { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; text-align: left; padding: 12px; min-height: 44px; }
+.roles-row[aria-current="true"] { outline: 2px solid var(--text-bright); outline-offset: -2px; }
+.roles-initials { grid-row: span 2; font-weight: 600; }
+.roles-instructions { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; margin: 0; }
+.roles-screen :is(button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.roles-screen :is(button, input[type="search"]) { min-height: 36px; }
+@media (max-width: 900px) { .roles-layout { grid-template-columns: minmax(0, 1fr); } }

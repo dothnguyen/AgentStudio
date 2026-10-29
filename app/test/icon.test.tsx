@@ -19,6 +19,18 @@ describe('Icon', () => {
     expect(svg.textContent).toBe('');
   });
 
+  it('icon_renders_every_name_including_roles_as_decorative_svg', () => {
+    for (const name of ['home', 'teams', 'agents', 'roles', 'boards', 'configuration', 'switch', 'chevron', 'refresh', 'item'] as const) {
+      const { container } = render(<Icon name={name} />);
+      const svg = container.querySelector('svg')!;
+      expect(svg.getAttribute('data-icon')).toBe(name);
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.getAttribute('focusable')).toBe('false');
+      expect(svg.querySelector('path')!.getAttribute('d')).toBeTruthy();
+      cleanup();
+    }
+  });
+
   it('icon_without_tone_has_no_tone_class', () => {
     const { container } = render(<Icon name="clock" />);
     expect(container.querySelector('svg')!.getAttribute('class')).toBe('icon');
