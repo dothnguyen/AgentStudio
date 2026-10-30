@@ -119,6 +119,39 @@ export function definitionBadge(team: OverviewTeam): string | null {
   }
 }
 
+export function definitionStateText(team: OverviewTeam): string {
+  switch (team.definition.state) {
+    case 'valid': return 'Valid';
+    case 'problems': return `Has ${plural(team.definition.problems.length, 'problem', 'problems')}`;
+    case 'unreadable': return 'Unreadable';
+    default: return 'No definition (runtime only)';
+  }
+}
+
+export interface AvailabilityCount { presence: string; label: string; tone: Tone; count: number }
+
+export function availabilityCounts(members: readonly OverviewMember[]): AvailabilityCount[] {
+  const counts = new Map<string, number>();
+  for (const member of members) counts.set(member.presence, (counts.get(member.presence) ?? 0) + 1);
+  const known = Object.keys(PRESENCE_LABELS).filter((p) => counts.has(p));
+  const unknown = [...counts.keys()].filter((p) => !Object.prototype.hasOwnProperty.call(PRESENCE_LABELS, p));
+  return [...known, ...unknown].map((presence) => ({
+    presence,
+    label: presenceLabel(presence),
+    tone: presenceTone(presence),
+    count: counts.get(presence)!,
+  }));
+}
+
+export function coordinatorText(o: TeamOverview): { text: string; tone: Tone } {
+  return o.coordinator.running === true ? { text: 'Running', tone: 'ok' } : { text: 'Not running', tone: 'danger' };
+}
+
+export function liveStateText(o: TeamOverview): { text: string; tone: Tone } {
+  if (o.runtimeState.available) return { text: 'Available', tone: 'ok' };
+  return { text: `Unavailable — ${o.runtimeState.error?.message ?? 'runtime not reachable'}`, tone: 'danger' };
+}
+
 export function overviewNotices(o: TeamOverview): string[] {
   const notices: string[] = [];
   if (!o.runtimeState.available) {

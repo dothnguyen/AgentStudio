@@ -185,6 +185,8 @@ class MergeConflict(DrillCase):
     def seed(self, worktree, content):
         with open(os.path.join(worktree, "shared.txt"), "w") as f:
             f.write(content)
+        with open(os.path.join(worktree, "fixed.txt"), "w") as f:
+            f.write("validation passes\n")
         git(worktree, "add", "-A")
         git(worktree, "commit", "-qm", "drill change")
 

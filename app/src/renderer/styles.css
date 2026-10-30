@@ -1263,6 +1263,14 @@ ul[aria-label="Workspaces"] {
 
 .agents-screen button:focus-visible, .agents-screen a:focus-visible, .agents-screen input:focus-visible, .agents-screen select:focus-visible, .agents-screen textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
+.teams-overview { display: flex; flex-direction: column; gap: 12px; }
+.teams-overview-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 0; }
+.teams-overview-facts dt { color: var(--text-muted); font-size: 12px; }
+.teams-overview-facts dd { margin: 2px 0 0; color: var(--text-bright); min-width: 0; overflow-wrap: anywhere; }
+.teams-overview-availability { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; }
+.teams-overview-actions { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); }
+@media (max-width: 560px) { .teams-overview-facts { grid-template-columns: minmax(0, 1fr); } .teams-team-actions, .teams-board-actions { display: grid; grid-template-columns: minmax(0, 1fr); } }
+
 /* Roles browser (P05-S35) */
 .roles-screen, .roles-layout > *, .roles-detail-pane, .roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
 .roles-search { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }

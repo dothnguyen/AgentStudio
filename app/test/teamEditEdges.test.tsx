@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
@@ -32,7 +32,10 @@ describe('team editing edge cases', () => {
     });
     render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
     await flush();
-    expect(screen.getByText(/could not be read; fix the file/)).toBeTruthy();
+    const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
+    expect(panel.getByText(/could not be read; fix the file/)).toBeTruthy();
+    expect(panel.getByText('Unreadable')).toBeTruthy();
+    expect(panel.queryByRole('button', { name: 'Delete team' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));

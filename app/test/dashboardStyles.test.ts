@@ -239,3 +239,12 @@ describe('teams navigation', () => {
     expect(/\.teams-view-tabs \{[^}]*flex-wrap: wrap/.test(flat)).toBe(true);
   });
 });
+
+describe('teams overview', () => {
+  it('teams_overview_styles_use_tokens', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.teams-overview-facts { display: grid;');
+    expect(flat).toContain('.teams-overview-facts dt { color: var(--text-muted);');
+    expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-overview-facts \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  });
+});

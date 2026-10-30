@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, resolveMemberSelection, missingMemberNotice } from "../src/renderer/teams/teamsModel";
 import { roleItem } from './rolesFixtures';
-import { member } from "./teamsFixtures";
 import {
+  availabilityCounts,
+  coordinatorText,
+  definitionStateText,
+  liveStateText,
   orderTeams,
   overviewNotices,
   presenceLabel,
@@ -14,7 +17,7 @@ import {
   workText,
 } from '../src/renderer/teams/teamsModel';
 import type { OverviewRuntimeState } from '../src/renderer/api';
-import { overviewFixture, team, twoTeams } from './teamsFixtures';
+import { member, overviewFixture, team, twoTeams } from './teamsFixtures';
 
 function withState(id: string, state: OverviewRuntimeState) {
   return { team: team({ id, runtime: { state, teamId: null, status: null } }) };
@@ -87,6 +90,37 @@ describe('teamsModel', () => {
     const t = runtimeTone;
     expect([t('running'), t('starting'), t('error'), t('disconnected'), t('stopped'), t('not_started'), t('unavailable')])
       .toEqual(['ok', 'warning', 'danger', 'danger', 'muted', 'muted', 'muted']);
+  });
+});
+
+describe('overview helpers', () => {
+  it('definition_state_text_covers_every_state', () => {
+    const problems = [{ path: 'a', message: 'x' }, { path: 'b', message: 'y' }];
+    expect(definitionStateText(team())).toBe('Valid');
+    expect(definitionStateText(team({ definition: { state: 'problems', problems } }))).toBe('Has 2 problems');
+    expect(definitionStateText(team({ definition: { state: 'problems', problems: [] } }))).toBe('Has 0 problems');
+    expect(definitionStateText(team({ definition: { state: 'unreadable', problems: [] } }))).toBe('Unreadable');
+    expect(definitionStateText(team({ definition: { state: 'missing', problems: [] } }))).toBe('No definition (runtime only)');
+  });
+
+  it('availability_counts_group_only_returned_members', () => {
+    const members = ['busy', 'idle', 'busy', 'mystery'].map((presence, i) => member({ memberId: `m${i}`, presence }));
+    expect(availabilityCounts(members)).toEqual([
+      { presence: 'idle', label: 'Available', tone: 'ok', count: 1 },
+      { presence: 'busy', label: 'Working', tone: 'busy', count: 2 },
+      { presence: 'mystery', label: 'mystery', tone: 'muted', count: 1 },
+    ]);
+    expect(availabilityCounts([])).toEqual([]);
+  });
+
+  it('coordinator_and_live_state_text', () => {
+    expect(coordinatorText(overviewFixture([], { coordinator: { running: true } }))).toEqual({ text: 'Running', tone: 'ok' });
+    expect(coordinatorText(overviewFixture([], { coordinator: { running: false } }))).toEqual({ text: 'Not running', tone: 'danger' });
+    expect(liveStateText(overviewFixture([]))).toEqual({ text: 'Available', tone: 'ok' });
+    expect(liveStateText(overviewFixture([], { runtimeState: { available: false, error: { code: 'X', message: 'db locked' } } })))
+      .toEqual({ text: 'Unavailable — db locked', tone: 'danger' });
+    expect(liveStateText(overviewFixture([], { runtimeState: { available: false, error: null } })).text)
+      .toBe('Unavailable — runtime not reachable');
   });
 });
 

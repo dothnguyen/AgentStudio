@@ -108,3 +108,18 @@ describe('board results and errors', () => {
       .toMatchObject({ problems: ['rules[0]: bad'] });
   });
 });
+
+describe('selected runtime id', () => {
+  it('view_selected_runtime_id_drives_relationship', () => {
+    const t2 = team({ runtime: { state: 'running', teamId: 't-2', status: 'running' } });
+    const other = boardControlView(t2, runner({ status: 'running', teamId: 't-1' }), true);
+    expect(other.status).toBe('Board: Running with another team');
+    expect([other.canRun, other.canStop]).toEqual([false, true]);
+    expect(boardControlView(t2, runner({ status: 'running', teamId: 't-2' }), true).status).toBe('Board: Running with this team');
+  });
+
+  it('result_text_never_reports_pending_board_status_as_success', () => {
+    const result = { board: { status: 'stopped' } } as unknown as Parameters<typeof boardResultText>[2];
+    expect(boardResultText('run', running(), result)).toBe('Board reported status "stopped".');
+  });
+});

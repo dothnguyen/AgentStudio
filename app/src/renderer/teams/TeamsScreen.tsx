@@ -1,3 +1,5 @@
+import { SectionError } from './SectionError';
+import { TeamOverviewPanel } from './TeamOverviewPanel';
 import { MembersView } from './MembersView';
 import { RoutingSettingsPanel } from './RoutingSettingsPanel';
 import { TeamChooser } from './TeamChooser';
@@ -22,27 +24,24 @@ import type {
 } from '../api';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
-import { boardControlView, boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
+import { boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
 import { memberActionKey, assignmentConfirmation, lastSwitchSignature, matchingTerminalSwitch, SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT, type MemberActionInFlight } from './memberAgentActionsModel';
 import { TeamNameForm, WriteFeedbackView } from './TeamEditForms';
 import {
   addMemberInput,
-  canEditTeam,
   errorFeedback,
-  liveNote,
   nextStartSuffix,
   problemsSuffix,
   thrownError,
-  uneditableNote,
   type MemberFormValues,
   type WriteFeedback,
 } from './teamEditModel';
 import {
-  RUNTIME_LABELS,
-  memberCountText,
+
   memberName,
   orderTeams,
   overviewNotices,
+
   teamKey,
   teamLabel,
 } from './teamsModel';
@@ -66,19 +65,6 @@ export function TeamsScreen(props: TeamsScreenProps): JSX.Element {
   return <TeamsOverview key={props.workspace.id} {...props} />;
 }
 
-function SectionError(props: { section: DashboardSectionController<unknown> }): JSX.Element | null {
-  const { section } = props;
-  if (section.error === null) return null;
-  return (
-    <div className="panel-error" role="alert">
-      <p><code className="entity-id">{section.error.code}</code>: {section.error.message}</p>
-      {typeof section.error.remediation === 'string' && section.error.remediation !== '' && (
-        <p>{section.error.remediation}</p>
-      )}
-      <button type="button" onClick={() => { void section.reload(); }}>Retry</button>
-    </div>
-  );
-}
 
 
 function TeamsOverview(props: TeamsScreenProps): JSX.Element {
@@ -438,57 +424,11 @@ function TeamDetailPanel(props: {
   };
 }): JSX.Element {
   const { team, overview, agents, writes, pending, board } = props;
-  const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
-  const editable = canEditTeam(team);
-  const unNote = uneditableNote(team);
-  const runNote = liveNote(team);
+
   const panel = (id: TeamsChildView): JSX.Element | null => {
     if (id === 'routing') return props.routing;
     if (id === 'overview') return (
-      <>
-        <p className="teams-detail-facts">
-          <span>{memberCountText(team)}</span>
-          <span>{`Runtime: ${RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}`}</span>
-          {team.runtime.teamId !== null && <code className="entity-id">{team.runtime.teamId}</code>}
-        </p>
-        {unNote !== null && <p className="panel-note">{unNote}</p>}
-        {runNote !== null && <p className="panel-note">{runNote}</p>}
-        <BoardControl team={team} pending={pending} {...board} />
-        {editable && (
-          <div className="teams-team-actions">
-            <button type="button" disabled={pending} onClick={() => setTeamForm('rename')}>Rename team</button>
-            <button type="button" disabled={pending} onClick={() => setTeamForm('delete')}>Delete team</button>
-          </div>
-        )}
-        {teamForm === 'rename' && (
-          <TeamNameForm
-            heading="Rename team"
-            submitLabel="Save name"
-            initialName={team.name ?? ''}
-            pending={pending}
-            onSubmit={(name) => { void writes.rename(team, name).then((ok) => { if (ok) setTeamForm(null); }); }}
-            onCancel={() => setTeamForm(null)}
-          />
-        )}
-        {teamForm === 'delete' && (
-          <div className="teams-confirm" role="group" aria-label="Confirm team deletion">
-            <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => { void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
-            >
-              Confirm delete
-            </button>
-            <button type="button" onClick={() => setTeamForm(null)}>Cancel</button>
-          </div>
-        )}
-        {team.definition.problems.length > 0 && (
-          <ul className="teams-problems" aria-label="Definition problems">
-            {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
-          </ul>
-        )}
-      </>
+      <TeamOverviewPanel team={team} overview={overview} writes={writes} pending={pending} board={board} />
     );
     return <MembersView teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
       agents={agents} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
@@ -507,42 +447,3 @@ function TeamDetailPanel(props: {
     </section>
   );
 }
-
-function BoardControl(props: {
-  team: OverviewTeam;
-  section: DashboardSectionController<BoardSettings>;
-  connected: boolean;
-  action: BoardAction | null;
-  pending: boolean;
-  onRun(team: OverviewTeam): void;
-  onStop(team: OverviewTeam): void;
-}): JSX.Element {
-  const { team, section, connected, action, pending, onRun, onStop } = props;
-  const settings = section.state === 'ready' ? section.data : null;
-  const view = settings === null ? null : boardControlView(team, settings.runner, connected);
-  return (
-    <section className="teams-board" aria-labelledby="teams-board-title">
-      <h3 id="teams-board-title">Board control</h3>
-      {section.state === 'loading' && <p className="panel-loading">Loading board state…</p>}
-      {section.state === 'error' && <SectionError section={section} />}
-      {view !== null && (
-        <>
-          <p className={`status-badge teams-board-status teams-tone-${view.tone}`}>
-            <span className="status-dot" aria-hidden="true" />
-            {view.status}
-          </p>
-          {view.detail !== null && <p className="panel-note">{view.detail}</p>}
-          {view.runHint !== null && <p className="panel-note">{view.runHint}</p>}
-          <div className="teams-board-actions">
-            <button type="button" disabled={pending || !view.canRun} onClick={() => onRun(team)}>Run board</button>
-            <button type="button" disabled={pending || !view.canStop} onClick={() => onStop(team)}>Stop board</button>
-          </div>
-        </>
-      )}
-      {action !== null && (
-        <p className="panel-loading" role="status">{action === 'run' ? 'Starting board…' : 'Stopping board…'}</p>
-      )}
-    </section>
-  );
-}
-

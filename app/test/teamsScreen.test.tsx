@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, within, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
@@ -104,7 +104,7 @@ describe('TeamsScreen', () => {
     expect(cardNames(list)).toEqual(['Dev Team', 'Release Team']);
     expect(card(list, 'Dev Team').getAttribute('aria-pressed')).toBe('true');
     const detail = result.getByRole('region', { name: 'Dev Team' });
-    expect(detail.textContent).toContain('Runtime: Running');
+    expect(detail.textContent).toContain('Running');
     expect(detail.textContent).toContain('t-1');
     await openTab(result, 'Members');
     const r1 = cells(within(openMember('dev')).getAllByRole('row')[1]!);
@@ -232,7 +232,7 @@ describe('TeamsScreen', () => {
       agents: [{ ok: true, data: catalog }],
     });
     const hits = result.getAllByText(long);
-    expect(hits).toHaveLength(2);
+    expect(hits).toHaveLength(3);
     for (const h of hits) expect(h.textContent).toBe(long);
     expect(result.getByText('16+ members', { selector: '.teams-card-facts' })).toBeTruthy();
     await openTab(result, 'Members');
@@ -774,7 +774,7 @@ describe('focused navigation', () => {
     expect(panels).toHaveLength(1);
     expect(panels[0]!.id).toBe('teams-panel-overview');
     expect(panels[0]!.getAttribute('aria-labelledby')).toBe('teams-tab-overview');
-    expect(panels[0]!.textContent).toContain('Runtime: Running');
+    expect(panels[0]!.textContent).toContain('Running');
     expect(panels[0]!.textContent).toContain('Board control');
     expect(result.queryByRole('table')).toBeNull();
     expect(result.queryByRole('region', { name: 'Worktree and routing settings' })).toBeNull();
@@ -941,6 +941,79 @@ describe('focused navigation', () => {
         expect(panel.contains(el)).toBe(false);
       }
     }
+  });
+});
+
+describe('team overview', () => {
+  const panel = () => screen.getByRole('tabpanel', { name: 'Overview' });
+  const summary = () => within(panel()).getByRole('list', { hidden: true, name: 'Member availability' });
+
+  it('overview_shows_definition_runtime_members_and_coordinator', async () => {
+    await renderScreen();
+    const facts = within(panel()).getByLabelText('Team summary').textContent ?? '';
+    for (const text of ['Dev Team', 'dev-team', 'Valid', 'Running', 't-1', '2 members', '1 Working', '1 Available', 'Available']) {
+      expect(facts).toContain(text);
+    }
+    expect(summary()).toBeTruthy();
+    expect(within(panel()).queryByRole('table')).toBeNull();
+  });
+
+  it('overview_partial_and_missing_definition', async () => {
+    const data = overviewFixture(
+      [team({ id: null, name: null, definition: { state: 'missing', problems: [] }, runtime: { state: 'running', teamId: 'rt-9', status: 'running' } })],
+      { partial: true, coordinator: { running: false }, runtimeState: { available: false, error: { code: 'RT', message: 'state db locked' } } },
+    );
+    await renderScreen({ overview: [{ ok: true, data }] });
+    const text = panel().textContent ?? '';
+    for (const t of ['None (runtime only)', 'No definition (runtime only)', 'rt-9', 'Not running', 'Unavailable — state db locked',
+      'This team has no definition file; it cannot be edited here.']) expect(text).toContain(t);
+    expect(within(panel()).queryByRole('button', { name: 'Rename team' })).toBeNull();
+    expect(within(panel()).queryByRole('button', { name: 'Delete team' })).toBeNull();
+    const notice = screen.getByText('Live team state unavailable — state db locked');
+    expect(panel().contains(notice)).toBe(false);
+  });
+
+  it('overview_problems_and_truncation', async () => {
+    const data = overviewFixture([team({
+      definition: { state: 'problems', problems: [{ path: 'members[0].agent', message: 'unknown agent' }] },
+      membersTruncated: true,
+      members: [member(), member({ memberId: 'qa', name: 'qa' })],
+    })]);
+    await renderScreen({ overview: [{ ok: true, data }] });
+    const text = panel().textContent ?? '';
+    expect(text).toContain('Has 1 problem');
+    expect(text).toContain('2+ members');
+    expect(text).toContain('Counts cover the 2 members shown; more members exist.');
+    expect(within(within(panel()).getByRole('list', { name: 'Definition problems' })).getByText('members[0].agent: unknown agent')).toBeTruthy();
+  });
+
+  it('overview_uses_no_sample_data', async () => {
+    await renderScreen({ overview: [{ ok: true, data: overviewFixture([team({ members: [], membersTruncated: true })]) }] });
+    expect(panel().textContent).toContain('No members');
+    expect(panel().textContent).toContain('Counts cover the 0 members shown; more members exist.');
+    expect(within(panel()).queryByText(/^0 /)).toBeNull();
+    expect(within(panel()).queryByRole('list', { name: 'Member availability' })).toBeNull();
+    for (const sample of ['Developer', 'QA', 'T-031']) expect(panel().textContent).not.toContain(sample);
+  });
+
+  it('overview_tab_shows_no_extra_reads', async () => {
+    const { fake } = await renderScreen();
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(fake.boardSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('overview_distinguishes_runtime_coordinator_and_live_state', async () => {
+    const data = overviewFixture([team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' } })], {
+      coordinator: { running: true }, runtimeState: { available: false, error: null },
+    });
+    await renderScreen({ overview: [{ ok: true, data }] });
+    const fact = (name: string) => within(panel()).getByText(name, { selector: 'dt' }).nextElementSibling!;
+    expect(fact('Runtime').textContent).toContain('Stopped');
+    expect(fact('Runtime').textContent).toContain('No runtime id');
+    expect(fact('Coordinator').textContent).toBe('Running');
+    expect(fact('Live state').textContent).toBe('Unavailable — runtime not reachable');
   });
 });
 

@@ -33,6 +33,7 @@ async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}, con
 }
 const flush = () => act(async () => {});
 const board = () => screen.getByRole('region', { name: 'Board control' });
+const overviewPanel = () => screen.getByRole('tabpanel', { name: 'Overview' });
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
 const boardButton = (name: string) => within(board()).getByRole('button', { name }) as HTMLButtonElement;
 const runResult = { ok: true as const, data: { board: { workspace: '/work/alpha', status: 'running' as const, teamId: 't-1' }, rules: 3 } };
@@ -84,6 +85,7 @@ describe('board controls', () => {
   it('run_board_reflects_backend_outcome', async () => {
     const runBoard = vi.fn(async () => runResult);
     const { fake } = await renderScreen({ boardSettings: [boardOk(), boardOk(runningRunner())], calls: { runBoard } });
+    expect(overviewPanel().contains(board())).toBe(true);
     expect(board().textContent).toContain('Board: Not running');
     fireEvent.click(boardButton('Run board'));
     await flush();
@@ -96,6 +98,27 @@ describe('board controls', () => {
     expect(board().textContent).toContain('Board: Running with this team');
     expect(boardButton('Run board').disabled).toBe(true);
     expect(boardButton('Stop board').disabled).toBe(false);
+  });
+
+  it('overview_board_relationship_matrix', async () => {
+    const cases = [
+      { runner: runner({ status: 'running', teamId: 't-1' }), status: 'Board: Running with this team', run: false, stop: true },
+      { runner: runner({ status: 'running', teamId: 'other', teamDefId: 'release' }), status: 'Board: Running with another team', run: false, stop: true, detail: 'Team release runs this board.' },
+      { runner: runner({ status: 'stopped', teamId: 't-1' }), status: 'Board: Stopped', run: true, stop: false, detail: 'This team ran the board last.' },
+      { runner: runner(), status: 'Board: Not running', run: true, stop: false },
+      { runner: runner({ status: 'disconnected' }), status: 'Board: Disconnected', run: false, stop: false },
+      { runner: runner({ status: 'unavailable' }), status: 'Board: State unavailable', run: false, stop: false },
+      { runner: runner(), status: 'Board: Disconnected', run: false, stop: false, lost: true },
+    ];
+    for (const c of cases) {
+      const { result } = await renderScreen({ boardSettings: [boardOk(c.runner)] }, c.lost ? { state: 'lost', error: 'offline', distro: null, command: null } : connected);
+      expect(overviewPanel().contains(board())).toBe(true);
+      expect(board().textContent).toContain(c.status);
+      if (c.detail) expect(board().textContent).toContain(c.detail);
+      expect(boardButton('Run board').disabled).toBe(!c.run);
+      expect(boardButton('Stop board').disabled).toBe(!c.stop);
+      result.unmount();
+    }
   });
 
   it('rapid_repeated_clicks_submit_once', async () => {
@@ -144,6 +167,7 @@ describe('board controls', () => {
     expect(alert).toContain('Another team already runs this board.');
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.boardSettings).toHaveBeenCalledTimes(2);
+    expect(fake.overview).toHaveBeenCalledTimes(2);
   });
 
   it('pending_outcome_is_not_reported_as_success', async () => {
@@ -161,6 +185,24 @@ describe('board controls', () => {
     expect(alert).toContain('Board did not stop.');
     expect(alert).toContain('recorded but not confirmed yet');
     expect(screen.queryByRole('status')).toBeNull();
+    expect(fake.overview).toHaveBeenCalledTimes(2);
+    expect(fake.boardSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('pending_run_is_not_success_and_refreshes_both_sections', async () => {
+    const runBoard = vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'PENDING', message: 'Awaiting confirmation.', retryable: true },
+    }));
+    const { fake } = await renderScreen({ calls: { runBoard } });
+    fireEvent.click(boardButton('Run board'));
+    await flush();
+    expect(runBoard).toHaveBeenCalledTimes(1);
+    expect(runBoard).toHaveBeenCalledWith('ws-a', 't-1');
+    expect(screen.getByRole('alert').textContent).toContain('Board did not start.');
+    expect(screen.getByRole('alert').textContent).toContain('recorded but not confirmed yet');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.boardSettings).toHaveBeenCalledTimes(2);
   });
 
