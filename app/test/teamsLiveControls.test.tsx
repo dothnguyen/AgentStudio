@@ -5,6 +5,7 @@ import type { ConnectionStatus } from '../src/renderer/api';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
 import {
+  memberRow, field, openMember, showMembers,
   RUN_TEAM_ID,
   boardSettingsFixture,
   deferred,
@@ -34,11 +35,10 @@ const flush = () => act(async () => {});
 const board = () => screen.getByRole('region', { name: 'Board control' });
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
 const boardButton = (name: string) => within(board()).getByRole('button', { name }) as HTMLButtonElement;
-const cells = (row: HTMLElement) => Array.from(row.querySelectorAll('td'));
 const runResult = { ok: true as const, data: { board: { workspace: '/work/alpha', status: 'running' as const, teamId: 't-1' }, rules: 3 } };
 
 describe('live team state', () => {
-  it('member_availability_and_work_match_runtime_evidence', async () => {
+  it('member_availability_and_work_fixture_matrix', async () => {
     const o = overviewFixture([team({
       runtime: { state: 'running', teamId: RUN_TEAM_ID, status: 'running' },
       members: [
@@ -51,28 +51,29 @@ describe('live team state', () => {
           memberId: 'c', name: 'c', presence: 'waiting_input',
           work: { state: 'working', ticket: null, assignment: { goal: 'Answer question' } } as never,
         }),
-        member({ memberId: 'd', name: 'd', presence: 'offline', work: { state: 'unavailable', reason: 'offline' } as never }),
+        member({ memberId: 'd', name: 'd', presence: 'limit_reached', work: { state: 'none' } }),
+        member({ memberId: 'e', name: 'e', presence: 'offline', work: { state: 'unavailable', reason: 'offline' } }),
+        member({ memberId: 'f', name: 'f', presence: 'not_in_runtime', work: { state: 'unavailable', reason: 'not_in_runtime' } }),
+        member({ memberId: 'g', name: 'g', presence: 'unavailable', work: { state: 'unavailable', reason: 'unavailable' } }),
       ],
     })]);
     await renderScreen({ overview: [ok(o)] });
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
-    const rows = within(screen.getByRole('region', { name: 'Dev Team' })).getAllByRole('row').slice(1);
-    const status = rows.map((r) => cells(r)[4]!);
-    expect(status.map((c) => c.textContent)).toEqual(['Available', 'Working', 'Waiting for input', 'Offline']);
-    ['ok', 'busy', 'warning', 'danger'].forEach((tone, i) => {
-      expect(status[i]!.querySelector('.status-badge')!.className).toContain(`teams-tone-${tone}`);
-    });
-    expect(rows.map((r) => cells(r)[5]!.textContent)).toEqual(['No current work', 'T-7 Fix login', 'Answer question', 'Not available']);
+    const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(name => memberRow(name));
+    expect(rows.map(r => field(r, 'availability'))).toEqual(['Available', 'Working', 'Waiting for input', 'Limit reached', 'Offline', 'Not in runtime', 'Unavailable']);
+    ['ok', 'busy', 'warning', 'warning', 'danger', 'muted', 'muted'].forEach((tone, i) => expect(rows[i]!.querySelector('.status-badge')!.className).toContain(`teams-tone-${tone}`));
+    expect(rows.map(r => field(r, 'work'))).toEqual(['No current work', 'T-7 Fix login', 'Answer question', 'No current work', 'Not available — offline', 'Not available — member is not in the running team', 'Not available — live state unavailable']);
   });
 
   it('stopped_team_members_say_unavailable', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
-    const row = within(screen.getByRole('region', { name: 'Release Team' })).getAllByRole('row')[1]!;
-    expect(cells(row)[4]!.textContent).toBe('Stopped');
-    expect(cells(row)[4]!.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
-    expect(cells(row)[5]!.textContent).toBe('Not available');
+    const row = memberRow('qa');
+    expect(field(row, 'availability')).toBe('Stopped');
+    expect(row.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
+    expect(field(row, 'work')).toBe('Not available — team stopped');
+    expect(field(row, 'agent')).toBe('Not running · saved default: OpenCode Sonnet');
     const badge = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).querySelector('.teams-runtime')!;
     expect(badge('Release Team').className).toContain('teams-tone-muted');
     expect(badge('Dev Team').className).toContain('teams-tone-ok');
@@ -207,7 +208,7 @@ describe('board controls', () => {
     expect(within(board()).queryByRole('button', { name: 'Run board' })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
     await flush();
-    expect(screen.getByRole('table')).toBeTruthy();
+    expect(showMembers()).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     await flush();
     fireEvent.click(within(board()).getByRole('button', { name: 'Retry' }));
@@ -285,10 +286,21 @@ describe('board controls', () => {
   it('role_integration_preserves_live_and_agents_controls', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    openMember('dev');
     expect(screen.getAllByText(/Live agent actions/).length).toBeGreaterThan(0);
     expect(button('Refresh')).toBeTruthy();
     const text = document.body.textContent ?? '';
     expect(text).not.toMatch(/role (grants|owns|sets|chooses|provides|inherits)/i);
     expect(text).not.toMatch(/inherited from (the|a) role/i);
+  });
+});
+
+describe('roster runtime evidence', () => {
+  it('stale_and_pending_live_agent_evidence_is_labelled', async () => {
+    const live = member().runtime ?? { ...((await import('./teamsFixtures')).twoTeams().teams[1]!.members[0]!.runtime!) };
+    await renderScreen({overview: [ok(overviewFixture([team({members: [member({runtime: {...live, stale: true, activeAgent: 'codex-gpt', pendingAgent: 'codex-gpt'}}), member({memberId: 'next', name: 'next', presence: 'not_started', work: {state: 'unavailable', reason: 'not_started'}})]})]))]});
+    expect(field(memberRow('dev'), 'agent')).toContain('Last live agent: codex-gpt (team not running)');
+    expect(field(memberRow('dev'), 'agent')).toContain('Switch to codex-gpt pending');
+    expect(field(memberRow('next'), 'availability')).toBe('Not started'); expect(field(memberRow('next'), 'work')).toBe('Not available — team not started');
   });
 });

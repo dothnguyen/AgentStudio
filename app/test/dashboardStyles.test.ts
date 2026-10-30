@@ -29,6 +29,12 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('dashboard styles', () => {
+  it('member_roster_styles_have_focus_and_selection', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
+    expect(flat).toContain('.teams-member-row[aria-current="true"] {');
+    expect(flat).toMatch(/@media \(max-width: 760px\) \{\s*\.teams-member-list-head \{ display: none; \}/);
+  });
   it('keeps team list item spacing separate from card layout', () => {
     const flat = squash(css);
     expect(flat).toContain('.dashboard-panel .teams-card-list li { display: block; padding: 4px 0; }');

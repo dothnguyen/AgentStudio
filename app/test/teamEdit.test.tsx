@@ -5,6 +5,7 @@ import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import {
+  openMember,
   deferred,
   fakeManagement,
   member,
@@ -32,6 +33,7 @@ const MEMBER_ACTION = /^(Add member|Edit |Remove |Confirm remove )/;
 const click = async (name: string | RegExp) => {
   if (typeof name === 'string' && MEMBER_ACTION.test(name)
     && screen.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected') !== 'true') await openTab('Members');
+  if (typeof name === 'string' && /^(Edit|Remove) (dev|lead)$/.test(name) && !screen.queryByRole('region', { name: name.split(' ')[1] })) openMember(name.split(' ')[1]!);
   fireEvent.click(screen.getByRole('button', { name }));
   await flush();
 };
@@ -314,6 +316,7 @@ describe('team editing', () => {
     await click('Confirm remove lead');
     expect(removeMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead');
     expect(screen.getByRole('status').textContent).toBe('Removed lead from Dev Team.');
+    expect(screen.queryByText(/is no longer in this team/)).toBeNull();
   });
 
   it('forms_are_keyboard_friendly', async () => {
@@ -461,7 +464,7 @@ describe('team editing', () => {
     await click('Confirm remove lead');
     alert = screen.getByRole('alert');
     expect(alert.textContent).toContain('Member was not removed.');
-    expect(screen.getByText('lead')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'lead' })).getAllByText('lead').length).toBeGreaterThan(0);
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 

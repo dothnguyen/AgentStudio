@@ -49,3 +49,5 @@ export function memberAgentActions(team: OverviewTeam, member: OverviewMember, c
   const result = s && s.state !== 'pending' ? `Switch to ${label(s.requestedAgent)} ${s.state}${s.state === 'failed' && (s.code !== null || s.message !== null) ? ` — ${s.code ?? ''}${s.code !== null && s.message !== null ? ': ' : ''}${s.message ?? ''}` : s.state === 'completed' ? '.' : ''}` : null;
   return { visible: true, activeText: [r.activeAgent ?? 'Unknown', r.provider, r.model, r.reasoning && `Reasoning: ${r.reasoning}`].filter(Boolean).join(' · '), availabilityText: r.availability === 'idle' ? 'Available' : r.availability, assignmentText: r.assignment ? `${r.assignment.id} · ${r.assignment.status} · ${r.assignment.taskId}` : 'No active assignment', pendingText: r.pendingAgent ? `Switch to ${label(r.pendingAgent)} pending.` : null, lastResultText: result, notice: allHeld ? 'All alternate agents are on quota hold.' : base, allHeld, options };
 }
+
+export function memberActionKey(teamDefId: string, memberId: string): string { return JSON.stringify([teamDefId, memberId]); }

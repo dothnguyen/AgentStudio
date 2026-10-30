@@ -1,3 +1,4 @@
+import { fireEvent, within } from "@testing-library/react";
 import { vi } from 'vitest';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import type {
@@ -214,3 +215,20 @@ export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): 
     workflows: [{ name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] }, { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] }],
     protectedRoutes: ['merge-conflict', 'plan-merge-conflict'].map(status => ({ status, role: 'TeamLead', satisfied: true })), ...overrides };
 }
+
+export function showMembers(root: HTMLElement = document.body): HTMLElement {
+  const tab = within(root).queryByRole('tab', { name: 'Members' });
+  if (tab && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
+  return within(root).getByRole('list', { name: /^Members of / });
+}
+export function memberRow(name: string, root: HTMLElement = document.body): HTMLElement {
+  const list = showMembers(root);
+  const row = Array.from(list.querySelectorAll<HTMLElement>('.teams-member-row')).find(el => el.querySelector('.teams-member-name')?.textContent === name);
+  if (!row) throw new Error(`No member row named ${name}`);
+  return row;
+}
+export function openMember(name: string, root: HTMLElement = document.body): HTMLElement {
+  fireEvent.click(memberRow(name, root));
+  return within(root).getByRole('region', { name });
+}
+export function field(row: HTMLElement, f: string): string { return row.querySelector(`[data-field="${f}"]`)?.textContent ?? ''; }

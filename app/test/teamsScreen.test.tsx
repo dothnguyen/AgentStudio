@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
-import { catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams } from './teamsFixtures';
+import { catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -43,7 +44,8 @@ describe('TeamsScreen', () => {
     const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
     await act(async () => {});
     await openTab(result, 'Members');
-    const row = within(result.getByRole('region', { name: 'Dev Team' })).getAllByRole('row')[1]!;
+    openMember('dev');
+    const row = within(result.getByRole('region', { name: 'dev' })).getAllByRole('row')[1]!;
     expect(cells(row)[1]).toContain('qa-b');
     expect(cells(row)[1]).toContain('Second QA');
     expect(result.getByText(/Member role changes apply the next time the team starts/)).toBeTruthy();
@@ -60,7 +62,7 @@ describe('TeamsScreen', () => {
     const failed = await renderMembers({ roles: [{ ok: false, error: { code: 'INTERNAL', message: 'roles down', retryable: false } }] });
     expect(failed.result.queryByRole('button', { name: /in Roles/ })).toBeNull();
     expect(failed.result.getByRole('button', { name: 'Retry loading roles' })).toBeTruthy();
-    const row = within(failed.result.getByRole('region', { name: 'Dev Team' })).getAllByRole('row')[1]!;
+    const row = within(openMember('dev')).getAllByRole('row')[1]!;
     expect(cells(row)[1]).toContain('Developer');
     expect(cells(row)[2]).toContain('OpenCode Sonnet');
     expect(failed.result.getByRole('button', { name: 'Edit dev' })).toBeTruthy();
@@ -71,7 +73,7 @@ describe('TeamsScreen', () => {
     const saved = {id: 'saved', name: 'Saved choice', provider: 'saved-provider', model: 'saved-model', reasoning: null, description: null, state: 'ok' as const};
     const m = member({agentMode: 'ordered_catalog', agentOptions: [saved], defaultAgent: 'saved', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model'}});
     const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
-    const row = within(result.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
+    const row = within(openMember('dev')).getAllByRole('row')[1]!;
     const values = cells(row);
     expect(values[2]).toBe('Default — Saved choice · saved-provider · saved-model');
     expect(values[3]).toContain('live-id · live-provider · live-model');
@@ -85,7 +87,7 @@ describe('TeamsScreen', () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     const m = member({agentMode: 'ordered_catalog', agentOptions: [first, missing], defaultAgent: 'first', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model', reasoning: 'high'}});
     const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
-    const row = within(result.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
+    const row = within(openMember('dev')).getAllByRole('row')[1]!;
     const savedCell = row.querySelectorAll('td')[2]!;
     const items = within(savedCell).getAllByRole('listitem');
     expect(items.map(item => item.textContent)).toEqual([
@@ -105,8 +107,9 @@ describe('TeamsScreen', () => {
     expect(detail.textContent).toContain('Runtime: Running');
     expect(detail.textContent).toContain('t-1');
     await openTab(result, 'Members');
-    const rows = within(detail).getAllByRole('row').slice(1);
-    const [r1, r2] = rows.map((r) => cells(r));
+    const r1 = cells(within(openMember('dev')).getAllByRole('row')[1]!);
+    fireEvent.click(result.getByRole('button', { name: 'Back to members' }));
+    const r2 = cells(within(openMember('lead')).getAllByRole('row')[1]!);
     expect(r1).toEqual([
       'devAgent: opencode-sonnet',
       'DeveloperImplements scoped tickets.',
@@ -140,7 +143,7 @@ describe('TeamsScreen', () => {
     await openTab(result, 'Members');
     const detail = result.getByRole('region', { name: 'Release Team' });
     expect(within(detail).getByRole('heading', { level: 2 }).textContent).toBe('Release Team');
-    const row = within(detail).getAllByRole('row')[1]!;
+    const row = within(openMember('qa')).getAllByRole('row')[1]!;
     expect(row.textContent).toContain('qa');
     expect(row.textContent).toContain('Stopped');
     expect(row.textContent).toContain('Not available');
@@ -162,10 +165,10 @@ describe('TeamsScreen', () => {
     const { result } = await renderScreen({ agents: [{ ok: false, error: { code: 'CATALOG_FAIL', message: 'failed', retryable: true } }] });
     await openTab(result, 'Members');
     const detail = result.getByRole('region', { name: 'Dev Team' });
-    expect(within(detail).getAllByRole('row')[1]?.textContent).toContain('dev');
+    expect(memberRow('dev').textContent).toContain('dev');
     fireEvent.click(result.getByRole('button', { name: 'Add member' }));
     expect(result.queryByRole('option', { name: 'OpenCode Sonnet (opencode-sonnet)' })).toBeNull();
-    expect(within(detail).getAllByRole('row')[1]?.textContent).toContain('dev');
+    expect(memberRow('dev').textContent).toContain('dev');
   });
 
   it('empty_workspace_shows_empty_states_and_no_sample_agents', async () => {
@@ -206,7 +209,7 @@ describe('TeamsScreen', () => {
     const detail = result.getByRole('region', { name: 'ghost' });
     expect(detail.textContent).toContain('$: could not load team definition: TEAM_CONFIG_INVALID');
     await openTab(result, 'Members');
-    const row = within(detail).getAllByRole('row')[1]!;
+    const row = within(openMember('m1')).getAllByRole('row')[1]!;
     for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Not available', 'Unavailable']) {
       expect(row.textContent).toContain(t);
     }
@@ -332,12 +335,13 @@ describe('TeamsScreen', () => {
 });
 
 describe('live member actions', () => {
+  const renderLive = async (opts: Parameters<typeof fakeManagement>[0] = {}) => { const out = await renderMembers(opts); openMember('dev'); return out; };
   const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
   const data = (runtime = live) => overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({runtime})] })]);
   const confirmation = (id: string) => ({ok: false as const, error: {code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: {assignmentId: id}}});
   it('exact_assignment_confirmation_and_decline', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('assignment-A'));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     const trigger = result.getByRole('button', {name: 'Switch'});
     fireEvent.click(trigger); await act(async () => {});
     const dialog = result.getByRole('dialog');
@@ -349,7 +353,7 @@ describe('live member actions', () => {
   });
   it('stale_confirmation_requires_new_consent', async () => {
     const call = vi.fn().mockResolvedValueOnce(confirmation('A')).mockResolvedValueOnce(confirmation('B')).mockResolvedValue(confirmation('B'));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await act(async () => {});
     expect(call).toHaveBeenCalledTimes(2); expect(result.getByRole('dialog').textContent).toContain('B'); expect(result.getByRole('dialog').textContent).toContain('fresh confirmation');
@@ -357,14 +361,14 @@ describe('live member actions', () => {
     expect(call).toHaveBeenLastCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt', {cancelActive: true, assignmentId: 'B'});
   });
   it('all_held_and_unknown_reset_display', async () => {
-    const {result} = await renderMembers({overview: [{ok: true, data: data({...live, quotaHolds: {'codex-gpt': null, missing: 'bad'}})}]});
+    const {result} = await renderLive({overview: [{ok: true, data: data({...live, quotaHolds: {'codex-gpt': null, missing: 'bad'}})}]});
     expect(result.getAllByText(/Reset time unknown/)).toHaveLength(2);
     expect(result.getAllByRole('button', {name: 'Resume'})).toHaveLength(2);
     expect(result.getByText('All alternate agents are on quota hold.')).toBeTruthy();
   });
   it('duplicate_switch_blocked', async () => {
     const call = vi.fn(() => new Promise(() => {}));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     const trigger = result.getByRole('button', {name: 'Switch'});
     fireEvent.click(trigger); fireEvent.click(trigger);
     expect(call).toHaveBeenCalledTimes(1); expect(result.getAllByText('Requesting…').length).toBeGreaterThan(0);
@@ -374,14 +378,14 @@ describe('live member actions', () => {
     const held = {...live, quotaHolds: {'codex-gpt': null}, assignment: {id: 'job', status: 'working', taskId: 'task'}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet'}});
     const switchCall = vi.fn();
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, quotaHolds: {}})}], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, quotaHolds: {}})}], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
     fireEvent.click(result.getByRole('button', {name: 'Resume'})); await act(async () => {});
     expect(result.getByText('Quota hold cleared for inactive option Codex GPT; quota was not verified. The live agent and assignment were not changed.')).toBeTruthy();
     expect(result.container.textContent).toContain('job · working · task'); expect(switchCall).not.toHaveBeenCalled();
   });
   it('keyboard_accessible_dialog_focus_return', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('A'));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     const trigger = result.getByRole('button', {name: 'Switch'}); trigger.focus(); fireEvent.click(trigger); await act(async () => {});
     const dialog = result.getByRole('dialog'); const confirm = within(dialog).getByRole('button', {name: 'Confirm cancellation'}); const cancel = within(dialog).getByRole('button', {name: 'Cancel'});
     expect(dialog.getAttribute('aria-modal')).toBe('true'); expect(dialog.getAttribute('aria-labelledby')).toBeTruthy(); expect(dialog.getAttribute('aria-describedby')).toBeTruthy(); expect(document.activeElement).toBe(confirm);
@@ -392,7 +396,7 @@ describe('live member actions', () => {
 
   it('keeps_focus_in_confirmation_while_switch_is_pending', async () => {
     const call = vi.fn().mockResolvedValueOnce(confirmation('A')).mockImplementationOnce(() => new Promise(() => {}));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     const dialog = result.getByRole('dialog');
     const confirm = within(dialog).getByRole('button', {name: 'Confirm cancellation'}) as HTMLButtonElement;
@@ -408,7 +412,7 @@ describe('live member actions', () => {
 
   it('eligible_and_disabled_switch_states', async () => {
     const call = vi.fn(() => new Promise(() => {}));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     const button = result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement;
     expect(button.disabled).toBe(false); fireEvent.click(button);
     expect(call).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt'); expect(button.disabled).toBe(true);
@@ -416,14 +420,14 @@ describe('live member actions', () => {
   it('active_resume_makes_available_when_backend_reports_it', async () => {
     const held = {...live, availability: 'limit_reached', quotaHolds: {'opencode-sonnet': null}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'opencode-sonnet', cleared: true, activeAgent: 'opencode-sonnet'}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, availability: 'idle', quotaHolds: {}})}], calls: {resumeMemberAgent: resume}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, availability: 'idle', quotaHolds: {}})}], calls: {resumeMemberAgent: resume}});
     fireEvent.click(result.getByRole('button', {name: 'Resume'})); await act(async () => {});
     expect(result.getByText('Quota hold cleared for active option OpenCode Sonnet; quota was not verified. Availability is shown from refreshed backend state.')).toBeTruthy();
     expect(result.getAllByText('Available').length).toBeGreaterThan(0);
   });
   it('disconnected_stale_missing_and_permission_errors', async () => {
     const call = vi.fn().mockResolvedValue({ok: false, error: {code: 'PERMISSION_DENIED', message: 'Denied exactly', remediation: 'Ask an administrator.', retryable: false}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     expect(result.container.textContent).toContain('PERMISSION_DENIED: Denied exactly'); expect(result.getByText('Ask an administrator.')).toBeTruthy();
     result.unmount();
@@ -431,10 +435,11 @@ describe('live member actions', () => {
     const disconnected = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={{state: 'lost', error: null, distro: null, command: 'serve'}} />);
     await act(async () => {});
     await openTab(disconnected, 'Members');
+    openMember('dev');
     expect((disconnected.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
     expect(disconnected.container.textContent).toContain('Backend disconnected; live actions are disabled.');
     disconnected.unmount();
-    const unavailable = await renderMembers({overview: [{ok: true, data: data()}], agents: [{ok: false, error: {code: 'ERROR', message: 'Unavailable', retryable: false}}]});
+    const unavailable = await renderLive({overview: [{ok: true, data: data()}], agents: [{ok: false, error: {code: 'ERROR', message: 'Unavailable', retryable: false}}]});
     expect((unavailable.result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
     expect(unavailable.result.container.textContent).toContain('Agent catalog unavailable; switching is disabled.');
   });
@@ -442,10 +447,11 @@ describe('live member actions', () => {
     const other = team({id: 'other-team', name: 'Other Team', runtime: {state: 'running', teamId: 'other', status: 'running'}, members: [member({runtime: live})]});
     const first = data().teams[0]!;
     const call = vi.fn(() => new Promise(() => {}));
-    const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([first, other])}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: overviewFixture([first, other])}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'}));
     fireEvent.click(card(result.getByRole('region', {name: 'Workspace teams'}), 'Other Team'));
     await openTab(result, 'Members');
+    openMember('dev');
     const button = result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.click(button);
@@ -458,23 +464,29 @@ describe('live member actions', () => {
     let resolveRead!: (value: {ok: true; data: typeof done}) => void;
     const read = new Promise<{ok: true; data: typeof done}>(resolve => { resolveRead = resolve; });
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: initial}, read, {ok: true, data: done}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: initial}, read, {ok: true, data: done}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
-      for (const button of result.getAllByRole('button', {name: 'Switch'})) fireEvent.click(button);
+      fireEvent.click(result.getByRole('button', {name: 'Switch'}));
+      fireEvent.click(result.getByRole('button', {name: 'Back to members'}));
+      openMember('qa');
+      fireEvent.click(result.getByRole('button', {name: 'Switch'}));
       await act(async () => { await vi.advanceTimersByTimeAsync(250); });
       expect(fake.overview).toHaveBeenCalledTimes(2);
       await act(async () => { resolveRead({ok: true, data: done}); });
       expect(fake.overview).toHaveBeenCalledTimes(3);
       expect(result.queryByText(/Settings refresh was superseded/)).toBeNull();
-      expect(result.getAllByText('Switch to Codex GPT completed.')).toHaveLength(2);
+      expect(result.getByText('Switch to Codex GPT completed.')).toBeTruthy();
+      fireEvent.click(result.getByRole('button', {name: 'Back to members'}));
+      openMember('dev');
+      expect(result.getByText('Switch to Codex GPT completed.')).toBeTruthy();
       await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
       expect(fake.overview).toHaveBeenCalledTimes(3);
     } finally { vi.useRealTimers(); }
   });
   it('confirmed_error_preserves_assignment_data', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('assignment-A'));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await act(async () => {});
     expect(result.getByRole('alert').textContent).toContain('assignment-A');
@@ -484,7 +496,7 @@ describe('live member actions', () => {
     const pending = {...live, pendingAgent: 'codex-gpt', lastSwitch: {...old, state: 'pending' as const, at: 'new'}};
     const done = {...live, lastSwitch: {...old, at: 'new'}};
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data({...live, lastSwitch: old})}, {ok: true, data: data({...live, lastSwitch: old})}, {ok: true, data: data(pending)}, {ok: true, data: data(done)}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data({...live, lastSwitch: old})}, {ok: true, data: data({...live, lastSwitch: old})}, {ok: true, data: data(pending)}, {ok: true, data: data(done)}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
@@ -506,7 +518,7 @@ describe('live member actions', () => {
   it('failed_projection_stops_polling_and_preserves_backend_details', async () => {
     const failed = {...live, lastSwitch: {state: 'failed' as const, requestedAgent: 'codex-gpt', assignmentId: null, code: 'PROVIDER_UNAVAILABLE', message: 'Provider unavailable', at: 'new'}};
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', pendingAgent: 'codex-gpt', assignmentId: 'a', cancellation: 'requested'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}, {ok: true, data: data(failed)}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}, {ok: true, data: data(failed)}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
@@ -518,7 +530,7 @@ describe('live member actions', () => {
   it('poll_timeout_retains_pending_projection_and_blocks_another_switch', async () => {
     const pending = {...live, pendingAgent: 'codex-gpt', lastSwitch: {state: 'pending' as const, requestedAgent: 'codex-gpt', assignmentId: 'a', code: null, message: null, at: 'new'}};
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', pendingAgent: 'codex-gpt', assignmentId: 'a', cancellation: 'requested'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}, {ok: true, data: data(pending)}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}, {ok: true, data: data(pending)}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
@@ -534,7 +546,7 @@ describe('live member actions', () => {
     const pending = {...live, pendingAgent: 'codex-gpt'};
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', pendingAgent: 'codex-gpt', assignmentId: 'a', cancellation: 'requested'}});
     const error = {code: 'READ_FAILED', message: 'State is unavailable.', remediation: 'Retry the read.', retryable: true};
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}, {ok: true, data: data(pending)}, {ok: false, error}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}, {ok: true, data: data(pending)}, {ok: false, error}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'}));
@@ -552,7 +564,7 @@ describe('live member actions', () => {
   it('resume_without_clearing_reports_no_quota_verification', async () => {
     const held = {...live, quotaHolds: {'codex-gpt': null}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: false, activeAgent: 'opencode-sonnet'}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
     fireEvent.click(result.getByRole('button', {name: 'Resume'})); await act(async () => {});
     expect(result.getByText('No recorded quota hold was cleared for Codex GPT; quota was not verified.')).toBeTruthy();
     expect(result.getByRole('button', {name: 'Resume'})).toBeTruthy();
@@ -563,7 +575,7 @@ describe('live member actions', () => {
     const refresh = new Promise<{ok: true; data: ReturnType<typeof data>}>(resolve => { resolveRefresh = resolve; });
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'opencode-sonnet', cleared: true, activeAgent: 'opencode-sonnet'}});
     const switchCall = vi.fn();
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}, refresh], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}, refresh], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
     fireEvent.click(result.getByRole('button', {name: 'Resume'})); await act(async () => {});
     expect(result.container.textContent).toContain('limit_reached');
     expect(result.container.textContent).toContain('job · working · task');
@@ -577,14 +589,14 @@ describe('live member actions', () => {
   it('backend_error_data_is_rendered_as_text', async () => {
     const payload = '<img src=x onerror=alert(1)>';
     const call = vi.fn().mockResolvedValue({ok: false, error: {code: 'PERMISSION_DENIED', message: payload, remediation: payload, data: {assignmentId: payload}, retryable: false}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     expect(result.getByRole('alert').textContent).toContain(payload);
     expect(result.getByRole('alert').querySelector('img')).toBeNull();
   });
   it('provider_unavailable_is_rendered_verbatim', async () => {
     const call = vi.fn().mockResolvedValue({ok: false, error: {code: 'PROVIDER_UNAVAILABLE', message: "Provider 'codex' is not ready: offline", remediation: 'Start the provider.', retryable: false}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     expect(result.container.textContent).toContain("PROVIDER_UNAVAILABLE: Provider 'codex' is not ready: offline");
     expect(result.getByText('Start the provider.')).toBeTruthy();
@@ -603,7 +615,7 @@ describe('live member actions', () => {
     ];
     for (const [code, message] of errors) {
       const call = vi.fn().mockResolvedValue({ok: false, error: {code, message, remediation: 'Retry exactly as directed.', retryable: false}});
-      const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+      const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
       fireEvent.click(result.getByRole('button', {name: 'Switch'}));
       await act(async () => {});
       expect(result.getByRole('alert').textContent).toContain(`${code}: ${message}`);
@@ -615,7 +627,7 @@ describe('live member actions', () => {
   it('resume_error_preserves_backend_message_and_hold', async () => {
     const held = {...live, quotaHolds: {'codex-gpt': null}};
     const resume = vi.fn().mockResolvedValue({ok: false, error: {code: 'INTERNAL', message: "The member's quota holds are invalid; no hold was cleared.", remediation: 'Inspect holds.', retryable: false}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
     fireEvent.click(result.getByRole('button', {name: 'Resume'}));
     await act(async () => {});
     expect(result.getByRole('alert').textContent).toContain("INTERNAL: The member's quota holds are invalid; no hold was cleared.");
@@ -624,7 +636,7 @@ describe('live member actions', () => {
   });
   it('changed_assignment_refocuses_confirmation', async () => {
     const call = vi.fn().mockResolvedValueOnce(confirmation('A')).mockResolvedValueOnce(confirmation('B'));
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await act(async () => {});
     expect(document.activeElement).toBe(result.getByRole('button', {name: 'Confirm cancellation'}));
@@ -637,24 +649,24 @@ describe('live member actions', () => {
       [{...live, pendingAgent: 'codex-gpt'}, 'A switch is already pending for this member.'],
       [{...live, quotaHolds: {'codex-gpt': null}}, "Agent 'codex-gpt' is on quota hold."],
     ] as const) {
-      const {result} = await renderMembers({overview: [{ok: true, data: data(runtime)}]});
+      const {result} = await renderLive({overview: [{ok: true, data: data(runtime)}]});
       expect((result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
       expect(result.getAllByText(reason).length).toBeGreaterThan(0);
       result.unmount();
     }
-    const {result} = await renderMembers({overview: [{ok: true, data: data()}], agents: [{ok: true, data: catalogFixture({agents: []})}]});
+    const {result} = await renderLive({overview: [{ok: true, data: data()}], agents: [{ok: true, data: catalogFixture({agents: []})}]});
     expect((result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
     expect(result.getByText("Agent 'codex-gpt' is missing from the catalog.")).toBeTruthy();
   });
   it('inline_member_has_no_live_actions', async () => {
     const inline = member({agentMode: 'inline', source: 'inline', runtime: live});
-    const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [inline]})])}]});
+    const {result} = await renderLive({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [inline]})])}]});
     expect(result.queryByRole('button', {name: 'Switch'})).toBeNull();
     expect(result.queryByRole('button', {name: 'Resume'})).toBeNull();
   });
   it('refresh_failure_after_switch_preserves_backend_error', async () => {
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}, {ok: false, error: {code: 'REFRESH_ERROR', message: 'Read failed', remediation: 'Retry the read.', retryable: true}}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}, {ok: false, error: {code: 'REFRESH_ERROR', message: 'Read failed', remediation: 'Retry the read.', retryable: true}}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
@@ -667,7 +679,7 @@ describe('live member actions', () => {
 
   it('unmount_cancels_outstanding_switch_poll_timer', async () => {
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'}));
@@ -680,7 +692,7 @@ describe('live member actions', () => {
 
   it('workspace_change_cancels_outstanding_switch_poll_timer', async () => {
     const call = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p'}});
-    const {result, fake} = await renderMembers({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
+    const {result, fake} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     vi.useFakeTimers();
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'}));
@@ -698,7 +710,7 @@ describe('live member actions', () => {
   it('held_missing_catalog_option_can_be_resumed', async () => {
     const held = {...live, configuredAgents: ['opencode-sonnet', 'missing'], quotaHolds: {missing: null}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'missing', cleared: true, activeAgent: 'opencode-sonnet'}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, quotaHolds: {}})}], calls: {resumeMemberAgent: resume}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, quotaHolds: {}})}], calls: {resumeMemberAgent: resume}});
     expect(result.getByText("Agent 'missing' is missing from the catalog.")).toBeTruthy();
     fireEvent.click(result.getByRole('button', {name: 'Resume'}));
     await act(async () => {});
@@ -709,7 +721,7 @@ describe('live member actions', () => {
   it('live_actions_use_frozen_options_and_runtime_metadata', async () => {
     const runtime = {...live, configuredAgents: ['opencode-sonnet', 'removed', 'codex-gpt'], provider: 'actual-provider', model: 'actual-model', reasoning: 'high', quotaHolds: {removed: null, extra: null}};
     const saved = member({runtime, defaultAgent: 'saved-only', provider: 'saved-provider', model: 'saved-model'});
-    const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [saved]})])}]});
+    const {result} = await renderLive({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [saved]})])}]});
     const actions = within(result.getByRole('region', {name: 'Live agent actions for dev'}));
     expect(actions.getByText('opencode-sonnet · actual-provider · actual-model · Reasoning: high')).toBeTruthy();
     expect(actions.queryByText(/saved-provider|saved-model|saved-only/)).toBeNull();
@@ -728,7 +740,7 @@ describe('live member actions', () => {
   it('pending_switch_still_allows_resume_of_an_inactive_hold', async () => {
     const held = {...live, pendingAgent: 'codex-gpt', quotaHolds: {'codex-gpt': null}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: false, activeAgent: 'opencode-sonnet'}});
-    const {result} = await renderMembers({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
+    const {result} = await renderLive({overview: [{ok: true, data: data(held)}], calls: {resumeMemberAgent: resume}});
     expect((result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
     const button = result.getByRole('button', {name: 'Resume'}) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
@@ -772,7 +784,7 @@ describe('focused navigation', () => {
     const { result } = await renderScreen();
     await openTab(result, 'Members');
     expect(result.getAllByRole('tabpanel')).toHaveLength(1);
-    expect(within(result.getByRole('tabpanel')).getByRole('table')).toBeTruthy();
+    expect(within(result.getByRole('tabpanel')).getByRole('list', { name: /^Members of / })).toBeTruthy();
     expect(within(result.getByRole('tabpanel')).queryByRole('heading', { name: 'Board control' })).toBeNull();
     await openTab(result, 'Routing');
     expect(result.getAllByRole('tabpanel')).toHaveLength(1);
@@ -840,7 +852,7 @@ describe('focused navigation', () => {
     expect(cardNames(list(result))).toEqual(['Release Team', 'Dev Team']);
     expect(card(list(result), 'Release Team').getAttribute('aria-pressed')).toBe('true');
     expect(selectedTabs(result)).toEqual(['Members']);
-    expect(within(result.getByRole('region', { name: 'Release Team' })).getByRole('table')).toBeTruthy();
+    expect(within(result.getByRole('region', { name: 'Release Team' })).getByRole('list', { name: /^Members of / })).toBeTruthy();
   });
 
   it('refresh_removal_falls_back_to_first_team_overview', async () => {
@@ -929,5 +941,101 @@ describe('focused navigation', () => {
         expect(panel.contains(el)).toBe(false);
       }
     }
+  });
+});
+
+describe('member roster', () => {
+  it('roster_shows_only_returned_identity_role_agent_availability_and_work', async () => {
+    const { fake } = await renderScreen();
+    const dev = memberRow('dev');
+    expect(['name', 'role', 'agent', 'availability', 'work'].map(f => field(dev, f))).toEqual(['dev', 'Developer', 'Active: opencode-sonnet · opencode · claude-sonnet', 'Working', 'T-031 Teams screen']);
+    const lead = memberRow('lead');
+    expect(['role', 'agent', 'availability', 'work'].map(f => field(lead, f))).toEqual(['TeamLead', 'Not running · saved inline: codex · model not set', 'Available', 'No current work']);
+    const list = showMembers();
+    expect(within(list).queryByRole('button', {name: /in Roles|Switch|Resume|Edit|Remove/})).toBeNull();
+    expect(list.textContent).not.toMatch(/Implements scoped tickets\.|Default —/);
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+  it('keyboard_enter_and_space_open_the_exact_member', async () => {
+    const user = userEvent.setup();
+    await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member(), member({memberId: 'qa', name: 'qa'})]})])}]});
+    memberRow('qa').focus(); await user.keyboard('{Enter}');
+    const detail = screen.getByRole('region', {name: 'qa'});
+    expect(within(detail).getAllByRole('row')[1]!.textContent).not.toContain('dev');
+    expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    expect(document.activeElement).toBe(memberRow('qa')); expect(memberRow('qa').getAttribute('aria-current')).toBe('true');
+    memberRow('dev').focus(); await user.keyboard(' '); expect(screen.getByRole('region', {name: 'dev'})).toBeTruthy();
+  });
+  it('refresh_keeps_detail_on_the_same_stable_member_and_removal_shows_notice', async () => {
+    const dev = member(), qa = member({memberId: 'qa', name: 'qa'});
+    const mk = (members: typeof dev[]) => ({ok: true as const, data: overviewFixture([team({members})])});
+    await renderScreen({overview: [mk([dev, qa]), mk([{...qa, role: 'Reviewer'}, dev]), mk([dev])]});
+    openMember('qa'); fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
+    expect(screen.getByRole('region', {name: 'qa'}).textContent).toContain('Reviewer');
+    fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
+    expect(screen.queryByRole('region', {name: 'qa'})).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Member "qa" is no longer in this team. Showing all members.');
+    expect(memberRow('dev')).toBeTruthy();
+  });
+  it('truncated_refresh_reports_selected_member_not_returned', async () => {
+    const dev = member(), qa = member({memberId: 'qa', name: 'qa'});
+    await renderScreen({overview: [
+      {ok: true, data: overviewFixture([team({members: [dev, qa]})])},
+      {ok: true, data: overviewFixture([team({members: [dev], membersTruncated: true})])},
+    ]});
+    openMember('qa');
+    fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
+    await act(async () => {});
+    expect(screen.queryByRole('region', {name: 'qa'})).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Member "qa" is not among the returned members (the member list is truncated). Showing the returned members.');
+    expect(memberRow('dev')).toBeTruthy();
+  });
+  it('navigation_between_roster_and_detail_does_not_read_management', async () => {
+    const {fake} = await renderScreen();
+    showMembers(); openMember('dev');
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    fireEvent.click(screen.getByRole('tab', {name: 'Overview'}));
+    showMembers();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(fake.agents).toHaveBeenCalledTimes(1);
+    expect(fake.boardSettings).toHaveBeenCalledTimes(1);
+  });
+  it('member_without_id_is_listed_but_not_openable', async () => {
+    await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({memberId: null, name: 'ghost-runtime', source: 'runtime'})]})])}]});
+    const row = memberRow('ghost-runtime'); expect(row.textContent).toContain('No member id returned'); expect(row.closest('li')!.querySelector('button')).toBeNull();
+  });
+  it('empty_roster_and_truncation_are_truthful', async () => {
+    const empty = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: []})])}]});
+    fireEvent.click(screen.getByRole('tab', {name: 'Members'})); expect(screen.getByText('This team has no members.')).toBeTruthy(); expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull(); empty.result.unmount();
+    const members = Array.from({length: 16}, (_, i) => member({memberId: `m${i}`, name: `m${i}`}));
+    await renderScreen({overview: [{ok: true, data: overviewFixture([team({members, membersTruncated: true})])}]});
+    expect(within(showMembers()).getAllByRole('listitem')).toHaveLength(16); expect(screen.getByText('Showing the first 16 members.')).toBeTruthy();
+  });
+  it('add_member_is_available_at_members_level', async () => {
+    await renderScreen(); showMembers(); expect(screen.getAllByRole('button', {name: 'Add member'})).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', {name: 'Add member'})); expect(screen.getByRole('form', {name: 'Add member'})).toBeTruthy();
+    openMember('dev'); expect(screen.queryByRole('button', {name: 'Add member'})).toBeNull();
+  });
+});
+
+describe('roster evidence and team removal', () => {
+  it('roster_saved_fallback_is_never_labelled_active', async () => {
+    const option = {...member().agentOptions[0]!, name: 'Saved choice'};
+    await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({runtime: null, agentOptions: [option]}), member({memberId: 'missing', name: 'missing', runtime: null, agentOptions: [{...option, id: 'gone', name: null, state: 'missing'}]}), member({memberId: 'runtime', name: 'runtime', runtime: null, source: 'runtime'})]})])}]});
+    expect(field(memberRow('dev'), 'agent')).toBe('Not running · saved default: Saved choice');
+    expect(field(memberRow('missing'), 'agent')).toContain('Saved default is missing from the catalog');
+    expect(field(memberRow('runtime'), 'agent')).toBe('No live or saved agent');
+  });
+  it('roster_role_shows_catalog_name_stable_id_and_diagnostics', async () => {
+    const {result} = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({role: 'qa-b'}), member({memberId: 'x', name: 'x', role: 'retired', roleState: 'undefined'})]})])}], roles: [{ok: true, data: rolesFixture({items: [roleItem('qa-b', {name: 'QA'})]})}]});
+    expect(field(memberRow('dev'), 'role')).toBe('QAqa-b'); expect(field(memberRow('x'), 'role')).toContain('Role not defined in roles.json'); result.unmount();
+    await renderScreen({roles: [{ok: false, error: {code: 'ERROR', message: 'failed', retryable: false}}]}); expect(field(memberRow('dev'), 'role')).toBe('Developer');
+  });
+  it('removed_team_never_opens_same_member_id_in_another_team', async () => {
+    const alpha = team({id: 'alpha', name: 'Alpha', members: [member()]}), beta = team({id: 'beta', name: 'Beta', members: [member()]});
+    await renderScreen({overview: [{ok: true, data: overviewFixture([alpha, beta])}, {ok: true, data: overviewFixture([beta])}]});
+    openMember('dev'); fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
+    showMembers(); expect(screen.queryByRole('region', {name: 'dev'})).toBeNull(); expect(screen.queryByRole('button', {name: 'Back to members'})).toBeNull();
   });
 });

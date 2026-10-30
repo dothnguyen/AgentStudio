@@ -378,6 +378,7 @@ describe('WorkspaceShell', () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
     await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
@@ -391,6 +392,7 @@ describe('WorkspaceShell', () => {
     const { view, ui } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
     view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));

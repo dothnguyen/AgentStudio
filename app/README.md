@@ -141,3 +141,5 @@ reaches its limit.
 ### Deleting a role
 
 The Roles screen offers **Delete role** for the selected role only when its usage was scanned completely and shows no references, its catalog and instruction version tokens are present, and the backend connection is ready. The confirmation dialog states whether the instruction file is removed (conventional, unshared file) or preserved (custom or shared file). The backend rescans usage on delete; if it reports `ROLE_IN_USE`, every reference group is listed and nothing is changed — there is no force-delete or reference rewrite. The role list updates only after the delete succeeds and Roles reloads; if the reload fails, further role changes stay disabled until Roles is retried.
+
+The Teams Members tab presents a compact roster of returned member identity, role, live or saved agent, availability, and current work. Select a member to view its details and controls; returning to the roster restores focus to that member. A member that disappears on refresh returns to the roster with an explanatory notice.

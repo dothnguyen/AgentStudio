@@ -1,4 +1,4 @@
-import type { ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
+import type { RoleCatalogItem, ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
 
 
 export function text(value: unknown): string | null {
@@ -158,4 +158,92 @@ export function runtimeTone(state: string): Tone {
     case 'disconnected': return 'danger';
     default: return 'muted';
   }
+}
+
+export interface MemberSelection { teamKey: string; memberId: string }
+
+export type MemberSelectionResult =
+  | { state: 'none' }
+  | { state: 'other-team' }
+  | { state: 'missing'; memberId: string }
+  | { state: 'selected'; member: OverviewMember };
+
+export function resolveMemberSelection(team: OverviewTeam, key: string, selection: MemberSelection | null): MemberSelectionResult {
+  if (selection === null) return { state: 'none' };
+  if (selection.teamKey !== key) return { state: 'other-team' };
+  const member = team.members.find((m) => m.memberId === selection.memberId);
+  return member === undefined ? { state: 'missing', memberId: selection.memberId } : { state: 'selected', member };
+}
+
+export function missingMemberNotice(memberId: string, truncated: boolean): string {
+  return truncated
+    ? `Member "${memberId}" is not among the returned members (the member list is truncated). Showing the returned members.`
+    : `Member "${memberId}" is no longer in this team. Showing all members.`;
+}
+
+export function memberIdentity(m: OverviewMember): { name: string; id: string | null; note: string | null } {
+  const name = memberName(m);
+  return {
+    name,
+    id: m.memberId !== null && m.memberId !== name ? m.memberId : null,
+    note: m.memberId === null ? 'No member id returned'
+      : m.source === 'runtime' ? 'Runtime only — not in the saved team definition'
+      : null,
+  };
+}
+
+export function memberRoleSummary(m: OverviewMember, roles: readonly RoleCatalogItem[] | null): { label: string; roleId: string | null; note: string | null } {
+  const u = m.roleState === 'unavailable' ? 'Role descriptions unavailable' : null;
+  if (m.role === null) return { label: 'No role', roleId: null, note: u };
+  if (m.roleState === 'undefined') return { label: m.role, roleId: null, note: 'Role not defined in roles.json' };
+  const item = roles?.find((r) => r.id === m.role) ?? null;
+  if (item !== null) return { label: item.name, roleId: item.id !== item.name ? item.id : null, note: u };
+  if (roles !== null) return { label: m.role, roleId: null, note: u ?? 'Not found in the role catalog' };
+  return { label: m.role, roleId: null, note: u };
+}
+
+export function memberAgentSummary(m: OverviewMember): { text: string; kind: 'active' | 'stale' | 'none' | 'saved'; note: string | null } {
+  const r = m.runtime;
+  const active = r ? text(r.activeAgent) : null;
+  const first = m.agentOptions[0];
+  let result: { text: string; kind: 'active' | 'stale' | 'none' | 'saved' };
+  if (r && active && !r.stale) result = { text: `Active: ${active} · ${providerModelText(r.provider, r.model)}`, kind: 'active' };
+  else if (r && active) result = { text: `Last live agent: ${active} (team not running)`, kind: 'stale' };
+  else if (r) result = { text: 'No live agent reported', kind: 'none' };
+  else if (m.source === 'runtime') result = { text: 'No live or saved agent', kind: 'none' };
+  else if (m.agentMode === 'inline') {
+    result = m.provider === null
+      ? { text: 'No live or saved agent', kind: 'none' }
+      : { text: `Not running · saved inline: ${providerModelText(m.provider, m.model)}`, kind: 'saved' };
+  } else {
+    result = first === undefined
+      ? { text: 'No live or saved agent', kind: 'none' }
+      : { text: `Not running · saved default: ${first.name ?? first.id}`, kind: 'saved' };
+  }
+  const note = r && text(r.pendingAgent) ? `Switch to ${r.pendingAgent} pending`
+    : result.kind === 'saved' && m.agentMode !== 'inline' && first?.state === 'missing' ? 'Saved default is missing from the catalog'
+    : null;
+  return { ...result, note };
+}
+
+export const WORK_UNAVAILABLE_REASONS: Record<string, string> = {
+  not_in_runtime: 'member is not in the running team',
+  not_started: 'team not started',
+  stopped: 'team stopped',
+  error: 'team runtime error',
+  disconnected: 'team disconnected',
+  unavailable: 'live state unavailable',
+};
+
+export function workSummary(work: MemberWork): string {
+  if (work.state === 'none') return 'No current work';
+  if (work.state === 'unavailable') {
+    const reason = text(work.reason);
+    if (reason === null) return 'Not available';
+    const label = Object.prototype.hasOwnProperty.call(WORK_UNAVAILABLE_REASONS, reason) ? WORK_UNAVAILABLE_REASONS[reason]! : reason;
+    return `Not available — ${label}`;
+  }
+  if (work.ticket !== null) return work.ticket.title === '' ? work.ticket.key : `${work.ticket.key} ${work.ticket.title}`;
+  if (work.assignment !== null) return work.assignment.goal !== '' ? work.assignment.goal : `Assignment ${work.assignment.id}`;
+  return 'Working (no details returned)';
 }
