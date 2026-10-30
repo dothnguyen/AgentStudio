@@ -61,6 +61,8 @@ export function TeamsScreen(props: TeamsScreenProps): JSX.Element {
 
 
 function TeamsOverview(props: TeamsScreenProps): JSX.Element {
+  const connectionState = props.connection?.state ?? null;
+  const connected = connectionState === null || connectionState === 'connected';
   const overview = useDashboardSection<TeamOverview>(props.management.overview, props.workspace.id);
   const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
   const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
@@ -79,7 +81,10 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const actionLocks = useRef(new Set<string>());
   const [actions, setActions] = useState<Record<string, MemberActionInFlight>>({});
   const [polling, setPolling] = useState<Record<string, boolean>>({});
-  const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; changed: boolean } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean } | null>(null);
+  const confirmationGeneration = useRef(0);
+  const selectedMemberRef = useRef(selectedMember);
+  selectedMemberRef.current = selectedMember;
   const confirmRef = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef<HTMLButtonElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -87,6 +92,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const lastData = useRef<TeamOverview | null>(null);
   const actionRefreshQueue = useRef<Promise<void>>(Promise.resolve());
   const mounted = useRef(true);
+  const confirmationActionInFlight = confirmation !== null && !!actions[memberActionKey(confirmation.teamDefId, confirmation.memberId)];
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; timers.current.forEach((resolve, timer) => { clearTimeout(timer); resolve(); }); timers.current.clear(); };
@@ -123,11 +129,27 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     return true;
   }
 
-  useEffect(() => { if (confirmation && mounted.current) confirmRef.current?.focus(); else if (!confirmation && restoreFocus.current && mounted.current && restoreFocus.current.isConnected && !restoreFocus.current.disabled) { restoreFocus.current.focus(); restoreFocus.current = null; } }, [confirmation, actions]);
+  useEffect(() => {
+    if (confirmation) { (confirmRef.current?.disabled ? cancelRef.current : confirmRef.current)?.focus(); return; }
+    const trigger = restoreFocus.current;
+    if (trigger) {
+      if (trigger.isConnected && !trigger.disabled) trigger.focus();
+      else document.getElementById('teams-member-detail-title')?.focus();
+      restoreFocus.current = null;
+    }
+  }, [confirmation, connected, confirmationActionInFlight]);
+  useEffect(() => {
+    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey || viewState.view !== 'members')) {
+      confirmationGeneration.current++;
+      restoreFocus.current = null;
+      setConfirmation(null);
+      document.getElementById('teams-member-detail-title')?.focus();
+    }
+  }, [selectedMember, viewState, confirmation]);
   function closeConfirmation(trigger: HTMLButtonElement): void {
+    confirmationGeneration.current++;
     restoreFocus.current = trigger;
     setConfirmation(null);
-    if (mounted.current && trigger.isConnected && !trigger.disabled) trigger.focus();
   }
   const ws = props.workspace.id;
   const mgmt = props.management;
@@ -174,8 +196,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     actionRefreshQueue.current = refresh.then(() => undefined, () => undefined);
     return refresh;
   }
-  async function switchAgent(context: { teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; trigger: HTMLButtonElement; signature: string | null }, assignmentId?: string): Promise<void> {
+  async function switchAgent(context: { teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string }, assignmentId?: string): Promise<void> {
     if (!lock(context.teamDefId, context.memberId, context.agentId, 'switch')) return;
+    const generation = confirmationGeneration.current;
     try {
       let result;
       try { result = assignmentId === undefined ? await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId) : await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId, { cancelActive: true, assignmentId }); }
@@ -184,14 +207,16 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       if (!result.ok) {
         const match = assignmentConfirmation(result.error);
         if (match && (assignmentId === undefined || match.assignmentId !== assignmentId)) {
+          if (confirmationGeneration.current !== generation) return;
+          if (selectedMemberRef.current?.memberId !== context.memberId || selectedMemberRef.current?.teamKey !== context.selectionKey) return;
           setConfirmation({ ...context, assignmentId: match.assignmentId, changed: assignmentId !== undefined });
         } else {
-          if (assignmentId !== undefined) closeConfirmation(context.trigger);
+          if (assignmentId !== undefined && confirmationGeneration.current === generation) closeConfirmation(context.trigger);
           setFeedback({ ...errorFeedback('Switch request failed.', result.error), dataText: result.error.data === undefined ? null : JSON.stringify(result.error.data) });
         }
         return;
       }
-      if (assignmentId !== undefined) closeConfirmation(context.trigger);
+      if (assignmentId !== undefined && confirmationGeneration.current === generation) closeConfirmation(context.trigger);
       setPolling(a => ({ ...a, [memberActionKey(context.teamDefId, context.memberId)]: true }));
       for (let i = 0; i < SWITCH_REFRESH_LIMIT; i++) {
         await waitForPoll();
@@ -267,8 +292,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     }
   }
 
-  const connectionState = props.connection?.state ?? null;
-  const connected = connectionState === null || connectionState === 'connected';
   const lastConnection = useRef(connectionState);
   useEffect(() => {
     const previous = lastConnection.current;
@@ -335,7 +358,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       {confirmation && <div className="modal-overlay teams-live-modal"><div role="dialog" aria-modal="true" aria-labelledby="teams-switch-title" aria-describedby="teams-switch-description" onKeyDown={e => {
         if (e.key === 'Escape') { e.preventDefault(); closeConfirmation(confirmation.trigger); }
         if (e.key === 'Tab') { if (confirmRef.current?.disabled) { e.preventDefault(); cancelRef.current?.focus(); } else if (e.shiftKey && document.activeElement === confirmRef.current) { e.preventDefault(); cancelRef.current?.focus(); } else if (!e.shiftKey && document.activeElement === cancelRef.current) { e.preventDefault(); confirmRef.current?.focus(); } }
-      }}><h2 id="teams-switch-title">Confirm cancellation</h2><p id="teams-switch-description">Switch {confirmation.memberName} to {confirmation.agentLabel} and cancel assignment <code>{confirmation.assignmentId}</code>?</p>{confirmation.changed && <p role="alert">The assignment changed; fresh confirmation is required.</p>}<div className="dialog-actions"><button ref={confirmRef} type="button" disabled={!!actions[memberActionKey(confirmation.teamDefId, confirmation.memberId)]} onClick={() => { void switchAgent(confirmation, confirmation.assignmentId); }}>Confirm cancellation</button><button ref={cancelRef} type="button" onClick={() => closeConfirmation(confirmation.trigger)}>Cancel</button></div></div></div>}
+      }}><h2 id="teams-switch-title">Confirm cancellation</h2><p id="teams-switch-description">Switch {confirmation.memberName} to {confirmation.agentLabel} and cancel assignment <code>{confirmation.assignmentId}</code>?</p>{confirmation.changed && <p role="alert">The assignment changed; fresh confirmation is required.</p>}<div className="dialog-actions"><button ref={confirmRef} type="button" disabled={!connected || confirmationActionInFlight} onClick={() => { void switchAgent(confirmation, confirmation.assignmentId); }}>Confirm cancellation</button><button ref={cancelRef} type="button" onClick={() => closeConfirmation(confirmation.trigger)}>Cancel</button></div></div></div>}
       <div className="teams-layout">
         <section className="dashboard-panel teams-list-panel" aria-labelledby="teams-list-title">
           <h2 id="teams-list-title">Workspace teams</h2>
@@ -375,7 +398,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             connected={connected}
             actions={actions}
             polling={polling}
-            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
+            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, selectionKey: selectedMember?.teamKey ?? '', signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
             onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
             pending={pending}
             view={view.view}

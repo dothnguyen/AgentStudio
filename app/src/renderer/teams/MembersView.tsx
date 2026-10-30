@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { MemberDetailPanel, type MemberDetailPanelProps } from './MemberDetailPanel';
+import { MemberLiveAgentActions } from './MemberLiveAgentActions';
+import { memberActionKey, type MemberActionInFlight } from './memberAgentActionsModel';
+import type { OverviewMember, OverviewTeam } from '../api';
 import { MemberList } from './MemberList';
 import { MemberForm } from './TeamEditForms';
 import { canEditTeam, emptyMemberForm } from './teamEditModel';
 import { teamsPanelId } from './teamsViewModel';
 import { missingMemberNotice, resolveMemberSelection, type MemberSelection } from './teamsModel';
 
-export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved'> { teamKey: string; selection: MemberSelection | null; onSelect(s: MemberSelection | null): void }
+export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'liveActions'> { actions: Record<string, MemberActionInFlight>; polling: Record<string, boolean>; onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void; onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void; teamKey: string; selection: MemberSelection | null; onSelect(s: MemberSelection | null): void }
 export function MembersView(props: MembersViewProps): JSX.Element {
   const { team, teamKey, selection, onSelect } = props;
   const [adding, setAdding] = useState(false);
@@ -24,7 +27,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   function open(id: string): void { setLost(null); setAdding(false); setLastOpened(id); onSelect({ teamKey, memberId: id }); }
   function back(): void { setReturnFocus({ memberId: selection?.memberId ?? null }); onSelect(null); }
   function removed(): void { setReturnFocus({ memberId: null }); onSelect(null); }
-  if (result.state === 'selected') return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} onBack={back} onRemoved={removed} />;
+  if (result.state === 'selected') return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} inFlight={props.actions[memberActionKey(team.id ?? '', result.member.memberId ?? '')] ?? null} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
   return <div className="teams-members-view">
     {lost !== null && <p className="panel-note" role="status">{missingMemberNotice(lost, team.membersTruncated)}</p>}
     {canEditTeam(team) && <div className="teams-members-actions"><button ref={addRef} type="button" disabled={props.pending || adding} onClick={() => setAdding(true)}>Add member</button></div>}

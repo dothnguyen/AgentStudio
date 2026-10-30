@@ -116,7 +116,7 @@ Named switch and resume calls resolve the workspace in the main process and subm
 commands with fresh idempotency keys. Switching an active assignment requires its exact ID and
 an explicit cancellation confirmation; backend errors and cancellation results are passed through.
 
-Member detail shows identity, shared role, ticket permission, saved options, and live state separately. Ticket permission is loaded from the saved team definition and can be edited when available. Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details remain separate from saved configuration.
+Member detail shows identity, shared role, ticket permission, saved options, and live state separately. Ticket permission is loaded from the saved team definition and can be edited when available. Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details and switch and resume controls use the options frozen at team start, separately from saved configuration. Resuming a hold does not verify quota.
 
 The Agents screen loads the saved catalog and team usage independently, reports connection and configuration problems, and browses saved agent configurations, with search, provider and reasoning filters, and saved team-member references. Saved agents can be created, edited, and duplicated using backend-provided provider options. Deleting a saved definition requires confirmation and is blocked when saved team-member references are known; the backend also checks references when usage is incomplete or changes. Deletion does not change team membership or live runtime. Other saved changes apply on a future team start; live agent controls remain in Teams.
 
@@ -134,7 +134,9 @@ The Teams view shows each running catalog member's live agent options and quota 
 from runtime state. Switch requests with an active assignment require confirmation of
 its exact ID. Resume clears a recorded hold; it does not verify provider quota. Saved
 options apply on the next team start and do not determine live switch eligibility.
-Reset times without a valid explicit time zone are shown as unknown. Concurrent
+Switch evidence includes any backend code and message in every state, and a dead pane is
+reported even when no live options are available. Reset times without a valid explicit
+time zone are shown as unknown. Concurrent
 member switch requests refresh independently until their results appear or polling
 reaches its limit.
 

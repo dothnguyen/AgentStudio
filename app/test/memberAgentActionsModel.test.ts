@@ -59,7 +59,7 @@ describe('member agent actions', () => {
     expect(memberAgentActions(team(), member({runtime}), catalog, true, null).options[1]!.disabledReason).toBe('The team is not running.');
     expect(view({...runtime, availability: 'busy', assignment: null}).options[1]!.disabledReason).toBe('Member must be idle, quota-limited, or have an active assignment before switching.');
     expect(view({...runtime, availability: 'busy', assignment: {id: 'a', status: 'working', taskId: 't'}}).options[1]!.canSwitch).toBe(true);
-    expect(view({...runtime, pendingAgent: 'backup', quotaHolds: {backup: null}}).options[1]!.canResume).toBe(true);
+    expect(view({...runtime, pendingAgent: 'backup', quotaHolds: {backup: null}}).options[1]!.canResume).toBe(false);
     expect(view({...runtime, configuredAgents: ['primary']}).allHeld).toBe(false);
     expect(view({...runtime, stale: true}, catalog, false).options[1]!.disabledReason).toBe('Backend disconnected; live actions are disabled.');
   });
@@ -105,10 +105,36 @@ describe('member agent actions', () => {
     const result = {state: 'failed' as const, requestedAgent: 'backup', assignmentId: null, code: 'PROVIDER_UNAVAILABLE', message: 'offline', at: 'now'};
     const v = view({...runtime, pendingAgent: 'backup', lastSwitch: result});
     expect(v.pendingText).toBe('Switch to Backup pending.');
+    expect(view({...runtime, lastSwitch: {...result, state: 'pending'}}).lastResultText).toBe('Switch to Backup pending — PROVIDER_UNAVAILABLE: offline');
     expect(v.lastResultText).toBe('Switch to Backup failed — PROVIDER_UNAVAILABLE: offline');
-    expect(view({...runtime, lastSwitch: {...result, state: 'completed'}}).lastResultText).toBe('Switch to Backup completed.');
+    expect(view({...runtime, lastSwitch: {...result, state: 'completed'}}).lastResultText).toBe('Switch to Backup completed — PROVIDER_UNAVAILABLE: offline');
     expect(view({...runtime, lastSwitch: {...result, code: null, message: null}}).lastResultText).toBe('Switch to Backup failed');
     expect(view({...runtime, pendingAgent: 'removed'}, null).pendingText).toBe('Switch to removed pending.');
     expect(memberAgentActions(running, member({runtime: null}), catalog, true, null).visible).toBe(false);
   });
+  it('unavailable_runtime_and_inline_sources_never_expose_actions', () => {
+    for (const m of [member({runtime: null}), member({runtime, agentMode: 'inline'}), member({runtime, source: 'inline'})]) {
+      expect(memberAgentActions(running, m, catalog, true, null)).toMatchObject({visible: false, options: [], activeText: ''});
+    }
+  });
+  it('confirmation_rejects_missing_and_whitespace_assignment_ids', () => {
+    const message = 'Member has an active assignment; confirm cancellation of this assignment to switch.';
+    for (const data of [undefined, null, {}, {assignmentId: '  '}, {assignmentId: ['A']}]) {
+      expect(assignmentConfirmation({code: 'BAD_REQUEST', message, retryable: false, data})).toBeNull();
+    }
+  });
+  it('dead_pane_notice_is_visible_without_options', () => {
+    expect(view({...runtime, configuredAgents: [], quotaHolds: {}, paneState: 'dead'}).notice).toBe("The member's pane is not alive.");
+  });
+  it('hold_only_catalog_option_is_resume_only', () => {
+    const v = view({...runtime, quotaHolds: {extra: null}}, [...catalog, {id: 'extra', name: 'Extra', provider: 'p'}]);
+    expect(v.options[2]).toMatchObject({id: 'extra', canSwitch: false, canResume: true});
+  });
+  it('deduplicates_frozen_and_held_ids_without_changing_order', () => {
+    const v = view({...runtime, configuredAgents: ['primary', 'backup', 'primary', 'backup'], quotaHolds: {backup: null, extra: null}});
+    expect(v.options.map(option => option.id)).toEqual(['primary', 'backup', 'extra']);
+    expect(v.options[1]).toMatchObject({canSwitch: false, canResume: true});
+    expect(v.options[2]).toMatchObject({canSwitch: false, canResume: true});
+  });
+
 });
