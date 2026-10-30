@@ -4,7 +4,6 @@ import {
   resolveTeamsView,
   rovingIndex,
   selectChildView,
-  selectMemberView,
   selectTeamView,
   teamsPanelId,
   teamsTabId,
@@ -17,7 +16,7 @@ const items: TeamViewItem[] = [
   { key: 'a', team: team({ id: 'a', members: [member({ memberId: 'm1' })] }) },
   { key: 'b', team: team({ id: 'b' }) },
 ];
-const state = (over: Partial<TeamsViewState> = {}): TeamsViewState => ({ teamKey: 'a', view: 'members', memberId: null, ...over });
+const state = (over: Partial<TeamsViewState> = {}): TeamsViewState => ({ teamKey: 'a', view: 'overview', memberId: null, ...over });
 
 describe('teamsViewModel', () => {
   it('resolve_keeps_state_without_data', () => {
@@ -54,12 +53,8 @@ describe('teamsViewModel', () => {
 
   it('select_child_view_keeps_team_and_member', () => {
     const s = state({ memberId: 'm1' });
-    expect(selectChildView(s, 'members')).toBe(s);
+    expect(selectChildView(s, 'overview')).toBe(s);
     expect(selectChildView(s, 'routing')).toEqual({ teamKey: 'a', view: 'routing', memberId: 'm1' });
-  });
-
-  it('select_member_opens_members', () => {
-    expect(selectMemberView(state({ view: 'overview' }), 'm1')).toEqual({ teamKey: 'a', view: 'members', memberId: 'm1' });
   });
 
   it('roving_index_matrix', () => {
@@ -77,7 +72,7 @@ describe('teamsViewModel', () => {
   });
 
   it('ids_are_stable', () => {
-    expect(teamsTabId('members')).toBe('teams-tab-members');
+    expect(teamsTabId('overview')).toBe('teams-tab-overview');
     expect(teamsPanelId('routing')).toBe('teams-panel-routing');
   });
 });

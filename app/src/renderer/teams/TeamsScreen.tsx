@@ -1,6 +1,5 @@
 import { SectionError } from './SectionError';
 import { TeamOverviewPanel } from './TeamOverviewPanel';
-import { MembersView } from './MembersView';
 import { RoutingSettingsPanel } from './RoutingSettingsPanel';
 import { TeamViewTabs } from './TeamViewTabs';
 import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
@@ -163,7 +162,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     }
   }, [confirmation, connected, confirmationActionInFlight]);
   useEffect(() => {
-    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey || viewState.view !== 'members')) {
+    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey)) {
       confirmationGeneration.current++;
       restoreFocus.current = null;
       setConfirmation(null);
@@ -455,30 +454,11 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         {data !== null && selected !== null && (
           <TeamDetailPanel
             key={selected.key}
-            workspaceId={ws}
-            management={mgmt}
-            savedRevision={savedRevision}
             team={selected.team}
-            teamKey={selected.key}
-            selection={selectedMember}
-            onSelectMember={setSelectedMember}
             overview={data}
-            agents={agentList}
-            agentsFresh={agentsFresh}
-            rolesFresh={rolesFresh}
             readOnly={!overviewFresh}
-            roleItems={roleItems}
-            roleCatalogMessage={roleCatalogMessage}
-            onViewRole={props.onViewRole}
             writes={writes}
-            connected={connected}
-            actions={actions}
-            polling={polling}
-            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, selectionKey: selectedMember?.teamKey ?? '', signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
-            onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
             pending={pending}
-            announce={announceChild}
-            onMemberNoticeChange={setMemberNotice}
             view={view.view}
             onSelectView={(next) => setViewState(selectChildView(view, next))}
             routing={<RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} announce={announceChild} alert={alertSource === 'board' || alertSource === 'routing'} onLocalErrorChange={setRoutingError} roleItems={roleItems} onViewRole={props.onViewRole} />}
@@ -501,24 +481,11 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
 }
 
 function TeamDetailPanel(props: {
-  workspaceId: string; management: ManagementApi; savedRevision: number;
   team: OverviewTeam;
   overview: TeamOverview;
-  teamKey: string; selection: import('./teamsModel').MemberSelection | null; onSelectMember(selection: import('./teamsModel').MemberSelection | null): void;
-  agents: AgentDef[] | null;
-  agentsFresh: boolean; rolesFresh: boolean; readOnly: boolean;
-  roleItems: RoleCatalogItem[] | null;
-  roleCatalogMessage: string | null;
-  onViewRole?(roleId: string): void;
+  readOnly: boolean;
   writes: TeamWrites;
-  connected: boolean;
-  actions: Record<string, MemberActionInFlight>;
-  polling: Record<string, boolean>;
-  onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void;
-  onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void;
   pending: boolean;
-  announce: boolean;
-  onMemberNoticeChange(active: boolean): void;
   view: TeamsChildView;
   onSelectView(view: TeamsChildView): void;
   routing: JSX.Element;
@@ -534,17 +501,14 @@ function TeamDetailPanel(props: {
     onStop(team: OverviewTeam): void;
   };
 }): JSX.Element {
-  const { team, overview, agents, writes, pending, board } = props;
+  const { team, overview, writes, pending, board } = props;
 
   const panel = (id: TeamsChildView): JSX.Element | null => {
     if (id === 'routing') return props.routing;
     if (id === 'overview') return (
-      <TeamOverviewPanel team={team} overview={overview} writes={writes} pending={pending} readOnly={props.readOnly} board={board} />
+      <TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} writes={writes} pending={pending} readOnly={props.readOnly} board={board} />
     );
-    return <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
-      agents={agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
-      writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
-      onSwitch={props.onSwitch} onResume={props.onResume} />;
+    return null;
   };
   return (
     <section className="dashboard-panel teams-detail" aria-labelledby="teams-detail-title">

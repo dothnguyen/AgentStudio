@@ -260,8 +260,8 @@ describe('teams navigation', () => {
 describe('teams overview', () => {
   it('teams_overview_styles_use_tokens', () => {
     const flat = squash(css);
-    expect(flat).toContain('.teams-overview-facts { display: grid;');
-    expect(flat).toContain('.teams-overview-facts dt { color: var(--text-muted);');
-    expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-overview-facts \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+    expect(flat).toContain('.teams-overview-summaries { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));');
+    expect(flat).toContain('.teams-summary-card { display: flex;');
+    expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-overview-summaries \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   });
 });

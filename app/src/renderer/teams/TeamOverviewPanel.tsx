@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import type { BoardSettings, OverviewTeam, TeamOverview } from '../api';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import { boardControlView, type BoardAction } from './boardControlModel';
@@ -39,7 +39,7 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
   const view = settings === null ? null : boardControlView(team, settings.runner, connected && !stale);
   return (
     <section className="teams-board" aria-labelledby="teams-board-title">
-      <h3 id="teams-board-title" tabIndex={-1}>Board control</h3>
+      <h3 id="teams-board-title" tabIndex={-1}>Board</h3>
       {section.state === 'loading' && <p className="panel-loading" role={props.announce === false ? undefined : 'status'}>{stale ? 'Refreshing board state… Showing previously loaded data.' : 'Loading board state…'}</p>}
       {section.state === 'error' && <SectionError section={section} alert={props.alert} label="Board" stale={stale} retryId="teams-retry-board" onRetry={props.onRetry} />}
       {view !== null && (
@@ -64,11 +64,65 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
 }
 
 
+export function TeamStatusSummary(props: { team: OverviewTeam; overview: TeamOverview; stale: boolean }): JSX.Element {
+  const { team, overview } = props;
+  const coordinator = coordinatorText(overview);
+  const live = liveStateText(overview);
+  return (
+    <section className="teams-summary-card" aria-labelledby="teams-status-title">
+      <h3 id="teams-status-title">Team status</h3>
+      <p className="teams-summary-name">{teamLabel(team)}</p>
+      <p className={`status-badge teams-runtime teams-tone-${runtimeTone(team.runtime.state)}`}>
+        <span className="status-dot" aria-hidden="true" />
+        {RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}
+      </p>
+      <ul className="teams-summary-list">
+        <li>{`Definition: ${definitionStateText(team)}`}</li>
+        <li>{`Coordinator: ${coordinator.text}`}</li>
+        <li>{`Live state: ${live.text}`}</li>
+      </ul>
+      {props.stale && <p className="panel-note">Team data is stale — showing previously loaded data.</p>}
+      {overview.partial && <p className="panel-note">Some team details could not be read.</p>}
+      {team.definition.problems.length > 0 && (
+        <ul className="teams-problems" aria-label="Definition problems">
+          {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export function MemberAvailabilitySummary(props: { team: OverviewTeam }): JSX.Element {
+  const { team } = props;
+  return (
+    <section className="teams-summary-card" aria-labelledby="teams-availability-title">
+      <h3 id="teams-availability-title">Member availability</h3>
+      <p>{memberCountText(team)}</p>
+      {team.members.length === 0 ? <p>No members</p> : (
+        <ul className="teams-overview-availability" aria-label="Member availability counts">
+          {availabilityCounts(team.members).map((c) => (
+            <li key={c.presence}>
+              <span className={`status-badge teams-presence teams-tone-${c.tone}`}>
+                <span className="status-dot" aria-hidden="true" />
+                {`${c.count} ${c.label}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {team.membersTruncated && (
+        <p className="teams-cell-note">{`Counts cover the ${team.members.length} members shown; more members exist.`}</p>
+      )}
+    </section>
+  );
+}
+
 export interface TeamOverviewPanelProps {
   team: OverviewTeam;
   overview: TeamOverview;
   writes: Pick<TeamWrites, 'rename' | 'deleteTeam'>;
   pending: boolean;
+  stale: boolean;
   readOnly?: boolean;
   board: Omit<BoardControlProps, 'team' | 'pending'>;
 }
@@ -83,68 +137,23 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
     setTeamForm(null);
     setTimeout(() => (invoker === 'rename' ? renameRef : deleteRef).current?.focus(), 0);
   };
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const confirmed = useRef(false);
+  const wasPending = useRef(pending);
+  // A failed delete leaves the confirmation open: return focus to the Confirm button that pending disabled.
+  useEffect(() => {
+    if (wasPending.current && !pending && confirmed.current && confirmRef.current?.isConnected) { confirmed.current = false; confirmRef.current.focus(); }
+    wasPending.current = pending;
+  }, [pending]);
   const unNote = uneditableNote(team);
   const runNote = liveNote(team);
-  const coordinator = coordinatorText(overview);
-  const live = liveStateText(overview);
-  const badge = (tone: string, text: string): JSX.Element => (
-    <span className={`status-badge teams-tone-${tone}`}>
-      <span className="status-dot" aria-hidden="true" />
-      {text}
-    </span>
-  );
   return (
     <div className="teams-overview">
-      <dl className="teams-overview-facts" aria-label="Team summary">
-        <div><dt>Name</dt><dd>{teamLabel(team)}</dd></div>
-        <div>
-          <dt>Team id</dt>
-          <dd>{team.id !== null ? <code className="entity-id">{team.id}</code> : 'None (runtime only)'}</dd>
-        </div>
-        <div><dt>Definition</dt><dd>{definitionStateText(team)}</dd></div>
-        <div>
-          <dt>Runtime</dt>
-          <dd>
-            <span className={`status-badge teams-runtime teams-tone-${runtimeTone(team.runtime.state)}`}>
-              <span className="status-dot" aria-hidden="true" />
-              {RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}
-            </span>
-            {' '}
-            {team.runtime.teamId !== null ? <code className="entity-id">{team.runtime.teamId}</code> : <span>No runtime id</span>}
-          </dd>
-        </div>
-        <div><dt>Members</dt><dd>{memberCountText(team)}</dd></div>
-        <div>
-          <dt>Availability</dt>
-          <dd>
-            {team.members.length === 0 ? 'No members' : (
-              <>
-                <ul className="teams-overview-availability" aria-label="Member availability">
-                  {availabilityCounts(team.members).map((c) => (
-                    <li key={c.presence}>
-                      <span className={`status-badge teams-presence teams-tone-${c.tone}`}>
-                        <span className="status-dot" aria-hidden="true" />
-                        {`${c.count} ${c.label}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {team.membersTruncated && (
-              <p className="teams-cell-note">{`Counts cover the ${team.members.length} members shown; more members exist.`}</p>
-            )}
-          </dd>
-        </div>
-        <div><dt>Coordinator</dt><dd>{badge(coordinator.tone, coordinator.text)}</dd></div>
-        <div><dt>Live state</dt><dd>{badge(live.tone, live.text)}</dd></div>
-      </dl>
-      {team.definition.problems.length > 0 && (
-        <ul className="teams-problems" aria-label="Definition problems">
-          {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
-        </ul>
-      )}
-      <BoardControl team={team} pending={pending} {...board} />
+      <div className="teams-overview-summaries">
+        <TeamStatusSummary team={team} overview={overview} stale={props.stale} />
+        <BoardControl team={team} pending={pending} {...board} />
+        <MemberAvailabilitySummary team={team} />
+      </div>
       <section className="teams-overview-actions" aria-labelledby="teams-overview-actions-title">
         <h3 id="teams-overview-actions-title">Team actions</h3>
         {unNote !== null && <p className="panel-note">{unNote}</p>}
@@ -171,8 +180,9 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
             <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
             <button
               type="button"
+              ref={confirmRef}
               disabled={writeBlocked}
-              onClick={() => { void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
+              onClick={() => { confirmed.current = true; void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
             >
               Confirm delete
             </button>

@@ -1,10 +1,9 @@
 import type { OverviewTeam } from '../api';
 
-export type TeamsChildView = 'overview' | 'members' | 'routing';
+export type TeamsChildView = 'overview' | 'routing';
 
 export const TEAMS_CHILD_VIEWS: readonly { id: TeamsChildView; label: string }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'members', label: 'Members' },
   { id: 'routing', label: 'Routing' },
 ];
 
@@ -21,11 +20,14 @@ export interface TeamViewItem {
   team: OverviewTeam;
 }
 
-export function teamsTabId(view: TeamsChildView): string {
+/** Child tabs plus the retained Members panel id (recomposed by P05-S51–S53). */
+type TeamsPanelView = TeamsChildView | 'members';
+
+export function teamsTabId(view: TeamsPanelView): string {
   return `teams-tab-${view}`;
 }
 
-export function teamsPanelId(view: TeamsChildView): string {
+export function teamsPanelId(view: TeamsPanelView): string {
   return `teams-panel-${view}`;
 }
 
@@ -49,10 +51,6 @@ export function selectTeamView(state: TeamsViewState, teamKey: string | null): T
 export function selectChildView(state: TeamsViewState, view: TeamsChildView): TeamsViewState {
   if (view === state.view) return state;
   return { ...state, view };
-}
-
-export function selectMemberView(state: TeamsViewState, memberId: string | null): TeamsViewState {
-  return { ...state, view: 'members', memberId };
 }
 
 export function rovingIndex(key: string, index: number, count: number, orientation: 'horizontal' | 'vertical'): number | null {

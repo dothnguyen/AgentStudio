@@ -43,6 +43,14 @@ export function TeamNameForm(props: {
   const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const submitted = useRef(false);
+  const wasPending = useRef(pending);
+  // A failed write leaves the form open: return focus to the submit button the pending state disabled.
+  useEffect(() => {
+    if (wasPending.current && !pending && submitted.current && submitRef.current?.isConnected) { submitted.current = false; submitRef.current.focus(); }
+    wasPending.current = pending;
+  }, [pending]);
 
   function submit(e: FormEvent): void {
     e.preventDefault();
@@ -58,6 +66,7 @@ export function TeamNameForm(props: {
       return;
     }
     setError(undefined);
+    submitted.current = true;
     onSubmit(trimmed);
   }
 
@@ -77,7 +86,7 @@ export function TeamNameForm(props: {
       />
       <FieldError id={errorId} message={error} />
       <div className="teams-team-actions">
-        <button type="submit" disabled={pending || props.readOnly === true}>{pending ? 'Saving…' : submitLabel}</button>
+        <button type="submit" ref={submitRef} disabled={pending || props.readOnly === true}>{pending ? 'Saving…' : submitLabel}</button>
         <button type="button" onClick={onCancel}>Cancel</button>
       </div>
     </form>
