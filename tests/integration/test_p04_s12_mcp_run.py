@@ -94,8 +94,9 @@ class McpRun(unittest.TestCase):
                                        if t["title"].startswith("Finding:")], 30, "agent tickets")
         self.assertEqual(len(added), 2, added)  # duplicate call collapsed by the idempotency key
         first = self.data("ticket", "show", added[0]["key"])
-        self.assertEqual((first["ticket"]["status"], first["ticket"]["phase"]),
-                         ("in-progress", "default"))  # claimed by the rule's during status
+        # The board may claim the new ticket asynchronously after it appears in the list.
+        self.wait_for(lambda: self.data("ticket", "show", added[0]["key"])["ticket"]["status"] == "in-progress", 120, "created ticket claim")
+        self.assertEqual(first["ticket"]["phase"], "default")
         self.assertEqual(first["ticket"]["createdByMember"], "scribe")
         self.assertEqual(first["ticket"]["createdByAssignment"], claiming_assignment)
         # the same request id retried: one ticket, not two (2 distinct titles = 2 tickets)

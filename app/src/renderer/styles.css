@@ -1220,6 +1220,16 @@ ul[aria-label="Workspaces"] {
 @media (max-width: 900px) { .teams-layout { grid-template-columns: minmax(0, 1fr); } }
 
 /* Routing settings (P05-S16) */
+.routing-scope { color: var(--text-muted); }
+.routing-table-wrap { overflow-x: auto; max-width: 100%; }
+.routing-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.routing-table :is(th, td) { text-align: left; padding: .375rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.routing-disclosure h3 { margin: .5rem 0 0; font-size: 1rem; }
+.routing-disclosure h3 button { background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: .25rem 0; }
+.routing-disclosure h3 button::before { content: '▸ '; }
+.routing-disclosure h3 button[aria-expanded="true"]::before { content: '▾ '; }
+.routing-role-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+
 .routing-settings { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
 .routing-rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
 .routing-rule-grid fieldset { min-width: 0; }

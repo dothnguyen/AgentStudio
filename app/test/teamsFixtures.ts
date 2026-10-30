@@ -263,3 +263,16 @@ export function openMember(name: string, root: HTMLElement = document.body): HTM
   return within(root).getByRole('region', { name });
 }
 export function field(row: HTMLElement, f: string): string { return row.querySelector(`[data-field="${f}"]`)?.textContent ?? ''; }
+
+export function escalationRoutingFixture(): BoardSettings {
+  const s = escalationSettingsFixture();
+  s.statuses = [...s.statuses.map(x => ({ ...x, name: ({ 'qa-ready': 'QA ready', 'review-ready': 'Review ready', 'need-escalate': 'Escalate' } as Record<string, string>)[x.id] ?? x.name })), { id: 'blocked-x', name: null, kind: null }];
+  s.rules[5] = { ...s.rules[5], workflow: 'board-develop', onPass: 'review-ready', maxRounds: 4, priority: 5 };
+  s.rules[6] = { ...s.rules[6], workflow: 'board-develop', onBlocked: 'blocked-x' };
+  s.rules[7] = { ...s.rules[7], workflow: 'board-senior', onPass: 'merge-ready' };
+  s.workflows.push({ name: 'board-senior', builtin: true, roles: ['SeniorDeveloper'], errors: [] });
+  s.actionRules = s.rules.filter(r => r.type === 'action').map((r, i) => ({ status: r.status, action: r.action!, onPass: r.onPass, onFail: r.onFail, onPassCreatedTickets: i === 0 ? 'backlog' : null }));
+  const raw = s.board.config!.rules as Array<Record<string, unknown>>;
+  for (const r of s.rules.slice(5)) raw[r.index] = { ...raw[r.index], workflow: r.workflow, onPass: r.onPass, ...(r.onBlocked ? { onBlocked: r.onBlocked } : {}), ...(r.maxRounds !== null ? { maxRounds: r.maxRounds } : {}), ...(r.priority !== null ? { priority: r.priority } : {}) };
+  return s;
+}

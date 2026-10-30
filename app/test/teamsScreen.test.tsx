@@ -761,7 +761,7 @@ describe('focused navigation', () => {
     expect(panels[0]!.textContent).toContain('Running');
     expect(panels[0]!.textContent).toContain('Board control');
     expect(result.queryByRole('table')).toBeNull();
-    expect(result.queryByRole('region', { name: 'Worktree and routing settings' })).toBeNull();
+    expect(result.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
   });
 
   it('members_and_routing_tabs_show_exactly_one_panel', async () => {
@@ -772,7 +772,7 @@ describe('focused navigation', () => {
     expect(within(result.getByRole('tabpanel')).queryByRole('heading', { name: 'Board control' })).toBeNull();
     await openTab(result, 'Routing');
     expect(result.getAllByRole('tabpanel')).toHaveLength(1);
-    expect(within(result.getByRole('tabpanel')).getByRole('region', { name: 'Worktree and routing settings' })).toBeTruthy();
+    expect(within(result.getByRole('tabpanel')).getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
     expect(result.queryByRole('table')).toBeNull();
   });
 
@@ -857,7 +857,7 @@ describe('focused navigation', () => {
     expect(result.getByText('No teams defined in this workspace.')).toBeTruthy();
     expect(result.queryByRole('tablist')).toBeNull();
     expect(result.queryAllByRole('tabpanel')).toHaveLength(0);
-    expect(result.queryByRole('region', { name: 'Worktree and routing settings' })).toBeNull();
+    expect(result.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
     for (const name of ['New team', 'Refresh']) expect((result.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -1095,6 +1095,21 @@ describe('roster evidence and team removal', () => {
     openMember('dev'); fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
     showMembers(); expect(screen.queryByRole('region', {name: 'dev'})).toBeNull(); expect(screen.queryByRole('button', {name: 'Back to members'})).toBeNull();
   });
+});
+
+it('routing tab shows workspace routing with role links without extra reads', async () => {
+  const { routingSettingsFixture } = await import('./teamsFixtures');
+  const onViewRole = vi.fn();
+  const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
+  await act(async () => {});
+  expect(view.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  expect(panel.getByText(/Changes affect every team/)).toBeTruthy();
+  fireEvent.click(panel.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
+  expect(onViewRole).toHaveBeenCalledOnce(); expect(onViewRole).toHaveBeenCalledWith('Developer');
+  expect(fake.boardSettings).toHaveBeenCalledTimes(1); expect(fake.roles).toHaveBeenCalledTimes(1);
 });
 
 describe('member detail focus and settings', () => {

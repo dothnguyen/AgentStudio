@@ -1,12 +1,12 @@
 import { useRef, useState, type JSX } from 'react';
-import type { BoardSettings, ManagementApi, ManagementError, Problem } from '../../shared/management';
+import type { BoardSettings, ManagementApi, ManagementError, RoleCatalogItem } from '../../shared/management';
+import { RoutingReadView } from './RoutingReadView';
+import { RoutingEditForm } from './RoutingEditForm';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import { boardSettingsChanges, createRoutingDraft, errorProblems, updateRuleField, validateRoutingDraft, type EditableRuleField, type RoutingDraft } from './routingSettingsModel';
 
-export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean }
-const modes: Record<string, string> = { '': 'Default', main: 'Main workspace', worktree: 'Isolated worktree', none: 'No workspace' };
-const val = (v: unknown) => typeof v === 'string' ? v : '';
-export function RoutingSettingsPanel({ workspaceId, management, section, connected }: RoutingSettingsPanelProps): JSX.Element {
+export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void }
+export function RoutingSettingsPanel({ workspaceId, management, section, connected, roleItems = null, onViewRole }: RoutingSettingsPanelProps): JSX.Element {
   const [draft, setDraft] = useState<RoutingDraft | null>(null);
   const [editSettings, setEditSettings] = useState<BoardSettings | null>(null);
   const [pending, setPending] = useState(false); const lock = useRef(false);
@@ -47,40 +47,23 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
     } catch (reason) { setError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); }
     finally { lock.current = false; setPending(false); }
   }
-  function field(index: number, name: EditableRuleField, label: string, value: string, options: Array<{ value: string; label: string; disabled?: boolean }>) {
-    const path = `rules[${index}].${name === 'status' ? 'when.status' : name}`; const matches = problems.filter(p => p.path === path); const id = `routing-${index}-${name}`;
-    return <label htmlFor={id}>{label}<select id={id} value={value} disabled={pending || !connected || !!savedKind} aria-invalid={matches.length > 0} aria-describedby={matches.length ? `${id}-error` : undefined} onChange={e => change(index, name, e.target.value)}>{options.map(o => <option key={o.value} value={o.value} disabled={o.disabled && o.value !== value}>{o.label}</option>)}</select>{matches.length > 0 && <span id={`${id}-error`} className="routing-problem">{matches.map(p => <span key={p.message}>{path}: {p.message}</span>)}</span>}</label>;
-  }
-  const statusOptions = (editSettings ?? settings)?.statuses.map(s => ({ value: s.id, label: s.name ? `${s.name} (${s.id})` : s.id })) ?? [];
-  const summaryProblems = problems.filter(p => {
-    if (p.path === 'baseBranch') return false;
-    const match = /^rules\[(\d+)\]\.(when\.status|role|workflow|workspace|onPass|onFail|onBlocked)$/.exec(p.path);
-    if (!match || !draft?.rules[Number(match[1])]) return true;
-    return ['role', 'workflow', 'workspace', 'onBlocked'].includes(match[2]) && draft.rules[Number(match[1])].type !== 'agent';
-  });
-  return <section className="dashboard-panel routing-settings" aria-label="Worktree and routing settings"><h2>Worktree and routing settings</h2>
+  return <section className="dashboard-panel routing-settings" aria-label="Workspace board routing"><h2>Workspace board routing</h2>
+    <p className="routing-scope">Routing belongs to the workspace board. Changes affect every team that uses this workspace board, not only the selected team.</p>
     {section.loading && <p className="panel-loading">Loading settings…</p>}
     {section.error && <div className="panel-error" role="alert"><p>{section.error.code}: {section.error.message}</p><button type="button" onClick={() => void section.reload()}>Retry</button></div>}
-    {notice && <p role="status">{notice}</p>}
+    {!connected && settings && <p className="panel-note">Disconnected from the backend. Routing is read-only until the connection returns.</p>}
+    {settings && (section.error !== null || section.data === null) && <p className="panel-note">Showing the last loaded routing; it may be out of date.</p>}
     {settings && <>
-      {settings.board.message && <p>{settings.board.message}</p>}{settings.roles.message && <p>{settings.roles.message}</p>}
+      {settings.board.state === 'missing' && <p className="routing-problem">No workspace board is configured, so no routing is shown.</p>}
+      {settings.board.state === 'invalid' && <p className="routing-problem">The workspace board configuration is invalid. Routing cannot be shown until it is repaired.</p>}
+      {settings.board.message && <p>{settings.board.message}</p>}
       {settings.board.problems.map((p, i) => <p className="routing-problem" key={i}>{p.path}: {p.message}</p>)}
-      <p>Base branch: {settings.worktree.baseBranch ?? 'main'}</p>
-      <ul>{settings.rules.map(r => <li key={r.index}>{r.status} → {r.type === 'action' ? 'merge' : `${r.role} → ${r.workflow}`} → pass: {r.onPass} / fail: {r.onFail}{r.type === 'agent' && r.onBlocked ? ` / blocked: ${r.onBlocked}` : ''}{r.type === 'agent' && ` (${modes[r.workspace ?? ''] ?? r.workspace})`}</li>)}</ul>
-      <h3>Protected merge-conflict routing</h3><ul aria-label="Protected merge-conflict routing">{settings.protectedRoutes.map(r => <li key={r.status}>{r.status} → TeamLead — {r.satisfied ? 'Protected' : 'Needs repair'}</li>)}</ul>
-      <h3>Workflows</h3><ul>{settings.workflows.map(w => <li key={w.name}>{w.name}{w.errors.length > 0 && ' — unavailable'}</li>)}</ul>
+      {settings.roles.state !== 'ok' && <p>{settings.roles.message ?? `Workspace roles are ${settings.roles.state}.`}</p>}
+      {roleItems === null && <p className="panel-note">Role names are unavailable; rules show stable role ids.</p>}
+      {notice && <p role="status">{notice}</p>}
+      <RoutingReadView settings={settings} roleItems={roleItems} onViewRole={onViewRole} />
       {!draft && <button type="button" disabled={!canEdit || pending} onClick={() => { setEditSettings(settings); setDraft(createRoutingDraft(settings)); setError(null); setNotice(''); }}>Edit routing settings</button>}
-      {draft && <form onSubmit={e => { e.preventDefault(); void save(); }}>
-        <label htmlFor="routing-base">Base branch<input id="routing-base" value={draft.baseBranch} disabled={pending || !connected || !!savedKind} aria-invalid={problems.some(p => p.path === 'baseBranch')} aria-describedby={problems.some(p => p.path === 'baseBranch') ? 'routing-base-error' : undefined} onChange={e => { setDraft({ ...draft, baseBranch: e.target.value }); setError(previous => previous?.code === 'CONFIG_CHANGED' ? previous : null); }} /></label>
-        {problems.filter(p => p.path === 'baseBranch').map(p => <p id="routing-base-error" className="routing-problem" key={p.message}>{p.path}: {p.message}</p>)}
-        <div className="routing-rule-grid">{draft.rules.map((r, i) => { const when = r.when && typeof r.when === 'object' ? r.when as Record<string, unknown> : {}; return <fieldset key={i}><legend>Rule {i + 1} — {val(r.type)}</legend>
-          {field(i, 'status', 'Source status', val(when.status), statusOptions)}
-          {r.type === 'agent' ? <>{field(i, 'role', 'Role', val(r.role), (editSettings ?? settings).roles.items.map(x => ({ value: x.id, label: x.id })))}{field(i, 'workflow', 'Workflow', val(r.workflow), (editSettings ?? settings).workflows.map(x => ({ value: x.name, label: `${x.name}${x.errors.length ? ' — unavailable' : ''}`, disabled: !!x.errors.length })))}{field(i, 'workspace', 'Workspace', val(r.workspace), Object.entries(modes).map(([value, label]) => ({ value, label })))}</> : <p>Action: {val(r.action)}</p>}
-          {field(i, 'onPass', 'Pass status', val(r.onPass), statusOptions)}{field(i, 'onFail', 'Fail status', val(r.onFail), statusOptions)}{r.type === 'agent' && field(i, 'onBlocked', 'Blocked status', val(r.onBlocked), [{ value: '', label: 'None' }, ...statusOptions])}
-        </fieldset>; })}</div>
-        {summaryProblems.length > 0 && <div role="alert" className="routing-problem">{summaryProblems.map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}</div>}
-        <button type="submit" disabled={!canEdit || pending || !!savedKind || problems.length > 0 || error?.code === 'CONFIG_CHANGED'}>Save</button> <button type="button" disabled={pending || !!savedKind} onClick={() => { setDraft(null); setError(null); setNotice(''); }}>Cancel</button>
-      </form>}
+      {draft && editSettings && <RoutingEditForm draft={draft} settings={editSettings} problems={problems} pending={pending} connected={connected} locked={!!savedKind} canEdit={canEdit} conflict={error?.code === 'CONFIG_CHANGED'} onChange={change} onBaseBranchChange={v => { setDraft({ ...draft, baseBranch: v }); setError(p => p?.code === 'CONFIG_CHANGED' ? p : null); }} onSubmit={() => void save()} onCancel={() => { setDraft(null); setError(null); setNotice(''); }} />}
       {reloadError && <div className="panel-error" role="alert"><p>Reload failed: {reloadError.code}: {reloadError.message}</p><button type="button" disabled={pending || !connected} onClick={() => void reload()}>Retry latest settings</button></div>}
       {error && <div className="panel-error" role="alert"><p>{error.code}: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}{(!draft || error.code !== 'BOARD_CONFIG_INVALID') && errorProblems(error).map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}{error.code === 'CONFIG_CHANGED' && <button type="button" disabled={pending || !connected} onClick={() => void reload()}>Reload latest settings</button>}</div>}
     </>}

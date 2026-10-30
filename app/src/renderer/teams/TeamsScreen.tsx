@@ -380,7 +380,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             pending={pending}
             view={view.view}
             onSelectView={(next) => setViewState(selectChildView(view, next))}
-            routing={<RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} />}
+            routing={<RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} roleItems={roleItems} onViewRole={props.onViewRole} />}
             board={{
               section: board,
               connected,
