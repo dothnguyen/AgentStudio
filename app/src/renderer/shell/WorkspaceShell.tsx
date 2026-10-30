@@ -1,10 +1,12 @@
-import { useEffect, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { ConnectionStatus, DashboardApi, ManagementApi, Workspace } from '../api';
 import { DashboardHome } from '../dashboard/DashboardHome';
 import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceholder';
 import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
 import { TeamsScreen } from '../teams/TeamsScreen';
+import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
+import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
 import { StudioMark } from '../WorkspacesScreen';
 import { ShellIcon } from './ShellIcon';
 import { DEFAULT_SECTION, NAV_ITEMS, type NavItem } from './navModel';
@@ -27,17 +29,26 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
 
   const [requestedRoleId, setRequestedRoleId] = useState<string | null>(null);
+  const teamsNavigation = useTeamsNavigationController(props.workspace.id, props.management.overview, props.connection);
+  const [teamChildCurrent, setTeamChildCurrent] = useState(false);
+  const teamsParentRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
     setRequestedRoleId(null);
+    setTeamChildCurrent(false);
   }, [props.workspace.id]);
+
+  useEffect(() => {
+    if (teamsNavigation.selectedKey === null) setTeamChildCurrent(false);
+  }, [teamsNavigation.selectedKey]);
 
   function navigate(nextId: string, options?: { roleId?: string }): void {
     const item = items.find((candidate) => candidate.id === nextId);
     if (item === undefined || item.disabled === true) return;
     const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
     setRequestedRoleId(roleId);
+    setTeamChildCurrent(false);
     setSectionId(nextId);
   }
 
@@ -55,6 +66,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     <TeamsScreen
       workspace={props.workspace}
       management={props.management}
+      navigation={teamsNavigation}
       connection={props.connection}
       onViewRole={(roleId) => navigate('roles', { roleId })}
     />
@@ -95,23 +107,37 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         </header>
         <nav aria-label="Workspace" className="workspace-nav">
           {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="nav-item"
-              disabled={item.disabled === true}
-              aria-current={item.id === sectionId ? 'page' : undefined}
-              onClick={() => navigate(item.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  navigate(item.id);
-                }
-              }}
-            >
-              <ShellIcon name={item.icon ?? 'item'} />
-              <span className="nav-label">{item.label}</span>
-            </button>
+            <Fragment key={item.id}>
+              <button
+                type="button"
+                className="nav-item"
+                ref={item.id === 'teams' ? teamsParentRef : undefined}
+                disabled={item.disabled === true}
+                aria-current={item.id === sectionId && !(item.id === 'teams' && teamChildCurrent && teamsNavigation.selectedKey !== null) ? 'page' : undefined}
+                onClick={() => navigate(item.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(item.id);
+                  }
+                }}
+              >
+                <ShellIcon name={item.icon ?? 'item'} />
+                <span className="nav-label">{item.label}</span>
+              </button>
+              {item.id === 'teams' && item.disabled !== true && (
+                <WorkspaceTeamNavigation
+                  controller={teamsNavigation}
+                  active={sectionId === 'teams' && teamChildCurrent}
+                  parentButtonRef={teamsParentRef}
+                  onOpenTeam={(key) => {
+                    teamsNavigation.selectTeam(key);
+                    navigate('teams');
+                    setTeamChildCurrent(true);
+                  }}
+                />
+              )}
+            </Fragment>
           ))}
         </nav>
         <button type="button" className="switch-workspace" onClick={props.onSwitchWorkspace}>

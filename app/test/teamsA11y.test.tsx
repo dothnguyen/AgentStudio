@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
+import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import {
   LONG_UNBROKEN, fakeManagement, longContentOverview, longRoutingSettings, managementError, member, memberRow, openMember, overviewFixture, team, twoTeams,
@@ -26,7 +26,7 @@ function teamsRules(): Array<{ selector: string; body: string }> {
 
 async function mount(opts: Parameters<typeof fakeManagement>[0] = {}, tab?: string) {
   const fake = fakeManagement(opts);
-  const view = render(<main><TeamsScreen workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
+  const view = render(<main><TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
   await act(async () => {});
   if (tab) { fireEvent.click(view.getByRole('tab', { name: tab })); await act(async () => {}); }
   return { fake, view };
@@ -40,7 +40,7 @@ it('teams_has_one_main_one_h1_logical_landmarks_and_named_controls', async () =>
   const levels = view.getAllByRole('heading').map(h => Number(h.tagName[1]));
   expect(levels[0]).toBe(1);
   levels.forEach((level, i) => { if (i > 0) expect(level).toBeLessThanOrEqual(levels[i - 1]! + 1); });
-  expect(view.getAllByRole('heading', { level: 2 }).map(h => h.textContent)[0]).toBe('Workspace teams');
+  expect(view.getAllByRole('heading', { level: 2 }).map(h => h.textContent)[0]).toBe('Dev Team');
   expect(view.getByRole('tablist')).toBeTruthy();
   for (const control of view.getAllByRole('button').concat(view.getAllByRole('tab'))) {
     expect((control.getAttribute('aria-label') ?? control.textContent ?? '').trim().length).toBeGreaterThan(0);
@@ -105,7 +105,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
   for (const bp of [900, 700, 560]) expect(flat).toContain(`@media (max-width: ${bp}px)`);
   expect(flat).toMatch(/\.teams-overview \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   expect(flat).toMatch(/\.teams-member-detail \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-layout, \.teams-overview, \.teams-member-detail, \.routing-rule-grid, \.routing-escalation-fields \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview, \.teams-member-detail, \.routing-rule-grid, \.routing-escalation-fields \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   expect(flat).toMatch(/\.teams-overview > \*, \.teams-member-detail > \*[^{]*\{ min-width: 0; \}/);
   expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.routing-table-wrap \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.teams-member-row \{ grid-template-columns: minmax\(0, 1fr\); \}/);
@@ -131,4 +131,18 @@ it('teams_css_has_focus_hit_targets_and_reduced_motion', () => {
   }
   expect(flat).toContain('@media (prefers-reduced-motion: reduce)');
   expect(flat).toMatch(/prefers-reduced-motion: reduce\) \{ \*, \*::before, \*::after \{[^}]*transition-duration: 0\.01ms !important/);
+});
+
+it('nested_team_buttons_have_unique_accessible_names_and_single_current_item', async () => {
+  const fake = fakeManagement();
+  const view = render(<main><TeamsHarness sidebar workspace={workspaceA} management={fake.api} /></main>);
+  await act(async () => {});
+  const rows = within(view.getByRole('list', { name: 'Workspace teams' })).getAllByRole('button');
+  expect(rows.length).toBeGreaterThan(1);
+  const names = rows.map(row => row.getAttribute('aria-label')!);
+  expect(new Set(names).size).toBe(names.length);
+  for (const name of names) expect(name).toMatch(/^Open .+, .+/);
+  expect(rows.filter(row => row.getAttribute('aria-current') === 'page')).toHaveLength(1);
+  expect(view.container.querySelectorAll('[aria-current="page"]:not(.breadcrumb *)')).toHaveLength(1);
+  expect(rows.every(row => row.tagName === 'BUTTON' && !row.hasAttribute('tabindex'))).toBe(true);
 });

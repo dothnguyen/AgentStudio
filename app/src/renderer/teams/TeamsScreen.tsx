@@ -2,9 +2,8 @@ import { SectionError } from './SectionError';
 import { TeamOverviewPanel } from './TeamOverviewPanel';
 import { MembersView } from './MembersView';
 import { RoutingSettingsPanel } from './RoutingSettingsPanel';
-import { TeamChooser } from './TeamChooser';
 import { TeamViewTabs } from './TeamViewTabs';
-import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, resolveTeamsView, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
+import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
@@ -21,6 +20,7 @@ import type {
   TeamOverview,
   Workspace,
 } from '../api';
+import type { TeamsNavigationController } from './useTeamsNavigationController';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
 import { boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
@@ -38,16 +38,14 @@ import {
 import {
 
   memberName,
-  orderTeams,
   overviewNotices,
-
-  teamKey,
   teamLabel,
 } from './teamsModel';
 
 export interface TeamsScreenProps {
   workspace: Workspace;
   management: ManagementApi;
+  navigation: TeamsNavigationController;
   connection?: ConnectionStatus;
   onViewRole?(roleId: string): void;
 }
@@ -63,7 +61,8 @@ export function TeamsScreen(props: TeamsScreenProps): JSX.Element {
 function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const connectionState = props.connection?.state ?? null;
   const connected = connectionState === null || connectionState === 'connected';
-  const overview = useDashboardSection<TeamOverview>(props.management.overview, props.workspace.id);
+  const navigation = props.navigation;
+  const overview = navigation.overview;
   const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
   const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
   const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
@@ -93,7 +92,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const restoreFocus = useRef<HTMLButtonElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const timers = useRef(new Map<ReturnType<typeof setTimeout>, () => void>());
-  const lastData = useRef<TeamOverview | null>(null);
   const lastAgents = useRef<AgentCatalogList | null>(null);
   const lastRoles = useRef<RoleCatalogList | null>(null);
   const lastBoard = useRef<BoardSettings | null>(null);
@@ -121,7 +119,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   async function runWrite<T>(
     failTitle: string,
     call: () => Promise<ManagementResult<T>>,
-    onOk: (data: T) => { text: string; selectKey?: string | null },
+    onOk: (data: T) => { text: string; selectCreated?: string },
   ): Promise<boolean> {
     if (writeLock.current) return false;
     if (readOnlyRef.current) {
@@ -146,10 +144,12 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       return false;
     }
     setSavedRevision(r => r + 1);
-    const { text: message, selectKey } = onOk(result.data);
+    const { text: message, selectCreated } = onOk(result.data);
     setFeedback({ kind: 'success', text: message });
-    if (selectKey !== undefined) { setSelectedMember(null); setViewState(current => selectTeamView(current, selectKey)); }
-    void overview.reload();
+    if (selectCreated !== undefined) {
+      void navigation.reloadAndSelect(selectCreated);
+    }
+    else void overview.reload();
     return true;
   }
 
@@ -183,7 +183,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     })),
     deleteTeam: (team) => runWrite('Team was not deleted.', () => mgmt.deleteTeam(ws, team.id!), () => ({
       text: `Deleted team "${teamLabel(team)}".`,
-      selectKey: null,
     })),
     addMember: (team, values) => runWrite('Member was not added.', () => mgmt.addMember(ws, team.id!, addMemberInput(values)), (d) => ({
       text: `Added ${d.member.name} to ${teamLabel(team)}.${nextStartSuffix(d.appliesOnNextStart)}${problemsSuffix(d.problems)}`,
@@ -302,18 +301,18 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   async function createTeam(name: string): Promise<void> {
     const ok = await runWrite('Team was not created.', () => mgmt.createTeam(ws, { name }), (d) => ({
       text: `Created team "${d.team.name}".${problemsSuffix(d.problems)}`,
-      selectKey: d.team.id,
+      selectCreated: d.team.id,
     }));
     if (ok && mounted.current) setCreating(false);
   }
 
-  async function refreshAll(announce = false): Promise<void> {
+  async function refreshAll(announce = false, includeOverview = true): Promise<void> {
     if (refreshLock.current) return;
     refreshLock.current = true;
     setRefreshing(true);
     if (announce) setFeedback((f) => (f?.kind === 'success' ? null : f));
     try {
-      const results = await Promise.all([overview, agents, board, roleCatalog].map(async (section) => {
+      const results = await Promise.all((includeOverview ? [overview, agents, board, roleCatalog] : [agents, board, roleCatalog]).map(async (section) => {
         if (!section.reloadFresh) { await section.reload(); return true; }
         return (await section.reloadFresh()).ok;
       }));
@@ -343,15 +342,14 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   useEffect(() => {
     const previous = lastConnection.current;
     lastConnection.current = connectionState;
-    if (connectionState === 'connected' && previous !== null && previous !== 'connected') void refreshAll();
+    if (connectionState === 'connected' && previous !== null && previous !== 'connected') void refreshAll(false, false);
   }, [connectionState]);
 
-  if (overview.state === 'ready' && overview.data !== null) lastData.current = overview.data;
   if (agents.state === 'ready' && agents.data !== null) lastAgents.current = agents.data;
   if (roleCatalog.state === 'ready' && roleCatalog.data !== null) lastRoles.current = roleCatalog.data;
   if (board.state === 'ready' && board.data !== null) lastBoard.current = board.data;
-  const data = overview.data ?? lastData.current;
-  const overviewFresh = overview.state === 'ready' && overview.data !== null && connected;
+  const data = navigation.data;
+  const overviewFresh = navigation.fresh;
   const agentsFresh = agents.state === 'ready' && agents.data !== null && connected;
   const rolesData = roleCatalog.data ?? lastRoles.current;
   const rolesFresh = roleCatalog.state === 'ready' && roleCatalog.data !== null && connected;
@@ -363,11 +361,21 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     : roleCatalog.error !== null ? 'The role catalog could not be loaded. Retry loading it to choose or change a role.'
     : rolesData?.state === 'invalid' ? 'The role catalog is invalid. Fix it in Roles before choosing a role.'
     : 'The role catalog is unavailable. Retry loading it to choose or change a role.';
-  const ordered = data === null
-    ? []
-    : orderTeams(data.teams.map((team, index) => ({ key: teamKey(team, index), team })));
-  const view = resolveTeamsView(viewState, data === null ? null : ordered);
-  const selected = view.teamKey === null ? null : ordered.find((item) => item.key === view.teamKey) ?? null;
+  const selected = navigation.selected;
+  const view = selected !== null && viewState.teamKey === selected.key ? viewState : selectTeamView(INITIAL_TEAMS_VIEW, selected?.key ?? null);
+  const [seenIntent, setSeenIntent] = useState({ key: navigation.selectedKey, version: navigation.selectionVersion, sidebarVersion: navigation.sidebarSelectionVersion });
+  const focusDetail = useRef(false);
+  if (seenIntent.key !== navigation.selectedKey || seenIntent.version !== navigation.selectionVersion) {
+    if (seenIntent.sidebarVersion !== navigation.sidebarSelectionVersion) focusDetail.current = true;
+    setSeenIntent({ key: navigation.selectedKey, version: navigation.selectionVersion, sidebarVersion: navigation.sidebarSelectionVersion });
+    setSelectedMember(null);
+    setViewState(selectTeamView(INITIAL_TEAMS_VIEW, navigation.selectedKey));
+  }
+  useEffect(() => {
+    if (!focusDetail.current) return;
+    focusDetail.current = false;
+    document.getElementById('teams-detail-title')?.focus();
+  }, [seenIntent]);
   useEffect(() => { if (selectedMember && selectedMember.teamKey !== view.teamKey) setSelectedMember(null); }, [selectedMember, view.teamKey]);
   const notices = data === null ? [] : overviewNotices(data);
   const rolesPending = roleCatalog.loading && roleCatalog.error === null;
@@ -415,9 +423,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         if (e.key === 'Tab') { if (confirmRef.current?.disabled) { e.preventDefault(); cancelRef.current?.focus(); } else if (e.shiftKey && document.activeElement === confirmRef.current) { e.preventDefault(); cancelRef.current?.focus(); } else if (!e.shiftKey && document.activeElement === cancelRef.current) { e.preventDefault(); confirmRef.current?.focus(); } }
       }}><h2 id="teams-switch-title">Confirm cancellation</h2><p id="teams-switch-description">Switch {confirmation.memberName} to {confirmation.agentLabel} and cancel assignment <code>{confirmation.assignmentId}</code>?</p>{confirmation.changed && <p role="alert">The assignment changed; fresh confirmation is required.</p>}<div className="dialog-actions"><button ref={confirmRef} type="button" disabled={!overviewFresh || confirmationActionInFlight} onClick={() => { void switchAgent(confirmation, confirmation.assignmentId); }}>Confirm cancellation</button><button ref={cancelRef} type="button" onClick={() => closeConfirmation(confirmation.trigger)}>Cancel</button></div></div></div>}
       <FormAlertContext.Provider value={setFormAlert}>
-      <div className="teams-layout">
-        <section className="dashboard-panel teams-list-panel" aria-labelledby="teams-list-title">
-          <h2 id="teams-list-title" tabIndex={-1}>Workspace teams</h2>
+      {(creating || overview.state !== 'ready' || (data !== null && selected === null) || (selected === null && (board.state === 'loading' || board.state === 'error'))) && (
+        <section className="dashboard-panel teams-status-panel" aria-labelledby="teams-list-title">
+          <h2 id="teams-list-title" tabIndex={-1}>Teams data status</h2>
           {creating && (
             <TeamNameForm
               heading="New team"
@@ -431,8 +439,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           )}
           {overview.state === 'loading' && data === null && <p className="panel-loading" role={connected ? 'status' : undefined}>Loading teams…</p>}
           {overview.state === 'loading' && data !== null && connected && <p className="panel-loading" role="status">Refreshing teams… Showing previously loaded data.</p>}
-          {overview.state === 'error' && <SectionError section={overview} alert={alertSource === 'overview'} stale={data !== null} retryId="teams-retry-overview" onRetry={() => { void retrySection(overview, 'teams-retry-overview', 'teams-list-title'); }} />}
-          {data !== null && ordered.length === 0 && (
+          {overview.state === 'error' && <SectionError section={overview} alert={alertSource === 'overview'} stale={data !== null} retryId="teams-retry-overview" onRetry={() => { void retrySection(overview, 'teams-retry-overview', 'teams-detail-title'); }} />}
+          {data !== null && navigation.items.length === 0 && (
             <p className="panel-empty">No teams defined in this workspace.</p>
           )}
           {selected === null && (board.state === 'loading' || board.state === 'error') && (
@@ -442,8 +450,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
               {board.state === 'error' && <SectionError section={board} alert={alertSource === 'board'} label="Board" stale={lastBoard.current !== null} retryId="teams-retry-board" onRetry={() => { void retrySection(board, 'teams-retry-board', 'teams-board-title'); }} />}
             </section>
           )}
-          {data !== null && selected !== null && <TeamChooser items={ordered} selectedKey={selected.key} onSelect={(key) => { setSelectedMember(null); setViewState(selectTeamView(view, key)); }} />}
         </section>
+      )}
         {data !== null && selected !== null && (
           <TeamDetailPanel
             key={selected.key}
@@ -487,7 +495,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             }}
           />
         )}
-      </div>
       </FormAlertContext.Provider>
     </div>
   );

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/api';
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
-import { fakeManagement, member, overviewFixture, team, twoTeams, connectionFixture } from './teamsFixtures';
+import { fakeManagement, member, overviewFixture, team, twoTeams, connectionFixture, deferred } from './teamsFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -70,7 +70,7 @@ describe('WorkspaceShell', () => {
 
     expect(name.getAttribute('title')).toBe(workspace.name);
     expect(path.getAttribute('title')).toBe(workspace.path);
-    expect(within(nav).getAllByRole('button').map((button) => button.textContent)).toEqual([
+    expect(Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent)).toEqual([
       'Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
@@ -405,21 +405,22 @@ describe('WorkspaceShell', () => {
     const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
     const ui = (w: Workspace) => <WorkspaceShellComponent workspace={w} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />;
     const view = render(ui(workspace));
-    const pressed = (name: RegExp) => view.getByRole('button', { name }).getAttribute('aria-pressed');
+    const pressed = (name: RegExp) => (view.getByRole('button', { name }).getAttribute('aria-current') === 'page' ? 'true' : 'false');
     const selected = () => view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent);
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    fireEvent.click(await view.findByRole('button', { name: /^Release Team/ }));
+    fireEvent.click(await view.findByRole('button', { name: /^Open Release Team,/ }));
     fireEvent.click(view.getByRole('tab', { name: 'Members' }));
-    expect(pressed(/^Release Team/)).toBe('true');
+    expect(pressed(/^Open Release Team,/)).toBe('true');
     fireEvent.click(view.getByRole('button', { name: 'Agents' }));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    await waitFor(() => expect(pressed(/^Dev Team/)).toBe('true'));
+    await waitFor(() => expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy());
+    expect(pressed(/^Open Release Team,/)).toBe('false');
     expect(selected()).toEqual(['Overview']);
     fireEvent.click(view.getByRole('tab', { name: 'Members' }));
     view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));
     await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    await waitFor(() => expect(pressed(/^Dev Team/)).toBe('true'));
+    await waitFor(() => expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy());
     expect(selected()).toEqual(['Overview']);
     expect(fake.overview).toHaveBeenLastCalledWith('b');
   });
@@ -446,7 +447,7 @@ describe('WorkspaceShell', () => {
       await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
       expect(view.queryByText('Dev Team')).toBeNull();
       fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-      await view.findByRole('button', { name: /^Only B/ });
+      await view.findByRole('button', { name: /^Open Only B,/ });
       expect(overview).toHaveBeenLastCalledWith('b');
       structure(view);
       expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
@@ -454,8 +455,9 @@ describe('WorkspaceShell', () => {
       expect(view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent)).toEqual(['Overview']);
       expect(view.queryByRole('region', { name: 'dev' })).toBeNull();
       const h2 = view.getAllByRole('heading', { level: 2 }).map(h => h.textContent);
-      expect(h2.indexOf('Workspace teams')).toBeLessThan(h2.indexOf('Only B'));
-      expect(h2.indexOf('Only B')).toBeGreaterThan(-1);
+      expect(h2).toContain('Only B');
+      expect(view.queryByRole('region', { name: 'Workspace teams' })).toBeNull();
+      expect(view.queryByRole('list', { name: 'Choose a team' })).toBeNull();
     });
 
     it('home_agents_roles_and_teams_navigation_remain_keyboard_reachable', async () => {
@@ -466,7 +468,8 @@ describe('WorkspaceShell', () => {
         expect(nav.tagName).toBe('BUTTON'); expect(nav.hasAttribute('tabindex')).toBe(false);
         nav.focus();
         await userEvent.keyboard('{Enter}');
-        await waitFor(() => expect(view.getByRole('button', { name }).getAttribute('aria-current')).toBe('page'));
+        if (name === 'Teams') await waitFor(() => expect(currentButtons(view.container)).toHaveLength(1));
+        else await waitFor(() => expect(view.getByRole('button', { name }).getAttribute('aria-current')).toBe('page'));
         expect(currentButtons(view.container)).toHaveLength(1);
         structure(view);
         expect(document.activeElement).toBe(view.getByRole('button', { name }));
@@ -499,5 +502,409 @@ describe('WorkspaceShell', () => {
       expect(view.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected')).toBe('true');
       structure(view);
     });
+  });
+});
+
+describe('T-084 sidebar team navigation', () => {
+  const ui = (fake: ReturnType<typeof fakeManagement>, ws: Workspace = workspace, conn: ConnectionStatus = connection) => (
+    <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />
+  );
+  const settle = () => act(async () => {});
+  const ok = <T,>(data: T) => ({ ok: true as const, data });
+  const fail = (message: string) => ({ ok: false as const, error: { code: 'READ_FAILED', message, retryable: true } });
+  const rows = (view: ReturnType<typeof render>) => view.queryAllByRole('listitem').flatMap((li) => Array.from(li.querySelectorAll<HTMLButtonElement>('.team-nav-item')));
+  const row = (view: ReturnType<typeof render>, name: string) => view.getByRole('button', { name: new RegExp(`^Open ${name},`) });
+  const teamsButton = (view: ReturnType<typeof render>) => view.getByRole('button', { name: 'Teams' });
+  const tabs = (view: ReturnType<typeof render>) => view.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
+  const running = (t: ReturnType<typeof team>) => ({ ...t, runtime: { state: 'running' as const, teamId: 'live', status: 'running' } });
+
+  it('sidebar_teams_are_loaded_once_and_selecting_child_opens_overview', async () => {
+    const fake = fakeManagement();
+    const view = render(ui(fake));
+    await settle();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Dev Team', 'Release Team']);
+    expect(view.getByRole('list', { name: 'Workspace teams' })).toBeTruthy();
+    expect(rows(view).every((r) => r.getAttribute('aria-current') === null)).toBe(true);
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(rows(view).filter((r) => r.getAttribute('aria-current') === 'page').map((r) => r.getAttribute('aria-label'))).toEqual(['Open Release Team, Stopped']);
+    expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
+    expect(currentButtons(view.container)).toHaveLength(1);
+    expect(view.queryByRole('list', { name: 'Choose a team' })).toBeNull();
+    expect(view.container.querySelector('.teams-card, .teams-layout')).toBeNull();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('sidebar_children_are_reachable_by_tab_and_activate_with_enter_and_space', async () => {
+    const fake = fakeManagement();
+    const view = render(ui(fake));
+    await settle();
+    teamsButton(view).focus();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(row(view, 'Dev Team'));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(row(view, 'Release Team'));
+    await userEvent.keyboard('{Enter}');
+    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(row(view, 'Dev Team'));
+    await userEvent.keyboard(' ');
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('teams_parent_is_current_until_a_sidebar_child_is_opened', async () => {
+    const view = render(ui(fakeManagement()));
+    await settle();
+    fireEvent.click(teamsButton(view));
+    await settle();
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    expect(rows(view).every((button) => button.getAttribute('aria-current') === null)).toBe(true);
+    fireEvent.click(row(view, 'Release Team'));
+    expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('teams_parent_becomes_current_when_the_selected_child_is_removed_and_list_is_empty', async () => {
+    const fake = fakeManagement({ overview: [ok(twoTeams()), ok(overviewFixture([])), ok(twoTeams())] });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(rows(view)).toHaveLength(0);
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    expect(rows(view).every((button) => button.getAttribute('aria-current') === null)).toBe(true);
+  });
+
+  it('initial_sidebar_error_retry_loads_only_overview_and_selects_real_data', async () => {
+    const fake = fakeManagement({ overview: [fail('offline'), ok(twoTeams())] });
+    const view = render(ui(fake));
+    await settle();
+    expect(rows(view)).toHaveLength(0);
+    expect(view.getByRole('alert').textContent).toContain('Teams unavailable. offline');
+    const before = [fake.agents, fake.roles, fake.boardSettings].map((f) => f.mock.calls.length);
+    fireEvent.click(within(view.getByRole('complementary')).getByRole('button', { name: 'Retry teams' }));
+    await settle();
+    expect(fake.overview).toHaveBeenCalledTimes(2);
+    expect([fake.agents, fake.roles, fake.boardSettings].map((f) => f.mock.calls.length)).toEqual(before);
+    expect(rows(view)).toHaveLength(2);
+    fireEvent.click(row(view, 'Dev Team'));
+    await settle();
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('teams_parent_preserves_valid_selection_and_same_child_reopens_overview', async () => {
+    const fake = fakeManagement();
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    await settle();
+    fireEvent.click(teamsButton(view));
+    await settle();
+    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    await settle();
+    fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
+    await settle();
+    expect(view.container.querySelector('#teams-member-detail-title')).toBeTruthy();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    expect(tabs(view)).toEqual(['Overview']);
+    expect(view.container.querySelector('#teams-member-detail-title')).toBeNull();
+    expect(document.activeElement).toBe(document.getElementById('teams-detail-title'));
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('sidebar_selection_survives_reorder_and_falls_back_after_removal', async () => {
+    const [releaseTeam, devTeam] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
+    const fake = fakeManagement({ overview: [
+      ok(twoTeams()),
+      ok(overviewFixture([running(releaseTeam), { ...devTeam, runtime: { state: 'stopped', teamId: null, status: null } }])),
+      ok(overviewFixture([devTeam])),
+    ] });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Release Team', 'Dev Team']);
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(tabs(view)).toEqual(['Members']);
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Dev Team']);
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(tabs(view)).toEqual(['Overview']);
+  });
+
+  it('runtime_only_sidebar_selection_survives_reorder_by_runtime_id', async () => {
+    const live = team({ id: null as unknown as string, name: 'Live only', definition: { state: 'missing', problems: [] }, runtime: { state: 'running', teamId: 'runtime-1', status: 'running' } });
+    const saved = team({ id: 'saved', name: 'Saved team' });
+    const reorderedLive = { ...live, runtime: { state: 'stopped' as const, teamId: 'runtime-1', status: 'stopped' } };
+    const reorderedSaved = running(saved);
+    const fake = fakeManagement({ overview: [ok(overviewFixture([live, saved])), ok(overviewFixture([reorderedLive, reorderedSaved]))] });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Live only'));
+    fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Saved team', 'Live only']);
+    expect(row(view, 'Live only').getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('heading', { level: 2, name: 'Live only' })).toBeTruthy();
+    expect(tabs(view)).toEqual(['Routing']);
+  });
+
+  it('partial_truncated_sidebar_rows_with_markup_names_remain_selectable_as_text', async () => {
+    const name = '<img src=x onerror=alert(1)>';
+    const data = overviewFixture([team({ id: 'untrusted', name })], { partial: true, truncated: true });
+    const view = render(ui(fakeManagement({ overview: [ok(data)] })));
+    await settle();
+    const button = view.getByRole('button', { name: `Open ${name}, Not started` });
+    expect(button.querySelector('img')).toBeNull();
+    expect(button.textContent).toContain(name);
+    expect(view.getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
+    expect(view.getByText('Some team navigation data is unavailable.')).toBeTruthy();
+    fireEvent.click(button);
+    await settle();
+    expect(view.getByRole('heading', { level: 2, name })).toBeTruthy();
+    expect(button.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('sidebar_workspace_switch_clears_old_data_and_selection', async () => {
+    const onlyB = overviewFixture([team({ id: 'b-team', name: 'Only B' })]);
+    const gateB = deferred<ReturnType<typeof ok<typeof onlyB>>>();
+    const overview = vi.fn((id: string) => id === 'b' ? gateB.promise : Promise.resolve(ok(twoTeams())));
+    const fake = fakeManagement({ calls: { overview } });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    view.rerender(ui(fake, { ...workspace, id: 'b', name: 'Workspace B' }));
+    await settle();
+    expect(rows(view)).toHaveLength(0);
+    expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
+    expect(view.getByText('Loading teams…').getAttribute('role')).toBe('status');
+    await act(async () => { gateB.resolve(ok(onlyB)); });
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Only B']);
+    fireEvent.click(row(view, 'Only B'));
+    await settle();
+    expect(row(view, 'Only B').getAttribute('aria-current')).toBe('page');
+    expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
+  });
+
+  it('sidebar_ignores_a_superseded_workspace_response', async () => {
+    const gateA = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const onlyB = overviewFixture([team({ id: 'b-team', name: 'Only B' })]);
+    const overview = vi.fn((id: string) => id === 'a' ? gateA.promise : Promise.resolve(ok(onlyB)));
+    const fake = fakeManagement({ calls: { overview } });
+    const view = render(ui(fake));
+    await settle();
+    view.rerender(ui(fake, { ...workspace, id: 'b', name: 'Workspace B' }));
+    await settle();
+    await act(async () => { gateA.resolve(ok(twoTeams())); });
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Only B']);
+    expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
+  });
+
+  it('sidebar_ignores_a_superseded_workspace_error', async () => {
+    const gateA = deferred<ReturnType<typeof fail>>();
+    const onlyB = overviewFixture([team({ id: 'b-team', name: 'Only B' })]);
+    const overview = vi.fn((id: string) => id === 'a' ? gateA.promise : Promise.resolve(ok(onlyB)));
+    const fake = fakeManagement({ calls: { overview } });
+    const view = render(ui(fake));
+    await settle();
+    view.rerender(ui(fake, { ...workspace, id: 'b' }));
+    await settle();
+    fireEvent.click(row(view, 'Only B'));
+    await settle();
+    await act(async () => { gateA.resolve(fail('Old workspace error')); });
+    expect(view.queryByText(/Old workspace error/)).toBeNull();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Only B']);
+    expect(row(view, 'Only B').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('sidebar_retains_stale_rows_and_disables_teams_writes_on_error_or_disconnect', async () => {
+    const fake = fakeManagement({ overview: [ok(twoTeams()), fail('overview unreadable'), ok(twoTeams())] });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(teamsButton(view));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(view.getByText('Team list unavailable. Showing previously loaded teams. overview unreadable')).toBeTruthy();
+    expect(rows(view)).toHaveLength(2);
+    expect((view.getByRole('button', { name: 'New team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((view.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
+    const before = [fake.agents, fake.roles, fake.boardSettings].map((f) => f.mock.calls.length);
+    fireEvent.click(within(view.getByRole('complementary')).getByRole('button', { name: 'Retry teams' }));
+    await settle();
+    expect(fake.overview).toHaveBeenCalledTimes(3);
+    expect([fake.agents, fake.roles, fake.boardSettings].map((f) => f.mock.calls.length)).toEqual(before);
+    expect(view.queryByText(/Team list unavailable/)).toBeNull();
+    view.rerender(ui(fake, workspace, connectionFixture('lost')));
+    await settle();
+    expect(view.getByText('Connection lost. Showing previously loaded teams.')).toBeTruthy();
+    expect(rows(view)).toHaveLength(2);
+    expect((view.getByRole('button', { name: 'New team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((view.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sidebar_loading_empty_partial_truncated_and_long_names_are_truthful', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const loading = render(ui(fakeManagement({ calls: { overview: () => gate.promise } })));
+    await settle();
+    expect(loading.getByText('Loading teams…').getAttribute('role')).toBe('status');
+    expect(rows(loading)).toHaveLength(0);
+    loading.unmount();
+
+    const failed = render(ui(fakeManagement({ overview: [fail('down')] })));
+    await settle();
+    expect(failed.getByText('Teams unavailable. down').getAttribute('role')).toBe('alert');
+    expect(within(failed.getByRole('complementary')).getByRole('button', { name: 'Retry teams' })).toBeTruthy();
+    failed.unmount();
+
+    const empty = render(ui(fakeManagement({ overview: [ok(overviewFixture([]))] })));
+    await settle();
+    expect(empty.getByText('No teams defined.')).toBeTruthy();
+    expect(empty.queryByRole('list', { name: 'Workspace teams' })).toBeNull();
+    fireEvent.click(teamsButton(empty));
+    await settle();
+    expect(teamsButton(empty).getAttribute('aria-current')).toBe('page');
+    empty.unmount();
+
+    const longName = `Long ${'x'.repeat(200)}`;
+    const incomplete = render(ui(fakeManagement({ overview: [ok(overviewFixture([
+      team({ id: 'long', name: longName, definition: { state: 'unreadable', problems: [] } as never, runtime: { state: 'unavailable', teamId: null, status: null } }),
+    ], { partial: true, truncated: true }))] })));
+    await settle();
+    const longRow = rows(incomplete)[0]!;
+    expect(longRow.getAttribute('aria-label')).toBe(`Open ${longName}, Runtime unavailable, Definition unreadable`);
+    expect(longRow.querySelector('.team-nav-label')!.textContent).toBe(longName);
+    expect(longRow.getAttribute('title')).toBe(longName);
+    expect(incomplete.getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
+    expect(incomplete.getByText('Some team navigation data is unavailable.')).toBeTruthy();
+  });
+
+  it.each([
+    { roles: { state: 'missing' as const, message: 'Roles unavailable' } },
+    { catalog: { state: 'missing' as const, message: 'Catalog unavailable' } },
+    { runtimeState: { available: false, error: { code: 'DOWN', message: 'Runtime unavailable', retryable: true } } },
+  ])('partial_sidebar_notice_remains_visible_with_other_overview_errors', async (overrides) => {
+    const data = overviewFixture([team()], { ...overrides, partial: true });
+    const view = render(ui(fakeManagement({ overview: [ok(data)] })));
+    await settle();
+    expect(row(view, 'Dev Team')).toBeTruthy();
+    expect(view.getByText('Some team navigation data is unavailable.')).toBeTruthy();
+  });
+
+  it('refreshing_with_retained_rows_says_so_without_hiding_them', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const overview = vi.fn().mockResolvedValueOnce(ok(twoTeams())).mockReturnValueOnce(gate.promise);
+    const view = render(ui(fakeManagement({ calls: { overview } })));
+    await settle();
+    fireEvent.click(teamsButton(view));
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(view.getByText('Refreshing teams… Showing previously loaded teams.')).toBeTruthy();
+    expect(rows(view)).toHaveLength(2);
+    await act(async () => { gate.resolve(ok(twoTeams())); });
+    expect(view.queryByText(/^Refreshing teams… Showing previously loaded teams/)).toBeNull();
+  });
+
+  it('removed_focused_team_moves_focus_to_fallback_or_parent', async () => {
+    const [releaseTeam, devTeam] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
+    const fake = fakeManagement({ overview: [
+      ok(twoTeams()),
+      ok(overviewFixture([running(releaseTeam), { ...devTeam, runtime: { state: 'stopped', teamId: null, status: null } }])),
+      ok(overviewFixture([devTeam])),
+      ok(overviewFixture([])),
+    ] });
+    const view = render(ui(fake, workspace, connectionFixture('connecting')));
+    await settle();
+    const reconnect = async () => {
+      view.rerender(ui(fake, workspace, connectionFixture('lost')));
+      view.rerender(ui(fake, workspace, connectionFixture('connected')));
+      await settle();
+    };
+    row(view, 'Release Team').focus();
+    await reconnect();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Release Team', 'Dev Team']);
+    expect(document.activeElement).toBe(row(view, 'Release Team'));
+    await reconnect();
+    expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Dev Team']);
+    expect(document.activeElement).toBe(row(view, 'Dev Team'));
+    await reconnect();
+    expect(rows(view)).toHaveLength(0);
+    expect(document.activeElement).toBe(teamsButton(view));
+  });
+
+  it('removing_an_unfocused_team_does_not_move_focus', async () => {
+    const fake = fakeManagement({ overview: [ok(twoTeams()), ok(overviewFixture([twoTeams().teams[1]!]))] });
+    const view = render(ui(fake, workspace, connectionFixture('connecting')));
+    await settle();
+    view.getByRole('button', { name: 'Agents' }).focus();
+    view.rerender(ui(fake, workspace, connectionFixture('connected')));
+    await settle();
+    expect(rows(view)).toHaveLength(1);
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Agents' }));
+  });
+
+  it('reconnect_refreshes_overview_once_when_teams_is_closed_and_once_when_open', async () => {
+    const reads = (fake: ReturnType<typeof fakeManagement>) => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map((f) => f.mock.calls.length);
+    const closed = fakeManagement();
+    const first = render(ui(closed));
+    await settle();
+    expect(reads(closed)).toEqual([1, 0, 0, 0]);
+    first.rerender(ui(closed, workspace, connectionFixture('lost')));
+    await settle();
+    expect(reads(closed)).toEqual([1, 0, 0, 0]);
+    first.rerender(ui(closed, workspace, connectionFixture('connected')));
+    await settle();
+    expect(reads(closed)).toEqual([2, 0, 0, 0]);
+    first.unmount();
+
+    const open = fakeManagement();
+    const second = render(ui(open));
+    fireEvent.click(teamsButton(second));
+    await settle();
+    expect(reads(open)).toEqual([1, 1, 1, 1]);
+    second.rerender(ui(open, workspace, connectionFixture('lost')));
+    await settle();
+    second.rerender(ui(open, workspace, connectionFixture('connected')));
+    await settle();
+    expect(reads(open)).toEqual([2, 2, 2, 2]);
+  });
+
+  it('nested_teams_are_not_rendered_when_the_teams_item_is_disabled_or_absent', async () => {
+    const fake = fakeManagement();
+    const disabled = render(
+      <WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()}
+        items={NAV_ITEMS.map((item) => item.id === 'teams' ? { ...item, disabled: true } : item)} />,
+    );
+    await settle();
+    expect(disabled.container.querySelector('.team-nav')).toBeNull();
+    disabled.unmount();
+    const absent = render(
+      <WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()}
+        items={NAV_ITEMS.filter((item) => item.id !== 'teams')} />,
+    );
+    await settle();
+    expect(absent.container.querySelector('.team-nav')).toBeNull();
   });
 });

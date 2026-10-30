@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
+import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import {
@@ -20,7 +20,7 @@ afterEach(cleanup);
 
 async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const fake = fakeManagement(opts);
-  const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  const result = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
   return { fake, result };
 }
@@ -47,7 +47,7 @@ const ok = <T,>(data: T) => ({ ok: true as const, data });
 const fail = (error: { code: string; message: string; remediation?: string; data?: unknown }) =>
   ({ ok: false as const, error: { retryable: false, ...error } });
 const cardPressed = (name: string) =>
-  screen.getByRole('button', { name: new RegExp(`^${name}`) }).getAttribute('aria-pressed');
+  screen.getByRole('button', { name: new RegExp(`^Open ${name},`) }).getAttribute('aria-current');
 const overviewPanel = () => screen.getByRole('tabpanel', { name: 'Overview' });
 
 describe('team editing', () => {
@@ -65,7 +65,7 @@ describe('team editing', () => {
     expect(createTeam).toHaveBeenCalledTimes(1);
     expect(createTeam).toHaveBeenCalledWith('ws-a', { name: 'QA Team' });
     expect(screen.getByRole('status').textContent).toContain('Created team "QA Team".');
-    expect(cardPressed('QA Team')).toBe('true');
+    expect(cardPressed('QA Team')).toBe('page');
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.agents).toHaveBeenCalledTimes(1);
@@ -89,8 +89,8 @@ describe('team editing', () => {
 
   it('delete_team_needs_confirmation', async () => {
     const deleteTeam = vi.fn(async () => ok({ deleted: 'release' }));
-    const { fake } = await renderScreen({ calls: { deleteTeam } });
-    fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
+    const { fake } = await renderScreen({ overview: [ok(twoTeams()), ok(overviewFixture([twoTeams().teams[1]!]))], calls: { deleteTeam } });
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
     expect(within(overviewPanel()).getByRole('button', { name: 'Delete team' })).toBeTruthy();
     await click('Delete team');
     expect(deleteTeam).not.toHaveBeenCalled();
@@ -99,14 +99,14 @@ describe('team editing', () => {
     expect(deleteTeam).toHaveBeenCalledWith('ws-a', 'release');
     expect(screen.getByRole('status').textContent).toBe('Deleted team "Release Team".');
     expect(fake.overview).toHaveBeenCalledTimes(2);
-    expect(cardPressed('Dev Team')).toBe('true');
+    expect(cardPressed('Dev Team')).toBe('page');
   });
 
   it('rename_form_closes_when_another_team_is_selected', async () => {
     await renderScreen();
     await click('Rename team');
     expect(within(overviewPanel()).getByRole('form', { name: 'Rename team' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
     expect(within(overviewPanel()).queryByRole('form', { name: 'Rename team' })).toBeNull();
   });
 
@@ -490,7 +490,7 @@ describe('team editing', () => {
     expect(alert.textContent).toContain("TEAM_ALREADY_RUNNING: Team 'dev-team' is running in this workspace; stop it before deleting it.");
     expect(alert.textContent).toContain('run agent-studio team stop --team dev-team');
     expect(alert.textContent).toContain('Stop the team before deleting it or removing members.');
-    expect(screen.getByRole('button', { name: /^Dev Team/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open Dev Team,/ })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(1);
     await click('Remove lead');
     await click('Confirm remove lead');

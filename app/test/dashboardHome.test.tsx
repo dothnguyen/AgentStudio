@@ -229,6 +229,7 @@ describe('DashboardHome', () => {
     expect(result.getByRole('heading', { level: 1, name: 'Teams' })).toBeTruthy();
     const nav = result.getByRole('navigation', { name: 'Workspace' });
     expect(within(nav).getByRole('button', { name: 'Teams' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('button').filter((button) => button.getAttribute('aria-current') === 'page')).toHaveLength(1);
     expect(within(nav).getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 

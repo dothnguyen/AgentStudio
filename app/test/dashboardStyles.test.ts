@@ -36,10 +36,26 @@ describe('dashboard styles', () => {
     expect(flat).toMatch(/@media \(max-width: 700px\) \{\s*\.teams-member-list-head \{ position: absolute;[^}]*clip-path: inset\(50%\);/);
     expect(flat).not.toMatch(/\.teams-member-list-head \{[^}]*display: none/);
   });
-  it('keeps team list item spacing separate from card layout', () => {
+  it('removes_the_in_content_team_chooser_styles', () => {
     const flat = squash(css);
-    expect(flat).toContain('.dashboard-panel .teams-card-list li { display: block; padding: 4px 0; }');
-    expect(flat).toMatch(/\.teams-card \{ display: flex; flex-direction: column;/);
+    for (const selector of ['.teams-layout', '.teams-list-panel', '.teams-card-list', '.teams-card', '.teams-card-name', '.teams-card-facts']) {
+      expect(flat).not.toContain(selector);
+    }
+  });
+
+  it('sidebar_team_navigation_is_compact_wraps_and_has_visible_focus', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.team-nav \{[^}]*margin: 0 0 4px 18px;[^}]*border-left: 1px solid var\(--border\);/);
+    expect(flat).toMatch(/\.team-nav-item \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/);
+    expect(flat).toMatch(/\.team-nav-label \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
+    expect(flat).toMatch(/\.team-nav-state, \.team-nav-warning, \.team-nav-status[^{]*\{[^}]*overflow-wrap: anywhere;/);
+    expect(flat).toMatch(/\.team-nav-item-current \{[^}]*box-shadow: inset 3px 0 var\(--focus\);/);
+    expect(flat).toContain('.team-nav :is(button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
+    const rules = flat.match(/\.team-nav[^{]*\{[^}]*\}/g) ?? [];
+    expect(rules.length).toBeGreaterThan(5);
+    for (const rule of rules) {
+      expect(rule).not.toMatch(/overflow-x: ?scroll|white-space: ?nowrap|display: ?none|(?<![\w-])width: ?\d+px/);
+    }
   });
 
   it('home_grid_puts_wide_board_beside_team_and_stacks_at_1080px', () => {
@@ -236,7 +252,7 @@ describe('teams navigation', () => {
   it('teams_tabs_have_selected_state_and_visible_focus', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-view-tab[aria-selected="true"] { border-bottom-color: var(--focus);');
-    expect(flat).toContain('.teams-view-tab:focus-visible, .teams-card:focus-visible, .teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
+    expect(flat).toContain('.teams-view-tab:focus-visible, .teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
     expect(/\.teams-view-tabs \{[^}]*flex-wrap: wrap/.test(flat)).toBe(true);
   });
 });

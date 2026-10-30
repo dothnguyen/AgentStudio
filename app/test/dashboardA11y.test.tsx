@@ -38,7 +38,8 @@ describe('dashboard accessibility', () => {
     const never = () => new Promise<Result<never>>(() => {});
     const loading = shell({ teams: never, board: never, activity: never } as unknown as DashboardApi);
     const statuses = loading.getAllByRole('status').map((node) => node.textContent);
-    expect(statuses).toHaveLength(3);
+    expect(statuses).toHaveLength(4);
+    expect(statuses).toContain('Loading teams…');
     expect(statuses.join(' ')).toMatch(/team/i);
     expect(statuses.join(' ')).toMatch(/board/i);
     expect(statuses.join(' ')).toMatch(/activity/i);

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus } from '../src/renderer/api';
-import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
+import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import {
   memberRow, field, openMember, showMembers,
@@ -30,7 +30,7 @@ const connected: ConnectionStatus = { state: 'connected', error: null, distro: n
 
 async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}, connection?: ConnectionStatus) {
   const fake = fakeManagement(opts);
-  const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={connection} />);
+  const result = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} connection={connection} />);
   await act(async () => {});
   return { fake, result };
 }
@@ -71,16 +71,16 @@ describe('live team state', () => {
 
   it('stopped_team_members_say_unavailable', async () => {
     await renderScreen();
-    fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
     fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
     const row = memberRow('qa');
     expect(field(row, 'availability')).toBe('Stopped');
     expect(row.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
     expect(field(row, 'work')).toBe('Not available — team stopped');
     expect(field(row, 'agent')).toBe('Not running · saved default: OpenCode Sonnet');
-    const badge = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).querySelector('.teams-runtime')!;
-    expect(badge('Release Team').className).toContain('teams-tone-muted');
-    expect(badge('Dev Team').className).toContain('teams-tone-ok');
+    const badge = (name: string) => screen.getByRole('button', { name: new RegExp(`^Open ${name},`) }).querySelector('.team-nav-state')!;
+    expect(badge('Release Team').textContent).toBe('Stopped');
+    expect(badge('Dev Team').textContent).toBe('Running');
   });
 });
 
@@ -297,14 +297,14 @@ describe('board controls', () => {
 
   it('stopped_team_cannot_run', async () => {
     await renderScreen();
-    fireEvent.click(screen.getByRole('button', { name: /^Release Team/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
     expect(boardButton('Run board').disabled).toBe(true);
     expect(board().textContent).toContain('Start this team to run the board (team: Stopped).');
   });
 
   it('connection_loss_disables_and_reconnect_refreshes', async () => {
     const fake = fakeManagement();
-    const ui = (c: ConnectionStatus) => <TeamsScreen workspace={workspaceA} management={fake.api} connection={c} />;
+    const ui = (c: ConnectionStatus) => <TeamsHarness workspace={workspaceA} management={fake.api} connection={c} />;
     const { rerender } = render(ui(connected));
     await flush();
     rerender(ui({ state: 'lost', error: 'serve exited', distro: null, command: null }));
@@ -392,7 +392,7 @@ async function renderMembers(opts: Parameters<typeof fakeManagement>[0] = {}) {
   await act(async () => {});
   return out;
 }
-const card = (root: HTMLElement, name: string) => within(root).getByRole('button', {name: new RegExp(`^${name}`)});
+const card = (root: HTMLElement, name: string) => within(root).getByRole('button', {name: new RegExp(`^Open ${name},`)});
 
 describe('live member actions', () => {
   const renderLive = async (opts: Parameters<typeof fakeManagement>[0] = {}) => { const out = await renderMembers(opts); openMember('dev'); return out; };
@@ -513,7 +513,7 @@ describe('live member actions', () => {
   it('connection_loss_disables_open_confirmation_without_sending_cancellation', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('A'));
     const fake = fakeManagement({overview: [ok(data())], calls: {switchMemberAgent: call}});
-    const ui = (connection: ConnectionStatus) => <TeamsScreen workspace={workspaceA} management={fake.api} connection={connection} />;
+    const ui = (connection: ConnectionStatus) => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connection} />;
     const result = render(ui(connected));
     await flush();
     fireEvent.click(result.getByRole('tab', {name: 'Members'}));
@@ -591,7 +591,7 @@ describe('live member actions', () => {
     expect(result.container.textContent).toContain('PERMISSION_DENIED: Denied exactly'); expect(result.getByText('Ask an administrator.')).toBeTruthy();
     result.unmount();
     const fake = fakeManagement({overview: [{ok: true, data: data()}]});
-    const disconnected = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={{state: 'lost', error: null, distro: null, command: 'serve'}} />);
+    const disconnected = render(<TeamsHarness workspace={workspaceA} management={fake.api} connection={{state: 'lost', error: null, distro: null, command: 'serve'}} />);
     await act(async () => {});
     await openTab(disconnected, 'Members');
     openMember('dev');
@@ -608,7 +608,7 @@ describe('live member actions', () => {
     const call = vi.fn(() => new Promise(() => {}));
     const {result} = await renderLive({overview: [{ok: true, data: overviewFixture([first, other])}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'}));
-    fireEvent.click(card(result.getByRole('region', {name: 'Workspace teams'}), 'Other Team'));
+    fireEvent.click(card(result.getByRole('navigation', {name: 'Harness sidebar'}), 'Other Team'));
     await openTab(result, 'Members');
     openMember('dev');
     const button = result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement;
@@ -911,7 +911,7 @@ describe('live member actions', () => {
     fireEvent.click(result.getByRole('button', {name: 'Switch'}));
     await flush();
     expect(result.getByRole('dialog').textContent).toContain('assignment-A');
-    result.rerender(<TeamsScreen workspace={{...workspaceA, id: 'ws-b'}} management={fake.api} />);
+    result.rerender(<TeamsHarness workspace={{...workspaceA, id: 'ws-b'}} management={fake.api} />);
     await flush();
     expect(result.queryByRole('dialog')).toBeNull();
     expect(call).toHaveBeenCalledTimes(1);
@@ -925,7 +925,7 @@ describe('live member actions', () => {
     try {
       fireEvent.click(result.getByRole('button', {name: 'Switch'}));
       await act(async () => {});
-      result.rerender(<TeamsScreen workspace={{...workspaceA, id: 'ws-b'}} management={fake.api} />);
+      result.rerender(<TeamsHarness workspace={{...workspaceA, id: 'ws-b'}} management={fake.api} />);
       await act(async () => {});
       expect(fake.overview).toHaveBeenCalledTimes(2);
       expect(fake.overview).toHaveBeenLastCalledWith('ws-b');
@@ -1117,7 +1117,7 @@ describe('T-082 live controls', () => {
   it('disconnect_and_unmount_clear_polling_without_late_updates', async () => {
     const switchMemberAgent = vi.fn().mockResolvedValue(accepted);
     const fake = fakeManagement({ overview: [ok(data())], calls: { switchMemberAgent } });
-    const ui = (state: 'connected' | 'lost') => <TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+    const ui = (state: 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
     const result = render(ui('connected')); await flush();
     fireEvent.click(screen.getByRole('tab', { name: 'Members' })); openMember('dev'); await flush();
     vi.useFakeTimers();

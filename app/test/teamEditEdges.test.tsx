@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
+import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import { deferred, fakeManagement, overviewFixture, team, teamDefinition } from './teamsFixtures';
 
@@ -18,7 +18,7 @@ describe('team editing edge cases', () => {
   it('rename_to_same_name_is_not_sent', async () => {
     const renameTeam = vi.fn();
     const fake = fakeManagement({ calls: { renameTeam } });
-    render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
     await flush();
     await click('Rename team');
     await click('Save name');
@@ -30,7 +30,7 @@ describe('team editing edge cases', () => {
     const fake = fakeManagement({
       overview: [ok(overviewFixture([team({ definition: { state: 'unreadable', problems: [] } })]))],
     });
-    render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
     await flush();
     const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
     expect(panel.getByText(/could not be read; fix the file/)).toBeTruthy();
@@ -48,7 +48,7 @@ describe('team editing edge cases', () => {
     const gate = deferred<ReturnType<typeof ok>>();
     const createTeam = vi.fn(() => gate.promise);
     const fake = fakeManagement({ calls: { createTeam } });
-    const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+    const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
     await flush();
     await click('New team');
     fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'QA Team' } });
