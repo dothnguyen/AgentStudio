@@ -2,9 +2,8 @@ import type { JSX } from 'react';
 import type { OverviewMember, OverviewTeam, RoleCatalogItem } from '../api';
 import { memberIdentity, memberRoleSummary, memberAgentSummary, presenceLabel, presenceTone, teamLabel, workSummary } from './teamsModel';
 
-export interface MemberListProps { team: OverviewTeam; roleItems: RoleCatalogItem[] | null; currentMemberId: string | null; rowRef(memberId: string, el: HTMLButtonElement | null): void; onOpen(memberId: string): void }
-export function MemberList({ team, roleItems, currentMemberId, rowRef, onOpen }: MemberListProps): JSX.Element {
-  if (!team.members.length) return <p className="panel-empty">This team has no members.</p>;
+export interface MemberListProps { team: OverviewTeam; members: readonly OverviewMember[]; roleItems: RoleCatalogItem[] | null; currentMemberId: string | null; rowRef(memberId: string, el: HTMLButtonElement | null): void; onOpen(memberId: string): void }
+export function MemberList({ team, members, roleItems, currentMemberId, rowRef, onOpen }: MemberListProps): JSX.Element {
   function fields(m: OverviewMember): JSX.Element {
     const identity = memberIdentity(m), role = memberRoleSummary(m, roleItems), agent = memberAgentSummary(m);
     return <>
@@ -16,5 +15,5 @@ export function MemberList({ team, roleItems, currentMemberId, rowRef, onOpen }:
     </>;
   }
   return <><div className="teams-member-list-head" aria-hidden="true"><span>Member</span><span>Role</span><span>Agent</span><span>Availability</span><span>Current work</span></div>
-    <ul className="teams-member-list" aria-label={`Members of ${teamLabel(team)}`}>{team.members.map((m, i) => <li key={m.memberId ?? `index:${i}`}>{m.memberId !== null ? <button type="button" className="teams-member-row" data-member-row={m.memberId} ref={el => rowRef(m.memberId!, el)} aria-current={m.memberId === currentMemberId ? 'true' : undefined} onClick={() => onOpen(m.memberId!)}>{fields(m)}</button> : <div className="teams-member-row teams-member-row-static">{fields(m)}</div>}</li>)}</ul></>;
+    <ul className="teams-member-list" aria-label={`Members of ${teamLabel(team)}`}>{members.map((m, i) => <li key={m.memberId ?? `index:${i}`}>{m.memberId !== null ? <button type="button" className="teams-member-row" data-member-row={m.memberId} ref={el => rowRef(m.memberId!, el)} aria-current={m.memberId === currentMemberId ? 'true' : undefined} onClick={() => onOpen(m.memberId!)}>{fields(m)}</button> : <div className="teams-member-row teams-member-row-static">{fields(m)}</div>}</li>)}</ul></>;
 }

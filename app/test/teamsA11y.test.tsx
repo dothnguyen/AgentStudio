@@ -71,7 +71,7 @@ it.skip('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
   const data = overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ runtime: live })] })]);
   const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'job-1' } } });
-  const { view } = await mount({ overview: [{ ok: true, data }], calls: { switchMemberAgent } }, 'Members');
+  const { view } = await mount({ overview: [{ ok: true, data }], calls: { switchMemberAgent } }, 'Overview');
   openMember('dev'); await act(async () => {});
   const opener = view.getByRole('button', { name: 'Switch' }); opener.focus();
   await userEvent.keyboard('{Enter}'); await act(async () => {});
@@ -92,7 +92,7 @@ it.skip('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
 });
 
 it.skip('teams_long_content_remains_present', async () => {
-  const { view } = await mount({ overview: [{ ok: true, data: longContentOverview() }], roles: [managementError('ROLES_DOWN', `${LONG_UNBROKEN} message`, `${LONG_UNBROKEN} remediation`)] }, 'Members');
+  const { view } = await mount({ overview: [{ ok: true, data: longContentOverview() }], roles: [managementError('ROLES_DOWN', `${LONG_UNBROKEN} message`, `${LONG_UNBROKEN} remediation`)] }, 'Overview');
   expect(view.container.textContent!.split(LONG_UNBROKEN).length - 1).toBeGreaterThan(3);
   expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
   expect(view.getAllByRole('alert')[0]!.textContent).toContain(`${LONG_UNBROKEN} remediation`);

@@ -74,7 +74,7 @@ async function openTab(r: { getByRole: (role: string, o: { name: string }) => HT
 }
 async function renderMembers(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const out = await renderScreen(opts);
-  await openTab(out.result, 'Members');
+  await openTab(out.result, 'Overview');
   return out;
 }
 
@@ -94,7 +94,7 @@ describe('compact team overview', () => {
     for (const heading of ['Team status', 'Board', 'Member availability', 'Team actions']) {
       expect(result.getByRole('heading', { name: heading })).toBeTruthy();
     }
-    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Team status', 'Board', 'Member availability', 'Team actions']);
+    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Team status', 'Board', 'Member availability', 'Team actions', 'Members']);
     const status = result.getByRole('heading', { name: 'Team status' }).closest('section')!;
     const availability = result.getByRole('heading', { name: 'Member availability' }).closest('section')!;
     expect(within(status).getByText('Dev Team')).toBeTruthy();
@@ -202,7 +202,7 @@ describe('compact team overview', () => {
 });
 
 describe('TeamsScreen', () => {
-  it.skip('defined_member_shows_role_metadata_and_deep_link', async () => {
+  it('defined_member_shows_role_metadata_and_deep_link', async () => {
     const onViewRole = vi.fn();
     const fake = fakeManagement({
       overview: [{ ok: true, data: overviewFixture([team({ members: [member({ role: 'qa-b' })] })]) }],
@@ -210,7 +210,7 @@ describe('TeamsScreen', () => {
     });
     const result = render(<TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
     await act(async () => {});
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     openMember('dev');
     const row = result.getByRole('region', { name: 'dev' });
     expect(row.textContent).toContain('qa-b');
@@ -221,7 +221,7 @@ describe('TeamsScreen', () => {
     expect(onViewRole).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('undefined_or_unavailable_role_has_diagnostic_without_link', async () => {
+  it('undefined_or_unavailable_role_has_diagnostic_without_link', async () => {
     const overview = overviewFixture([team({ members: [member({ role: 'retired' }), member({ memberId: 'x', name: 'x', role: 'Developer', roleState: 'undefined' })] })]);
     const missing = await renderMembers({ overview: [{ ok: true, data: overview }] });
     expect(missing.result.queryByRole('button', { name: /in Roles/ })).toBeNull();
@@ -235,7 +235,7 @@ describe('TeamsScreen', () => {
     expect(failed.result.getByRole('button', { name: 'Edit dev' })).toBeTruthy();
   });
 
-  it.skip('saved_options_are_distinct_from_live_agent', async () => {
+  it('saved_options_are_distinct_from_live_agent', async () => {
     const live = twoTeams().teams[1]!.members[0]!.runtime!;
     const saved = {id: 'saved', name: 'Saved choice', provider: 'saved-provider', model: 'saved-model', reasoning: null, description: null, state: 'ok' as const};
     const m = member({agentMode: 'ordered_catalog', agentOptions: [saved], defaultAgent: 'saved', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model'}});
@@ -247,7 +247,7 @@ describe('TeamsScreen', () => {
     expect(savedText).not.toContain('live-id');
   });
 
-  it.skip('saved_options_keep_order_and_live_reasoning_uses_runtime_values', async () => {
+  it('saved_options_keep_order_and_live_reasoning_uses_runtime_values', async () => {
     const live = twoTeams().teams[1]!.members[0]!.runtime!;
     const first = {id: 'first', name: 'First', provider: 'saved-provider', model: 'saved-model', reasoning: 'low', description: null, state: 'ok' as const};
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
@@ -263,7 +263,7 @@ describe('TeamsScreen', () => {
     expect(row.textContent).toContain('live-id · live-provider · live-model · Reasoning: high');
   });
 
-  it.skip('renders_teams_and_members_from_overview', async () => {
+  it('renders_teams_and_members_from_overview', async () => {
     const { fake, result } = await renderScreen();
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
     const list = result.getByRole('navigation', { name: 'Harness sidebar' });
@@ -272,7 +272,7 @@ describe('TeamsScreen', () => {
     const detail = result.getByRole('region', { name: 'Dev Team' });
     expect(detail.textContent).toContain('Running');
     expect(detail.textContent).toContain('Running');
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     const r1 = openMember('dev').textContent;
     expect(r1).toContain('Default — OpenCode Sonnet · opencode · sonnet');
     expect(r1).toContain('T-031 Teams screen');
@@ -286,13 +286,13 @@ describe('TeamsScreen', () => {
     expect(fake.agents).toHaveBeenCalledWith('ws-a');
   });
 
-  it.skip('selecting_a_team_shows_its_members_without_reloading', async () => {
+  it('selecting_a_team_shows_its_members_without_reloading', async () => {
     const { fake, result } = await renderScreen();
     const list = result.getByRole('navigation', { name: 'Harness sidebar' });
     fireEvent.click(card(list, 'Release Team'));
     expect(card(list, 'Release Team').getAttribute('aria-current')).toBe('page');
     expect(card(list, 'Dev Team').getAttribute('aria-current')).toBeNull();
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     const detail = result.getByRole('region', { name: 'Release Team' });
     expect(within(detail).getByRole('heading', { level: 2 }).textContent).toBe('Release Team');
     const row = openMember('qa');
@@ -302,20 +302,20 @@ describe('TeamsScreen', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('does_not_render_catalog_region_but_still_loads_catalog_for_member_forms', async () => {
+  it('does_not_render_catalog_region_but_still_loads_catalog_for_member_forms', async () => {
     const { result, fake } = await renderScreen();
     expect(result.queryByRole('region', { name: 'Agent catalog' })).toBeNull();
     expect(result.queryByRole('heading', { name: 'Agent catalog' })).toBeNull();
     expect(result.queryByRole('list', { name: 'Agent catalog' })).toBeNull();
     expect(fake.agents).toHaveBeenCalledTimes(1);
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Add member' }));
     expect(result.getByRole('option', { name: 'OpenCode Sonnet (opencode-sonnet)' })).toBeTruthy();
   });
 
-  it.skip('keeps members visible and catalog choices unavailable when catalog loading fails', async () => {
+  it('keeps members visible and catalog choices unavailable when catalog loading fails', async () => {
     const { result } = await renderScreen({ agents: [{ ok: false, error: { code: 'CATALOG_FAIL', message: 'failed', retryable: true } }] });
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     const detail = result.getByRole('region', { name: 'Dev Team' });
     expect(memberRow('dev').textContent).toContain('dev');
     fireEvent.click(result.getByRole('button', { name: 'Add member' }));
@@ -337,7 +337,7 @@ describe('TeamsScreen', () => {
     }
   });
 
-  it.skip('missing_details_and_partial_overview_are_labelled', async () => {
+  it('missing_details_and_partial_overview_are_labelled', async () => {
     const data = overviewFixture([
       team({
         id: 'ghost',
@@ -360,7 +360,7 @@ describe('TeamsScreen', () => {
     for (const t of ['ghost', 'Runtime unavailable', 'Definition unreadable']) expect(list.textContent).toContain(t);
     const detail = result.getByRole('region', { name: 'ghost' });
     expect(detail.textContent).toContain('$: could not load team definition: TEAM_CONFIG_INVALID');
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     const row = openMember('m1');
     for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Not available', 'Unavailable']) {
       expect(row.textContent).toContain(t);
@@ -373,7 +373,7 @@ describe('TeamsScreen', () => {
     ]);
   });
 
-  it.skip('long_labels_and_truncation_render_in_full', async () => {
+  it('long_labels_and_truncation_render_in_full', async () => {
     const long = 'Very long team name '.repeat(10).trim();
     const members = Array.from({ length: 16 }, (_, i) => member({ memberId: `m${i}`, name: `m${i}` }));
     const desc = 'd'.repeat(4000);
@@ -386,8 +386,8 @@ describe('TeamsScreen', () => {
     const hits = result.getAllByText(long);
     expect(hits).toHaveLength(3);
     for (const h of hits) expect(h.textContent).toBe(long);
-    await openTab(result, 'Members');
-    expect(result.getByText('Showing the first 16 members.')).toBeTruthy();
+    await openTab(result, 'Overview');
+    expect(result.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
     expect(within(result.getByRole('list', { name: 'Data notices' })).getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
   });
 
@@ -490,7 +490,7 @@ describe('live member actions', () => {
   const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
   const data = (runtime = live) => overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({runtime})] })]);
   const confirmation = (id: string) => ({ok: false as const, error: {code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: {assignmentId: id}}});
-  it.skip('member_detail_separates_saved_and_frozen_evidence_from_compact_list', async () => {
+  it('member_detail_separates_saved_and_frozen_evidence_from_compact_list', async () => {
     const runtime = {...live, assignment: {id: 'assignment-1', status: 'working', taskId: 'task-1'}, pendingAgent: 'codex-gpt', lastSwitch: {state: 'failed' as const, requestedAgent: 'codex-gpt', assignmentId: 'assignment-1', code: 'PROVIDER_UNAVAILABLE', message: 'offline', at: 'now'}};
     const {result} = await renderMembers({overview: [{ok: true, data: data(runtime)}]});
     expect(result.queryByRole('button', {name: 'Switch'})).toBeNull();
@@ -502,7 +502,7 @@ describe('live member actions', () => {
     expect(detail.textContent).toContain('Switch to Codex GPT pending.');
     expect(detail.textContent).toContain('PROVIDER_UNAVAILABLE: offline');
   });
-  it.skip('no_runtime_inline_and_single_option_have_no_invalid_switch', async () => {
+  it('no_runtime_inline_and_single_option_have_no_invalid_switch', async () => {
     for (const m of [member({runtime: null}), member({runtime: live, agentMode: 'inline'}), member({runtime: {...live, configuredAgents: ['opencode-sonnet']}})]) {
       const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [m]})])}]});
       const detail = openMember('dev');
@@ -553,11 +553,11 @@ describe('focused navigation', () => {
     expect(result.queryByRole('table')).toBeNull();
   });
 
-  it.skip('tab_keyboard_moves_focus_selection_and_wraps', async () => {
+  it('tab_keyboard_moves_focus_selection_and_wraps', async () => {
     const { result } = await renderScreen();
     tab(result, 'Overview').focus();
     const steps: Array<[string, string]> = [
-      ['ArrowRight', 'Members'], ['ArrowRight', 'Routing'], ['ArrowRight', 'Overview'],
+      ['ArrowRight', 'Routing'], ['ArrowRight', 'Overview'],
       ['ArrowLeft', 'Routing'], ['Home', 'Overview'], ['End', 'Routing'],
     ];
     for (const [key, name] of steps) {
@@ -585,33 +585,33 @@ describe('focused navigation', () => {
     expect(card(root, 'Release Team').getAttribute('aria-current')).toBeNull();
   });
 
-  it.skip('selecting_a_new_team_returns_to_overview', async () => {
+  it('selecting_a_new_team_returns_to_overview', async () => {
     const { result } = await renderScreen();
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(card(list(result), 'Release Team'));
     expect(card(list(result), 'Release Team').getAttribute('aria-current')).toBe('page');
     expect(selectedTabs(result)).toEqual(['Overview']);
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(card(list(result), 'Release Team'));
     expect(selectedTabs(result)).toEqual(['Overview']);
   });
 
-  it.skip('refresh_reorder_preserves_selection_and_view', async () => {
+  it('refresh_reorder_preserves_selection_and_view', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: true, data: reordered() }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(cardNames(list(result))).toEqual(['Release Team', 'Dev Team']);
     expect(card(list(result), 'Release Team').getAttribute('aria-current')).toBe('page');
-    expect(selectedTabs(result)).toEqual(['Members']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
     expect(within(result.getByRole('region', { name: 'Release Team' })).getByRole('list', { name: /^Members of / })).toBeTruthy();
   });
 
-  it.skip('refresh_removal_falls_back_to_first_team_overview', async () => {
+  it('refresh_removal_falls_back_to_first_team_overview', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: true, data: overviewFixture([twoTeams().teams[1]!]) }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(cardNames(list(result))).toEqual(['Dev Team']);
@@ -630,16 +630,16 @@ describe('focused navigation', () => {
     for (const name of ['New team', 'Refresh']) expect((result.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it.skip('overview_error_after_refresh_retains_selection_and_view', async () => {
+  it('overview_error_after_refresh_retains_selection_and_view', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: false, error: { code: 'INTERNAL', message: 'boom', retryable: true } }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(within(result.getByRole('region', { name: 'Teams data status' })).getByRole('alert').textContent).toContain('INTERNAL: boom');
     expect(within(list(result)).getByText(/^Team list unavailable\. Showing previously loaded teams\./)).toBeTruthy();
     expect(card(list(result), 'Release Team').getAttribute('aria-current')).toBe('page');
-    expect(selectedTabs(result)).toEqual(['Members']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
   });
 
   it('workspace_change_resets_selection_and_view', async () => {
@@ -655,11 +655,11 @@ describe('focused navigation', () => {
     expect(fake.overview).toHaveBeenLastCalledWith('ws-b');
   });
 
-  it.skip('tab_and_team_changes_issue_no_management_reads', async () => {
+  it('tab_and_team_changes_issue_no_management_reads', async () => {
     const { fake, result } = await renderScreen();
-    for (const name of ['Members', 'Routing', 'Overview']) await openTab(result, name);
+    for (const name of ['Routing', 'Overview']) await openTab(result, name);
     tab(result, 'Overview').focus();
-    for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'Home', 'End']) fireEvent.keyDown(document.activeElement!, { key });
+    for (const key of ['ArrowRight', 'ArrowRight', 'Home', 'End']) fireEvent.keyDown(document.activeElement!, { key });
     fireEvent.click(card(list(result), 'Release Team'));
     fireEvent.keyDown(document.activeElement ?? card(list(result), 'Release Team'), { key: 'ArrowDown' });
     fireEvent.keyDown(card(list(result), 'Release Team'), { key: 'ArrowUp' });
@@ -667,7 +667,7 @@ describe('focused navigation', () => {
     for (const fn of [fake.overview, fake.agents, fake.boardSettings, fake.roles]) expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('global_status_and_feedback_stay_outside_tab_panels', async () => {
+  it('global_status_and_feedback_stay_outside_tab_panels', async () => {
     const fake = fakeManagement({
       roles: [{ ok: false, error: { code: 'INTERNAL', message: 'roles down', retryable: false } }],
       overview: [{ ok: true, data: overviewFixture(twoTeams().teams, { truncated: true }) }],
@@ -685,7 +685,7 @@ describe('focused navigation', () => {
     expect(result.getByRole('button', { name: 'Retry loading roles' }).parentElement?.textContent).toContain('INTERNAL: roles down');
     result.rerender(<TeamsHarness workspace={workspaceA} management={fake.api} connection={conn('lost')} />);
     await act(async () => {});
-    for (const name of ['Overview', 'Members', 'Routing']) {
+    for (const name of ['Overview', 'Routing']) {
       await openTab(result, name);
       const panel = result.getByRole('tabpanel');
       const outside = [
@@ -757,9 +757,9 @@ describe('team overview', () => {
     for (const sample of ['Developer', 'QA', 'T-031']) expect(panel().textContent).not.toContain(sample);
   });
 
-  it.skip('overview_tab_shows_no_extra_reads', async () => {
+  it('overview_tab_shows_no_extra_reads', async () => {
     const { fake } = await renderScreen();
-    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
@@ -778,7 +778,173 @@ describe('team overview', () => {
 });
 
 describe('member roster', () => {
-  it.skip('roster_shows_only_returned_identity_role_agent_availability_and_work', async () => {
+  const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
+  const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
+  const avail = () => screen.getByLabelText('Availability') as HTMLSelectElement;
+  const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
+  const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'ALPHA-two', presence: 'busy' })];
+
+  it('renders the sole member roster and Add member below compact Overview with only Overview and Routing tabs', async () => {
+    const { result } = await renderScreen();
+    expect(result.getAllByRole('tab').map(t => t.textContent)).toEqual(['Overview', 'Routing']);
+    expect(result.queryByRole('tab', { name: 'Members' })).toBeNull();
+    expect(result.getAllByRole('tabpanel')).toHaveLength(1);
+    expect(result.getAllByRole('list', { name: /^Members of / })).toHaveLength(1);
+    const heading = result.getByRole('heading', { name: 'Members' });
+    const summary = result.getByRole('heading', { name: 'Member availability' });
+    expect(summary.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(result.getAllByRole('button', { name: 'Add member' })).toHaveLength(1);
+    const ids = names();
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('combines text and availability filters, clears them, and preserves backend row order', async () => {
+    const { fake } = await renderScreen({ overview: [roster(trio())] });
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    fireEvent.change(search(), { target: { value: '   ' } });
+    expect(names()).toEqual(['a', 'b', 'c']);
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    fireEvent.change(search(), { target: { value: 'AlPhA' } });
+    expect(names()).toEqual(['a', 'c']);
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    expect(names()).toEqual(['a', 'c']);
+    fireEvent.change(search(), { target: { value: 'two' } });
+    expect(names()).toEqual(['c']);
+    fireEvent.change(avail(), { target: { value: 'idle' } });
+    expect(screen.getByText('No returned members match the current filters.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(names()).toEqual(['a', 'b', 'c']);
+    expect(search().value).toBe(''); expect(avail().value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes an empty team from no returned filter matches', async () => {
+    const empty = await renderScreen({ overview: [roster([])] });
+    expect(screen.getByText('This team has no members.')).toBeTruthy();
+    expect(screen.queryByText('No returned members match the current filters.')).toBeNull();
+    empty.result.unmount();
+    await renderScreen({ overview: [roster(trio())] });
+    fireEvent.change(search(), { target: { value: 'zzz' } });
+    expect(screen.getByText('No returned members match the current filters.')).toBeTruthy();
+    expect(screen.queryByText('This team has no members.')).toBeNull();
+  });
+
+  it('qualifies every filtered result when the returned roster is truncated', async () => {
+    await renderScreen({ overview: [roster(trio(), { membersTruncated: true })] });
+    const note = (x: number) => `Showing ${x} of 3 returned members. More members may exist; filters apply only to returned members.`;
+    expect(screen.getByText(note(3))).toBeTruthy();
+    fireEvent.change(search(), { target: { value: 'alpha' } });
+    expect(screen.getByText(note(2))).toBeTruthy();
+    fireEvent.change(search(), { target: { value: 'zzz' } });
+    expect(screen.getByText(note(0))).toBeTruthy();
+  });
+
+  it('qualifies an empty truncated roster and keeps filters harmless', async () => {
+    await renderScreen({ overview: [roster([], { membersTruncated: true })] });
+    expect(screen.getByText('This team has no members.')).toBeTruthy();
+    expect(screen.getByText('Showing 0 of 0 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
+    fireEvent.change(search(), { target: { value: 'anything' } });
+    expect(screen.getByText('This team has no members.')).toBeTruthy();
+    expect(screen.queryByText('No returned members match the current filters.')).toBeNull();
+  });
+
+  it('offers unknown raw availability and renders a member without an id as a static row', async () => {
+    await renderScreen({ overview: [roster([
+      member({ memberId: null, name: 'Anonymous', presence: 'mystery' }),
+      member({ memberId: 'known', name: 'Known', presence: 'mystery-extra' }),
+    ])] });
+    expect(within(avail()).getByRole('option', { name: 'mystery (1)' }).getAttribute('value')).toBe('mystery');
+    fireEvent.change(avail(), { target: { value: 'mystery' } });
+    expect(screen.getByText('Anonymous')).toBeTruthy();
+    expect(screen.queryByText('Known')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Anonymous/ })).toBeNull();
+    expect(screen.getByText('No member id returned')).toBeTruthy();
+  });
+
+  it('opens detail from Overview and restores the invoking row after Back with filters preserved', async () => {
+    const { fake } = await renderScreen({ overview: [roster(trio())] });
+    fireEvent.change(search(), { target: { value: 'alpha' } });
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    openMember('ALPHA-two');
+    expect(screen.queryByRole('list', { name: /^Members of / })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Member availability' })).toBeNull();
+    expect(screen.getAllByRole('region', { name: 'ALPHA-two' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
+    expect(search().value).toBe('alpha'); expect(avail().value).toBe('busy');
+    expect(document.activeElement).toBe(document.querySelector('[data-member-row="c"]'));
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps filters across refresh, resets a vanished availability only, and falls back to the Members heading when the row is filtered out', async () => {
+    const after = trio().map(m => m.memberId === 'c' ? { ...m, presence: 'idle' } : m);
+    const onlyIdle = trio().map(m => ({ ...m, presence: 'idle' }));
+    await renderScreen({ overview: [roster(trio()), roster(after), roster(onlyIdle)] });
+    fireEvent.change(search(), { target: { value: 'alpha' } });
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    openMember('ALPHA-two');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    expect(screen.getAllByRole('region', { name: 'ALPHA-two' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
+    expect(names()).toEqual(['a']);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Members' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(names()).toEqual(['a', 'b', 'c']);
+    fireEvent.change(search(), { target: { value: 'alpha' } });
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    expect(avail().value).toBe(''); expect(search().value).toBe('alpha');
+    expect(names()).toEqual(['a', 'c']);
+  });
+
+  it('clears detail on team change and reports a refreshed missing member before focusing the roster', async () => {
+    const a = member({ memberId: 'a', name: 'a' }), b = member({ memberId: 'b', name: 'b' });
+    const { result } = await renderScreen({ overview: [roster([a, b]), roster([b, a]), roster([b]), roster([a, b], { membersTruncated: true }), roster([b], { membersTruncated: true })] });
+    openMember('a');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    expect(screen.getAllByRole('region', { name: 'a' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
+    openMember('a');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    expect(screen.queryByRole('region', { name: 'a' })).toBeNull();
+    expect(screen.getByText('Member "a" is no longer in this team. Showing all members.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Members' }));
+    expect(names()).toEqual(['b']);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    openMember('a');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    expect(screen.getByText('Member "a" is not among the returned members (the member list is truncated). Showing the returned members.')).toBeTruthy();
+    result.unmount();
+  });
+
+  it('keeps filters across same-team reconnection and resets them on workspace change', async () => {
+    const fake = fakeManagement({ overview: [roster(trio()), roster(trio()), roster(trio())] });
+    const ui = (state: 'connected' | 'lost', ws = workspaceA) => <TeamsHarness sidebar workspace={ws} management={fake.api} connection={connectionFixture(state)} />;
+    const result = render(ui('connected'));
+    await act(async () => {});
+    fireEvent.change(search(), { target: { value: 'alpha' } });
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    result.rerender(ui('lost'));
+    result.rerender(ui('connected'));
+    await act(async () => {});
+    expect(search().value).toBe('alpha'); expect(avail().value).toBe('busy');
+    result.rerender(ui('connected', { ...workspaceA, id: 'ws-b' }));
+    await act(async () => {});
+    expect(search().value).toBe(''); expect(avail().value).toBe('');
+  });
+
+  it('clears detail and filters when switching to another team', async () => {
+    const { result } = await renderScreen();
+    fireEvent.change(search(), { target: { value: 'dev' } });
+    fireEvent.change(avail(), { target: { value: 'busy' } });
+    openMember('dev');
+    fireEvent.click(teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'Release Team'));
+    await act(async () => {});
+    expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
+    expect(search().value).toBe('');
+    expect(avail().value).toBe('');
+  });
+  it('roster_shows_only_returned_identity_role_agent_availability_and_work', async () => {
     const { fake } = await renderScreen();
     const dev = memberRow('dev');
     expect(['name', 'role', 'agent', 'availability', 'work'].map(f => field(dev, f))).toEqual(['dev', 'Developer', 'Active: opencode-sonnet · opencode · claude-sonnet', 'Working', 'T-031 Teams screen']);
@@ -789,7 +955,7 @@ describe('member roster', () => {
     expect(list.textContent).not.toMatch(/Implements scoped tickets\.|Default —/);
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
-  it.skip('keyboard_enter_and_space_open_the_exact_member', async () => {
+  it('keyboard_enter_and_space_open_the_exact_member', async () => {
     const user = userEvent.setup();
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member(), member({memberId: 'qa', name: 'qa'})]})])}]});
     memberRow('qa').focus(); await user.keyboard('{Enter}');
@@ -800,7 +966,7 @@ describe('member roster', () => {
     expect(document.activeElement).toBe(memberRow('qa')); expect(memberRow('qa').getAttribute('aria-current')).toBe('true');
     memberRow('dev').focus(); await user.keyboard(' '); expect(screen.getByRole('region', {name: 'dev'})).toBeTruthy();
   });
-  it.skip('refresh_keeps_detail_on_the_same_stable_member_and_removal_shows_notice', async () => {
+  it('refresh_keeps_detail_on_the_same_stable_member_and_removal_shows_notice', async () => {
     const dev = member(), qa = member({memberId: 'qa', name: 'qa'});
     const mk = (members: typeof dev[]) => ({ok: true as const, data: overviewFixture([team({members})])});
     await renderScreen({overview: [mk([dev, qa]), mk([{...qa, role: 'Reviewer'}, dev]), mk([dev])]});
@@ -811,7 +977,7 @@ describe('member roster', () => {
     expect(screen.getByText('Member "qa" is no longer in this team. Showing all members.').getAttribute('role')).toBe('status');
     expect(memberRow('dev')).toBeTruthy();
   });
-  it.skip('truncated_refresh_reports_selected_member_not_returned', async () => {
+  it('truncated_refresh_reports_selected_member_not_returned', async () => {
     const dev = member(), qa = member({memberId: 'qa', name: 'qa'});
     await renderScreen({overview: [
       {ok: true, data: overviewFixture([team({members: [dev, qa]})])},
@@ -824,7 +990,7 @@ describe('member roster', () => {
     expect(screen.getByText('Member "qa" is not among the returned members (the member list is truncated). Showing the returned members.').getAttribute('role')).toBe('status');
     expect(memberRow('dev')).toBeTruthy();
   });
-  it.skip('navigation_between_roster_and_detail_does_not_read_management', async () => {
+  it('navigation_between_roster_and_detail_does_not_read_management', async () => {
     const {fake} = await renderScreen();
     showMembers(); openMember('dev');
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
@@ -834,18 +1000,18 @@ describe('member roster', () => {
     expect(fake.agents).toHaveBeenCalledTimes(1);
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
   });
-  it.skip('member_without_id_is_listed_but_not_openable', async () => {
+  it('member_without_id_is_listed_but_not_openable', async () => {
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({memberId: null, name: 'ghost-runtime', source: 'runtime'})]})])}]});
     const row = memberRow('ghost-runtime'); expect(row.textContent).toContain('No member id returned'); expect(row.closest('li')!.querySelector('button')).toBeNull();
   });
-  it.skip('empty_roster_and_truncation_are_truthful', async () => {
+  it('empty_roster_and_truncation_are_truthful', async () => {
     const empty = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: []})])}]});
-    fireEvent.click(screen.getByRole('tab', {name: 'Members'})); expect(screen.getByText('This team has no members.')).toBeTruthy(); expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull(); empty.result.unmount();
+    fireEvent.click(screen.getByRole('tab', {name: 'Overview'})); expect(screen.getByText('This team has no members.')).toBeTruthy(); expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull(); empty.result.unmount();
     const members = Array.from({length: 16}, (_, i) => member({memberId: `m${i}`, name: `m${i}`}));
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members, membersTruncated: true})])}]});
-    expect(within(showMembers()).getAllByRole('listitem')).toHaveLength(16); expect(screen.getByText('Showing the first 16 members.')).toBeTruthy();
+    expect(within(showMembers()).getAllByRole('listitem')).toHaveLength(16); expect(screen.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
   });
-  it.skip('add_member_is_available_at_members_level', async () => {
+  it('add_member_is_available_at_members_level', async () => {
     await renderScreen(); showMembers(); expect(screen.getAllByRole('button', {name: 'Add member'})).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', {name: 'Add member'})); expect(screen.getByRole('form', {name: 'Add member'})).toBeTruthy();
     openMember('dev'); expect(screen.queryByRole('button', {name: 'Add member'})).toBeNull();
@@ -853,19 +1019,19 @@ describe('member roster', () => {
 });
 
 describe('roster evidence and team removal', () => {
-  it.skip('roster_saved_fallback_is_never_labelled_active', async () => {
+  it('roster_saved_fallback_is_never_labelled_active', async () => {
     const option = {...member().agentOptions[0]!, name: 'Saved choice'};
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({runtime: null, agentOptions: [option]}), member({memberId: 'missing', name: 'missing', runtime: null, agentOptions: [{...option, id: 'gone', name: null, state: 'missing'}]}), member({memberId: 'runtime', name: 'runtime', runtime: null, source: 'runtime'})]})])}]});
     expect(field(memberRow('dev'), 'agent')).toBe('Not running · saved default: Saved choice');
     expect(field(memberRow('missing'), 'agent')).toContain('Saved default is missing from the catalog');
     expect(field(memberRow('runtime'), 'agent')).toBe('No live or saved agent');
   });
-  it.skip('roster_role_shows_catalog_name_stable_id_and_diagnostics', async () => {
+  it('roster_role_shows_catalog_name_stable_id_and_diagnostics', async () => {
     const {result} = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({role: 'qa-b'}), member({memberId: 'x', name: 'x', role: 'retired', roleState: 'undefined'})]})])}], roles: [{ok: true, data: rolesFixture({items: [roleItem('qa-b', {name: 'QA'})]})}]});
     expect(field(memberRow('dev'), 'role')).toBe('QAqa-b'); expect(field(memberRow('x'), 'role')).toContain('Role not defined in roles.json'); result.unmount();
     await renderScreen({roles: [{ok: false, error: {code: 'ERROR', message: 'failed', retryable: false}}]}); expect(field(memberRow('dev'), 'role')).toBe('Developer');
   });
-  it.skip('removed_team_never_opens_same_member_id_in_another_team', async () => {
+  it('removed_team_never_opens_same_member_id_in_another_team', async () => {
     const alpha = team({id: 'alpha', name: 'Alpha', members: [member()]}), beta = team({id: 'beta', name: 'Beta', members: [member()]});
     await renderScreen({overview: [{ok: true, data: overviewFixture([alpha, beta])}, {ok: true, data: overviewFixture([beta])}]});
     openMember('dev'); fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
@@ -889,7 +1055,7 @@ it('routing tab shows workspace routing with role links without extra reads', as
 });
 
 describe('member detail focus and settings', () => {
-  it.skip('separates member settings, saved options and live state with timing copy', async () => {
+  it('separates member settings, saved options and live state with timing copy', async () => {
     await renderScreen(); showMembers(); const detail = openMember('dev');
     expect(within(detail).getByRole('navigation', {name: 'Member location'}).textContent).toBe('Dev TeamMembersdev');
     for (const label of ['Name', 'Member id', 'Role', 'Ticket permission']) expect(within(detail).getByText(label)).toBeTruthy();
@@ -902,7 +1068,7 @@ describe('member detail focus and settings', () => {
     expect(detail.textContent).not.toMatch(/roles? (provides?|supply|supplies|grants?|owns?|controls?|determines?|sets?) /i);
     expect(detail.textContent).not.toMatch(/role'?s? (permission|default agent|active agent|quota)/i);
   });
-  it.skip('shows inline and runtime-only members without inventing saved catalog options', async () => {
+  it('shows inline and runtime-only members without inventing saved catalog options', async () => {
     const inline = member({agentMode: 'inline', provider: 'codex', model: null});
     const runtime = member({memberId: 'live', name: 'live', source: 'runtime'});
     await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [inline, runtime]})])}]});
@@ -913,7 +1079,7 @@ describe('member detail focus and settings', () => {
     expect(detail.textContent).toContain('Saved options are not available for runtime-only members.');
     expect(within(detail).queryByRole('button', {name: /^(Edit|Remove) live$/})).toBeNull();
   });
-  it.skip('keeps a missing role visible and repairable without a link', async () => {
+  it('keeps a missing role visible and repairable without a link', async () => {
     await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [member({role: 'retired'})]})])}]});
     const detail = openMember('dev');
     expect(detail.textContent).toContain('Choose an existing role by editing this member.');
@@ -921,7 +1087,7 @@ describe('member detail focus and settings', () => {
     fireEvent.click(within(detail).getByRole('button', {name: 'Edit dev'}));
     expect(within(screen.getByLabelText('Role')).getByRole('option', {name: 'retired — missing from role catalog'})).toBeTruthy();
   });
-  it.skip('focuses the heading and restores the roster row on return', async () => {
+  it('focuses the heading and restores the roster row on return', async () => {
     await renderScreen(); showMembers(); openMember('dev');
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
     expect(screen.getByRole('heading', {name: 'Member settings'})).toBeTruthy();
@@ -930,7 +1096,7 @@ describe('member detail focus and settings', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
     expect(document.activeElement).toBe(document.querySelector('[data-member-row="dev"]'));
   });
-  it.skip('restores edit and remove focus after cancelling', async () => {
+  it('restores edit and remove focus after cancelling', async () => {
     await renderScreen(); showMembers(); openMember('lead');
     fireEvent.click(screen.getByRole('button', {name: 'Edit lead'}));
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'Edit lead'}));
@@ -941,7 +1107,7 @@ describe('member detail focus and settings', () => {
     fireEvent.keyDown(screen.getByRole('alertdialog'), {key: 'Escape'});
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Remove lead'}));
   });
-  it.skip('restores add focus after cancelling', async () => {
+  it('restores add focus after cancelling', async () => {
     await renderScreen(); showMembers();
     fireEvent.click(screen.getByRole('button', {name: 'Add member'}));
     fireEvent.click(within(screen.getByRole('form', {name: 'Add member'})).getByRole('button', {name: 'Cancel'}));
@@ -955,7 +1121,7 @@ const calls = (fake: ReturnType<typeof fakeManagement>) => [fake.overview, fake.
 const btn = (r: { getByRole: (role: string, o: { name: string | RegExp }) => HTMLElement }, name: string | RegExp) => r.getByRole('button', { name }) as HTMLButtonElement;
 
 describe('T-082 states', () => {
-  it.skip('member_activation_focuses_the_member_detail_h2', async () => {
+  it('member_activation_focuses_the_member_detail_h2', async () => {
     await renderMembers();
     fireEvent.click(memberRow('dev'));
     const heading = screen.getByRole('heading', { name: 'dev', level: 2 });
@@ -977,7 +1143,7 @@ describe('T-082 states', () => {
     expect(document.activeElement).toBe(refresh);
   });
 
-  it.skip('mixed_refresh_failure_does_not_announce_success_and_retries_only_failed_source', async () => {
+  it('mixed_refresh_failure_does_not_announce_success_and_retries_only_failed_source', async () => {
     const { fake, result } = await renderScreen({
       roles: [okR(rolesFixture()), managementError('ROLES_DOWN', 'catalog unavailable', 'Check roles.'), okR(rolesFixture())],
     });
@@ -991,7 +1157,7 @@ describe('T-082 states', () => {
     expect(result.queryByText('Teams data refreshed.')).toBeNull();
     expect(result.getByRole('alert').textContent).toContain('ROLES_DOWN: catalog unavailable');
     expect(result.getByRole('alert').textContent).toContain('Showing previously loaded data.');
-    expect(result.getByRole('tab', { name: 'Members' }).hasAttribute('disabled')).toBe(false);
+    expect(result.getByRole('tab', { name: 'Overview' }).hasAttribute('disabled')).toBe(false);
 
     fireEvent.click(btn(result, 'Retry loading roles'));
     await act(async () => {});
@@ -1017,14 +1183,14 @@ describe('T-082 states', () => {
     expect(result.container.querySelectorAll('.teams-card')).toHaveLength(0);
   });
 
-  it.skip('empty_roster_keeps_add_member_available', async () => {
+  it('empty_roster_keeps_add_member_available', async () => {
     const { result } = await renderMembers({ overview: [okR(emptyRoster())] });
     expect(result.getByText('This team has no members.')).toBeTruthy();
     expect(btn(result, 'Add member').disabled).toBe(false);
     expect(result.queryAllByRole('listitem').filter(li => li.querySelector('.teams-member-row'))).toHaveLength(0);
   });
 
-  it.skip('partial_truncated_and_unavailable_notices_use_returned_data', async () => {
+  it('partial_truncated_and_unavailable_notices_use_returned_data', async () => {
     const unavailable = await renderScreen({ overview: [okR(runtimeUnavailable('RUNTIME_DOWN', 'tmux is not reachable'))] });
     expect(within(unavailable.result.getByRole('list', { name: 'Data notices' })).getByText('Live team state unavailable — tmux is not reachable')).toBeTruthy();
     unavailable.result.unmount();
@@ -1041,10 +1207,10 @@ describe('T-082 states', () => {
     expect(truncated.result.queryByText(/of \d+ teams/)).toBeNull();
     truncated.result.unmount();
     await renderMembers({ overview: [okR(memberTruncatedOverview())] });
-    expect(screen.getByText('Showing the first 1 members.')).toBeTruthy();
+    expect(screen.getByText('Showing 1 of 1 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
   });
 
-  it.skip('failed_refresh_retains_stale_overview_and_retries_only_overview', async () => {
+  it('failed_refresh_retains_stale_overview_and_retries_only_overview', async () => {
     const runBoard = vi.fn();
     const { fake, result } = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'overview unreadable', 'Check the coordinator.'), okR(twoTeams())], calls: { runBoard } });
     expect(btn(result, 'Run board').disabled).toBe(false);
@@ -1063,7 +1229,7 @@ describe('T-082 states', () => {
     expect(btn(result, 'Run board').disabled).toBe(true);
     fireEvent.click(btn(result, 'Run board'));
     expect(runBoard).not.toHaveBeenCalled();
-    expect(result.getByRole('tab', { name: 'Members' }).hasAttribute('disabled')).toBe(false);
+    expect(result.getByRole('tab', { name: 'Overview' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(btn(result, 'Retry'));
     await act(async () => {});
     expect(calls(fake)).toEqual([3, 2, 2, 2]);
@@ -1106,7 +1272,7 @@ describe('T-082 states', () => {
     expect((result.getByLabelText('Team name') as HTMLInputElement).value).toBe('New team name');
   });
 
-  it.skip('member_validation_alert_does_not_duplicate_section_error_alert', async () => {
+  it('member_validation_alert_does_not_duplicate_section_error_alert', async () => {
     await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unreadable')] });
     fireEvent.click(memberRow('dev')); await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Edit dev' })); await act(async () => {});
@@ -1117,7 +1283,7 @@ describe('T-082 states', () => {
     expect(document.body.textContent).toContain('ROLES_DOWN: roles unreadable');
   });
 
-  it.skip.each(['roles', 'agents'] as const)('stale %s catalog blocks dependent member changes until retry', async (source) => {
+  it.each(['roles', 'agents'] as const)('stale %s catalog blocks dependent member changes until retry', async (source) => {
     const updateMember = vi.fn();
     const failure = managementError('CATALOG_DOWN', 'catalog unavailable');
     const opts = source === 'roles'
@@ -1140,7 +1306,7 @@ describe('T-082 states', () => {
     else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
   });
 
-  it.skip.each(['roles', 'agents'] as const)('pending %s refresh blocks dependent member changes until fresh data arrives', async (source) => {
+  it.each(['roles', 'agents'] as const)('pending %s refresh blocks dependent member changes until fresh data arrives', async (source) => {
     const updateMember = vi.fn();
     const roleGate = deferred<ReturnType<typeof okR<ReturnType<typeof rolesFixture>>>>();
     const agentGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>>>();
@@ -1166,7 +1332,7 @@ describe('T-082 states', () => {
     else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
   });
 
-  it.skip('stale catalogs do not block an unrelated member name change', async () => {
+  it('stale catalogs do not block an unrelated member name change', async () => {
     const updateMember = vi.fn(async () => okR({ team: {}, member: { name: 'Renamed' }, problems: [], appliesOnNextStart: false }));
     await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unavailable')], agents: [managementError('AGENTS_DOWN', 'agents unavailable')], calls: { updateMember } });
     fireEvent.click(memberRow('dev')); await act(async () => {});
@@ -1228,7 +1394,7 @@ describe('T-082 states', () => {
     expect(calls(fake)).toEqual([1, 1, 2, 3]);
   });
 
-  it.skip('connecting_lost_and_reconnected_disable_only_unsafe_actions', async () => {
+  it('connecting_lost_and_reconnected_disable_only_unsafe_actions', async () => {
     const writes = Object.fromEntries(['createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'runBoard', 'stopBoard'].map(n => [n, vi.fn()]));
     const fake = fakeManagement({ calls: writes });
     const ui = (state: 'connecting' | 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
@@ -1245,7 +1411,7 @@ describe('T-082 states', () => {
     expect(btn(result, 'Run board').disabled).toBe(true);
     expect(btn(result, 'Refresh').disabled).toBe(false);
     expect(result.getByRole('tab', { name: 'Routing' }).hasAttribute('disabled')).toBe(false);
-    fireEvent.click(result.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(result.getByRole('tab', { name: 'Overview' }));
     expect(openMember('dev')).toBeTruthy();
     expect(btn(result, 'Edit dev').disabled).toBe(true);
     expect(btn(result, 'Back to members').disabled).toBe(false);
@@ -1256,14 +1422,16 @@ describe('T-082 states', () => {
     for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled();
   });
 
-  it.skip('team_tabs_roving_and_sidebar_native_keyboard_behavior', async () => {
+  it('team_tabs_roving_and_sidebar_native_keyboard_behavior', async () => {
     const { result } = await renderScreen();
     const tabs = result.getAllByRole('tab');
     expect(tabs.filter(t => t.tabIndex === 0)).toHaveLength(1);
     tabs[0]!.focus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Members' }));
-    expect(result.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
+    expect(result.getByRole('tab', { name: 'Routing' }).getAttribute('aria-selected')).toBe('true');
+    await userEvent.keyboard('{Home}');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Overview' }));
     await userEvent.keyboard('{End}');
     expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
     await userEvent.keyboard('{ArrowRight}');
@@ -1297,7 +1465,7 @@ describe('T-082 states', () => {
     expect(document.getElementById('teams-detail-title')!.textContent).toBe(name);
   });
 
-  it.skip('member_open_back_save_remove_and_error_focus_is_deterministic', async () => {
+  it('member_open_back_save_remove_and_error_focus_is_deterministic', async () => {
     const updateMember = vi.fn()
       .mockResolvedValueOnce({ ok: false, error: { code: 'BAD_REQUEST', message: 'nope', retryable: false } })
       .mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'dev2', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
@@ -1332,7 +1500,7 @@ describe('T-082 states', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove dev' }));
   });
 
-  it.skip('successful_member_edit_retains_selection_and_focuses_updated_heading', async () => {
+  it('successful_member_edit_retains_selection_and_focuses_updated_heading', async () => {
     const refreshed = twoTeams();
     refreshed.teams[1]!.members[0]!.name = 'Updated developer';
     const updateMember = vi.fn().mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'Updated developer', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
@@ -1347,7 +1515,7 @@ describe('T-082 states', () => {
     expect(screen.queryByRole('button', { name: 'Save member' })).toBeNull();
   });
 
-  it.skip('successful_removal_clears_detail_and_focuses_the_next_action_after_refresh', async () => {
+  it('successful_removal_clears_detail_and_focuses_the_next_action_after_refresh', async () => {
     const initial = twoTeams();
     const refreshed = twoTeams();
     refreshed.teams[1]!.members = refreshed.teams[1]!.members.filter(m => m.memberId !== 'dev');
@@ -1364,7 +1532,7 @@ describe('T-082 states', () => {
     expect(document.activeElement).toBe(btn(result, 'Add member'));
   });
 
-  it.skip('status_and_missing_evidence_are_not_color_only', async () => {
+  it('status_and_missing_evidence_are_not_color_only', async () => {
     const o = overviewFixture([team({ members: [
       member({ memberId: 'a', name: 'a', presence: 'limit_reached', work: { state: 'unavailable', reason: 'offline' } }),
       member({ memberId: 'b', name: 'b', presence: 'brand_new_state', role: null, roleState: 'undefined' as never, agentDefId: null, provider: null, model: null, agentOptions: [], defaultAgent: null }),
@@ -1382,7 +1550,7 @@ describe('T-082 states', () => {
     expect(field(memberRow('b'), 'agent').length).toBeGreaterThan(0);
   });
 
-  it.skip('no_illustrative_design_data_is_rendered', async () => {
+  it('no_illustrative_design_data_is_rendered', async () => {
     const empty = await renderScreen({ overview: [okR(emptyWorkspace())], agents: [okR(catalogFixture({ agents: [] }))], boardSettings: [okR(boardSettingsFixture())], roles: [okR(invalidRoleCatalog())] });
     const text = empty.result.container.textContent!;
     for (const sample of ['Dev Team', 'Release Team', 'OpenCode', 'Codex', 'Claude', 'gpt', 'sonnet', 'T-0', 'running', 'idle']) expect(text).not.toContain(sample);
@@ -1603,11 +1771,11 @@ describe('T-084 shared sidebar navigation controller', () => {
     return { fake, result, controller: () => ref.current!, keys, ui };
   }
 
-  it.skip('shared_navigation_controller_prevents_second_overview_read', async () => {
+  it('shared_navigation_controller_prevents_second_overview_read', async () => {
     const { fake, result } = await renderWithController();
     const sidebar = result.getByRole('navigation', { name: 'Harness sidebar' });
     fireEvent.click(teamRow(sidebar, 'Release Team'));
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     await openTab(result, 'Routing');
     fireEvent.click(teamRow(sidebar, 'Dev Team'));
     expect(fake.overview).toHaveBeenCalledTimes(1);
@@ -1616,9 +1784,9 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(fake.overview).toHaveBeenCalledTimes(2);
   });
 
-  it.skip('external_team_selection_clears_member_and_returns_to_overview', async () => {
+  it('external_team_selection_clears_member_and_returns_to_overview', async () => {
     const { result, controller } = await renderWithController();
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     openMember('dev');
     expect(document.getElementById('teams-member-detail-title')).toBeTruthy();
     act(() => controller().selectTeam('release'));
@@ -1641,11 +1809,11 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('refresh_reorder_preserves_team_tab_member_and_focus', async () => {
+  it('refresh_reorder_preserves_team_tab_member_and_focus', async () => {
     const [release, dev] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
     const after = overviewFixture([{ ...release, runtime: { state: 'running', teamId: 'r', status: 'running' } }, { ...dev, runtime: { state: 'stopped', teamId: null, status: null } }]);
     const { fake, result } = await renderWithController({ overview: [okR(twoTeams()), okR(after)] });
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     openMember('dev');
     const row = teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'Dev Team');
     row.focus();
@@ -1653,18 +1821,18 @@ describe('T-084 shared sidebar navigation controller', () => {
     await settle();
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(cardNames(result.getByRole('navigation', { name: 'Harness sidebar' }))).toEqual(['Release Team', 'Dev Team']);
-    expect(selectedTabs(result)).toEqual(['Members']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
     expect(document.getElementById('teams-member-detail-title')).toBeTruthy();
     expect(result.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
   });
 
-  it.skip('refresh_removal_clears_confirmation_and_uses_first_ordered_team', async () => {
+  it('refresh_removal_clears_confirmation_and_uses_first_ordered_team', async () => {
     const running = { state: 'running' as const, teamId: 't', status: 'running' };
     const live = team({ runtime: running, members: [member({ runtime: liveRuntime() as never })] });
     const other = team({ id: 'other', name: 'Other Team', members: [member({ memberId: 'o', name: 'o' })] });
     const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'assignment-A' } } });
     const { result } = await renderWithController({ overview: [okR(overviewFixture([live, other])), okR(overviewFixture([other]))], calls: { switchMemberAgent } });
-    await openTab(result, 'Members');
+    await openTab(result, 'Overview');
     openMember('dev');
     fireEvent.click(result.getByRole('button', { name: 'Switch' }));
     await settle();

@@ -193,6 +193,20 @@ export function runtimeTone(state: string): Tone {
   }
 }
 
+export interface MemberListFilters { query: string; availability: string | null }
+
+/** Filters only the returned members, by the text the roster actually displays; keeps backend order. */
+export function filterMembers(members: readonly OverviewMember[], roles: readonly RoleCatalogItem[] | null, filters: MemberListFilters): OverviewMember[] {
+  const query = filters.query.trim().toLowerCase();
+  return members.filter((m) => {
+    if (filters.availability !== null && m.presence !== filters.availability) return false;
+    if (query === '') return true;
+    const identity = memberIdentity(m), role = memberRoleSummary(m, roles), agent = memberAgentSummary(m);
+    return [identity.name, identity.id, m.role, role.label, role.roleId, agent.text, agent.note, workSummary(m.work)]
+      .some((v) => v !== null && v.toLowerCase().includes(query));
+  });
+}
+
 export interface MemberSelection { teamKey: string; memberId: string }
 
 export type MemberSelectionResult =

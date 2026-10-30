@@ -20,14 +20,11 @@ export interface TeamViewItem {
   team: OverviewTeam;
 }
 
-/** Child tabs plus the retained Members panel id (recomposed by P05-S51–S53). */
-type TeamsPanelView = TeamsChildView | 'members';
-
-export function teamsTabId(view: TeamsPanelView): string {
+export function teamsTabId(view: TeamsChildView): string {
   return `teams-tab-${view}`;
 }
 
-export function teamsPanelId(view: TeamsPanelView): string {
+export function teamsPanelId(view: TeamsChildView): string {
   return `teams-panel-${view}`;
 }
 

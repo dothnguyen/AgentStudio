@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
-import { deferred, fakeManagement, overviewFixture, team, teamDefinition } from './teamsFixtures';
+import { catalogFixture, deferred, fakeManagement, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -161,5 +161,83 @@ describe('team editing edge cases', () => {
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: /^Open QA Team,/ }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('hides Add member for runtime-only or uneditable teams and blocks stale catalog submissions', async () => {
+    const addMember = vi.fn();
+    const runtime = fakeManagement({ overview: [ok(overviewFixture([team({ id: null, name: null, definition: { state: 'missing', problems: [] }, runtime: { state: 'running', teamId: 'rt-9', status: 'running' } })]))], calls: { addMember } });
+    render(<TeamsHarness workspace={workspaceA} management={runtime.api} />);
+    await flush();
+    expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
+    cleanup();
+
+    const down = { ok: false as const, error: { code: 'INTERNAL', message: 'down', retryable: true } };
+    const stale = fakeManagement({ roles: [down], agents: [down], calls: { addMember } });
+    render(<TeamsHarness workspace={workspaceA} management={stale.api} />);
+    await flush();
+    await click('Add member');
+    const form = screen.getByRole('form', { name: 'Add member' });
+    const submit = within(form).getByRole('button', { name: 'Add member' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    await flush();
+    expect(addMember).not.toHaveBeenCalled();
+  });
+
+  it.each(['roles', 'agents'] as const)('blocks adding with retained %s catalog data after refresh fails', async (source) => {
+    const addMember = vi.fn();
+    const down = { ok: false as const, error: { code: 'CATALOG_DOWN', message: 'catalog unavailable', retryable: true } };
+    const catalogs = source === 'roles'
+      ? { roles: [ok(teamRolesFixture()), down] }
+      : { agents: [ok(catalogFixture()), down] };
+    const fake = fakeManagement({ ...catalogs, calls: { addMember } });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+    await flush();
+    await click('Add member');
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'QA' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
+    const form = screen.getByRole('form', { name: 'Add member' });
+    expect((within(form).getByRole('button', { name: 'Add member' }) as HTMLButtonElement).disabled).toBe(false);
+    await click('Refresh');
+    expect(screen.getByRole('alert').textContent).toContain('Showing previously loaded data.');
+    expect(screen.getByRole('alert').textContent).toContain('CATALOG_DOWN: catalog unavailable');
+    expect((within(form).getByRole('button', { name: 'Add member' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(form);
+    await flush();
+    expect(addMember).not.toHaveBeenCalled();
+    expect(screen.getByRole('form', { name: 'Add member' })).toBe(form);
+    expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
+    expect(screen.getByRole('button', { name: source === 'agents' ? 'Remove codex-gpt' : 'Remove Codex GPT' })).toBeTruthy();
+  });
+
+  it('keeps write lock and exact backend error feedback in the integrated add flow', async () => {
+    const pending = deferred<{ ok: false; error: { code: string; message: string; remediation: string; retryable: boolean; data: { problems: { path: string; message: string }[] } } }>();
+    const addMember = vi.fn(() => pending.promise);
+    const fake = fakeManagement({ calls: { addMember } });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+    await flush();
+    await click('Add member');
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'QA' } });
+    fireEvent.change(screen.getByLabelText('Member name (optional)'), { target: { value: 'New tester' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'codex-gpt' } });
+    const submit = within(screen.getByRole('form', { name: 'Add member' })).getByRole('button', { name: 'Add member' });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    await flush();
+    expect(addMember).toHaveBeenCalledTimes(1);
+    const name = screen.getByLabelText('Member name (optional)');
+    name.focus();
+    expect(document.activeElement).toBe(name);
+    await act(async () => { pending.resolve({ ok: false, error: { code: 'MEMBER_EXISTS', message: 'Already there.', remediation: 'Pick another role.', retryable: false, data: { problems: [{ path: 'role', message: 'Role is already assigned' }] } } }); });
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain('MEMBER_EXISTS: Already there.');
+    expect(alert.textContent).toContain('Pick another role.');
+    expect(within(alert).getByRole('list', { name: 'Validation problems' }).textContent).toContain('role: Role is already assigned');
+    expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
+    expect((screen.getByLabelText('Member name (optional)') as HTMLInputElement).value).toBe('New tester');
+    expect(screen.getByRole('button', { name: 'Remove Codex GPT' })).toBeTruthy();
+    expect(screen.getByRole('form', { name: 'Add member' })).toBeTruthy();
+    expect(document.activeElement).toBe(submit);
+    expect(addMember).toHaveBeenCalledTimes(1);
   });
 });

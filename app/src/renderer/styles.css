@@ -1326,6 +1326,16 @@ ul[aria-label="Workspaces"] {
   .teams-member-settings { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* Integrated filterable member roster (P05-S51) */
+.teams-roster { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; border: 1px solid var(--border); min-width: 0; }
+.teams-roster > h3 { margin: 0; }
+.teams-member-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; }
+.teams-member-filter { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 200px; }
+.teams-member-filter > span { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+@media (max-width: 560px) {
+  .teams-member-filters { display: grid; grid-template-columns: minmax(0, 1fr); }
+}
+
 .team-nav-new { align-self: flex-start; min-width: 0; max-width: 100%; font-size: 0.9em; overflow-wrap: anywhere; }
 .team-nav-new:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .teams-create-dialog { width: min(480px, 100%); max-height: 100%; padding: 16px; overflow: auto; border: 1px solid #464646; border-radius: 4px; background: var(--surface-raised); box-shadow: 0 12px 28px rgb(0 0 0 / 45%); overflow-wrap: anywhere; }

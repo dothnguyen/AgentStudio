@@ -377,7 +377,7 @@ describe('WorkspaceShell', () => {
   it.skip('direct_roles_navigation_clears_requested_role', async () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+    fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
@@ -391,7 +391,7 @@ describe('WorkspaceShell', () => {
   it.skip('workspace_change_clears_section_and_role_request', async () => {
     const { view, ui } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+    fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
@@ -409,14 +409,14 @@ describe('WorkspaceShell', () => {
     const selected = () => view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent);
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('button', { name: /^Open Release Team,/ }));
-    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     expect(pressed(/^Open Release Team,/)).toBe('true');
     fireEvent.click(view.getByRole('button', { name: 'Agents' }));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     await waitFor(() => expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy());
     expect(pressed(/^Open Release Team,/)).toBe('false');
     expect(selected()).toEqual(['Overview']);
-    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));
     await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
@@ -439,7 +439,7 @@ describe('WorkspaceShell', () => {
       const fake = fakeManagement({ calls: { overview } });
       const view = render(shell(fake, workspace));
       fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-      fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+      fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
       fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
       await waitFor(() => expect(document.activeElement?.id).toBe('teams-member-detail-title'));
       expect(overview).toHaveBeenLastCalledWith('a');
@@ -486,8 +486,8 @@ describe('WorkspaceShell', () => {
       const reads = () => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map(f => f.mock.calls.length);
       const view = render(shell(fake, workspace));
       fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-      await view.findByRole('tab', { name: 'Members' });
-      fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+      await view.findByRole('tab', { name: 'Overview' });
+      fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
       const before = reads();
       expect(before).toEqual([1, 1, 1, 1]);
       view.rerender(shell(fake, workspace, connectionFixture('lost')));
@@ -499,7 +499,7 @@ describe('WorkspaceShell', () => {
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(reads()).toEqual([2, 2, 2, 2]);
       expect(fake.overview.mock.calls.every(c => c[0] === 'a')).toBe(true);
-      expect(view.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected')).toBe('true');
+      expect(view.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
       structure(view);
     });
   });
@@ -617,7 +617,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
     expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
-    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     await settle();
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     await settle();
@@ -640,12 +640,12 @@ describe('T-084 sidebar team navigation', () => {
     const view = render(ui(fake));
     await settle();
     fireEvent.click(row(view, 'Release Team'));
-    fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Release Team', 'Dev Team']);
     expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
-    expect(tabs(view)).toEqual(['Members']);
+    expect(tabs(view)).toEqual(['Overview']);
     fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Dev Team']);

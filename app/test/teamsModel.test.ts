@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, resolveMemberSelection, missingMemberNotice } from "../src/renderer/teams/teamsModel";
+import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, filterMembers, resolveMemberSelection, missingMemberNotice } from "../src/renderer/teams/teamsModel";
 import { roleItem } from './rolesFixtures';
 import {
   availabilityCounts,
@@ -185,5 +185,73 @@ describe('roster evidence summaries', () => {
     expect(workSummary({state: 'working', ticket: null, assignment: {...assignment, goal: ''}})).toBe('Assignment a');
     expect(workSummary({state: 'working', ticket: null, assignment: null})).toBe('Working (no details returned)');
     expect(['not_in_runtime', 'offline', 'constructor', ''].map(reason => workSummary({state: 'unavailable', reason}))).toEqual(['Not available — member is not in the running team', 'Not available — offline', 'Not available — constructor', 'Not available']);
+  });
+});
+
+describe('filterMembers', () => {
+  const none = { query: '', availability: null };
+  const live = twoTeams().teams[1]!.members[0]!.runtime!;
+  const members = [
+    member({ memberId: 'id-only-zz', name: 'Alpha' }),
+    member({ memberId: 'b', name: 'Bravo', role: 'Reviewer' }),
+    member({ memberId: 'c', name: 'Charlie', runtime: { ...live, activeAgent: 'live-agent-q', stale: false } }),
+    member({ memberId: 'd', name: 'Delta', runtime: { ...live, activeAgent: 'old-agent-q', stale: true } }),
+    member({ memberId: 'e', name: 'Echo', runtime: null, agentOptions: [{ id: 'saved-opt', name: 'Saved Default Opt', provider: 'p', model: 'm', reasoning: null, description: null, state: 'ok' }] }),
+    member({ memberId: 'f', name: 'Foxtrot', work: { state: 'working', ticket: { key: 'T-900', title: 'Zebra ticket' }, assignment: null } as never }),
+    member({ memberId: 'g', name: 'Golf', work: { state: 'working', ticket: null, assignment: { id: 'a1', goal: 'Polish the kiwi' } } as never }),
+    member({ memberId: 'h', name: 'Hotel', work: { state: 'unavailable', reason: 'stopped' } }),
+  ];
+  const ids = (query: string) => filterMembers(members, [roleItem('Developer', { name: 'Builder Role' })], { query, availability: null }).map((m) => m.memberId);
+
+  it('filters returned members case-insensitively across every displayed text field and preserves backend order', () => {
+    expect(ids('ID-ONLY')).toEqual(['id-only-zz']);
+    expect(ids('bravo')).toEqual(['b']);
+    expect(ids('REVIEWER')).toEqual(['b']);
+    expect(ids('builder role')).toContain('id-only-zz');
+    expect(ids('live-agent-q')).toEqual(['c']);
+    expect(ids('last live agent')).toEqual(['d']);
+    expect(ids('not running · saved default')).toContain('e');
+    expect(ids('saved default opt')).toEqual(['e']);
+    expect(ids('T-900')).toEqual(['f']);
+    expect(ids('zebra')).toEqual(['f']);
+    expect(ids('KIWI')).toEqual(['g']);
+    expect(ids('team stopped')).toEqual(['h']);
+    expect(ids('no-such-text')).toEqual([]);
+  });
+
+  it('combines an exact availability filter with text and does not mutate the source', () => {
+    const mixed = [
+      member({ memberId: 'a', name: 'a', presence: 'busy' }),
+      member({ memberId: 'b', name: 'b', presence: 'idle' }),
+      member({ memberId: 'c', name: 'c', presence: 'busy-ish' }),
+      member({ memberId: 'd', name: 'delta-unique', presence: 'busy' }),
+    ];
+    const before = JSON.stringify(mixed);
+    expect(filterMembers(mixed, null, { query: '', availability: 'busy' }).map((m) => m.memberId)).toEqual(['a', 'd']);
+    expect(filterMembers(mixed, null, { query: 'DELTA-unique', availability: 'busy' }).map((m) => m.memberId)).toEqual(['d']);
+    expect(filterMembers(mixed, null, { query: '', availability: 'busy-ish' }).map((m) => m.memberId)).toEqual(['c']);
+    expect(filterMembers(mixed, null, { query: 'busy', availability: null })).toEqual([]);
+    expect(JSON.stringify(mixed)).toBe(before);
+  });
+
+  it('treats whitespace query and null availability as no filters', () => {
+    expect(filterMembers(members, null, { query: '   ', availability: null })).toEqual(members);
+    expect(filterMembers(members, null, none)).not.toBe(members);
+  });
+
+  it('searches live provider and model, pending and missing-agent notes, and role fallbacks', () => {
+    const examples = [
+      member({ memberId: 'live', runtime: { ...live, provider: 'provider-unique', model: 'model-unique', pendingAgent: 'pending-unique', stale: false } }),
+      member({ memberId: 'missing', runtime: null, agentOptions: [{ id: 'lost', name: 'Lost', provider: null, model: null, reasoning: null, description: null, state: 'missing' }] }),
+      member({ memberId: 'norole', role: null }),
+      member({ memberId: 'fallback', role: 'uncatalogued-role' }),
+    ];
+    const find = (query: string) => filterMembers(examples, null, { query, availability: null }).map(m => m.memberId);
+    expect(find('PROVIDER-UNIQUE')).toEqual(['live']);
+    expect(find('MODEL-UNIQUE')).toEqual(['live']);
+    expect(find('pending-unique pending')).toEqual(['live']);
+    expect(find('saved default is missing')).toEqual(['missing']);
+    expect(find('no role')).toEqual(['norole']);
+    expect(find('UNCATALOGUED-ROLE')).toEqual(['fallback']);
   });
 });

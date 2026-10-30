@@ -33,7 +33,7 @@ const openTab = async (name: string) => {
 const MEMBER_ACTION = /^(Add member|Edit |Remove |Confirm remove )/;
 const click = async (name: string | RegExp) => {
   if (typeof name === 'string' && MEMBER_ACTION.test(name)
-    && screen.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected') !== 'true') await openTab('Members');
+    && screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected') !== 'true') await openTab('Overview');
   if (typeof name === 'string' && /^(Edit|Remove) (dev|lead)$/.test(name) && !screen.queryByRole('region', { name: name.split(' ')[1] })) openMember(name.split(' ')[1]!);
   fireEvent.click(screen.getByRole('button', { name }));
   await flush();
@@ -246,7 +246,7 @@ describe('team editing', () => {
     expect(alert).toContain('Stop the team before deleting it or removing members.');
   });
 
-  it.skip('add_member_with_catalog_agent', async () => {
+  it('add_member_with_catalog_agent', async () => {
     const addMember = vi.fn(async () => ok({
       team: teamDefinition(),
       member: { id: 'codex-gpt', name: 'Codex GPT', role: 'QA', agent: 'codex-gpt' },
@@ -264,7 +264,7 @@ describe('team editing', () => {
     );
   });
 
-  it.skip('edit_member_sends_only_changes', async () => {
+  it('edit_member_sends_only_changes', async () => {
     const updateMember = vi.fn(async () => ok({
       team: teamDefinition(),
       member: { id: 'dev', name: 'dev', role: 'Reviewer', agent: 'opencode-sonnet' },
@@ -280,7 +280,7 @@ describe('team editing', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'dev', level: 2 }));
   });
 
-  it.skip('edit_inline_member_switches_to_catalog_agent', async () => {
+  it('edit_inline_member_switches_to_catalog_agent', async () => {
     const updateMember = vi.fn(async () => ok({
       team: teamDefinition(),
       member: { id: 'lead', name: 'lead', role: 'TeamLead', agent: 'spare' },
@@ -296,7 +296,7 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', { agents: ['spare'] });
   });
 
-  it.skip('ordered_options_buttons_and_partial_patch', async () => {
+  it('ordered_options_buttons_and_partial_patch', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
     await renderScreen({calls: {updateMember}});
     await click('Edit dev');
@@ -312,7 +312,7 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt']});
     expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
   });
-  it.skip('add_options_excludes_selected_agents_and_restores_removed_agents', async () => {
+  it('add_options_excludes_selected_agents_and_restores_removed_agents', async () => {
     await renderScreen();
     await click('Edit dev');
     const select = screen.getByLabelText('Add agent option') as HTMLSelectElement;
@@ -329,7 +329,7 @@ describe('team editing', () => {
     expect(offered()).toEqual(['codex-gpt']);
   });
 
-  it.skip('saved_edit_does_not_change_live_agent_while_overview_reloads', async () => {
+  it('saved_edit_does_not_change_live_agent_while_overview_reloads', async () => {
     const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
     await renderScreen({overview: [ok(twoTeams()), gate.promise], calls: {updateMember}});
@@ -343,7 +343,7 @@ describe('team editing', () => {
     const row = screen.getByRole('region', {name: 'dev'});
     expect(row.textContent).toContain('opencode-sonnet · opencode · claude-sonnet');
   });
-  it.skip('missing_option_blocks_save_until_removed', async () => {
+  it('missing_option_blocks_save_until_removed', async () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: false}));
     await renderScreen({overview: [ok(overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [missing]})]})]))], calls: {updateMember}});
@@ -358,7 +358,7 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA', agents: ['codex-gpt']});
   });
 
-  it.skip('removing_last_option_blocks_save_and_associates_error', async () => {
+  it('removing_last_option_blocks_save_and_associates_error', async () => {
     const updateMember = vi.fn();
     await renderScreen({calls: {updateMember}});
     await click('Edit dev');
@@ -370,7 +370,7 @@ describe('team editing', () => {
     expect(updateMember).not.toHaveBeenCalled();
   });
 
-  it.skip('inline_name_edit_keeps_saved_configuration_until_conversion', async () => {
+  it('inline_name_edit_keeps_saved_configuration_until_conversion', async () => {
     const inline = member({memberId: 'lead', name: 'lead', role: 'TeamLead', source: 'inline', agentMode: 'inline', agentOptions: [], defaultAgent: null, provider: 'codex', model: 'model-x', reasoning: 'high'});
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'lead', name: 'Lead', role: 'TeamLead'}, problems: [], appliesOnNextStart: false}));
     await renderScreen({overview: [ok(overviewFixture([team({members: [inline]})]))], calls: {updateMember}});
@@ -387,7 +387,7 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('unavailable_catalog_preserves_rows_and_missing_evidence', async () => {
+  it('unavailable_catalog_preserves_rows_and_missing_evidence', async () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     const saved = member({agentMode: 'ordered_catalog', agentOptions: [...member().agentOptions, missing]});
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'QA'}, problems: [], appliesOnNextStart: false}));
@@ -408,7 +408,7 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA', agents: ['opencode-sonnet']});
   });
 
-  it.skip('option_controls_are_ordered_native_buttons_and_operable', async () => {
+  it('option_controls_are_ordered_native_buttons_and_operable', async () => {
     await renderScreen();
     await click('Edit dev');
     fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
@@ -458,7 +458,7 @@ describe('team editing', () => {
     expect(names()).toEqual([]);
   });
 
-  it.skip('remove_member_after_confirmation', async () => {
+  it('remove_member_after_confirmation', async () => {
     const removeMember = vi.fn(async () => ok({
       team: teamDefinition(),
       removed: { id: 'lead', name: 'lead', role: 'TeamLead' },
@@ -489,7 +489,7 @@ describe('team editing', () => {
     expect(createTeam).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('blank_inputs_are_not_sent', async () => {
+  it('blank_inputs_are_not_sent', async () => {
     const createTeam = vi.fn();
     const addMember = vi.fn();
     const updateMember = vi.fn();
@@ -526,7 +526,7 @@ describe('team editing', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('invalid_reference_lists_problems', async () => {
+  it('invalid_reference_lists_problems', async () => {
     const path = 'members[2].role';
     const message = "role 'QA' was deleted from in .agent-studio/roles.json";
     const addMember = vi.fn(async () => fail({
@@ -545,7 +545,7 @@ describe('team editing', () => {
     expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
   });
 
-  it.skip('member_form_uses_catalog_selector_and_blocks_add_when_unavailable', async () => {
+  it('member_form_uses_catalog_selector_and_blocks_add_when_unavailable', async () => {
     const dup = rolesFixture({ items: [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })] });
     const first = await renderScreen({ roles: [ok(dup)] });
     await click('Add member');
@@ -570,7 +570,7 @@ describe('team editing', () => {
     expect(edit.fake.roles).toHaveBeenCalled();
   });
 
-  it.skip('role_only_save_sends_exact_patch_and_next_start_notice', async () => {
+  it('role_only_save_sends_exact_patch_and_next_start_notice', async () => {
     const dup = rolesFixture({ items: [roleItem('Developer'), roleItem('qa-b', { name: 'QA' })] });
     const updateMember = vi.fn(async () => ok({ team: teamDefinition(), member: { id: 'dev', name: 'dev', role: 'qa-b', agent: 'opencode-sonnet' }, problems: [], appliesOnNextStart: true }));
     await renderScreen({ roles: [ok(dup)], calls: { updateMember } });
@@ -581,7 +581,7 @@ describe('team editing', () => {
     expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
   });
 
-  it.skip('duplicate_member_shows_backend_error', async () => {
+  it('duplicate_member_shows_backend_error', async () => {
     const addMember = vi.fn(async () => fail({ code: 'MEMBER_EXISTS', message: "Team 'dev-team' already has a member 'dev'." }));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
@@ -592,7 +592,7 @@ describe('team editing', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it.skip('running_team_conflicts_are_surfaced', async () => {
+  it('running_team_conflicts_are_surfaced', async () => {
     const deleteTeam = vi.fn(async () => fail({
       code: 'TEAM_ALREADY_RUNNING',
       message: "Team 'dev-team' is running in this workspace; stop it before deleting it.",
@@ -622,7 +622,7 @@ describe('team editing', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('rejected_write_shows_internal_error', async () => {
+  it('rejected_write_shows_internal_error', async () => {
     const addMember = vi.fn(() => Promise.reject(new Error('ipc down')));
     await renderScreen({ calls: { addMember } });
     await click('Add member');
@@ -663,7 +663,7 @@ describe('team editing', () => {
     expect(screen.getByRole('status').textContent).toMatch(/The team still has 1 problem; see the team details\.$/);
   });
 
-  it.skip('uneditable_teams_hide_controls', async () => {
+  it('uneditable_teams_hide_controls', async () => {
     const o = overviewFixture([team({
       id: null,
       definition: { state: 'missing', problems: [] },
@@ -671,7 +671,7 @@ describe('team editing', () => {
       members: [member({ source: 'runtime', memberId: 'x', name: 'x' })],
     })]);
     await renderScreen({ overview: [ok(o)] });
-    for (const view of ['Overview', 'Members']) {
+    for (const view of ['Overview', 'Routing']) {
       await openTab(view);
       for (const name of ['Rename team', 'Delete team', 'Add member', 'Edit x']) {
         expect(screen.queryByRole('button', { name })).toBeNull();
@@ -694,38 +694,38 @@ describe('team editing', () => {
 });
 
 describe('ticket permission and member focus', () => {
-  it.skip('retries a failed permission read and displays the saved value', async () => {
+  it('retries a failed permission read and displays the saved value', async () => {
     const teamCall = vi.fn().mockResolvedValueOnce(fail({code: 'INTERNAL', message: 'offline'}))
       .mockResolvedValueOnce(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
-    await renderScreen({calls: {team: teamCall}}); await openTab('Members'); openMember('dev'); await flush();
+    await renderScreen({calls: {team: teamCall}}); await openTab('Overview'); openMember('dev'); await flush();
     expect(screen.getByText('Ticket permission could not be loaded (INTERNAL: offline).')).toBeTruthy();
     await click('Retry loading ticket permission');
     expect(screen.getByText('Can add tickets: Yes')).toBeTruthy();
     expect(teamCall).toHaveBeenCalledTimes(2);
   });
-  it.skip('sends only the role when permission is known and unchanged', async () => {
+  it('sends only the role when permission is known and unchanged', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'qa-b'}, problems: []}));
     const teamCall = vi.fn(async () => ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
     const switchMemberAgent = vi.fn(); const resumeMemberAgent = vi.fn();
     await renderScreen({calls: {team: teamCall, updateMember, switchMemberAgent, resumeMemberAgent}, roles: [{ok: true, data: rolesFixture({items: [roleItem('Developer'), roleItem('qa-b', {name: 'QA'})]})}]});
-    await openTab('Members'); openMember('dev'); await flush(); await click('Edit dev');
+    await openTab('Overview'); openMember('dev'); await flush(); await click('Edit dev');
     expect((screen.getByLabelText('Can add tickets') as HTMLInputElement).checked).toBe(true);
     type('Role', 'qa-b'); await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'qa-b'});
     expect(switchMemberAgent).not.toHaveBeenCalled(); expect(resumeMemberAgent).not.toHaveBeenCalled();
   });
-  it.skip('loads and saves a changed permission', async () => {
+  it('loads and saves a changed permission', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'Developer'}, problems: []}));
     const teamCall = vi.fn(async () => ok({team: teamDefinition(), members: [], problems: [], active: null}));
     await renderScreen({calls: {team: teamCall, updateMember}});
-    await openTab('Members'); openMember('dev'); await flush(); await click('Edit dev');
+    await openTab('Overview'); openMember('dev'); await flush(); await click('Edit dev');
     expect((screen.getByLabelText('Can add tickets') as HTMLInputElement).disabled).toBe(false);
     fireEvent.click(screen.getByLabelText('Can add tickets'));
     await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {canAddTickets: true});
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
   });
-  it.skip('keeps unknown permission out of role edits', async () => {
+  it('keeps unknown permission out of role edits', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'QA'}, problems: []}));
     await renderScreen({calls: {updateMember}});
     await click('Edit dev');
@@ -733,14 +733,14 @@ describe('ticket permission and member focus', () => {
     type('Role', 'QA'); await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA'});
   });
-  it.skip('returns focus to submit after a failed save', async () => {
+  it('returns focus to submit after a failed save', async () => {
     await renderScreen({calls: {updateMember: vi.fn(async () => fail({code: 'INTERNAL', message: 'failed'}))}});
     await click('Edit dev'); type('Role', 'QA'); await click('Save member');
     expect(screen.getByRole('alert').textContent).toContain('Member was not saved.');
     expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Save member'}));
   });
-  it.skip('confirms the exact member and retains confirm focus on failure', async () => {
+  it('confirms the exact member and retains confirm focus on failure', async () => {
     const removeMember = vi.fn(async () => fail({code: 'TEAM_ALREADY_RUNNING', message: 'running'}));
     await renderScreen({calls: {removeMember}}); await click('Remove lead');
     expect(screen.getByRole('alertdialog').textContent).toContain('Remove lead (lead) from Dev Team?');
@@ -753,12 +753,12 @@ describe('ticket permission and member focus', () => {
 });
 
 describe('permission request lifetime', () => {
-  it.skip('ignores a response after navigating to another member', async () => {
+  it('ignores a response after navigating to another member', async () => {
     const first = deferred<ReturnType<typeof ok<{team: ReturnType<typeof teamDefinition>; members: never[]; problems: never[]; active: null}>>>();
     const second = deferred<ReturnType<typeof ok<{team: ReturnType<typeof teamDefinition>; members: never[]; problems: never[]; active: null}>>>();
     const teamCall = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     await renderScreen({calls: {team: teamCall}});
-    await openTab('Members'); openMember('dev');
+    await openTab('Overview'); openMember('dev');
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'})); openMember('lead');
     await act(async () => { first.resolve(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null})); });
     expect(screen.getByRole('region', {name: 'lead'}).textContent).not.toContain('Can add tickets: Yes');
@@ -768,7 +768,25 @@ describe('permission request lifetime', () => {
 });
 
 describe('member creation and removal focus', () => {
-  it.skip('adds permission and restores add button focus', async () => {
+  it('adds ordered agents from Overview without clearing the roster filter', async () => {
+    const addMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'new', name: 'New', role: 'QA'}, problems: [], appliesOnNextStart: true}));
+    await renderScreen({calls: {addMember}});
+    type('Search members', 'dev');
+    await click('Add member');
+    type('Role', 'QA');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'opencode-sonnet'}});
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    await click('Move Codex GPT up');
+    fireEvent.click(screen.getByLabelText('Can add tickets'));
+    await submitAddMember();
+    expect(addMember).toHaveBeenCalledTimes(1);
+    expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', {role: 'QA', agents: ['codex-gpt', 'opencode-sonnet'], canAddTickets: true});
+    expect(screen.getByRole('status').textContent).toBe('Added New to Dev Team. Saved configuration applies on the next team start; the running member is unchanged.');
+    expect(screen.queryByRole('form', {name: 'Add member'})).toBeNull();
+    expect((screen.getByLabelText('Search members') as HTMLInputElement).value).toBe('dev');
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
+  });
+  it('adds permission and restores add button focus', async () => {
     const addMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'new', role: 'QA'}, problems: []}));
     await renderScreen({calls: {addMember}}); await click('Add member');
     fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
@@ -776,7 +794,7 @@ describe('member creation and removal focus', () => {
     expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', {role: 'QA', agents: ['codex-gpt'], canAddTickets: true});
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
-  it.skip('moves focus to Add member after removal', async () => {
+  it('moves focus to Add member after removal', async () => {
     const removeMember = vi.fn(async () => ok({removed: {id: 'lead', name: 'lead'}, problems: []}));
     await renderScreen({calls: {removeMember}}); await click('Remove lead'); await click('Confirm remove lead');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
