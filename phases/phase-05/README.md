@@ -230,3 +230,43 @@ These stories add no live acceptance gate or manual evidence requirement. Focuse
 | Completion | [P05-S47](./stories/P05-S47-teams-states-accessibility-responsive.md) | Automated state, regression, keyboard, focus, and responsive coverage |
 
 These stories intentionally add no live acceptance gate or manual end-to-end requirement. The operator owns running-app verification; story evidence is focused backend, model, renderer, IPC regression, accessibility, typecheck, and production-build automation.
+
+## Teams overview and member detail refresh (T-083)
+
+**Goal.** Update the implemented Teams experience to the v4/v6 hierarchy: teams become compact workspace-sidebar destinations, Overview combines concise operational summaries with the member roster, and member detail leads with live state before a separate saved configuration editor. Preserve the current team, board, routing, member, switch, quota, refresh, connection, and workspace behavior while rendering only real workspace evidence and honest unavailable or partial states.
+
+### Open questions and planning assumptions
+
+| Question | Assumption used by these stories |
+|---|---|
+| Where are `design/teams-overview-v4.png` and `design/teams-member-detail-v6.png`? | They are named by T-083 but absent from this checkout. The stories use the ticket's explicit hierarchy and interactions; the images remain visual guidance when restored and must not override truthful data, existing safety contracts, or accessibility. |
+| When is nested team navigation shown? | Show returned teams beneath the Teams workspace destination whenever a workspace is open. Selecting a child opens Teams on that team's Overview; selecting the Teams parent uses the preserved valid team or first returned team. No URL router is added. |
+| How is overview data shared between the sidebar and Teams content? | Lift the existing `team.overview` section/controller to a workspace-scoped Teams navigation boundary and pass it into `TeamsScreen`. Do not issue duplicate overview reads merely because Teams content is open. |
+| What replaces the Members tab? | Overview contains the one roster and Add member action. Opening a row replaces the Overview content with focused member detail; Back returns to the same Overview roster and restores row focus. Routing remains the other selected-team tab and continues to edit workspace-wide settings. |
+| What does “filterable” mean without a new API? | Filter the bounded returned roster locally with a text query over displayed identity, role, live-agent, and current-work values plus a returned availability selector. Preserve backend order and state clearly when results are truncated or no returned row matches. |
+| When do saved member changes take effect? | Name, role, ticket permission, and ordered catalog options remain saved team-definition settings and apply on the next team start. The first saved option is the next-start default; saving never switches, resumes, or cancels a running member. |
+| Is backend or IPC work required? | No gap was found. Existing `team.overview`, `board.settings`, team/member mutations, `board.run/stop`, and `team.member.switch/resume` projections and typed APIs already cover the ticket; this plan changes renderer ownership, composition, and automated tests only. |
+
+### Verified current implementation and delta
+
+- T-073 and its implementation tickets T-074–T-082 are complete on the board. The current renderer has `TeamChooser` in a large two-column `TeamsScreen`, child tabs for Overview/Members/Routing, and `MemberList` only inside `MembersView`; T-083 moves the chooser to `WorkspaceShell`, integrates the list into Overview, and removes only the Members tab.
+- `WorkspaceShell.tsx` currently owns flat workspace-section state and resets it by `workspace.id`; `TeamsScreen.tsx` owns `team.overview` plus selected team/member state. A shared workspace-scoped controller is required so sidebar rows and content use the same refresh, stale-data, reconnection, and selection evidence.
+- `TeamOverviewPanel.tsx`, `boardControlModel.ts`, and existing mutation helpers already preserve rename/delete and board-run/stop restrictions. Their behavior is recomposed into compact summaries rather than replaced.
+- `MemberList.tsx` and `teamsModel.ts` already distinguish active runtime agents from labelled saved fallbacks and project role, presence, and work. T-083 adds local filtering and relocates the same truthful rows.
+- `MemberDetailPanel.tsx` currently interleaves settings, saved options, `MemberLiveAgentActions`, and repeated active/availability/work text. Split it into one live-first section and one explicit saved view/edit section while retaining the single switch/resume/polling controller in `TeamsScreen.tsx`.
+- `MemberLiveAgentActions.tsx` and `memberAgentActionsModel.ts` already implement frozen live options, quota holds, disabled reasons, switch polling, exact-assignment confirmation, and resume semantics. No saved editor may bypass or silently invoke those contracts.
+- T-062's Roles screen remains the only editor for shared role instructions. Member detail keeps the stable-role deep link and edits only member-owned fields.
+
+### Epics → stories
+
+| Epic | Story | Outcome |
+|---|---|---|
+| Sidebar navigation | [P05-S48](./stories/P05-S48-sidebar-team-navigation.md) | One shared overview controller and stable real-team selection in the workspace sidebar |
+| | [P05-S49](./stories/P05-S49-sidebar-team-creation.md) | Validated team creation from the sidebar with selection, feedback, and focus preservation |
+| Compact Overview | [P05-S50](./stories/P05-S50-compact-team-overview.md) | Concise team, board, and availability summaries with preserved team/board actions and Routing |
+| Integrated roster | [P05-S51](./stories/P05-S51-integrated-filterable-member-list.md) | Filterable real-data member roster and Add member directly on Overview; no Members tab |
+| Member detail | [P05-S52](./stories/P05-S52-live-member-detail.md) | Live-first active-agent, assignment, frozen-option, switch, hold, and resume experience |
+| | [P05-S53](./stories/P05-S53-saved-member-configuration.md) | Separate saved configuration view/edit/Save/Discard flow with next-start semantics |
+| Completion | [P05-S54](./stories/P05-S54-teams-v4-v6-states-accessibility.md) | Automated state, race, keyboard, focus, and responsive regression coverage |
+
+These stories add no live acceptance gate or manual end-to-end requirement. The operator owns running-app verification; implementation evidence is focused renderer/model tests, full app tests, typecheck, and production build automation.

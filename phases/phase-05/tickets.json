@@ -427,10 +427,71 @@
         "phases/phase-05/stories/P05-S46-focused-routing-editor.md"
       ],
       "priority": 4
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S48-sidebar-team-navigation.md",
+      "title": "Move team navigation into the workspace sidebar",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S47-teams-states-accessibility-responsive.md"
+      ],
+      "priority": 1
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S49-sidebar-team-creation.md",
+      "title": "Create teams from the workspace sidebar",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S48-sidebar-team-navigation.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S50-compact-team-overview.md",
+      "title": "Redesign the compact team overview and actions",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S48-sidebar-team-navigation.md"
+      ],
+      "priority": 2
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S51-integrated-filterable-member-list.md",
+      "title": "Integrate a filterable member list into Overview",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S50-compact-team-overview.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S52-live-member-detail.md",
+      "title": "Make live state primary in member detail",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S51-integrated-filterable-member-list.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S53-saved-member-configuration.md",
+      "title": "Add a separate saved member configuration editor",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S52-live-member-detail.md"
+      ],
+      "priority": 3
+    },
+    {
+      "path": "phases/phase-05/stories/P05-S54-teams-v4-v6-states-accessibility.md",
+      "title": "Finish Teams v4/v6 states, accessibility, and responsiveness",
+      "dependsOn": [
+        "phases/phase-05/stories/P05-S49-sidebar-team-creation.md",
+        "phases/phase-05/stories/P05-S50-compact-team-overview.md",
+        "phases/phase-05/stories/P05-S51-integrated-filterable-member-list.md",
+        "phases/phase-05/stories/P05-S52-live-member-detail.md",
+        "phases/phase-05/stories/P05-S53-saved-member-configuration.md"
+      ],
+      "priority": 4
     }
   ],
   "questions": [
     "Visual acceptance requires design/teams-screen-v1.png, which is absent from this checkout. Please provide it before P05-S17 is completed.",
-    "Should catalog definitions be workspace-scoped and should team members inherit provider/model without overrides? The plan assumes yes."
+    "Should catalog definitions be workspace-scoped and should team members inherit provider/model without overrides? The plan assumes yes.",
+    "T-083 names design/teams-overview-v4.png and design/teams-member-detail-v6.png, but both files are absent from this checkout. Restore them for visual guidance; the stories currently follow the ticket's explicit hierarchy and interaction requirements."
   ]
 }
