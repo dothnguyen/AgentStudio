@@ -216,8 +216,8 @@ describe('team editing', () => {
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt', 'opencode-sonnet']});
     gate.resolve(ok(twoTeams()));
     await flush();
-    const row = within(screen.getByRole('region', {name: 'Dev Team'})).getAllByRole('row')[1]!;
-    expect(row.querySelectorAll('td')[3]?.textContent).toContain('opencode-sonnet · opencode · claude-sonnet');
+    const row = screen.getByRole('region', {name: 'dev'});
+    expect(row.textContent).toContain('opencode-sonnet · opencode · claude-sonnet');
   });
   it('missing_option_blocks_save_until_removed', async () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
@@ -563,5 +563,95 @@ describe('team editing', () => {
     expect(screen.getByRole('alert')).toBeTruthy();
     await click('Dismiss');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('ticket permission and member focus', () => {
+  it('retries a failed permission read and displays the saved value', async () => {
+    const teamCall = vi.fn().mockResolvedValueOnce(fail({code: 'INTERNAL', message: 'offline'}))
+      .mockResolvedValueOnce(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
+    await renderScreen({calls: {team: teamCall}}); await openTab('Members'); openMember('dev'); await flush();
+    expect(screen.getByText('Ticket permission could not be loaded (INTERNAL: offline).')).toBeTruthy();
+    await click('Retry loading ticket permission');
+    expect(screen.getByText('Can add tickets: Yes')).toBeTruthy();
+    expect(teamCall).toHaveBeenCalledTimes(2);
+  });
+  it('sends only the role when permission is known and unchanged', async () => {
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'qa-b'}, problems: []}));
+    const teamCall = vi.fn(async () => ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
+    const switchMemberAgent = vi.fn(); const resumeMemberAgent = vi.fn();
+    await renderScreen({calls: {team: teamCall, updateMember, switchMemberAgent, resumeMemberAgent}, roles: [{ok: true, data: rolesFixture({items: [roleItem('Developer'), roleItem('qa-b', {name: 'QA'})]})}]});
+    await openTab('Members'); openMember('dev'); await flush(); await click('Edit dev');
+    expect((screen.getByLabelText('Can add tickets') as HTMLInputElement).checked).toBe(true);
+    type('Role', 'qa-b'); await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'qa-b'});
+    expect(switchMemberAgent).not.toHaveBeenCalled(); expect(resumeMemberAgent).not.toHaveBeenCalled();
+  });
+  it('loads and saves a changed permission', async () => {
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'Developer'}, problems: []}));
+    const teamCall = vi.fn(async () => ok({team: teamDefinition(), members: [], problems: [], active: null}));
+    await renderScreen({calls: {team: teamCall, updateMember}});
+    await openTab('Members'); openMember('dev'); await flush(); await click('Edit dev');
+    expect((screen.getByLabelText('Can add tickets') as HTMLInputElement).disabled).toBe(false);
+    fireEvent.click(screen.getByLabelText('Can add tickets'));
+    await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {canAddTickets: true});
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit dev'}));
+  });
+  it('keeps unknown permission out of role edits', async () => {
+    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'QA'}, problems: []}));
+    await renderScreen({calls: {updateMember}});
+    await click('Edit dev');
+    expect((screen.getByLabelText('Can add tickets') as HTMLInputElement).disabled).toBe(true);
+    type('Role', 'QA'); await click('Save member');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA'});
+  });
+  it('returns focus to submit after a failed save', async () => {
+    await renderScreen({calls: {updateMember: vi.fn(async () => fail({code: 'INTERNAL', message: 'failed'}))}});
+    await click('Edit dev'); type('Role', 'QA'); await click('Save member');
+    expect(screen.getByRole('alert').textContent).toContain('Member was not saved.');
+    expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Save member'}));
+  });
+  it('confirms the exact member and restores focus on failure', async () => {
+    const removeMember = vi.fn(async () => fail({code: 'TEAM_ALREADY_RUNNING', message: 'running'}));
+    await renderScreen({calls: {removeMember}}); await click('Remove lead');
+    expect(screen.getByRole('alertdialog').textContent).toContain('Remove lead (lead) from Dev Team?');
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Cancel removing lead'}));
+    await click('Confirm remove lead');
+    expect(removeMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Remove lead'}));
+  });
+});
+
+describe('permission request lifetime', () => {
+  it('ignores a response after navigating to another member', async () => {
+    const first = deferred<ReturnType<typeof ok<{team: ReturnType<typeof teamDefinition>; members: never[]; problems: never[]; active: null}>>>();
+    const second = deferred<ReturnType<typeof ok<{team: ReturnType<typeof teamDefinition>; members: never[]; problems: never[]; active: null}>>>();
+    const teamCall = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    await renderScreen({calls: {team: teamCall}});
+    await openTab('Members'); openMember('dev');
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'})); openMember('lead');
+    await act(async () => { first.resolve(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null})); });
+    expect(screen.getByRole('region', {name: 'lead'}).textContent).not.toContain('Can add tickets: Yes');
+    await act(async () => { second.resolve(ok({team: teamDefinition(), members: [], problems: [], active: null})); });
+    expect(screen.getByRole('region', {name: 'lead'}).textContent).toContain('Can add tickets: Not available for this member');
+  });
+});
+
+describe('member creation and removal focus', () => {
+  it('adds permission and restores add button focus', async () => {
+    const addMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'new', role: 'QA'}, problems: []}));
+    await renderScreen({calls: {addMember}}); await click('Add member');
+    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
+    type('Role', 'QA'); fireEvent.click(screen.getByLabelText('Can add tickets')); await submitAddMember();
+    expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', {role: 'QA', agents: ['codex-gpt'], canAddTickets: true});
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
+  });
+  it('returns to the members panel after removal', async () => {
+    const removeMember = vi.fn(async () => ok({removed: {id: 'lead', name: 'lead'}, problems: []}));
+    await renderScreen({calls: {removeMember}}); await click('Remove lead'); await click('Confirm remove lead');
+    expect(document.activeElement).toBe(document.getElementById('teams-panel-members'));
   });
 });

@@ -27,7 +27,28 @@ export interface MemberFormValues {
   role: string;
   agents: string[];
   useCatalogAgents: boolean;
+  canAddTickets?: boolean;
 }
+
+export interface TeamWrites {
+  rename(team: OverviewTeam, name: string): Promise<boolean>;
+  deleteTeam(team: OverviewTeam): Promise<boolean>;
+  addMember(team: OverviewTeam, values: MemberFormValues): Promise<boolean>;
+  updateMember(team: OverviewTeam, memberId: string, changes: MemberChanges): Promise<boolean>;
+  removeMember(team: OverviewTeam, memberId: string): Promise<boolean>;
+}
+export type TicketPermissionState = { state: 'loading' } | { state: 'ready'; canAddTickets: boolean | null } | { state: 'error'; error: ManagementError };
+export function ticketPermissionText(p: TicketPermissionState): string {
+  if (p.state === 'loading') return 'Checking ticket permission…';
+  if (p.state === 'error') return `Ticket permission could not be loaded (${p.error.code}: ${p.error.message}).`;
+  return p.canAddTickets === null ? 'Can add tickets: Not available for this member' : `Can add tickets: ${p.canAddTickets ? 'Yes' : 'No'}`;
+}
+export const MEMBER_TIMING_NOTE = 'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.';
+export const ROLE_SHARING_NOTE = 'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.';
+export const SAVED_OPTIONS_NOTE = 'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.';
+export const LIVE_STATE_NOTE = 'Live state comes from the running team. Saving member settings does not change it.';
+export const TICKET_PERMISSION_HINT = 'Lets this member add tickets with the board ticket tools during its assignments.';
+export const TICKET_PERMISSION_UNKNOWN = 'Ticket permission could not be loaded; it will not be changed.';
 
 export function isLiveTeam(team: OverviewTeam): boolean {
   return team.runtime.state === 'running' || team.runtime.state === 'starting';
@@ -146,11 +167,11 @@ export function validateAgentOptions(agents: readonly string[], missingAgentIds:
   if (agents.some((id) => missingAgentIds.has(id))) return 'Remove or replace missing catalog agents before saving.';
   return null;
 }
-export function memberFormInitial(m: OverviewMember): MemberFormValues {
+export function memberFormInitial(m: OverviewMember, canAddTickets?: boolean | null): MemberFormValues {
   const catalog = m.agentMode !== 'inline';
   const agents = m.agentOptions.map((o) => o.id);
   if (m.agentMode === 'single_catalog' && agents.length === 0 && m.defaultAgent !== null) agents.push(m.defaultAgent);
-  return { name: m.name ?? '', role: m.role ?? '', agents: catalog ? agents : [], useCatalogAgents: catalog };
+  return { name: m.name ?? '', role: m.role ?? '', agents: catalog ? agents : [], useCatalogAgents: catalog, ...(typeof canAddTickets === 'boolean' ? { canAddTickets } : {}) };
 }
 export function emptyMemberForm(): MemberFormValues {
   return { name: '', role: '', agents: [], useCatalogAgents: true };
@@ -169,6 +190,7 @@ export function addMemberInput(v: MemberFormValues): MemberInput {
   const input: MemberInput = { role: v.role.trim(), agents: [...v.agents] };
   const name = v.name.trim();
   if (name !== '') input.name = name;
+  if (v.canAddTickets === true) input.canAddTickets = true;
   return input;
 }
 export function memberChanges(initial: MemberFormValues, current: MemberFormValues): MemberChanges | null {
@@ -178,5 +200,6 @@ export function memberChanges(initial: MemberFormValues, current: MemberFormValu
   if (name !== initial.name) changes.name = name;
   if (role !== initial.role) changes.role = role;
   if (current.useCatalogAgents && (!initial.useCatalogAgents || current.agents.length !== initial.agents.length || current.agents.some((id, i) => id !== initial.agents[i]))) changes.agents = [...current.agents];
+  if (typeof initial.canAddTickets === 'boolean' && typeof current.canAddTickets === 'boolean' && current.canAddTickets !== initial.canAddTickets) changes.canAddTickets = current.canAddTickets;
   return Object.keys(changes).length === 0 ? null : changes;
 }

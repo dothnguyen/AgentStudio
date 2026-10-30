@@ -1,7 +1,7 @@
-import { useId, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
 import type { AgentDef, ResolvedAgentOption, RoleCatalogItem } from '../api';
 import {
-  addAgentOption, removeAgentOption, moveAgentOption,
+  addAgentOption, removeAgentOption, moveAgentOption, TICKET_PERMISSION_HINT, TICKET_PERMISSION_UNKNOWN,
   memberChanges,
   memberRoleChoices,
   validateMemberForm,
@@ -94,6 +94,12 @@ export function MemberForm(props: {
   const [values, setValues] = useState<MemberFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormValues, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const submitRef = useRef<HTMLButtonElement>(null);
+  const submitted = useRef(false);
+  const wasPending = useRef(pending);
+  useEffect(() => { headingRef.current?.focus(); }, []);
+  useEffect(() => { if (wasPending.current && !pending && submitted.current && submitRef.current?.isConnected) { submitted.current = false; submitRef.current.focus(); } wasPending.current = pending; }, [pending]);
 
   const available = (agents ?? []).filter((a) => !values.agents.includes(a.id));
   const missing = new Set(values.agents.filter((id) => agents === null
@@ -110,6 +116,7 @@ export function MemberForm(props: {
       setFormError('No changes to save.');
       return;
     }
+    submitted.current = true;
     onSubmit(values);
   }
 
@@ -132,7 +139,7 @@ export function MemberForm(props: {
 
   return (
     <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel)}>
-      <h3>{heading}</h3>
+      <h3 ref={headingRef} tabIndex={-1}>{heading}</h3>
       {!values.useCatalogAgents && inlineContext !== null && (
         <>
           <p>Inline — {providerModelText(inlineContext.provider, inlineContext.model)}{inlineContext.reasoning ? ` · Reasoning: ${inlineContext.reasoning}` : ''}</p>
@@ -205,9 +212,11 @@ export function MemberForm(props: {
         onChange={(e) => set('name', e.target.value)}
       />
       <FieldError id={nameF.err} message={errors.name} />
+      <div className="teams-permission-field"><input id={`${uid}-canAddTickets`} type="checkbox" checked={values.canAddTickets === true} disabled={pending || (mode === 'edit' && values.canAddTickets === undefined)} aria-describedby={`${uid}-canAddTickets-hint`} onChange={e => setValues(v => ({ ...v, canAddTickets: e.target.checked }))} /><label htmlFor={`${uid}-canAddTickets`}>Can add tickets</label></div>
+      <p id={`${uid}-canAddTickets-hint`} className="panel-note">{mode === 'edit' && values.canAddTickets === undefined ? TICKET_PERMISSION_UNKNOWN : TICKET_PERMISSION_HINT}</p>
       {formError !== null && <p className="teams-field-error" role="alert">{formError}</p>}
       <div className="teams-team-actions">
-        <button type="submit" disabled={pending || (mode === 'add' && roles === null)}>
+        <button ref={submitRef} type="submit" disabled={pending || (mode === 'add' && roles === null)}>
           {pending ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save member'}
         </button>
         <button type="button" onClick={onCancel}>Cancel</button>

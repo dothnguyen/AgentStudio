@@ -14,7 +14,6 @@ import type {
   ConnectionStatus,
   ManagementApi,
   ManagementResult,
-  MemberChanges,
   OverviewTeam,
   OverviewMember,
   RoleCatalogItem,
@@ -33,7 +32,7 @@ import {
   nextStartSuffix,
   problemsSuffix,
   thrownError,
-  type MemberFormValues,
+  type TeamWrites,
   type WriteFeedback,
 } from './teamEditModel';
 import {
@@ -53,13 +52,7 @@ export interface TeamsScreenProps {
   onViewRole?(roleId: string): void;
 }
 
-export interface TeamWrites {
-  rename(team: OverviewTeam, name: string): Promise<boolean>;
-  deleteTeam(team: OverviewTeam): Promise<boolean>;
-  addMember(team: OverviewTeam, values: MemberFormValues): Promise<boolean>;
-  updateMember(team: OverviewTeam, memberId: string, changes: MemberChanges): Promise<boolean>;
-  removeMember(team: OverviewTeam, memberId: string): Promise<boolean>;
-}
+export type { TeamWrites } from './teamEditModel';
 
 export function TeamsScreen(props: TeamsScreenProps): JSX.Element {
   return <TeamsOverview key={props.workspace.id} {...props} />;
@@ -80,6 +73,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const busy = refreshing || overview.loading || agents.loading || board.loading || roleCatalog.loading;
   const [feedback, setFeedback] = useState<WriteFeedback | null>(null);
   const [pending, setPending] = useState(false);
+  const [savedRevision, setSavedRevision] = useState(0);
   const [creating, setCreating] = useState(false);
   const writeLock = useRef(false);
   const actionLocks = useRef(new Set<string>());
@@ -121,6 +115,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       setFeedback(errorFeedback(failTitle, result.error));
       return false;
     }
+    setSavedRevision(r => r + 1);
     const { text: message, selectKey } = onOk(result.data);
     setFeedback({ kind: 'success', text: message });
     if (selectKey !== undefined) { setSelectedMember(null); setViewState(current => selectTeamView(current, selectKey)); }
@@ -364,6 +359,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         {data !== null && selected !== null && (
           <TeamDetailPanel
             key={selected.key}
+            workspaceId={ws}
+            management={mgmt}
+            savedRevision={savedRevision}
             team={selected.team}
             teamKey={selected.key}
             selection={selectedMember}
@@ -398,6 +396,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
 }
 
 function TeamDetailPanel(props: {
+  workspaceId: string; management: ManagementApi; savedRevision: number;
   team: OverviewTeam;
   overview: TeamOverview;
   teamKey: string; selection: import('./teamsModel').MemberSelection | null; onSelectMember(selection: import('./teamsModel').MemberSelection | null): void;
@@ -430,7 +429,7 @@ function TeamDetailPanel(props: {
     if (id === 'overview') return (
       <TeamOverviewPanel team={team} overview={overview} writes={writes} pending={pending} board={board} />
     );
-    return <MembersView teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
+    return <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
       agents={agents} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
       writes={writes} pending={pending} connected={props.connected} actions={props.actions} polling={props.polling}
       onSwitch={props.onSwitch} onResume={props.onResume} />;

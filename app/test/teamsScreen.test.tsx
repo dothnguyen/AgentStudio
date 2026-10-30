@@ -28,7 +28,6 @@ async function renderMembers(opts: Parameters<typeof fakeManagement>[0] = {}) {
   return out;
 }
 
-const cells = (row: HTMLElement) => Array.from(row.querySelectorAll('td')).map((td) => td.textContent ?? '');
 const cardNames = (root: HTMLElement) =>
   Array.from(root.querySelectorAll('.teams-card-name')).map((n) => n.textContent);
 const card = (root: HTMLElement, name: string) =>
@@ -45,10 +44,10 @@ describe('TeamsScreen', () => {
     await act(async () => {});
     await openTab(result, 'Members');
     openMember('dev');
-    const row = within(result.getByRole('region', { name: 'dev' })).getAllByRole('row')[1]!;
-    expect(cells(row)[1]).toContain('qa-b');
-    expect(cells(row)[1]).toContain('Second QA');
-    expect(result.getByText(/Member role changes apply the next time the team starts/)).toBeTruthy();
+    const row = result.getByRole('region', { name: 'dev' });
+    expect(row.textContent).toContain('qa-b');
+    expect(row.textContent).toContain('Second QA');
+    expect(result.getByText(/Changes to name, role, ticket permission/)).toBeTruthy();
     fireEvent.click(within(row).getByRole('button', { name: 'View QA in Roles' }));
     expect(onViewRole).toHaveBeenCalledWith('qa-b');
     expect(onViewRole).toHaveBeenCalledTimes(1);
@@ -62,9 +61,9 @@ describe('TeamsScreen', () => {
     const failed = await renderMembers({ roles: [{ ok: false, error: { code: 'INTERNAL', message: 'roles down', retryable: false } }] });
     expect(failed.result.queryByRole('button', { name: /in Roles/ })).toBeNull();
     expect(failed.result.getByRole('button', { name: 'Retry loading roles' })).toBeTruthy();
-    const row = within(openMember('dev')).getAllByRole('row')[1]!;
-    expect(cells(row)[1]).toContain('Developer');
-    expect(cells(row)[2]).toContain('OpenCode Sonnet');
+    const row = openMember('dev');
+    expect(row.textContent).toContain('Developer');
+    expect(row.textContent).toContain('OpenCode Sonnet');
     expect(failed.result.getByRole('button', { name: 'Edit dev' })).toBeTruthy();
   });
 
@@ -73,12 +72,11 @@ describe('TeamsScreen', () => {
     const saved = {id: 'saved', name: 'Saved choice', provider: 'saved-provider', model: 'saved-model', reasoning: null, description: null, state: 'ok' as const};
     const m = member({agentMode: 'ordered_catalog', agentOptions: [saved], defaultAgent: 'saved', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model'}});
     const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
-    const row = within(openMember('dev')).getAllByRole('row')[1]!;
-    const values = cells(row);
-    expect(values[2]).toBe('Default — Saved choice · saved-provider · saved-model');
-    expect(values[3]).toContain('live-id · live-provider · live-model');
-    expect(values[2]).not.toContain('live-id');
-    expect(values[3]).not.toContain('Saved choice');
+    const row = openMember('dev');
+    const savedText = within(row).getByRole('list', {name: 'Saved agent options'}).textContent;
+    expect(savedText).toBe('Default — Saved choice · saved-provider · saved-model');
+    expect(row.textContent).toContain('Active agent: live-id · live-provider · live-model');
+    expect(savedText).not.toContain('live-id');
   });
 
   it('saved_options_keep_order_and_live_reasoning_uses_runtime_values', async () => {
@@ -87,14 +85,14 @@ describe('TeamsScreen', () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     const m = member({agentMode: 'ordered_catalog', agentOptions: [first, missing], defaultAgent: 'first', runtime: {...live, activeAgent: 'live-id', provider: 'live-provider', model: 'live-model', reasoning: 'high'}});
     const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
-    const row = within(openMember('dev')).getAllByRole('row')[1]!;
-    const savedCell = row.querySelectorAll('td')[2]!;
+    const row = openMember('dev');
+    const savedCell = within(row).getByRole('list', {name: 'Saved agent options'});
     const items = within(savedCell).getAllByRole('listitem');
     expect(items.map(item => item.textContent)).toEqual([
       'Default — First · saved-provider · saved-model · Reasoning: low',
       'gone · Not available · Missing from catalog',
     ]);
-    expect(row.querySelectorAll('td')[3]?.textContent).toContain('live-id · live-provider · live-model · Reasoning: high');
+    expect(row.textContent).toContain('live-id · live-provider · live-model · Reasoning: high');
   });
 
   it('renders_teams_and_members_from_overview', async () => {
@@ -107,27 +105,13 @@ describe('TeamsScreen', () => {
     expect(detail.textContent).toContain('Running');
     expect(detail.textContent).toContain('t-1');
     await openTab(result, 'Members');
-    const r1 = cells(within(openMember('dev')).getAllByRole('row')[1]!);
+    const r1 = openMember('dev').textContent;
+    expect(r1).toContain('Default — OpenCode Sonnet · opencode · sonnet');
+    expect(r1).toContain('T-031 Teams screen');
     fireEvent.click(result.getByRole('button', { name: 'Back to members' }));
-    const r2 = cells(within(openMember('lead')).getAllByRole('row')[1]!);
-    expect(r1).toEqual([
-      'devAgent: opencode-sonnet',
-      'DeveloperImplements scoped tickets.',
-      'Default — OpenCode Sonnet · opencode · sonnet',
-      expect.stringContaining('opencode-sonnet · opencode · claude-sonnet'),
-      'Working',
-      'T-031 Teams screen',
-      'EditRemove',
-    ]);
-    expect(r2).toEqual([
-      'leadInline member',
-      'TeamLeadNo description',
-      'Inline — codex · model not set',
-      'Not running',
-      'Available',
-      'No current work',
-      'EditRemove',
-    ]);
+    const r2 = openMember('lead').textContent;
+    expect(r2).toContain('Inline agent — codex · model not set');
+    expect(r2).toContain('No current work');
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.overview).toHaveBeenCalledWith('ws-a');
     expect(fake.agents).toHaveBeenCalledTimes(1);
@@ -143,7 +127,7 @@ describe('TeamsScreen', () => {
     await openTab(result, 'Members');
     const detail = result.getByRole('region', { name: 'Release Team' });
     expect(within(detail).getByRole('heading', { level: 2 }).textContent).toBe('Release Team');
-    const row = within(openMember('qa')).getAllByRole('row')[1]!;
+    const row = openMember('qa');
     expect(row.textContent).toContain('qa');
     expect(row.textContent).toContain('Stopped');
     expect(row.textContent).toContain('Not available');
@@ -209,7 +193,7 @@ describe('TeamsScreen', () => {
     const detail = result.getByRole('region', { name: 'ghost' });
     expect(detail.textContent).toContain('$: could not load team definition: TEAM_CONFIG_INVALID');
     await openTab(result, 'Members');
-    const row = within(openMember('m1')).getAllByRole('row')[1]!;
+    const row = openMember('m1');
     for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Not available', 'Unavailable']) {
       expect(row.textContent).toContain(t);
     }
@@ -1034,7 +1018,7 @@ describe('member roster', () => {
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member(), member({memberId: 'qa', name: 'qa'})]})])}]});
     memberRow('qa').focus(); await user.keyboard('{Enter}');
     const detail = screen.getByRole('region', {name: 'qa'});
-    expect(within(detail).getAllByRole('row')[1]!.textContent).not.toContain('dev');
+    expect(detail.textContent).not.toContain('dev');
     expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull();
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
     expect(document.activeElement).toBe(memberRow('qa')); expect(memberRow('qa').getAttribute('aria-current')).toBe('true');
@@ -1110,5 +1094,66 @@ describe('roster evidence and team removal', () => {
     await renderScreen({overview: [{ok: true, data: overviewFixture([alpha, beta])}, {ok: true, data: overviewFixture([beta])}]});
     openMember('dev'); fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
     showMembers(); expect(screen.queryByRole('region', {name: 'dev'})).toBeNull(); expect(screen.queryByRole('button', {name: 'Back to members'})).toBeNull();
+  });
+});
+
+describe('member detail focus and settings', () => {
+  it('separates member settings, saved options and live state with timing copy', async () => {
+    await renderScreen(); showMembers(); const detail = openMember('dev');
+    expect(within(detail).getByRole('navigation', {name: 'Member location'}).textContent).toBe('Dev TeamMembersdev');
+    for (const label of ['Name', 'Member id', 'Role', 'Ticket permission']) expect(within(detail).getByText(label)).toBeTruthy();
+    for (const text of [
+      'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.',
+      'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.',
+      'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.',
+      'Live state comes from the running team. Saving member settings does not change it.',
+    ]) expect(detail.textContent).toContain(text);
+    expect(detail.textContent).not.toMatch(/roles? (provides?|supply|supplies|grants?|owns?|controls?|determines?|sets?) /i);
+    expect(detail.textContent).not.toMatch(/role'?s? (permission|default agent|active agent|quota)/i);
+  });
+  it('shows inline and runtime-only members without inventing saved catalog options', async () => {
+    const inline = member({agentMode: 'inline', provider: 'codex', model: null});
+    const runtime = member({memberId: 'live', name: 'live', source: 'runtime'});
+    await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [inline, runtime]})])}]});
+    let detail = openMember('dev');
+    expect(detail.textContent).toContain('Inline agent — codex · model not set');
+    fireEvent.click(within(detail).getByRole('button', {name: 'Back to members'}));
+    detail = openMember('live');
+    expect(detail.textContent).toContain('Saved options are not available for runtime-only members.');
+    expect(within(detail).queryByRole('button', {name: /^(Edit|Remove) live$/})).toBeNull();
+  });
+  it('keeps a missing role visible and repairable without a link', async () => {
+    await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [member({role: 'retired'})]})])}]});
+    const detail = openMember('dev');
+    expect(detail.textContent).toContain('Choose an existing role by editing this member.');
+    expect(within(detail).queryByRole('button', {name: /in Roles/})).toBeNull();
+    fireEvent.click(within(detail).getByRole('button', {name: 'Edit dev'}));
+    expect(within(screen.getByLabelText('Role')).getByRole('option', {name: 'retired — missing from role catalog'})).toBeTruthy();
+  });
+  it('focuses the heading and restores the roster row on return', async () => {
+    await renderScreen(); showMembers(); openMember('dev');
+    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 3}));
+    expect(screen.getByRole('heading', {name: 'Member settings'})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Saved agent options'})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Live agent'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    expect(document.activeElement).toBe(document.querySelector('[data-member-row="dev"]'));
+  });
+  it('restores edit and remove focus after cancelling', async () => {
+    await renderScreen(); showMembers(); openMember('lead');
+    fireEvent.click(screen.getByRole('button', {name: 'Edit lead'}));
+    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'Edit lead'}));
+    fireEvent.click(within(screen.getByRole('form', {name: 'Edit lead'})).getByRole('button', {name: 'Cancel'}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit lead'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Remove lead'}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Cancel removing lead'}));
+    fireEvent.keyDown(screen.getByRole('alertdialog'), {key: 'Escape'});
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Remove lead'}));
+  });
+  it('restores add focus after cancelling', async () => {
+    await renderScreen(); showMembers();
+    fireEvent.click(screen.getByRole('button', {name: 'Add member'}));
+    fireEvent.click(within(screen.getByRole('form', {name: 'Add member'})).getByRole('button', {name: 'Cancel'}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
 });

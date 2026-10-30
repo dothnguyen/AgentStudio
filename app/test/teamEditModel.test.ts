@@ -7,7 +7,7 @@ import {
   findCatalogRole,
   memberRoleChoices,
   roleChoiceLabel,
-  memberChanges,
+  memberChanges, ticketPermissionText,
   nextStartSuffix,
   problemsSuffix,
   validateMemberForm,
@@ -133,5 +133,29 @@ describe('teamEditModel', () => {
     expect(nextStartSuffix(undefined)).toBe('');
     expect(problemsSuffix([])).toBe('');
     expect(problemsSuffix([{ path: 'a', message: 'b' }])).toBe(' The team still has 1 problem; see the team details.');
+  });
+});
+
+describe('ticket permission', () => {
+  it('preserves known values and omits unknown values', () => {
+    expect(memberFormInitial(member(), true).canAddTickets).toBe(true);
+    expect(memberFormInitial(member(), null)).not.toHaveProperty('canAddTickets');
+    expect(memberFormInitial(member())).not.toHaveProperty('canAddTickets');
+    const base = memberFormInitial(member(), false);
+    expect(memberChanges(base, {...base, canAddTickets: true})).toEqual({canAddTickets: true});
+    expect(memberChanges({...base, canAddTickets: true}, base)).toEqual({canAddTickets: false});
+    expect(memberChanges(memberFormInitial(member()), memberFormInitial(member()))).toBeNull();
+  });
+  it('sends add permission only when enabled', () => {
+    const v = {...emptyMemberForm(), role: 'QA', agents: ['a']};
+    expect(addMemberInput({...v, canAddTickets: true})).toEqual({role: 'QA', agents: ['a'], canAddTickets: true});
+    expect(addMemberInput({...v, canAddTickets: false})).toEqual({role: 'QA', agents: ['a']});
+  });
+  it('describes all permission states', () => {
+    expect(ticketPermissionText({state: 'loading'})).toBe('Checking ticket permission…');
+    expect(ticketPermissionText({state: 'ready', canAddTickets: true})).toBe('Can add tickets: Yes');
+    expect(ticketPermissionText({state: 'ready', canAddTickets: false})).toBe('Can add tickets: No');
+    expect(ticketPermissionText({state: 'ready', canAddTickets: null})).toBe('Can add tickets: Not available for this member');
+    expect(ticketPermissionText({state: 'error', error: {code: 'INTERNAL', message: 'oops', retryable: false}})).toBe('Ticket permission could not be loaded (INTERNAL: oops).');
   });
 });

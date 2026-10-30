@@ -16,5 +16,5 @@ export function MemberList({ team, roleItems, currentMemberId, rowRef, onOpen }:
     </>;
   }
   return <><div className="teams-member-list-head" aria-hidden="true"><span>Member</span><span>Role</span><span>Agent</span><span>Availability</span><span>Current work</span></div>
-    <ul className="teams-member-list" aria-label={`Members of ${teamLabel(team)}`}>{team.members.map((m, i) => <li key={m.memberId ?? `index:${i}`}>{m.memberId !== null ? <button type="button" className="teams-member-row" ref={el => rowRef(m.memberId!, el)} aria-current={m.memberId === currentMemberId ? 'true' : undefined} onClick={() => onOpen(m.memberId!)}>{fields(m)}</button> : <div className="teams-member-row teams-member-row-static">{fields(m)}</div>}</li>)}</ul></>;
+    <ul className="teams-member-list" aria-label={`Members of ${teamLabel(team)}`}>{team.members.map((m, i) => <li key={m.memberId ?? `index:${i}`}>{m.memberId !== null ? <button type="button" className="teams-member-row" data-member-row={m.memberId} ref={el => rowRef(m.memberId!, el)} aria-current={m.memberId === currentMemberId ? 'true' : undefined} onClick={() => onOpen(m.memberId!)}>{fields(m)}</button> : <div className="teams-member-row teams-member-row-static">{fields(m)}</div>}</li>)}</ul></>;
 }
