@@ -4,8 +4,9 @@ export const SWITCH_REFRESH_LIMIT = 5;
 export const SWITCH_REFRESH_INTERVAL_MS = 250;
 export type MemberActionKind = 'switch' | 'resume';
 export type MemberActionInFlight = { memberId: string; agentId: string; kind: MemberActionKind } | null;
-export interface AgentActionOption { id: string; label: string; active: boolean; holdText: string | null; canSwitch: boolean; canResume: boolean; disabledReason: string | null }
-export interface MemberAgentActionsView { visible: boolean; activeText: string; availabilityText: string; assignmentText: string; pendingText: string | null; lastResultText: string | null; notice: string | null; allHeld: boolean; options: AgentActionOption[] }
+export type AgentActionState = 'active' | 'switchable' | 'held' | 'missing_catalog' | 'pending' | 'pane_dead' | 'ineligible';
+export interface AgentActionOption { id: string; label: string; active: boolean; state: AgentActionState; holdText: string | null; canSwitch: boolean; canResume: boolean; disabledReason: string | null }
+export interface MemberAgentActionsView { visible: boolean; activeText: string; availabilityText: string; paneText: string; staleText: string | null; assignmentText: string; workText: string | null; pendingText: string | null; lastResultText: string | null; notice: string | null; allHeld: boolean; options: AgentActionOption[] }
 export function formatResetAt(value: string | null): string {
   if (value === null || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return 'Reset time unknown';
   const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
@@ -30,24 +31,41 @@ export function assignmentConfirmation(error: ManagementError): { assignmentId: 
   const id = (error.data as { assignmentId?: unknown }).assignmentId;
   return typeof id === 'string' && id.trim() !== '' ? { assignmentId: id } : null;
 }
+function liveWorkText(work: OverviewMember['work']): string | null {
+  if (work.state === 'none') return null;
+  if (work.state === 'unavailable') return `Current work unavailable — ${work.reason}`;
+  if (work.ticket !== null) return `${work.ticket.key} · ${work.ticket.title} · ${work.ticket.status}`;
+  if (work.assignment !== null && work.assignment.goal.trim() !== '') return work.assignment.goal;
+  return 'Working';
+}
 export function memberAgentActions(team: OverviewTeam, member: OverviewMember, catalog: AgentDef[] | null, connected: boolean, inFlight: MemberActionInFlight): MemberAgentActionsView {
   const r = member.runtime;
-  const empty: MemberAgentActionsView = { visible: false, activeText: '', availabilityText: '', assignmentText: '', pendingText: null, lastResultText: null, notice: null, allHeld: false, options: [] };
-  if (!r || member.agentMode === 'inline' || member.source === 'inline') return empty;
-  const frozen = r.configuredAgents ?? [];
+  if (!r) return { visible: false, activeText: '', availabilityText: '', paneText: '', staleText: null, assignmentText: '', workText: null, pendingText: null, lastResultText: null, notice: null, allHeld: false, options: [] };
+  const inline = member.agentMode === 'inline' || member.source === 'inline';
+  const unknownEligibility = r.configuredAgents === null;
+  const frozen = [...new Set(r.configuredAgents ?? [])];
+  const switchTargets = inline || unknownEligibility ? [] : frozen;
+  const isHeld = (id: string) => Object.prototype.hasOwnProperty.call(r.quotaHolds, id);
   const label = (id: string) => catalog?.find(a => a.id === id)?.name || id;
   const base = !connected ? 'Backend disconnected; live actions are disabled.' : team.runtime.state !== 'running' ? 'The team is not running.' : r.stale ? 'Live member state is stale; refresh before switching or resuming.' : null;
+  const paneAlive = r.paneState === 'alive';
   const locked = inFlight?.memberId === member.memberId;
-  const options = [...new Set([...frozen, ...Object.keys(r.quotaHolds)])].map(id => {
-    const held = Object.prototype.hasOwnProperty.call(r.quotaHolds, id);
-    const reason = base ?? (r.paneState !== 'alive' ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : !catalog.some(a => a.id === id) ? `Agent '${id}' is missing from the catalog.` : held ? `Agent '${id}' is on quota hold.` : id === r.activeAgent ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
-    return { id, label: label(id), active: id === r.activeAgent, holdText: held ? formatResetAt(r.quotaHolds[id]) : null, canSwitch: reason === null, canResume: held && !base && !locked && !r.pendingAgent, disabledReason: reason };
+  const ids = [...new Set([...switchTargets, ...Object.keys(r.quotaHolds)])];
+  const options: AgentActionOption[] = ids.map(id => {
+    const held = isHeld(id);
+    const missing = catalog !== null && !catalog.some(a => a.id === id);
+    const reason = base ?? (!paneAlive ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled.' : inline ? 'Live switching is unavailable for inline members.' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : missing ? `Agent '${id}' is missing from the catalog.` : held && frozen.includes(id) ? `Agent '${id}' is on quota hold.` : id === r.activeAgent && frozen.includes(id) ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
+    const active = id === r.activeAgent;
+    const canSwitch = reason === null;
+    const state: AgentActionState = active ? 'active' : r.pendingAgent === id ? 'pending' : held ? 'held' : missing ? 'missing_catalog' : !paneAlive ? 'pane_dead' : canSwitch ? 'switchable' : 'ineligible';
+    return { id, label: label(id), active, state, holdText: held ? formatResetAt(r.quotaHolds[id]) : null, canSwitch, canResume: held && !base && paneAlive && !locked && !r.pendingAgent, disabledReason: reason };
   });
-  const alternatives = frozen.filter(id => id !== r.activeAgent);
-  const allHeld = alternatives.length > 0 && alternatives.every(id => Object.prototype.hasOwnProperty.call(r.quotaHolds, id));
+  const alternatives = switchTargets.filter(id => id !== r.activeAgent);
+  const allHeld = alternatives.length > 0 && alternatives.every(isHeld);
   const s = r.lastSwitch;
   const result = s ? `Switch to ${label(s.requestedAgent)} ${s.state}${(s.code !== null || s.message !== null) ? ` — ${s.code ?? ''}${s.code !== null && s.message !== null ? ': ' : ''}${s.message ?? ''}` : s.state === 'completed' ? '.' : ''}` : null;
-  return { visible: true, activeText: [r.activeAgent ?? 'Unknown', r.provider, r.model, r.reasoning && `Reasoning: ${r.reasoning}`].filter(Boolean).join(' · '), availabilityText: r.availability === 'idle' ? 'Available' : r.availability, assignmentText: r.assignment ? `${r.assignment.id} · ${r.assignment.status} · ${r.assignment.taskId}` : 'No active assignment', pendingText: r.pendingAgent ? `Switch to ${label(r.pendingAgent)} pending.` : null, lastResultText: result, notice: base ?? (r.paneState !== 'alive' ? "The member's pane is not alive." : allHeld ? 'All alternate agents are on quota hold.' : null), allHeld, options };
+  const notice = base ?? (!paneAlive ? "The member's pane is not alive." : inline ? 'Live switching is unavailable for inline members.' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled. Recorded quota holds can still be resumed.' : allHeld ? 'All alternate agents are on quota hold.' : null);
+  return { visible: true, activeText: [r.activeAgent ?? 'Unknown', r.provider, r.model, r.reasoning && `Reasoning: ${r.reasoning}`].filter(Boolean).join(' · '), availabilityText: r.availability === 'idle' ? 'Available' : r.availability, paneText: r.paneState ? `Pane: ${r.paneState}` : 'Pane state unavailable', staleText: r.stale ? 'Live state is stale.' : null, assignmentText: r.assignment ? `${r.assignment.id} · ${r.assignment.status} · ${r.assignment.taskId}` : 'No active assignment', workText: liveWorkText(member.work), pendingText: r.pendingAgent ? `Switch to ${label(r.pendingAgent)} pending.` : null, lastResultText: result, notice, allHeld, options };
 }
 
 export function memberActionKey(teamDefId: string, memberId: string): string { return JSON.stringify([teamDefId, memberId]); }

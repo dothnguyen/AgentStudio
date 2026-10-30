@@ -1,6 +1,6 @@
 # P05-S52 — Make live state primary in member detail
 
-Status: To Do
+Status: In Progress
 Depends on: P05-S51
 Architecture: [Teams overview and member detail refresh](../README.md#teams-overview-and-member-detail-refresh-t-083)
 

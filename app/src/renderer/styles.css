@@ -1267,11 +1267,16 @@ ul[aria-label="Workspaces"] {
 .agents-details, .agents-problems, .agents-error, .agents-references { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .agents-layout { grid-template-columns: minmax(0, 1fr); } }
 
-.teams-live-actions { margin-top: 0.75rem; }
-.teams-live-actions h4, .teams-live-actions p { margin: 0.25rem 0; }
-.teams-live-actions ul { padding-left: 1rem; }
-.teams-live-actions li { margin: 0.4rem 0; }
-.teams-live-actions button { margin-left: 0.4rem; }
+.teams-live-actions { margin-top: 0.75rem; width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); min-width: 0; }
+.teams-live-actions :is(h3, h4, p) { margin: 0.25rem 0; overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+.teams-live-summary { display: grid; grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr); gap: 4px 16px; margin: 0.5rem 0; }
+.teams-live-summary dt { color: var(--text-muted); font-weight: 600; }
+.teams-live-summary dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.teams-live-options { list-style: none; padding: 0; margin: 0.25rem 0; }
+.teams-live-options li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; margin: 0.4rem 0; padding: 8px 0; border-top: 1px solid var(--border); }
+.teams-live-option-label { min-width: 0; overflow-wrap: anywhere; }
+.teams-live-option-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.teams-live-options .teams-live-reason { grid-column: 1 / -1; }
 .teams-live-reason { font-size: 0.85em; }
 .teams-live-modal > div { background: var(--surface, #fff); color: var(--text, #111); padding: 1.5rem; max-width: 32rem; }
 
@@ -1323,7 +1328,8 @@ ul[aria-label="Workspaces"] {
   .teams-team-actions, .teams-board-actions, .teams-member-actions, .teams-confirm, .teams-live-modal .dialog-actions, .teams-screen .dashboard-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
   .teams-live-modal [role="dialog"] { width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; }
   .teams-screen :is(button, input, select, textarea) { max-width: 100%; }
-  .teams-member-settings { grid-template-columns: minmax(0, 1fr); }
+  .teams-member-settings, .teams-live-summary, .teams-live-options li { grid-template-columns: minmax(0, 1fr); }
+  .teams-live-option-actions button { min-height: 44px; }
 }
 
 /* Integrated filterable member roster (P05-S51) */

@@ -133,10 +133,16 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
   const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
   const renameRef = useRef<HTMLButtonElement>(null);
   const deleteRef = useRef<HTMLButtonElement>(null);
+  const restoreFocus = useRef<'rename' | 'delete' | null>(null);
   const cancelForm = (invoker: 'rename' | 'delete'): void => {
+    restoreFocus.current = invoker;
     setTeamForm(null);
-    setTimeout(() => (invoker === 'rename' ? renameRef : deleteRef).current?.focus(), 0);
   };
+  useEffect(() => {
+    if (teamForm !== null || restoreFocus.current === null) return;
+    (restoreFocus.current === 'rename' ? renameRef : deleteRef).current?.focus();
+    restoreFocus.current = null;
+  }, [teamForm]);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const confirmed = useRef(false);
   const wasPending = useRef(pending);

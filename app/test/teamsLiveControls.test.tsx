@@ -435,7 +435,7 @@ describe('board controls', () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     openMember('dev');
-    expect(screen.getByRole('region', {name: 'Live agent actions for dev'})).toBeTruthy();
+    expect(screen.getByRole('region', {name: 'Live for dev'})).toBeTruthy();
     expect(button('Refresh')).toBeTruthy();
     const text = document.body.textContent ?? '';
     expect(text).not.toMatch(/role (grants|owns|sets|chooses|provides|inherits)/i);
@@ -498,6 +498,38 @@ describe('live member actions', () => {
     expect(result.queryByRole('dialog')).toBeNull();
     expect(call).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(result.getByRole('heading', {name: 'other'}));
+  });
+  it('late_assignment_confirmation_does_not_reopen_after_member_selection_changes', async () => {
+    const response = deferred<ReturnType<typeof confirmation>>();
+    const call = vi.fn(() => response.promise);
+    const overview = overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [member({runtime: live}), member({memberId: 'other', name: 'other', runtime: live})]})]);
+    const {result} = await renderLive({overview: [ok(overview)], calls: {switchMemberAgent: call}});
+    fireEvent.click(result.getByRole('button', {name: 'Switch'}));
+    fireEvent.click(result.getByRole('button', {name: 'Back to members'}));
+    openMember('other');
+    await act(async () => { response.resolve(confirmation('late-assignment')); });
+    expect(result.queryByRole('dialog')).toBeNull();
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(result.getByRole('heading', {name: 'other', level: 2})).toBeTruthy();
+  });
+  it('returning_to_the_same_member_does_not_revive_an_old_confirmation', async () => {
+    const response = deferred<ReturnType<typeof confirmation>>();
+    const call = vi.fn(() => response.promise);
+    const {result} = await renderLive({overview: [ok(data())], calls: {switchMemberAgent: call}});
+    fireEvent.click(result.getByRole('button', {name: 'Switch'}));
+    fireEvent.click(result.getByRole('button', {name: 'Back to members'}));
+    openMember('dev');
+    await act(async () => { response.resolve(confirmation('old-assignment')); });
+    expect(result.queryByRole('dialog')).toBeNull();
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+  it('inline_frozen_hold_offers_resume_without_a_switch_button', async () => {
+    const inline = member({runtime: {...live, quotaHolds: {'codex-gpt': null}}, agentMode: 'inline'});
+    const overview = overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [inline]})]);
+    const {result} = await renderLive({overview: [ok(overview)]});
+    const region = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(region.getByRole('button', {name: 'Resume'})).toBeTruthy();
+    expect(region.queryByRole('button', {name: 'Switch'})).toBeNull();
   });
   it('dialog_restores_detail_heading_if_trigger_is_disabled', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('assignment-A'));
@@ -659,7 +691,7 @@ describe('live member actions', () => {
     const resume = vi.fn().mockResolvedValue(ok({teamId: 't', memberId: 'dev', agentId: 'a', option: 'opencode-sonnet', cleared: true, activeAgent: 'opencode-sonnet'}));
     const switchCall = vi.fn();
     const {result, fake} = await renderLive({overview: [ok(data(held)), ok(data(refreshed))], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
-    const actions = within(result.getByRole('region', {name: 'Live agent actions for dev'}));
+    const actions = within(result.getByRole('region', {name: 'Live for dev'}));
     const rows = actions.getAllByRole('listitem');
     fireEvent.click(within(rows[0]!).getByRole('button', {name: 'Resume'}));
     await flush();
@@ -1035,19 +1067,34 @@ describe('live member actions', () => {
     expect(result.getByText('Quota hold cleared for inactive option missing; quota was not verified. The live agent and assignment were not changed.')).toBeTruthy();
   });
 
+  it('inline_runtime_evidence_is_visible_without_switch_controls_and_null_eligibility_ignores_saved_options', async () => {
+    const run = {state: 'running' as const, teamId: 't', status: 'running'};
+    const inline = member({runtime: live, agentMode: 'inline'});
+    let {result} = await renderLive({overview: [{ok: true, data: overviewFixture([team({runtime: run, members: [inline]})])}]});
+    let actions = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(actions.getByText('Live switching is unavailable for inline members.')).toBeTruthy();
+    expect(actions.getByText('Active agent')).toBeTruthy();
+    expect(actions.queryByRole('button', {name: 'Switch'})).toBeNull();
+    result.unmount();
+    ({result} = await renderLive({overview: [{ok: true, data: overviewFixture([team({runtime: run, members: [member({runtime: {...live, configuredAgents: null}, defaultAgent: 'codex-gpt'})]})])}]}));
+    actions = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(actions.queryByRole('button', {name: 'Switch'})).toBeNull();
+    expect(actions.queryByText(/Codex GPT/)).toBeNull();
+  });
+
   it('live_actions_use_frozen_options_and_runtime_metadata', async () => {
     const runtime = {...live, configuredAgents: ['opencode-sonnet', 'removed', 'codex-gpt'], provider: 'actual-provider', model: 'actual-model', reasoning: 'high', quotaHolds: {removed: null, extra: null}};
     const saved = member({runtime, defaultAgent: 'saved-only', provider: 'saved-provider', model: 'saved-model'});
     const {result} = await renderLive({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [saved]})])}]});
-    const actions = within(result.getByRole('region', {name: 'Live agent actions for dev'}));
+    const actions = within(result.getByRole('region', {name: 'Live for dev'}));
     expect(actions.getByText('opencode-sonnet · actual-provider · actual-model · Reasoning: high')).toBeTruthy();
     expect(actions.queryByText(/saved-provider|saved-model|saved-only/)).toBeNull();
     const rows = actions.getAllByRole('listitem');
     expect(rows.map(row => row.textContent)).toEqual([
       expect.stringContaining('OpenCode Sonnet · Active'),
-      expect.stringContaining('removed · Reset time unknown'),
+      expect.stringContaining('removed · On quota hold · Reset time unknown'),
       expect.stringContaining('Codex GPT'),
-      expect.stringContaining('extra · Reset time unknown'),
+      expect.stringContaining('extra · On quota hold · Reset time unknown'),
     ]);
     expect(within(rows[1]!).getByRole('button', {name: 'Resume'})).toBeTruthy();
     expect(within(rows[3]!).getByRole('button', {name: 'Resume'})).toBeTruthy();
@@ -1059,8 +1106,8 @@ describe('live member actions', () => {
     const resume = vi.fn().mockResolvedValue(ok({teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet'}));
     const switchCall = vi.fn();
     const {result} = await renderLive({overview: [ok(data(held)), ok(data({...held, quotaHolds: {}}))], calls: {resumeMemberAgent: resume, switchMemberAgent: switchCall}});
-    const actions = within(result.getByRole('region', {name: 'Live agent actions for dev'}));
-    expect(actions.getByText('Live agent eligibility is unavailable.')).toBeTruthy();
+    const actions = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(actions.getByText('Live agent eligibility is unavailable; switching is disabled. Recorded quota holds can still be resumed.')).toBeTruthy();
     expect(actions.getByText(/Resets at 2026-01-02 03:04 UTC/)).toBeTruthy();
     expect(actions.queryByRole('button', {name: 'Switch'})).toBeNull();
     fireEvent.click(actions.getByRole('button', {name: 'Resume'}));
@@ -1141,6 +1188,38 @@ describe('T-082 live controls', () => {
     fireEvent.click(boardButton('Run board')); fireEvent.click(boardButton('Run board'));
     expect(runBoard).toHaveBeenCalledTimes(1);
     expect(runBoard).toHaveBeenCalledWith('ws-a', RUN_TEAM_ID);
+  });
+
+  it('requesting_is_announced_once_for_multiple_options', async () => {
+    const response = deferred<typeof accepted>();
+    const switchMemberAgent = vi.fn(() => response.promise);
+    await renderLive({ overview: [ok(data())], calls: { switchMemberAgent } });
+    fireEvent.click(switchButton());
+    const region = within(screen.getByRole('region', {name: 'Live for dev'}));
+    expect(region.getAllByText('Requesting…')).toHaveLength(1);
+    expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('polling_keeps_runtime_assignment_ticket_and_pending_evidence_without_optimistic_agent', async () => {
+    const assignment = {id: 'assignment-1', status: 'working', taskId: 'task-1'};
+    const work = {state: 'working' as const, assignment: {...assignment, goal: 'Ship', workflowRunId: null}, ticket: {key: 'T-1', title: 'Ticket title', status: 'doing', workflowRunId: null}};
+    const snapshot = (pending: boolean) => overviewFixture([team({runtime: {state: 'running', teamId: RUN_TEAM_ID, status: 'running'}, members: [member({runtime: {...live, assignment, pendingAgent: pending ? 'codex-gpt' : null, lastSwitch: pending ? switchEvidence('pending', 'codex-gpt') : null}, work})]})]);
+    const switchMemberAgent = vi.fn().mockResolvedValue(accepted);
+    const {fake} = await renderLive({overview: [ok(snapshot(false)), ok(snapshot(true))], calls: {switchMemberAgent}});
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(switchButton()); await flush();
+      let region = within(screen.getByRole('region', {name: 'Live for dev'}));
+      expect(region.getByText(/^opencode-sonnet · opencode · claude-sonnet/)).toBeTruthy();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS); });
+      region = within(screen.getByRole('region', {name: 'Live for dev'}));
+      expect(region.getByText(/^opencode-sonnet · opencode · claude-sonnet/)).toBeTruthy();
+      expect(region.getByText('assignment-1 · working · task-1')).toBeTruthy();
+      expect(region.getByText('T-1 · Ticket title · doing')).toBeTruthy();
+      expect(region.getByText('Switch to Codex GPT pending.')).toBeTruthy();
+      expect(fake.overview).toHaveBeenCalledTimes(2);
+      expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
 
   it('assigned_switch_dialog_traps_focus_escapes_and_restores_opener', async () => {
@@ -1225,6 +1304,100 @@ describe('T-082 live controls', () => {
       expect(fake.overview).toHaveBeenCalledTimes(2);
       expect(vi.getTimerCount()).toBe(0);
     } finally { vi.useRealTimers(); }
+  });
+
+  it('late_switch_responses_after_disconnect_do_not_open_confirmation_or_start_polling', async () => {
+    for (const reply of [needsConfirmation('late-assignment'), accepted, {ok: false as const, error: {code: 'PROVIDER_UNAVAILABLE', message: 'Late provider error', retryable: false}}]) {
+      const response = deferred<typeof reply>();
+      const switchMemberAgent = vi.fn(() => response.promise);
+      const fake = fakeManagement({ overview: [ok(data())], calls: { switchMemberAgent } });
+      const ui = (state: 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+      const result = render(ui('connected')); await flush();
+      fireEvent.click(screen.getByRole('tab', { name: 'Overview' })); openMember('dev'); await flush();
+      vi.useFakeTimers();
+      try {
+        fireEvent.click(switchButton());
+        result.rerender(ui('lost')); await flush();
+        await act(async () => { response.resolve(reply); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 1)); });
+        expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+        expect(fake.overview).toHaveBeenCalledTimes(1);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByText(/Late provider error/)).toBeNull();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally { result.unmount(); vi.useRealTimers(); }
+    }
+  });
+
+  it('late_resume_responses_after_disconnect_do_not_refresh_or_update_feedback', async () => {
+    const held = {...live, quotaHolds: {'codex-gpt': null}};
+    const replies = [{ok: true as const, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet'}}, {ok: false as const, error: {code: 'INTERNAL', message: 'Late resume error', retryable: false}}];
+    for (const reply of replies) {
+      const response = deferred<typeof reply>();
+      const resumeMemberAgent = vi.fn(() => response.promise);
+      const fake = fakeManagement({ overview: [ok(data(held))], calls: { resumeMemberAgent } });
+      const ui = (state: 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+      const result = render(ui('connected')); await flush();
+      fireEvent.click(screen.getByRole('tab', { name: 'Overview' })); openMember('dev'); await flush();
+      fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
+      result.rerender(ui('lost')); await flush();
+      await act(async () => { response.resolve(reply); });
+      expect(resumeMemberAgent).toHaveBeenCalledTimes(1);
+      expect(fake.overview).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(/Late resume error/)).toBeNull();
+      expect(screen.queryByText(/Quota hold cleared/)).toBeNull();
+      result.unmount();
+    }
+  });
+
+  it('resume_response_from_before_disconnect_is_ignored_after_reconnect', async () => {
+    const held = {...live, quotaHolds: {'codex-gpt': null}};
+    const replies = [{ok: true as const, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet'}}, {ok: false as const, error: {code: 'INTERNAL', message: 'Old resume error', retryable: false}}];
+    for (const reply of replies) {
+      const response = deferred<typeof reply>();
+      const resumeMemberAgent = vi.fn(() => response.promise);
+      const switchMemberAgent = vi.fn();
+      const fake = fakeManagement({overview: [ok(data(held))], calls: {resumeMemberAgent, switchMemberAgent}});
+      const ui = (state: 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+      const result = render(ui('connected')); await flush();
+      fireEvent.click(screen.getByRole('tab', {name: 'Overview'})); openMember('dev'); await flush();
+      fireEvent.click(screen.getByRole('button', {name: 'Resume'}));
+      result.rerender(ui('lost')); await flush();
+      result.rerender(ui('connected')); await flush();
+      const readsAfterReconnect = fake.overview.mock.calls.length;
+      await act(async () => { response.resolve(reply); });
+      expect(resumeMemberAgent).toHaveBeenCalledTimes(1);
+      expect(switchMemberAgent).not.toHaveBeenCalled();
+      expect(fake.overview).toHaveBeenCalledTimes(readsAfterReconnect);
+      expect(screen.queryByText(/Old resume error/)).toBeNull();
+      expect(screen.queryByText(/Quota hold cleared/)).toBeNull();
+      result.unmount();
+    }
+  });
+
+  it('switch_response_from_before_disconnect_is_ignored_after_reconnect', async () => {
+    for (const reply of [needsConfirmation('old-assignment'), accepted, {ok: false as const, error: {code: 'PROVIDER_UNAVAILABLE', message: 'Old provider error', retryable: false}}]) {
+      const response = deferred<typeof reply>();
+      const switchMemberAgent = vi.fn(() => response.promise);
+      const fake = fakeManagement({ overview: [ok(data())], calls: { switchMemberAgent } });
+      const ui = (state: 'connected' | 'lost') => <TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+      const result = render(ui('connected')); await flush();
+      fireEvent.click(screen.getByRole('tab', {name: 'Overview'})); openMember('dev'); await flush();
+      fireEvent.click(switchButton());
+      result.rerender(ui('lost')); await flush();
+      result.rerender(ui('connected')); await flush();
+      const readsAfterReconnect = fake.overview.mock.calls.length;
+      vi.useFakeTimers();
+      try {
+        await act(async () => { response.resolve(reply); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 1)); });
+        expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+        expect(fake.overview).toHaveBeenCalledTimes(readsAfterReconnect);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByText(/Old provider error/)).toBeNull();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally { result.unmount(); vi.useRealTimers(); }
+    }
   });
 
   it('switch_polling_matches_requested_agent_and_handles_failure_and_timeout', async () => {

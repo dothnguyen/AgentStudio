@@ -96,6 +96,12 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean } | null>(null);
   const alertSource = confirmation?.changed ? 'confirmation' : createError !== null && props.createTeamRequested ? 'create' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : routingError ? 'routing' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
   const confirmationGeneration = useRef(0);
+  const selectionIdentity = JSON.stringify([props.workspace.id, navigation.selectedKey, navigation.selectionVersion, viewState.teamKey, viewState.view, selectedMember?.teamKey, selectedMember?.memberId]);
+  const previousSelectionIdentity = useRef(selectionIdentity);
+  if (previousSelectionIdentity.current !== selectionIdentity) {
+    previousSelectionIdentity.current = selectionIdentity;
+    confirmationGeneration.current++;
+  }
   const selectedMemberRef = useRef(selectedMember);
   selectedMemberRef.current = selectedMember;
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -112,6 +118,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const actionRefreshQueue = useRef<Promise<void>>(Promise.resolve());
   const mounted = useRef(true);
   const connectedRef = useRef(connected);
+  const connectionGeneration = useRef(0);
+  if (connectedRef.current !== connected) connectionGeneration.current++;
   connectedRef.current = connected;
   const confirmationActionInFlight = confirmation !== null && !!actions[memberActionKey(confirmation.teamDefId, confirmation.memberId)];
   useEffect(() => {
@@ -176,13 +184,13 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     }
   }, [confirmation, connected, confirmationActionInFlight]);
   useEffect(() => {
-    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey)) {
+    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey || navigation.selectedKey !== confirmation.selectionKey || viewState.view !== 'overview')) {
       confirmationGeneration.current++;
       restoreFocus.current = null;
       setConfirmation(null);
       document.getElementById('teams-member-detail-title')?.focus();
     }
-  }, [selectedMember, viewState, confirmation]);
+  }, [selectedMember, viewState, confirmation, navigation.selectedKey, props.workspace.id]);
   function closeConfirmation(trigger: HTMLButtonElement): void {
     confirmationGeneration.current++;
     restoreFocus.current = trigger;
@@ -236,15 +244,16 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     if (readOnlyRef.current || !connectedRef.current) return;
     if (!lock(context.teamDefId, context.memberId, context.agentId, 'switch')) return;
     const generation = confirmationGeneration.current;
+    const connectionAtRequest = connectionGeneration.current;
     try {
       let result;
       try { result = assignmentId === undefined ? await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId) : await mgmt.switchMemberAgent(ws, context.teamDefId, context.memberId, context.agentId, { cancelActive: true, assignmentId }); }
       catch (reason) { result = { ok: false as const, error: thrownError(reason) }; }
-      if (!mounted.current) return;
+      if (!mounted.current || !connectedRef.current || connectionAtRequest !== connectionGeneration.current) return;
       if (!result.ok) {
         const match = assignmentConfirmation(result.error);
         if (match && (assignmentId === undefined || match.assignmentId !== assignmentId)) {
-          if (confirmationGeneration.current !== generation) return;
+          if (confirmationGeneration.current !== generation || !connectedRef.current) return;
           if (selectedMemberRef.current?.memberId !== context.memberId || selectedMemberRef.current?.teamKey !== context.selectionKey) return;
           setConfirmation({ ...context, assignmentId: match.assignmentId, changed: assignmentId !== undefined });
         } else {
@@ -259,8 +268,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         await waitForPoll();
         if (!mounted.current) return;
         if (!connectedRef.current) { setFeedback(errorFeedback('Switch status check stopped.', { code: 'DISCONNECTED', message: 'Connection lost before the switch result was confirmed.', retryable: true, remediation: 'Reconnect, then refresh to check the switch result.' })); return; }
+        if (connectionAtRequest !== connectionGeneration.current) return;
         const refreshed = await refreshForAction();
-        if (!mounted.current) return;
+        if (!mounted.current || !connectedRef.current || connectionAtRequest !== connectionGeneration.current) return;
         if (!refreshed.ok) { setFeedback(errorFeedback('Refresh failed.', refreshed.error)); return; }
         const member = refreshed.data.teams.find(t => t.id === context.teamDefId)?.members.find(m => m.memberId === context.memberId);
         if (member && matchingTerminalSwitch(member, context.agentId, context.signature)) return;
@@ -271,14 +281,16 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   async function resumeAgent(teamDefId: string, memberId: string, agentId: string, label: string): Promise<void> {
     if (readOnlyRef.current || !connectedRef.current) return;
     if (!lock(teamDefId, memberId, agentId, 'resume')) return;
+    const connectionAtRequest = connectionGeneration.current;
+    const stale = (): boolean => !mounted.current || !connectedRef.current || connectionAtRequest !== connectionGeneration.current;
     try {
       let result;
       try { result = await mgmt.resumeMemberAgent(ws, teamDefId, memberId, agentId); }
       catch (reason) { result = { ok: false as const, error: thrownError(reason) }; }
-      if (!mounted.current) return;
+      if (stale()) return;
       if (!result.ok) { setFeedback({ ...errorFeedback('Resume request failed.', result.error), dataText: result.error.data === undefined ? null : JSON.stringify(result.error.data) }); return; }
       const refreshed = await refreshForAction();
-      if (!mounted.current) return;
+      if (stale()) return;
       if (!refreshed.ok) { setFeedback(errorFeedback('Refresh failed.', refreshed.error)); return; }
       const d = result.data;
       setFeedback({ kind: 'success', text: !d.cleared ? `No recorded quota hold was cleared for ${label}; quota was not verified.` : d.activeAgent !== d.option ? `Quota hold cleared for inactive option ${label}; quota was not verified. The live agent and assignment were not changed.` : `Quota hold cleared for active option ${label}; quota was not verified. Availability is shown from refreshed backend state.` });

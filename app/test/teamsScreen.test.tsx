@@ -243,7 +243,7 @@ describe('TeamsScreen', () => {
     const row = openMember('dev');
     const savedText = within(row).getByRole('list', {name: 'Saved agent options'}).textContent;
     expect(savedText).toBe('Default — Saved choice · saved-provider · saved-model');
-    expect(row.textContent).toContain('Active agent: live-id · live-provider · live-model');
+    expect(row.textContent).toContain('live-id · live-provider · live-model');
     expect(savedText).not.toContain('live-id');
   });
 
@@ -275,11 +275,11 @@ describe('TeamsScreen', () => {
     await openTab(result, 'Overview');
     const r1 = openMember('dev').textContent;
     expect(r1).toContain('Default — OpenCode Sonnet · opencode · sonnet');
-    expect(r1).toContain('T-031 Teams screen');
+    expect(r1).toContain('T-031 · Teams screen');
     fireEvent.click(result.getByRole('button', { name: 'Back to members' }));
     const r2 = openMember('lead').textContent;
     expect(r2).toContain('Inline agent — codex · model not set');
-    expect(r2).toContain('No current work');
+    expect(r2).toContain('Live state is unavailable because this member has no running runtime record.');
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.overview).toHaveBeenCalledWith('ws-a');
     expect(fake.agents).toHaveBeenCalledTimes(1);
@@ -297,8 +297,7 @@ describe('TeamsScreen', () => {
     expect(within(detail).getByRole('heading', { level: 2 }).textContent).toBe('Release Team');
     const row = openMember('qa');
     expect(row.textContent).toContain('qa');
-    expect(row.textContent).toContain('Stopped');
-    expect(row.textContent).toContain('Not available');
+    expect(row.textContent).toContain('Live state is unavailable because this member has no running runtime record.');
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
@@ -362,7 +361,7 @@ describe('TeamsScreen', () => {
     expect(detail.textContent).toContain('$: could not load team definition: TEAM_CONFIG_INVALID');
     await openTab(result, 'Overview');
     const row = openMember('m1');
-    for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Not available', 'Unavailable']) {
+    for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Live state is unavailable because this member has no running runtime record.']) {
       expect(row.textContent).toContain(t);
     }
     const notices = within(result.getByRole('list', { name: 'Data notices' })).getAllByRole('listitem');
@@ -507,8 +506,9 @@ describe('live member actions', () => {
       const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({runtime: {state: 'running', teamId: 't', status: 'running'}, members: [m]})])}]});
       const detail = openMember('dev');
       expect(within(detail).queryByRole('button', {name: 'Switch'})).toBeNull();
-      if (!m.runtime || m.agentMode === 'inline') expect(detail.textContent).toContain('Live controls are unavailable because this member has no running runtime record.');
-      else expect(detail.textContent).toContain('Active agent:');
+      if (!m.runtime) expect(detail.textContent).toContain('Live state is unavailable because this member has no running runtime record.');
+      else if (m.agentMode === 'inline') { expect(detail.textContent).toContain('Live switching is unavailable for inline members.'); expect(within(detail).getByText('Active agent')).toBeTruthy(); }
+      else expect(within(detail).getByText('Active agent')).toBeTruthy();
       result.unmount();
     }
   });
@@ -1063,7 +1063,6 @@ describe('member detail focus and settings', () => {
       'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.',
       'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.',
       'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.',
-      'Live state comes from the running team. Saving member settings does not change it.',
     ]) expect(detail.textContent).toContain(text);
     expect(detail.textContent).not.toMatch(/roles? (provides?|supply|supplies|grants?|owns?|controls?|determines?|sets?) /i);
     expect(detail.textContent).not.toMatch(/role'?s? (permission|default agent|active agent|quota)/i);
@@ -1092,9 +1091,55 @@ describe('member detail focus and settings', () => {
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
     expect(screen.getByRole('heading', {name: 'Member settings'})).toBeTruthy();
     expect(screen.getByRole('heading', {name: 'Agent options — next team start'})).toBeTruthy();
-    expect(screen.getByRole('heading', {name: 'Live agent'})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Live', level: 3})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
     expect(document.activeElement).toBe(document.querySelector('[data-member-row="dev"]'));
+  });
+  it('member_detail_leads_with_one_live_section_without_duplicate_summary', async () => {
+    await renderScreen(); showMembers(); const detail = openMember('dev');
+    const h2 = within(detail).getByRole('heading', {name: 'dev', level: 2});
+    const live = within(detail).getByRole('heading', {name: 'Live', level: 3});
+    const settings = within(detail).getByRole('heading', {name: 'Member settings'});
+    expect(h2.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(live.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(detail).getAllByRole('region', {name: 'Live for dev'})).toHaveLength(1);
+    const region = within(detail).getByRole('region', {name: 'Live for dev'});
+    for (const label of ['Active agent', 'Availability']) {
+      expect(within(detail).getAllByText(label)).toHaveLength(1);
+      expect(within(region).getAllByText(label)).toHaveLength(1);
+    }
+    expect(detail.textContent).not.toContain('Current work:');
+    expect(detail.textContent).not.toContain('Live state comes from the running team');
+  });
+  it('member_detail_live_section_uses_runtime_assignment_ticket_and_unavailable_copy', async () => {
+    const running = {state: 'running' as const, teamId: 't', status: 'running'};
+    const live = {...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle'};
+    const work = {state: 'working' as const, assignment: {id: 'as-1', status: 'working', taskId: 'task-1', goal: 'Ship it', workflowRunId: null}, ticket: {key: 'T-9', title: 'Nine', status: 'doing', workflowRunId: null}};
+    const members = [
+      member({memberId: 'run', name: 'run', runtime: {...live, assignment: {id: 'as-1', status: 'working', taskId: 'task-1'}, provider: 'actual-p', model: null, reasoning: null}, work}),
+      member({memberId: 'none', name: 'none', runtime: null}),
+      member({memberId: 'old', name: 'old', runtime: {...live, stale: true, configuredAgents: null}, agentOptions: [{id: 'saved-only', name: null, provider: null, model: null, reasoning: null, description: null, state: 'ok'}]}),
+      member({memberId: 'gone', name: 'gone', runtime: {...live, activeAgent: null, paneState: null, provider: null, model: null, reasoning: null}, work: {state: 'unavailable', reason: 'board offline'}}),
+    ];
+    await renderMembers({overview: [{ok: true, data: overviewFixture([team({runtime: running, members})])}]});
+    let region = within(openMember('run')).getByRole('region', {name: 'Live for run'});
+    expect(region.textContent).toContain('as-1 · working · task-1');
+    expect(region.textContent).toContain('T-9 · Nine · doing');
+    expect(region.textContent).toContain('actual-p');
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    region = within(openMember('none')).getByRole('region', {name: 'Live for none'});
+    expect(region.textContent).toContain('Live state is unavailable because this member has no running runtime record.');
+    expect(within(region).queryByRole('button')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    region = within(openMember('old')).getByRole('region', {name: 'Live for old'});
+    expect(region.textContent).toContain('Live state is stale.');
+    expect(region.textContent).not.toContain('saved-only');
+    expect(within(region).queryByRole('button', {name: 'Switch'})).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    region = within(openMember('gone')).getByRole('region', {name: 'Live for gone'});
+    expect(region.textContent).toContain('Unknown');
+    expect(region.textContent).toContain('Pane state unavailable');
+    expect(region.textContent).toContain('Current work unavailable — board offline');
   });
   it('restores edit and remove focus after cancelling', async () => {
     await renderScreen(); showMembers(); openMember('lead');
