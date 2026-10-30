@@ -1239,6 +1239,13 @@ ul[aria-label="Workspaces"] {
 .routing-problem { color: var(--danger, #b42318); overflow-wrap: anywhere; }
 @media (max-width: 900px) { .routing-rule-grid { grid-template-columns: minmax(0, 1fr); } }
 
+.routing-settings form h3 { margin-block: 1rem .5rem; }
+.routing-escalation { margin-block: .75rem; }
+.routing-escalation h4 { margin-block: .5rem; }
+.routing-escalation > label { flex-direction: row; align-items: center; }
+.routing-escalation-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .5rem; }
+.routing-problem span { display: block; }
+
 .teams-option-list { padding-left: 1.5rem; }
 .teams-option-row { margin-bottom: .5rem; overflow-wrap: anywhere; }
 .teams-option-meta, .teams-option-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }

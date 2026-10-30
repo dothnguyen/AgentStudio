@@ -3,7 +3,7 @@ import type { BoardSettings, ManagementApi, ManagementError, RoleCatalogItem } f
 import { RoutingReadView } from './RoutingReadView';
 import { RoutingEditForm } from './RoutingEditForm';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
-import { boardSettingsChanges, createRoutingDraft, errorProblems, updateRuleField, validateRoutingDraft, type EditableRuleField, type RoutingDraft } from './routingSettingsModel';
+import { boardSettingsChanges, createRoutingDraft, errorProblems, updateRuleField, setRuleFailureLimit, removeRuleFailureLimit, validateRoutingDraft, type EditableRuleField, type RoutingDraft } from './routingSettingsModel';
 
 export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void }
 export function RoutingSettingsPanel({ workspaceId, management, section, connected, roleItems = null, onViewRole }: RoutingSettingsPanelProps): JSX.Element {
@@ -17,7 +17,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
   const [reloadError, setReloadError] = useState<ManagementError | null>(null);
   const [savedKind, setSavedKind] = useState<'routing' | null>(null);
   const canEdit = !!(connected && settings && settings.board.state === 'ok' && settings.roles.state === 'ok' && settings.board.sha256 && settings.roles.sha256 && createRoutingDraft(settings));
-  const problems = draft && editSettings ? [...validateRoutingDraft(draft, editSettings), ...(error ? errorProblems(error) : [])] : [];
+  const problems = draft && editSettings ? [...validateRoutingDraft(draft, editSettings), ...(error?.code === 'BOARD_CONFIG_INVALID' ? errorProblems(error) : [])] : [];
   function change(index: number, field: EditableRuleField, value: string) { if (draft) setDraft(updateRuleField(draft, index, field, value)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }
   async function refreshLatest() {
     try {
@@ -31,7 +31,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
       return false;
     }
   }
-  async function reload() { if (lock.current) return; lock.current = true; setPending(true); try { if (await refreshLatest()) { setDraft(null); setError(null); setNotice(savedKind ? 'Routing settings saved.' : ''); setSavedKind(null); } } catch (reason) { setReloadError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); } finally { lock.current = false; setPending(false); } }
+  async function reload() { if (lock.current) return; lock.current = true; setPending(true); try { if (await refreshLatest()) { setDraft(null); setEditSettings(null); setError(null); setNotice(savedKind ? 'Routing settings saved.' : ''); setSavedKind(null); } } catch (reason) { setReloadError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); } finally { lock.current = false; setPending(false); } }
   async function save() {
     if (lock.current || !editSettings || !canEdit || savedKind || error?.code === 'CONFIG_CHANGED') return;
     const snapshot = editSettings;
@@ -43,7 +43,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
       const result = await management.updateBoardSettings(workspaceId, changes, snapshot.board.sha256!);
       if (!result.ok) { setError(result.error); return; }
       setSavedKind('routing');
-      if (await refreshLatest()) { setDraft(null); setSavedKind(null); setNotice('Routing settings saved.'); }
+      if (await refreshLatest()) { setDraft(null); setEditSettings(null); setSavedKind(null); setNotice('Routing settings saved.'); }
     } catch (reason) { setError({ code: 'INTERNAL', message: reason instanceof Error ? reason.message : String(reason), retryable: false }); }
     finally { lock.current = false; setPending(false); }
   }
@@ -63,7 +63,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
       {notice && <p role="status">{notice}</p>}
       <RoutingReadView settings={settings} roleItems={roleItems} onViewRole={onViewRole} />
       {!draft && <button type="button" disabled={!canEdit || pending} onClick={() => { setEditSettings(settings); setDraft(createRoutingDraft(settings)); setError(null); setNotice(''); }}>Edit routing settings</button>}
-      {draft && editSettings && <RoutingEditForm draft={draft} settings={editSettings} problems={problems} pending={pending} connected={connected} locked={!!savedKind} canEdit={canEdit} conflict={error?.code === 'CONFIG_CHANGED'} onChange={change} onBaseBranchChange={v => { setDraft({ ...draft, baseBranch: v }); setError(p => p?.code === 'CONFIG_CHANGED' ? p : null); }} onSubmit={() => void save()} onCancel={() => { setDraft(null); setError(null); setNotice(''); }} />}
+      {draft && editSettings && <RoutingEditForm draft={draft} settings={editSettings} problems={problems} pending={pending} connected={connected} locked={!!savedKind} canEdit={canEdit} conflict={error?.code === 'CONFIG_CHANGED'} onChange={change} onBaseBranchChange={v => { setDraft({ ...draft, baseBranch: v }); setError(p => p?.code === 'CONFIG_CHANGED' ? p : null); setNotice(''); }} onFailureChange={(index, count, status) => { setDraft(d => d && setRuleFailureLimit(d, index, count, status)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }} onFailureRemove={index => { setDraft(d => d && removeRuleFailureLimit(d, index)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }} onSubmit={() => void save()} onCancel={() => { setDraft(null); setEditSettings(null); setError(null); setReloadError(null); setNotice(''); }} />}
       {reloadError && <div className="panel-error" role="alert"><p>Reload failed: {reloadError.code}: {reloadError.message}</p><button type="button" disabled={pending || !connected} onClick={() => void reload()}>Retry latest settings</button></div>}
       {error && <div className="panel-error" role="alert"><p>{error.code}: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}{(!draft || error.code !== 'BOARD_CONFIG_INVALID') && errorProblems(error).map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}{error.code === 'CONFIG_CHANGED' && <button type="button" disabled={pending || !connected} onClick={() => void reload()}>Reload latest settings</button>}</div>}
     </>}

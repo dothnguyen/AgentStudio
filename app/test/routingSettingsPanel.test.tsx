@@ -399,3 +399,170 @@ it('uses renamed routing identifiers and reports missing workflows and handlers'
   expect(panel.getAllByText('No rule starts from Triage (triage); escalated tickets wait there.')).toHaveLength(2);
   expect(panel.queryByRole('button', { name: /in Roles/ })).toBeNull();
 });
+
+it('edits and submits existing failure escalation with the original SHA', async () => {
+  const { escalationSettingsFixture } = await import('./teamsFixtures');
+  const s = escalationSettingsFixture(); const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const qa = within(panel.getByRole('group', { name: 'Rule 6 — agent' }));
+  const review = within(panel.getByRole('group', { name: 'Rule 7 — agent' }));
+  expect((review.getByLabelText('Failure count') as HTMLInputElement).value).toBe('3');
+  expect((review.getByLabelText('Escalation target status') as HTMLSelectElement).value).toBe('need-escalate');
+  fireEvent.change(qa.getByLabelText('Failure count'), { target: { value: '4' } });
+  fireEvent.change(qa.getByLabelText('Escalation target status'), { target: { value: 'dev-ready' } });
+  const rules = structuredClone(s.board.config!.rules) as Array<Record<string, unknown>>;
+  rules[5].onFailureLimit = { count: 4, status: 'dev-ready' };
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(update).toHaveBeenCalledWith('ws-a', { rules }, s.board.sha256);
+});
+
+it('enables and removes failure escalation without changing another rule', async () => {
+  const s = routingSettingsFixture(); const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const first = within(panel.getByRole('group', { name: 'Rule 1 — agent' }));
+  const toggle = first.getByLabelText('Escalate after repeated failures');
+  fireEvent.click(toggle); expect((first.getByLabelText('Failure count') as HTMLInputElement).value).toBe('1');
+  expect(document.activeElement).toBe(first.getByLabelText('Failure count'));
+  fireEvent.click(toggle); fireEvent.click(toggle);
+  const rules = structuredClone(s.board.config!.rules) as Array<Record<string, unknown>>;
+  rules[0].onFailureLimit = { count: 1, status: s.statuses[0].id };
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(update).toHaveBeenCalledWith('ws-a', { rules }, s.board.sha256);
+});
+
+it('blocks invalid escalation and maps backend escalation problems inline', async () => {
+  const { escalationSettingsFixture } = await import('./teamsFixtures'); const s = escalationSettingsFixture();
+  const update = vi.fn(async () => ({ ok: false as const, error: { code: 'BOARD_CONFIG_INVALID', message: 'invalid', retryable: false, data: { problems: [{ path: 'rules[5].onFailureLimit.count', message: 'Rejected count' }, { path: 'rules[5].onFailureLimit.status', message: 'Rejected target' }] } } }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s]); fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const qa = within(panel.getByRole('group', { name: 'Rule 6 — agent' })); const count = qa.getByLabelText('Failure count');
+  fireEvent.change(count, { target: { value: '0' } }); expect(count.getAttribute('aria-invalid')).toBe('true');
+  expect(update).not.toHaveBeenCalled(); fireEvent.change(count, { target: { value: '4' } });
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(qa.getAllByText('rules[5].onFailureLimit.count: Rejected count')).toHaveLength(1);
+  expect(qa.getAllByText('rules[5].onFailureLimit.status: Rejected target')).toHaveLength(1);
+  expect(qa.getByLabelText(/Escalation target status/).getAttribute('aria-invalid')).toBe('true');
+});
+
+it.each(['', 'unknown-status'])('blocks a client-invalid escalation target %s', async status => {
+  const { escalationSettingsFixture } = await import('./teamsFixtures');
+  const settings = escalationSettingsFixture();
+  (settings.board.config!.rules as Array<Record<string, unknown>>)[5].onFailureLimit = { count: 3, status };
+  const update = vi.fn();
+  const { panel } = await setup({ updateBoardSettings: update }, [settings]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const qa = within(panel.getByRole('group', { name: 'Rule 6 — agent' }));
+  expect(qa.getByLabelText(/Escalation target status/).getAttribute('aria-invalid')).toBe('true');
+  expect(qa.getByText('rules[5].onFailureLimit.status: Choose a status from this board.')).toBeTruthy();
+  const save = panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  fireEvent.submit(save.closest('form')!);
+  expect(update).not.toHaveBeenCalled();
+});
+
+it('clears the no-op notice when the base branch changes', async () => {
+  const update = vi.fn();
+  const { panel } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!);
+  expect(panel.getByText('No routing changes to save.')).toBeTruthy();
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new-base' } });
+  expect(panel.queryByText('No routing changes to save.')).toBeNull();
+  expect(update).not.toHaveBeenCalled();
+});
+
+it('states workspace-wide future timing without calling other mutation APIs', async () => {
+  const { panel, fake } = await setup();
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  expect(panel.getByText('Saved changes apply workspace-wide to future board claims and transitions. They do not change member roles or shared role instructions, cancel current assignments, or reroute work already in flight.')).toBeTruthy();
+  fireEvent.click(panel.getByRole('button', { name: 'Cancel' }));
+  expect(fake.api.updateRole).not.toHaveBeenCalled();
+});
+
+it('submits removal of an existing escalation without altering other raw fields', async () => {
+  const { escalationSettingsFixture } = await import('./teamsFixtures');
+  const settings = escalationSettingsFixture();
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [settings]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const qa = within(panel.getByRole('group', { name: 'Rule 6 — agent' }));
+  fireEvent.click(qa.getByLabelText('Escalate after repeated failures'));
+  expect(qa.queryByLabelText('Failure count')).toBeNull();
+  const rules = structuredClone(settings.board.config!.rules) as Array<Record<string, unknown>>;
+  delete rules[5].onFailureLimit;
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(update).toHaveBeenCalledExactlyOnceWith('ws-a', { rules }, settings.board.sha256);
+});
+
+it('keeps edit choices and validation on the captured snapshot after refresh', async () => {
+  const { RoutingSettingsPanel } = await import('../src/renderer/teams/RoutingSettingsPanel');
+  const initial = routingSettingsFixture();
+  const latest = structuredClone(initial);
+  latest.statuses = latest.statuses.map(s => s.id === 'dev-ready' ? { ...s, name: 'New label' } : s);
+  latest.workflows = latest.workflows.filter(w => w.name !== 'board-develop');
+  latest.board.sha256 = 'c'.repeat(64);
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const fake = fakeManagement({ calls: { updateBoardSettings: update } });
+  const section = { state: 'ready' as const, data: initial, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}) };
+  const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={section} />);
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  view.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={{ ...section, data: latest }} />);
+  const first = within(panel.getByRole('group', { name: 'Rule 1 — agent' }));
+  expect(within(first.getByLabelText('Source status')).queryByRole('option', { name: 'New label (dev-ready)' })).toBeNull();
+  expect((within(first.getByLabelText('Workflow')).getByRole('option', { name: 'board-develop' }) as HTMLOptionElement).disabled).toBe(false);
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(update).toHaveBeenCalledExactlyOnceWith('ws-a', { baseBranch: 'draft' }, initial.board.sha256);
+});
+
+it.each(['board', 'roles', 'rules'] as const)('makes independently missing or malformed %s inspect-only', async kind => {
+  const settings = routingSettingsFixture();
+  if (kind === 'board') settings.board = { ...settings.board, state: 'missing' };
+  else if (kind === 'roles') settings.roles = { ...settings.roles, state: 'missing' };
+  else settings.board.config!.rules = [null];
+  const update = vi.fn();
+  const { panel } = await setup({ updateBoardSettings: update }, [settings]);
+  expect((panel.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(update).not.toHaveBeenCalled();
+});
+
+it.each(['board', 'roles'] as const)('makes a missing %s SHA inspect-only', async kind => {
+  const settings = routingSettingsFixture();
+  settings[kind].sha256 = null;
+  const update = vi.fn();
+  const { panel } = await setup({ updateBoardSettings: update }, [settings]);
+  const edit = panel.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement;
+  expect(edit.disabled).toBe(true);
+  fireEvent.click(edit);
+  expect(panel.queryByRole('button', { name: 'Save' })).toBeNull();
+  expect(update).not.toHaveBeenCalled();
+});
+
+it('uses returned status labels and ids for both existing escalation policies', async () => {
+  const { escalationSettingsFixture } = await import('./teamsFixtures');
+  const settings = escalationSettingsFixture();
+  settings.statuses = settings.statuses.map(s => s.id === 'need-escalate' ? { ...s, name: 'Custom escalation' } : s).reverse();
+  const { panel } = await setup({}, [settings]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  for (const rule of [6, 7]) {
+    const group = within(panel.getByRole('group', { name: `Rule ${rule} — agent` }));
+    const target = group.getByLabelText('Escalation target status') as HTMLSelectElement;
+    expect(target.value).toBe('need-escalate');
+    expect(within(target).getByRole('option', { name: 'Custom escalation (need-escalate)' })).toBeTruthy();
+    expect((group.getByLabelText('Failure count') as HTMLInputElement).value).toBe('3');
+  }
+});
+
+it('only writes board settings when saving a routing change', async () => {
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel, fake } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new-base' } });
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
+  expect(update).toHaveBeenCalledTimes(1);
+  for (const method of ['createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'addMember', 'updateMember', 'removeMember', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent'] as const) {
+    expect(fake.api[method]).not.toHaveBeenCalled();
+  }
+});

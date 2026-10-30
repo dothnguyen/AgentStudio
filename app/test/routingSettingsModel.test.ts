@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, removeFailureLimit, setFailureLimit, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
+import { boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, removeRuleFailureLimit, setRuleFailureLimit, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
 import { escalationSettingsFixture, routingSettingsFixture } from './teamsFixtures';
 
 describe('routing settings model', () => {
@@ -82,6 +82,8 @@ it.each(['onFail', 'onBlocked'] as const)('finds a done path through %s', edge =
   expect(validateRoutingDraft(changed, settings)).not.toContainEqual({ path: 'rules', message: 'No routing path reaches a done status.' });
 });
 
+const setFailureLimit = (draft: ReturnType<typeof createRoutingDraft> & {}, index: number, policy: { count: number; status: string }) => setRuleFailureLimit(draft, index, policy.count, policy.status);
+
 describe('failure escalation', () => {
   const policy = { count: 3, status: 'need-escalate' };
   const setup = () => { const s = escalationSettingsFixture(); return { s, d: createRoutingDraft(s)! }; };
@@ -114,31 +116,31 @@ describe('failure escalation', () => {
     const invalid = updateFailureLimit(d, 5, 'count', Number.NaN);
     const updated = updateFailureLimit(invalid, 5, 'status', 'dev-ready');
     expect((updated.rules[5].onFailureLimit as { count: number }).count).toBeNaN();
-    expect(validateRoutingDraft(updated, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect(validateRoutingDraft(updated, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Enter a positive whole number.' });
     expect((updateRuleField(invalid, 5, 'onPass', 'dev-ready').rules[5].onFailureLimit as { count: number }).count).toBeNaN();
   });
   it('removes only onFailureLimit', () => {
-    const { d } = setup(); const r = removeFailureLimit(d, 5);
+    const { d } = setup(); const r = removeRuleFailureLimit(d, 5);
     const { onFailureLimit: _omit, ...rest } = d.rules[5];
     expect(r.rules[5]).not.toHaveProperty('onFailureLimit'); expect(r.rules[5]).toEqual(rest);
     expect(r.rules[6].onFailureLimit).toEqual(policy);
-    expect(removeFailureLimit(d, 0)).toEqual(d);
+    expect(removeRuleFailureLimit(d, 0)).toEqual(d);
   });
   it('detects no-op edits', () => {
     const { s, d } = setup();
     expect(boardSettingsChanges(setFailureLimit(d, 5, { ...policy }), s)).toBeNull();
     const base = routingSettingsFixture();
-    expect(boardSettingsChanges(removeFailureLimit(setFailureLimit(createRoutingDraft(base)!, 0, { count: 2, status: 'dev-ready' }), 0), base)).toBeNull();
+    expect(boardSettingsChanges(removeRuleFailureLimit(setFailureLimit(createRoutingDraft(base)!, 0, { count: 2, status: 'dev-ready' }), 0), base)).toBeNull();
     expect(setFailureLimit(d, 99, { ...policy })).toEqual(d);
   });
   it.each([0, -1, 1.5, Number.NaN])('rejects count %s', (c) => {
     const { s, d } = setup();
-    expect(validateRoutingDraft(updateFailureLimit(d, 5, 'count', c), s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect(validateRoutingDraft(updateFailureLimit(d, 5, 'count', c), s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Enter a positive whole number.' });
   });
   it('rejects a string count', () => {
     const { s, d } = setup(); const rules = structuredClone(d.rules);
     rules[5].onFailureLimit = { count: '3', status: 'need-escalate' };
-    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Enter a positive whole number.' });
   });
   it('rejects unknown or empty target status', () => {
     const { s, d } = setup();
@@ -146,26 +148,26 @@ describe('failure escalation', () => {
   });
   it('rejects malformed policies', () => {
     const { s, d } = setup();
-    for (const bad of [null, { count: 3 }, { count: 3, status: 'need-escalate', extra: 1 }]) {
+    for (const bad of [null, { count: 3, status: 'need-escalate', extra: 1 }]) {
       const rules = structuredClone(d.rules); rules[5].onFailureLimit = bad;
       expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation needs a count and a target status.' });
     }
   });
   it('rejects a policy on an action rule', () => {
     const s = routingSettingsFixture(); const d = setFailureLimit(createRoutingDraft(s)!, 1, { count: 2, status: 'done' });
-    expect(validateRoutingDraft(d, s)).toContainEqual({ path: 'rules[1].onFailureLimit', message: 'Failure escalation is only available on agent rules.' });
+    expect(validateRoutingDraft(d, s)).toContainEqual({ path: 'rules[1].onFailureLimit', message: 'Failure escalation is available only for agent rules.' });
   });
   it('reaches done only through the escalation target', () => {
     const { s, d } = setup(); const none = { path: 'rules', message: 'No routing path reaches a done status.' };
     let x = updateRuleField(d, 0, 'onPass', 'qa-ready'); x = updateRuleField(x, 0, 'onFail', 'qa-ready');
     x = updateRuleField(x, 5, 'onPass', 'dev-ready'); x = updateRuleField(x, 5, 'onFail', 'dev-ready'); x = updateRuleField(x, 7, 'onPass', 'merge-ready');
     expect(validateRoutingDraft(x, s)).not.toContainEqual(none);
-    expect(validateRoutingDraft(removeFailureLimit(x, 5), s)).toContainEqual(none);
+    expect(validateRoutingDraft(removeRuleFailureLimit(x, 5), s)).toContainEqual(none);
   });
   it('keeps unknown rule fields through every helper', () => {
     const { d } = setup(); const rules = structuredClone(d.rules); rules[5].futureKey = { a: 1 };
     const x = { ...d, rules };
-    for (const out of [setFailureLimit(x, 5, { count: 9, status: 'dev-ready' }), updateFailureLimit(x, 5, 'count', 4), removeFailureLimit(x, 5)]) expect(out.rules[5].futureKey).toEqual({ a: 1 });
+    for (const out of [setFailureLimit(x, 5, { count: 9, status: 'dev-ready' }), updateFailureLimit(x, 5, 'count', 4), removeRuleFailureLimit(x, 5)]) expect(out.rules[5].futureKey).toEqual({ a: 1 });
   });
   it('reads only object policies with numeric count and string status and returns a copy', () => {
     expect(failureLimitOf(undefined)).toBeNull();
@@ -181,18 +183,18 @@ describe('failure escalation', () => {
     rules[5].onFailureLimit = { status: 'need-escalate', count: 3, extra: 1 };
     const input = { ...d, rules }; const before = structuredClone(input);
     const unchanged = setFailureLimit(input, 5, policy);
-    expect(JSON.stringify(unchanged)).toBe(JSON.stringify(input));
+    expect(unchanged.rules[5].onFailureLimit).toEqual({ count: 3, status: 'need-escalate' });
     const updated = updateFailureLimit(input, 5, 'count', 4);
     expect(Object.keys(updated.rules[5].onFailureLimit as object)).toEqual(['status', 'count', 'extra']);
     expect(updated.rules[5].onFailureLimit).toEqual({ status: 'need-escalate', count: 4, extra: 1 });
     const replaced = setFailureLimit(input, 5, { count: 4, status: 'dev-ready' });
     expect(Object.keys(replaced.rules[5].onFailureLimit as object)).toEqual(['count', 'status']);
     expect(input).toEqual(before);
-    removeFailureLimit(input, 5); expect(input).toEqual(before);
+    removeRuleFailureLimit(input, 5); expect(input).toEqual(before);
   });
   it('returns cloned unchanged rules for out-of-range helper calls', () => {
     const { d } = setup();
-    for (const result of [setFailureLimit(d, 99, policy), updateFailureLimit(d, 99, 'count', 2), removeFailureLimit(d, 99)]) {
+    for (const result of [setFailureLimit(d, 99, policy), updateFailureLimit(d, 99, 'count', 2), removeRuleFailureLimit(d, 99)]) {
       expect(result).toEqual(d); expect(result.rules).not.toBe(d.rules);
     }
   });
@@ -200,7 +202,7 @@ describe('failure escalation', () => {
     const { s, d } = setup(); const rules = structuredClone(d.rules);
     rules[5].onFailureLimit = { count: true, status: 42 };
     const problems = validateRoutingDraft({ ...d, rules }, s);
-    expect(problems).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect(problems).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Enter a positive whole number.' });
     expect(problems).toContainEqual({ path: 'rules[5].onFailureLimit.status', message: 'Choose a status from this board.' });
   });
   it('rejects array and string policies and uses action presence for action rules', () => {
@@ -209,8 +211,8 @@ describe('failure escalation', () => {
       const rules = structuredClone(d.rules); rules[5].onFailureLimit = value;
       expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation needs a count and a target status.' });
     }
-    const rules = structuredClone(d.rules); rules[5].action = 'merge';
-    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation is only available on agent rules.' });
+    const rules = structuredClone(d.rules); rules[5].type = 'action'; rules[5].action = 'merge';
+    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation is available only for agent rules.' });
   });
   it('does not create a policy when updating a non-object value', () => {
     const { d } = setup();
@@ -225,4 +227,30 @@ describe('failure escalation', () => {
       .map(path => ({ path, message: 'Invalid policy' }));
     expect(errorProblems({ code: 'BOARD_CONFIG_INVALID', message: 'Invalid board', retryable: false, data: { problems } })).toEqual(problems);
   });
+});
+
+it('adds edits and removes failure escalation without mutating raw rules', () => {
+  const s = escalationSettingsFixture(); const d = createRoutingDraft(s)!; const before = structuredClone(d);
+  const added = setRuleFailureLimit(d, 0, 1, 'done');
+  const edited = setRuleFailureLimit(added, 0, 3, 'need-escalate');
+  const removed = removeRuleFailureLimit(edited, 0);
+  expect(removed).toEqual(before); expect(d).toEqual(before);
+  expect(edited.rules.slice(1)).toEqual(before.rules.slice(1));
+});
+
+it('validates escalation count status and agent-only scope', () => {
+  const s = escalationSettingsFixture(); const d = createRoutingDraft(s)!;
+  for (const count of [0, -1, 1.5]) expect(validateRoutingDraft(setRuleFailureLimit(d, 5, count, 'done'), s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Enter a positive whole number.' });
+  for (const status of ['', 'absent']) expect(validateRoutingDraft(setRuleFailureLimit(d, 5, 1, status), s)).toContainEqual({ path: 'rules[5].onFailureLimit.status', message: 'Choose a status from this board.' });
+  const rules = structuredClone(d.rules); rules[5].onFailureLimit = { count: 1 };
+  expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit.status', message: 'Choose a status from this board.' });
+  expect(validateRoutingDraft(setRuleFailureLimit(d, 1, 1, 'done'), s)).toContainEqual({ path: 'rules[1].onFailureLimit', message: 'Failure escalation is available only for agent rules.' });
+});
+
+it('preserves hidden and future rule fields in the changes payload', () => {
+  const s = routingSettingsFixture(); const raw = s.board.config!.rules as Array<Record<string, unknown>>;
+  Object.assign(raw[0], { syncBase: true, maxRounds: 3, priority: 5, onFailPriority: 2, onPassCreatedTickets: { status: 'backlog' }, futurePolicy: { mode: 'keep' } });
+  const draft = createRoutingDraft(s)!; const changed = updateRuleField(draft, 0, 'onFail', 'backlog');
+  const expected = structuredClone(raw); expected[0].onFail = 'backlog';
+  expect(boardSettingsChanges(changed, s)).toEqual({ rules: expected }); expect(draft.rules).toEqual(raw);
 });
