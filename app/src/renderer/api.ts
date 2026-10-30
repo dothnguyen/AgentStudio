@@ -16,6 +16,7 @@ export type {
   BoardSettingsKey,
   ConfigState,
   ConfigWriteResult,
+  FailureLimitPolicy,
   ManagementApi,
   ManagementError,
   ManagementResult,

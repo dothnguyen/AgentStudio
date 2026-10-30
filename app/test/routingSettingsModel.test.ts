@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { boardSettingsChanges, createRoutingDraft, errorProblems, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
-import { routingSettingsFixture } from './teamsFixtures';
+import { boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, removeFailureLimit, setFailureLimit, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
+import { escalationSettingsFixture, routingSettingsFixture } from './teamsFixtures';
 
 describe('routing settings model', () => {
   it('clones and preserves raw nested properties and optional fields', () => {
@@ -80,4 +80,149 @@ it.each(['onFail', 'onBlocked'] as const)('finds a done path through %s', edge =
   changed = updateRuleField(changed, 0, 'onFail', 'dev-ready');
   changed = updateRuleField(changed, 0, edge, 'merge-ready');
   expect(validateRoutingDraft(changed, settings)).not.toContainEqual({ path: 'rules', message: 'No routing path reaches a done status.' });
+});
+
+describe('failure escalation', () => {
+  const policy = { count: 3, status: 'need-escalate' };
+  const setup = () => { const s = escalationSettingsFixture(); return { s, d: createRoutingDraft(s)! }; };
+  it('projects QA and review escalation and validates clean', () => {
+    const { s, d } = setup();
+    expect(s.rules[5].onFailureLimit).toEqual(policy); expect(s.rules[6].onFailureLimit).toEqual(policy);
+    expect(s.rules[7].onFailureLimit).toBeNull(); expect(s.rules[7].role).toBe('SeniorDeveloper');
+    expect(routingSettingsFixture().rules.every(r => r.onFailureLimit === null)).toBe(true);
+    expect(failureLimitOf(d.rules[5])).toEqual(policy);
+    expect(validateRoutingDraft(d, s)).toEqual([]);
+  });
+  it('adds a policy without touching other raw fields', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!; const before = structuredClone(d);
+    const u = setFailureLimit(d, 0, { count: 2, status: 'dev-ready' });
+    expect(d).toEqual(before);
+    expect(u.rules[0]).toEqual({ ...before.rules[0], onFailureLimit: { count: 2, status: 'dev-ready' } });
+    expect(u.rules.slice(1)).toEqual(before.rules.slice(1));
+    expect(boardSettingsChanges(u, s)).toEqual({ rules: u.rules });
+  });
+  it('changes count and status independently', () => {
+    const { d } = setup();
+    expect(updateFailureLimit(d, 5, 'count', 5).rules[5].onFailureLimit).toEqual({ count: 5, status: 'need-escalate' });
+    const st = updateFailureLimit(d, 5, 'status', 'dev-ready');
+    expect(st.rules[5].onFailureLimit).toEqual({ count: 3, status: 'dev-ready' });
+    expect(st.rules[5].onFailPriority).toBe(0); expect(st.rules[5].workspace).toBe('worktree');
+    expect(updateFailureLimit(d, 0, 'count', 5)).toEqual(d);
+  });
+  it('preserves an invalid NaN count when another field is edited', () => {
+    const { s, d } = setup();
+    const invalid = updateFailureLimit(d, 5, 'count', Number.NaN);
+    const updated = updateFailureLimit(invalid, 5, 'status', 'dev-ready');
+    expect((updated.rules[5].onFailureLimit as { count: number }).count).toBeNaN();
+    expect(validateRoutingDraft(updated, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect((updateRuleField(invalid, 5, 'onPass', 'dev-ready').rules[5].onFailureLimit as { count: number }).count).toBeNaN();
+  });
+  it('removes only onFailureLimit', () => {
+    const { d } = setup(); const r = removeFailureLimit(d, 5);
+    const { onFailureLimit: _omit, ...rest } = d.rules[5];
+    expect(r.rules[5]).not.toHaveProperty('onFailureLimit'); expect(r.rules[5]).toEqual(rest);
+    expect(r.rules[6].onFailureLimit).toEqual(policy);
+    expect(removeFailureLimit(d, 0)).toEqual(d);
+  });
+  it('detects no-op edits', () => {
+    const { s, d } = setup();
+    expect(boardSettingsChanges(setFailureLimit(d, 5, { ...policy }), s)).toBeNull();
+    const base = routingSettingsFixture();
+    expect(boardSettingsChanges(removeFailureLimit(setFailureLimit(createRoutingDraft(base)!, 0, { count: 2, status: 'dev-ready' }), 0), base)).toBeNull();
+    expect(setFailureLimit(d, 99, { ...policy })).toEqual(d);
+  });
+  it.each([0, -1, 1.5, Number.NaN])('rejects count %s', (c) => {
+    const { s, d } = setup();
+    expect(validateRoutingDraft(updateFailureLimit(d, 5, 'count', c), s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+  });
+  it('rejects a string count', () => {
+    const { s, d } = setup(); const rules = structuredClone(d.rules);
+    rules[5].onFailureLimit = { count: '3', status: 'need-escalate' };
+    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+  });
+  it('rejects unknown or empty target status', () => {
+    const { s, d } = setup();
+    for (const v of ['unknown', '']) expect(validateRoutingDraft(updateFailureLimit(d, 5, 'status', v), s)).toContainEqual({ path: 'rules[5].onFailureLimit.status', message: 'Choose a status from this board.' });
+  });
+  it('rejects malformed policies', () => {
+    const { s, d } = setup();
+    for (const bad of [null, { count: 3 }, { count: 3, status: 'need-escalate', extra: 1 }]) {
+      const rules = structuredClone(d.rules); rules[5].onFailureLimit = bad;
+      expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation needs a count and a target status.' });
+    }
+  });
+  it('rejects a policy on an action rule', () => {
+    const s = routingSettingsFixture(); const d = setFailureLimit(createRoutingDraft(s)!, 1, { count: 2, status: 'done' });
+    expect(validateRoutingDraft(d, s)).toContainEqual({ path: 'rules[1].onFailureLimit', message: 'Failure escalation is only available on agent rules.' });
+  });
+  it('reaches done only through the escalation target', () => {
+    const { s, d } = setup(); const none = { path: 'rules', message: 'No routing path reaches a done status.' };
+    let x = updateRuleField(d, 0, 'onPass', 'qa-ready'); x = updateRuleField(x, 0, 'onFail', 'qa-ready');
+    x = updateRuleField(x, 5, 'onPass', 'dev-ready'); x = updateRuleField(x, 5, 'onFail', 'dev-ready'); x = updateRuleField(x, 7, 'onPass', 'merge-ready');
+    expect(validateRoutingDraft(x, s)).not.toContainEqual(none);
+    expect(validateRoutingDraft(removeFailureLimit(x, 5), s)).toContainEqual(none);
+  });
+  it('keeps unknown rule fields through every helper', () => {
+    const { d } = setup(); const rules = structuredClone(d.rules); rules[5].futureKey = { a: 1 };
+    const x = { ...d, rules };
+    for (const out of [setFailureLimit(x, 5, { count: 9, status: 'dev-ready' }), updateFailureLimit(x, 5, 'count', 4), removeFailureLimit(x, 5)]) expect(out.rules[5].futureKey).toEqual({ a: 1 });
+  });
+  it('reads only object policies with numeric count and string status and returns a copy', () => {
+    expect(failureLimitOf(undefined)).toBeNull();
+    for (const value of [null, [], 'policy', { count: '3', status: 'need-escalate' }, { count: 3, status: 1 }]) {
+      expect(failureLimitOf({ onFailureLimit: value })).toBeNull();
+    }
+    const original = { count: 3, status: 'need-escalate', extra: true };
+    const result = failureLimitOf({ onFailureLimit: original });
+    expect(result).toEqual(policy); expect(result).not.toBe(original);
+  });
+  it('preserves policy key order on no-op and update, and replaces changed policies exactly', () => {
+    const { d } = setup(); const rules = structuredClone(d.rules);
+    rules[5].onFailureLimit = { status: 'need-escalate', count: 3, extra: 1 };
+    const input = { ...d, rules }; const before = structuredClone(input);
+    const unchanged = setFailureLimit(input, 5, policy);
+    expect(JSON.stringify(unchanged)).toBe(JSON.stringify(input));
+    const updated = updateFailureLimit(input, 5, 'count', 4);
+    expect(Object.keys(updated.rules[5].onFailureLimit as object)).toEqual(['status', 'count', 'extra']);
+    expect(updated.rules[5].onFailureLimit).toEqual({ status: 'need-escalate', count: 4, extra: 1 });
+    const replaced = setFailureLimit(input, 5, { count: 4, status: 'dev-ready' });
+    expect(Object.keys(replaced.rules[5].onFailureLimit as object)).toEqual(['count', 'status']);
+    expect(input).toEqual(before);
+    removeFailureLimit(input, 5); expect(input).toEqual(before);
+  });
+  it('returns cloned unchanged rules for out-of-range helper calls', () => {
+    const { d } = setup();
+    for (const result of [setFailureLimit(d, 99, policy), updateFailureLimit(d, 99, 'count', 2), removeFailureLimit(d, 99)]) {
+      expect(result).toEqual(d); expect(result.rules).not.toBe(d.rules);
+    }
+  });
+  it('reports both invalid count and non-string status independently', () => {
+    const { s, d } = setup(); const rules = structuredClone(d.rules);
+    rules[5].onFailureLimit = { count: true, status: 42 };
+    const problems = validateRoutingDraft({ ...d, rules }, s);
+    expect(problems).toContainEqual({ path: 'rules[5].onFailureLimit.count', message: 'Use a whole number of at least 1.' });
+    expect(problems).toContainEqual({ path: 'rules[5].onFailureLimit.status', message: 'Choose a status from this board.' });
+  });
+  it('rejects array and string policies and uses action presence for action rules', () => {
+    const { s, d } = setup();
+    for (const value of [[], 'policy']) {
+      const rules = structuredClone(d.rules); rules[5].onFailureLimit = value;
+      expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation needs a count and a target status.' });
+    }
+    const rules = structuredClone(d.rules); rules[5].action = 'merge';
+    expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation is only available on agent rules.' });
+  });
+  it('does not create a policy when updating a non-object value', () => {
+    const { d } = setup();
+    for (const value of [null, [], 'policy']) {
+      const rules = structuredClone(d.rules); rules[5].onFailureLimit = value;
+      const input = { ...d, rules };
+      expect(updateFailureLimit(input, 5, 'count', 4)).toEqual(input);
+    }
+  });
+  it('preserves backend failure escalation problem paths', () => {
+    const problems = ['rules[5].onFailureLimit', 'rules[5].onFailureLimit.count', 'rules[5].onFailureLimit.status']
+      .map(path => ({ path, message: 'Invalid policy' }));
+    expect(errorProblems({ code: 'BOARD_CONFIG_INVALID', message: 'Invalid board', retryable: false, data: { problems } })).toEqual(problems);
+  });
 });

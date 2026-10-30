@@ -82,6 +82,13 @@ def protected_problems(current_raw, candidate_raw):
     return problems
 
 
+def _failure_limit(rule):
+    policy = rule.get("onFailureLimit")
+    if "action" in rule or not isinstance(policy, dict):
+        return None
+    return {"count": policy["count"], "status": policy["status"]}
+
+
 def _board_block(ws):
     data = _read_bytes(_path(ws, "board.json"))
     if data is None:
@@ -158,6 +165,7 @@ def settings(conn, workspace, coordinator_running, runtime_error):
                           "onPass": r["onPass"], "onFail": r["onFail"], "onBlocked": r.get("onBlocked"),
                           "workspace": r.get("workspace"), "syncBase": r.get("syncBase", False),
                           "maxRounds": r.get("maxRounds"), "priority": r.get("priority"),
+                          "onFailureLimit": _failure_limit(r),
                           "protected": status in PROTECTED_ROUTES})
             if "action" in r:
                 action_rules.append({"status": status, "action": r["action"], "onPass": r["onPass"],

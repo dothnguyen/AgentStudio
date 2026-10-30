@@ -1,10 +1,10 @@
-import type { BoardSettings, BoardSettingsChanges, ManagementError, Problem } from '../../shared/management';
+import type { BoardSettings, BoardSettingsChanges, FailureLimitPolicy, ManagementError, Problem } from '../../shared/management';
 
 export type WorkspaceMode = '' | 'main' | 'worktree' | 'none';
 export type EditableRuleField = 'status' | 'role' | 'workflow' | 'workspace' | 'onPass' | 'onFail' | 'onBlocked';
 export interface RoutingDraft { baseBranch: string; rules: Array<Record<string, unknown>> }
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const clone = <T,>(value: T): T => structuredClone(value);
 export function createRoutingDraft(settings: BoardSettings): RoutingDraft | null {
   const config = settings.board.config;
   if (settings.board.state !== 'ok' || !object(config) || !Array.isArray(config.rules) || !config.rules.every(object)) return null;
@@ -16,6 +16,29 @@ export function updateRuleField(draft: RoutingDraft, index: number, field: Edita
   if (field === 'status') rule.when = { ...(object(rule.when) ? rule.when : {}), status: value };
   else if ((field === 'workspace' || field === 'onBlocked') && value === '') delete rule[field];
   else rule[field] = value;
+  return { ...draft, rules };
+}
+export function failureLimitOf(rule: Record<string, unknown> | undefined): FailureLimitPolicy | null {
+  const policy = rule?.onFailureLimit;
+  return object(policy) && typeof policy.count === 'number' && typeof policy.status === 'string' ? { count: policy.count, status: policy.status } : null;
+}
+export function setFailureLimit(draft: RoutingDraft, index: number, policy: FailureLimitPolicy): RoutingDraft {
+  const rules = clone(draft.rules); const rule = rules[index];
+  if (!rule) return { ...draft, rules };
+  const existing = rule.onFailureLimit;
+  if (object(existing) && existing.count === policy.count && existing.status === policy.status) return { ...draft, rules };
+  rule.onFailureLimit = { count: policy.count, status: policy.status };
+  return { ...draft, rules };
+}
+export function updateFailureLimit(draft: RoutingDraft, index: number, field: 'count' | 'status', value: number | string): RoutingDraft {
+  const rules = clone(draft.rules); const rule = rules[index];
+  if (!rule || !object(rule.onFailureLimit)) return { ...draft, rules };
+  rule.onFailureLimit = { ...rule.onFailureLimit, [field]: value };
+  return { ...draft, rules };
+}
+export function removeFailureLimit(draft: RoutingDraft, index: number): RoutingDraft {
+  const rules = clone(draft.rules); const rule = rules[index];
+  if (rule) delete rule.onFailureLimit;
   return { ...draft, rules };
 }
 export function validateRoutingDraft(draft: RoutingDraft, settings: BoardSettings): Problem[] {
@@ -36,9 +59,18 @@ export function validateRoutingDraft(draft: RoutingDraft, settings: BoardSetting
       if (rule.workspace !== undefined && rule.workspace !== '' && !['main', 'worktree', 'none'].includes(String(rule.workspace))) add(`${prefix}.workspace`, 'Choose Default, Main workspace, Isolated worktree, or No workspace.');
     } else if (rule.type === 'action' && rule.action !== 'merge') add(`${prefix}.action`, 'Only the configured merge action can be edited here.');
     if ((status === 'merge-conflict' || status === 'plan-merge-conflict') && (rule.type !== 'agent' || rule.role !== 'TeamLead')) add(`${prefix}.role`, 'This protected merge-conflict route must use TeamLead.');
+    if ('onFailureLimit' in rule) {
+      const policy = rule.onFailureLimit;
+      if ('action' in rule) add(`${prefix}.onFailureLimit`, 'Failure escalation is only available on agent rules.');
+      if (!object(policy) || Object.keys(policy).sort().join(',') !== 'count,status') add(`${prefix}.onFailureLimit`, 'Failure escalation needs a count and a target status.');
+      else {
+        if (!(typeof policy.count === 'number' && Number.isInteger(policy.count) && policy.count >= 1)) add(`${prefix}.onFailureLimit.count`, 'Use a whole number of at least 1.');
+        if (typeof policy.status !== 'string' || !statuses.has(policy.status)) add(`${prefix}.onFailureLimit.status`, 'Choose a status from this board.');
+      }
+    }
   });
   const initial = settings.statuses.find(s => s.kind === 'initial')?.id; const visited = new Set<string>(); const queue = initial ? [initial] : [];
-  while (queue.length) { const status = queue.shift()!; if (visited.has(status)) continue; visited.add(status); for (const rule of draft.rules) if (object(rule.when) && rule.when.status === status) for (const next of [rule.onPass, rule.onFail, rule.onBlocked]) if (typeof next === 'string' && next) queue.push(next); }
+  while (queue.length) { const status = queue.shift()!; if (visited.has(status)) continue; visited.add(status); for (const rule of draft.rules) if (object(rule.when) && rule.when.status === status) for (const next of [rule.onPass, rule.onFail, rule.onBlocked, object(rule.onFailureLimit) ? rule.onFailureLimit.status : undefined]) if (typeof next === 'string' && next) queue.push(next); }
   if (!settings.statuses.some(s => s.kind === 'done' && visited.has(s.id))) add('rules', 'No routing path reaches a done status.');
   return problems;
 }

@@ -210,10 +210,41 @@ export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): 
   ];
   return { ...boardSettingsFixture(), board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: { rules: raw } },
     statuses: ['backlog', 'dev-ready', 'merge-ready', 'merge-conflict', 'plan-merge-ready', 'plan-merge-conflict', 'done'].map(id => ({ id, name: id, kind: id === 'backlog' ? 'initial' : id === 'done' ? 'done' : null })),
-    rules: raw.map((r, index) => ({ index, status: r.when.status, type: r.type as 'agent' | 'action', role: r.role ?? null, workflow: r.workflow ?? null, action: r.action ?? null, onPass: r.onPass, onFail: r.onFail, onBlocked: null, workspace: r.workspace ?? null, syncBase: !!r.syncBase, maxRounds: r.maxRounds ?? null, priority: null, protected: r.when.status.includes('conflict') })),
+    rules: raw.map((r, index) => ({ index, status: r.when.status, type: r.type as 'agent' | 'action', role: r.role ?? null, workflow: r.workflow ?? null, action: r.action ?? null, onPass: r.onPass, onFail: r.onFail, onBlocked: null, workspace: r.workspace ?? null, syncBase: !!r.syncBase, maxRounds: r.maxRounds ?? null, priority: null, onFailureLimit: null, protected: r.when.status.includes('conflict') })),
     roles: { state: 'ok', sha256: 'b'.repeat(64), message: null, items: [{ id: 'Developer', description: 'Develops' }, { id: 'TeamLead', description: 'Leads' }] },
     workflows: [{ name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] }, { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] }],
     protectedRoutes: ['merge-conflict', 'plan-merge-conflict'].map(status => ({ status, role: 'TeamLead', satisfied: true })), ...overrides };
+}
+
+export function escalationSettingsFixture(): BoardSettings {
+  const base = routingSettingsFixture();
+  const policy = { count: 3, status: 'need-escalate' };
+  const raw = [
+    ...(base.board.config!.rules as Array<Record<string, unknown>>),
+    { type: 'agent', when: { status: 'qa-ready' }, role: 'QA', workflow: 'board-qa', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
+    { type: 'agent', when: { status: 'review-ready' }, role: 'Reviewer', workflow: 'board-review', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
+    { type: 'agent', when: { status: 'need-escalate' }, role: 'SeniorDeveloper', workflow: 'board-senior-develop', workspace: 'worktree', syncBase: true, onPass: 'qa-ready', onFail: 'need-escalate', maxRounds: 3, priority: 0 },
+  ];
+  const view = (index: number, status: string, role: string, workflow: string, onPass: string, onFail: string, extra: Partial<BoardSettings['rules'][number]>): BoardSettings['rules'][number] => ({
+    index, status, type: 'agent', role, workflow, action: null, onPass, onFail, onBlocked: null, workspace: 'worktree',
+    syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false, ...extra,
+  });
+  return {
+    ...base,
+    board: { ...base.board, config: { rules: raw } },
+    statuses: [...base.statuses, ...['qa-ready', 'review-ready', 'need-escalate'].map(id => ({ id, name: id, kind: null }))],
+    rules: [
+      ...base.rules,
+      view(5, 'qa-ready', 'QA', 'board-qa', 'merge-ready', 'dev-ready', { onFailureLimit: { ...policy } }),
+      view(6, 'review-ready', 'Reviewer', 'board-review', 'merge-ready', 'dev-ready', { onFailureLimit: { ...policy } }),
+      view(7, 'need-escalate', 'SeniorDeveloper', 'board-senior-develop', 'qa-ready', 'need-escalate', { syncBase: true, maxRounds: 3, priority: 0 }),
+    ],
+    roles: { ...base.roles, items: [...base.roles.items, { id: 'QA', description: 'Tests' }, { id: 'Reviewer', description: 'Reviews' }, { id: 'SeniorDeveloper', description: 'Escalation' }] },
+    workflows: [...base.workflows,
+      { name: 'board-qa', builtin: true, roles: ['QA'], errors: [] },
+      { name: 'board-review', builtin: true, roles: ['Reviewer'], errors: [] },
+      { name: 'board-senior-develop', builtin: true, roles: ['SeniorDeveloper'], errors: [] }],
+  };
 }
 
 export function showMembers(root: HTMLElement = document.body): HTMLElement {

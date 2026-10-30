@@ -118,6 +118,55 @@ class BoardSettingsTests(unittest.TestCase):
                                                {"id": "TeamLead", "description": "Leads"}])
         names = {w["name"] for w in s["workflows"]}
         self.assertTrue({"work", "resolve"} <= names)
+        self.assertEqual([r["onFailureLimit"] for r in s["rules"]], [None] * 5)
+
+    def test_settings_projects_failure_limit_policy(self):
+        board = copy.deepcopy(BOARD)
+        board["statuses"] += [{"id": "qa"}, {"id": "review"}, {"id": "need-escalate"}]
+        policy = {"count": 3, "status": "need-escalate"}
+        board["rules"] += [
+            rule("qa", "worker", "work", "review", "build", onFailureLimit=dict(policy)),
+            rule("review", "worker", "work", "ready", "build", onFailureLimit=dict(policy)),
+            rule("need-escalate", "worker", "work", "qa", "need-escalate", maxRounds=3)]
+        self.write("board.json", board)
+        s = self.settings()
+        self.assertEqual(s["board"]["state"], "ok")
+        self.assertEqual(s["board"]["problems"], [])
+        self.assertEqual(s["rules"][5]["onFailureLimit"], policy)
+        self.assertEqual(s["rules"][6]["onFailureLimit"], policy)
+        for i in (0, 1, 2, 7):
+            self.assertIsNone(s["rules"][i]["onFailureLimit"])
+        self.assertEqual(s["board"]["config"]["rules"][5]["onFailureLimit"], policy)
+        self.assertIsNot(s["rules"][5]["onFailureLimit"], s["board"]["config"]["rules"][5]["onFailureLimit"])
+
+    def test_board_update_round_trips_failure_limit(self):
+        rules = copy.deepcopy(BOARD["rules"])
+        rules[0]["onFailureLimit"] = {"count": 2, "status": "build"}
+        out = boardsettings.update_board(self.ws, {"rules": rules}, sha(self.read_bytes("board.json")))
+        self.assertEqual(out["changed"], ["rules"])
+        self.assertEqual(self.read_json("board.json")["rules"][0]["onFailureLimit"], {"count": 2, "status": "build"})
+        self.assertEqual(self.settings()["rules"][0]["onFailureLimit"], {"count": 2, "status": "build"})
+        del rules[0]["onFailureLimit"]
+        boardsettings.update_board(self.ws, {"rules": rules}, sha(self.read_bytes("board.json")))
+        self.assertNotIn("onFailureLimit", self.read_json("board.json")["rules"][0])
+        self.assertIsNone(self.settings()["rules"][0]["onFailureLimit"])
+        self.assertEqual(self.read_json("board.json"), BOARD)
+
+    def test_invalid_failure_limit_edits_leave_files_untouched(self):
+        cases = [(0, {"count": 0, "status": "build"}, "rules[0].onFailureLimit.count"),
+                 (0, {"count": 2, "status": "nowhere"}, "rules[0].onFailureLimit.status"),
+                 (0, {"count": 2}, "rules[0].onFailureLimit"),
+                 (1, {"count": 2, "status": "build"}, "rules[1].onFailureLimit")]
+        for index, policy, path in cases:
+            with self.subTest(path=path, policy=policy):
+                rules = copy.deepcopy(BOARD["rules"])
+                rules[index]["onFailureLimit"] = policy
+                before = self.snapshot()
+                with self.assertRaises(AsError) as cm:
+                    boardsettings.update_board(self.ws, {"rules": rules})
+                self.assertEqual(cm.exception.code, "BOARD_CONFIG_INVALID")
+                self.assertIn(path, [p["path"] for p in cm.exception.data["problems"]])
+                self.assertEqual(self.snapshot(), before)
 
     def test_board_update_round_trip_preserves_untouched_keys(self):
         rules = copy.deepcopy(BOARD["rules"])
@@ -223,6 +272,18 @@ class BoardSettingsTests(unittest.TestCase):
         self.assertEqual((s["board"]["state"], s["statuses"]), ("invalid", []))
         os.remove(os.path.join(self.cfg, "board.json"))
         self.assertEqual(self.settings()["board"]["state"], "missing")
+
+    def test_invalid_or_missing_board_has_no_projected_rules(self):
+        board = copy.deepcopy(BOARD)
+        board["rules"][0]["onFailureLimit"] = {"count": 0, "status": "build"}
+        self.write("board.json", board)
+        s = self.settings()
+        self.assertEqual(s["board"]["state"], "invalid")
+        self.assertEqual(s["rules"], [])
+        os.remove(os.path.join(self.cfg, "board.json"))
+        s = self.settings()
+        self.assertEqual(s["board"]["state"], "missing")
+        self.assertEqual(s["rules"], [])
 
     def test_role_update_round_trip_and_preserves_fields(self):
         cur = sha(self.read_bytes("roles.json"))

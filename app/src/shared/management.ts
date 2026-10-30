@@ -250,6 +250,11 @@ export interface BoardRunner {
   coordinatorRunning: boolean;
   error: { code: string; message: string } | null;
 }
+export interface FailureLimitPolicy {
+  count: number;
+  status: string;
+}
+
 export interface BoardRuleView {
   index: number;
   status: string;
@@ -264,6 +269,7 @@ export interface BoardRuleView {
   syncBase: boolean;
   maxRounds: number | null;
   priority: number | null;
+  onFailureLimit: FailureLimitPolicy | null;
   protected: boolean;
 }
 export interface BoardSettings {
