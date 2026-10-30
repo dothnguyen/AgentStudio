@@ -10,11 +10,12 @@ import {
 } from './teamEditModel';
 import { providerModelText } from './teamsModel';
 
-function escapeCancel(onCancel: () => void) {
+function escapeCancel(onCancel: () => void, disabled = false) {
   return (e: KeyboardEvent<HTMLFormElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      onCancel();
+      e.stopPropagation();
+      if (!disabled) onCancel();
     }
   };
 }
@@ -33,10 +34,13 @@ export function TeamNameForm(props: {
   initialName: string;
   pending: boolean;
   readOnly?: boolean;
+  /** Suppresses Escape and Cancel (a dialog keeps itself open while a request is in flight). */
+  cancelDisabled?: boolean;
   onSubmit(name: string): void;
   onCancel(): void;
 }): JSX.Element {
   const { heading, submitLabel, initialName, pending, onSubmit, onCancel } = props;
+  const cancelDisabled = props.cancelDisabled ?? false;
   const uid = useId();
   const inputId = `${uid}-name`;
   const errorId = `${uid}-name-error`;
@@ -48,7 +52,7 @@ export function TeamNameForm(props: {
   const wasPending = useRef(pending);
   // A failed write leaves the form open: return focus to the submit button the pending state disabled.
   useEffect(() => {
-    if (wasPending.current && !pending && submitted.current && submitRef.current?.isConnected) { submitted.current = false; submitRef.current.focus(); }
+    if (wasPending.current && !pending && submitted.current && initialName !== '' && submitRef.current?.isConnected) { submitted.current = false; submitRef.current.focus(); }
     wasPending.current = pending;
   }, [pending]);
 
@@ -71,7 +75,7 @@ export function TeamNameForm(props: {
   }
 
   return (
-    <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel)}>
+    <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel, cancelDisabled)}>
       <h3>{heading}</h3>
       <label htmlFor={inputId}>Team name</label>
       <input
@@ -87,7 +91,7 @@ export function TeamNameForm(props: {
       <FieldError id={errorId} message={error} />
       <div className="teams-team-actions">
         <button type="submit" ref={submitRef} disabled={pending || props.readOnly === true}>{pending ? 'Saving…' : submitLabel}</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" disabled={pending || cancelDisabled} onClick={onCancel}>Cancel</button>
       </div>
     </form>
   );

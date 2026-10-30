@@ -1709,4 +1709,34 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'QA Team').getAttribute('aria-current')).toBe('page');
     expect(keys).toEqual([null, 'dev-team', 'qa-team']);
   });
+
+  it('create_request_from_sidebar_opens_dialog_without_duplicate_overview_read', async () => {
+    const { fake, result } = await renderWithController();
+    const before = calls(fake);
+    fireEvent.click(result.getByRole('button', { name: 'New team' }));
+    await settle();
+    expect(result.getByRole('dialog', { name: 'New team' })).toBeTruthy();
+    expect(result.getAllByRole('button', { name: 'New team' })).toHaveLength(1);
+    expect(result.getByRole('button', { name: /^Open Dev Team,/ }).getAttribute('aria-current')).toBe('page');
+    expect(calls(fake)).toEqual(before);
+  });
+
+  it('confirmed_created_team_opens_overview_and_clears_member_detail', async () => {
+    const createTeam = vi.fn(async () => okR({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    const after = overviewFixture([...twoTeams().teams, team({ id: 'qa-team', name: 'QA Team', members: [] })]);
+    const { result } = await renderWithController({ overview: [okR(twoTeams()), okR(after)], calls: { createTeam } });
+    fireEvent.click(tab(result, 'Routing'));
+    await settle();
+    expect(selectedTabs(result)).toEqual(['Routing']);
+    fireEvent.click(result.getByRole('button', { name: 'New team' }));
+    await settle();
+    expect(selectedTabs(result)).toEqual(['Routing']);
+    fireEvent.change(result.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    fireEvent.click(result.getByRole('button', { name: 'Create team' }));
+    await settle();
+    expect(result.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(selectedTabs(result)).toEqual(['Overview']);
+    expect(result.queryByRole('dialog')).toBeNull();
+  });
 });
+

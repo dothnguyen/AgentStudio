@@ -15,7 +15,7 @@ export interface TeamsNavigationController {
   selectionVersion: number;
   sidebarSelectionVersion: number;
   selectTeam(teamKey: string): void;
-  reloadAndSelect(teamKey: string): Promise<Result<TeamOverview>>;
+  reloadAndSelect(teamId: string): Promise<Result<TeamOverview>>;
 }
 
 interface Selection {
@@ -65,11 +65,14 @@ export function useTeamsNavigationController(
   itemsRef.current = items;
 
   const [selection, setSelection] = useState<Selection>({ workspaceId, key: null, version: 0, sidebarVersion: 0 });
-  const pending = useRef<{ workspaceId: string; key: string } | null>(null);
+  const pending = useRef<{ workspaceId: string; teamId: string } | null>(null);
+  const preserveSelection = useRef<{ workspaceId: string; data: TeamOverview } | null>(null);
+  const currentWorkspace = useRef(workspaceId);
+  currentWorkspace.current = workspaceId;
   const base: Selection = selection.workspaceId === workspaceId ? selection : { workspaceId, key: null, version: 0, sidebarVersion: 0 };
-  const pendingKey = pending.current?.workspaceId === workspaceId ? pending.current.key : null;
-  const wanted = pendingKey !== null && items.some((item) => item.key === pendingKey) ? pendingKey : base.key;
-  const selectedKey = reconcileSelectedTeam(wanted, items);
+  const preserving = pending.current?.workspaceId === workspaceId ||
+    (preserveSelection.current?.workspaceId === workspaceId && preserveSelection.current.data === data);
+  const selectedKey = preserving ? base.key : reconcileSelectedTeam(base.key, items);
   if (base !== selection || selectedKey !== selection.key) setSelection({ ...base, key: selectedKey });
   const selected = items.find((item) => item.key === selectedKey) ?? null;
 
@@ -82,16 +85,20 @@ export function useTeamsNavigationController(
 
   const selectTeam = useCallback((key: string) => {
     if (!itemsRef.current.some((item) => item.key === key)) return;
+    preserveSelection.current = null;
     choose(workspaceId, key, true);
   }, [choose, workspaceId]);
 
   const reloadFresh = raw.reloadFresh;
-  const reloadAndSelect = useCallback(async (key: string): Promise<Result<TeamOverview>> => {
-    const request = { workspaceId, key };
+  const reloadAndSelect = useCallback(async (teamId: string): Promise<Result<TeamOverview>> => {
+    const request = { workspaceId, teamId };
     pending.current = request;
     const result = reloadFresh === undefined ? failure('Teams cannot be refreshed.') : await reloadFresh();
+    if (currentWorkspace.current !== workspaceId || pending.current !== request) return result;
+    const match = result.ok ? navigationItems(result.data).find((item) => item.team.id === teamId) : undefined;
+    if (result.ok && match === undefined) preserveSelection.current = { workspaceId, data: result.data };
     if (pending.current === request) pending.current = null;
-    if (result.ok && navigationItems(result.data).some((item) => item.key === key)) choose(workspaceId, key);
+    if (match !== undefined) choose(workspaceId, match.key);
     return result;
   }, [choose, reloadFresh, workspaceId]);
 

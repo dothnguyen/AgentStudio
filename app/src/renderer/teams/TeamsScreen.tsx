@@ -16,15 +16,18 @@ import type {
   OverviewMember,
   RoleCatalogItem,
   RoleCatalogList,
+  TeamEditResult,
   TeamOverview,
   Workspace,
 } from '../api';
+import { navigationItems } from './teamsNavigationModel';
 import type { TeamsNavigationController } from './useTeamsNavigationController';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
 import { boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
 import { memberActionKey, assignmentConfirmation, lastSwitchSignature, matchingTerminalSwitch, SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT, type MemberActionInFlight } from './memberAgentActionsModel';
-import { FormAlertContext, TeamNameForm, WriteFeedbackView } from './TeamEditForms';
+import { FormAlertContext, WriteFeedbackView } from './TeamEditForms';
+import { TeamCreateDialog } from './TeamCreateDialog';
 import {
   addMemberInput,
   errorFeedback,
@@ -47,7 +50,13 @@ export interface TeamsScreenProps {
   navigation: TeamsNavigationController;
   connection?: ConnectionStatus;
   onViewRole?(roleId: string): void;
+  createTeamRequested: boolean;
+  onCreateTeamRequestedChange(requested: boolean): void;
+  onTeamsWritePendingChange(pending: boolean): void;
+  onCreateFocusRequest(target: CreateFocusTarget): void;
 }
+
+export type CreateFocusTarget = { kind: 'new-team' } | { kind: 'team'; key: string };
 
 export type { TeamWrites } from './teamEditModel';
 
@@ -77,13 +86,13 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [memberNotice, setMemberNotice] = useState(false);
   const [pending, setPending] = useState(false);
   const [savedRevision, setSavedRevision] = useState(0);
-  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<Extract<WriteFeedback, { kind: 'error' }> | null>(null);
   const writeLock = useRef(false);
   const actionLocks = useRef(new Set<string>());
   const [actions, setActions] = useState<Record<string, MemberActionInFlight>>({});
   const [polling, setPolling] = useState<Record<string, boolean>>({});
   const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean } | null>(null);
-  const alertSource = confirmation?.changed ? 'confirmation' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : routingError ? 'routing' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
+  const alertSource = confirmation?.changed ? 'confirmation' : createError !== null && props.createTeamRequested ? 'create' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : routingError ? 'routing' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
   const confirmationGeneration = useRef(0);
   const selectedMemberRef = useRef(selectedMember);
   selectedMemberRef.current = selectedMember;
@@ -95,7 +104,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const lastRoles = useRef<RoleCatalogList | null>(null);
   const lastBoard = useRef<BoardSettings | null>(null);
   const refreshRef = useRef<HTMLButtonElement>(null);
-  const newTeamRef = useRef<HTMLButtonElement>(null);
   const focusAfter = useRef<string | null>(null);
   const [, bumpFocus] = useState(0);
   const readOnlyRef = useRef(false);
@@ -108,6 +116,10 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     mounted.current = true;
     return () => { mounted.current = false; timers.current.forEach((resolve, timer) => { clearTimeout(timer); resolve(); }); timers.current.clear(); };
   }, []);
+
+  const onWritePending = props.onTeamsWritePendingChange;
+  useEffect(() => { onWritePending(pending); }, [pending, onWritePending]);
+  useEffect(() => () => onWritePending(false), [onWritePending]);
 
   useEffect(() => {
     if (connected) return;
@@ -297,12 +309,48 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     void board.reload();
   }
 
+  function closeCreate(target: CreateFocusTarget): void {
+    props.onCreateTeamRequestedChange(false);
+    props.onCreateFocusRequest(target);
+    setCreateError(null);
+  }
+
   async function createTeam(name: string): Promise<void> {
-    const ok = await runWrite('Team was not created.', () => mgmt.createTeam(ws, { name }), (d) => ({
-      text: `Created team "${d.team.name}".${problemsSuffix(d.problems)}`,
-      selectCreated: d.team.id,
-    }));
-    if (ok && mounted.current) setCreating(false);
+    if (writeLock.current || readOnlyRef.current || !connectedRef.current) return;
+    writeLock.current = true;
+    setPending(true);
+    setCreateError(null);
+    try {
+      let result: ManagementResult<TeamEditResult>;
+      try {
+        result = await mgmt.createTeam(ws, { name });
+      } catch (reason) {
+        result = { ok: false, error: thrownError(reason) };
+      }
+      if (!mounted.current) return;
+      if (!result.ok) {
+        setCreateError(errorFeedback('Team was not created.', result.error));
+        return;
+      }
+      const createdId = result.data.team.id;
+      let text = `Created team "${result.data.team.name}".${problemsSuffix(result.data.problems)}`;
+      setSavedRevision((r) => r + 1);
+      const refreshed = await navigation.reloadAndSelect(createdId);
+      if (!mounted.current) return;
+      let target: CreateFocusTarget = { kind: 'new-team' };
+      if (!refreshed.ok) {
+        text += ` Team list refresh failed (${refreshed.error.code}: ${refreshed.error.message}). Refresh Teams to select it.`;
+      } else {
+        const row = navigationItems(refreshed.data).find((item) => item.team.id === createdId);
+        if (row === undefined) text += ` The refreshed team list did not include team "${createdId}"; refresh Teams to select it.`;
+        else target = { kind: 'team', key: row.key };
+      }
+      setFeedback({ kind: 'success', text });
+      closeCreate(target);
+    } finally {
+      writeLock.current = false;
+      if (mounted.current) setPending(false);
+    }
   }
 
   async function refreshAll(announce = false, includeOverview = true): Promise<void> {
@@ -393,9 +441,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
           <p className="teams-subtitle">Manage team membership, routing, and live operation in this workspace.</p>
         </div>
         <div className="dashboard-actions">
-          <button type="button" className="teams-new-button" ref={newTeamRef} disabled={pending || !overviewFresh} onClick={() => setCreating(true)}>
-            New team
-          </button>
           <button type="button" className="refresh-button" aria-busy={busy} ref={refreshRef} onClick={() => { void refreshAll(true); }}>
             <ShellIcon name="refresh" />
             Refresh
@@ -421,21 +466,20 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         if (e.key === 'Escape') { e.preventDefault(); closeConfirmation(confirmation.trigger); }
         if (e.key === 'Tab') { if (confirmRef.current?.disabled) { e.preventDefault(); cancelRef.current?.focus(); } else if (e.shiftKey && document.activeElement === confirmRef.current) { e.preventDefault(); cancelRef.current?.focus(); } else if (!e.shiftKey && document.activeElement === cancelRef.current) { e.preventDefault(); confirmRef.current?.focus(); } }
       }}><h2 id="teams-switch-title">Confirm cancellation</h2><p id="teams-switch-description">Switch {confirmation.memberName} to {confirmation.agentLabel} and cancel assignment <code>{confirmation.assignmentId}</code>?</p>{confirmation.changed && <p role="alert">The assignment changed; fresh confirmation is required.</p>}<div className="dialog-actions"><button ref={confirmRef} type="button" disabled={!overviewFresh || confirmationActionInFlight} onClick={() => { void switchAgent(confirmation, confirmation.assignmentId); }}>Confirm cancellation</button><button ref={cancelRef} type="button" onClick={() => closeConfirmation(confirmation.trigger)}>Cancel</button></div></div></div>}
+      {props.createTeamRequested && (
+        <TeamCreateDialog
+          pending={pending}
+          readOnly={!overviewFresh || !connected}
+          error={createError}
+          onSubmit={(name) => { void createTeam(name); }}
+          onCancel={() => closeCreate({ kind: 'new-team' })}
+          onDismissError={() => setCreateError(null)}
+        />
+      )}
       <FormAlertContext.Provider value={setFormAlert}>
-      {(creating || overview.state !== 'ready' || (data !== null && selected === null) || (selected === null && (board.state === 'loading' || board.state === 'error'))) && (
+      {(overview.state !== 'ready' || (data !== null && selected === null) || (selected === null && (board.state === 'loading' || board.state === 'error'))) && (
         <section className="dashboard-panel teams-status-panel" aria-labelledby="teams-list-title">
           <h2 id="teams-list-title" tabIndex={-1}>Teams data status</h2>
-          {creating && (
-            <TeamNameForm
-              heading="New team"
-              submitLabel="Create team"
-              initialName=""
-              pending={pending}
-              readOnly={!overviewFresh}
-              onSubmit={(name) => { void createTeam(name); }}
-              onCancel={() => { setCreating(false); newTeamRef.current?.focus(); }}
-            />
-          )}
           {overview.state === 'loading' && data === null && <p className="panel-loading" role={connected ? 'status' : undefined}>Loading teams…</p>}
           {overview.state === 'loading' && data !== null && connected && <p className="panel-loading" role="status">Refreshing teams… Showing previously loaded data.</p>}
           {overview.state === 'error' && <SectionError section={overview} alert={alertSource === 'overview'} stale={data !== null} retryId="teams-retry-overview" onRetry={() => { void retrySection(overview, 'teams-retry-overview', 'teams-detail-title'); }} />}

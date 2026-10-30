@@ -102,4 +102,64 @@ describe('team editing edge cases', () => {
     await flush();
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
+
+  it('sidebar_create_pending_blocks_rapid_submit_cancel_and_other_team_writes', async () => {
+    const gate = deferred<ReturnType<typeof ok>>();
+    const createTeam = vi.fn(() => gate.promise);
+    const runBoard = vi.fn();
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([team({ id: 'dev-team', name: 'Dev Team', runtime: { state: 'running', teamId: 'runtime-dev', status: 'running' } })])), ok(overviewFixture([team({ id: 'dev-team', name: 'Dev Team' }), team({ id: 'qa-team', name: 'QA Team', members: [], runtime: { state: 'running', teamId: 'runtime-qa', status: 'running' } })]))],
+      calls: { createTeam, runBoard },
+    });
+    render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
+    await flush();
+    expect((screen.getByRole('button', { name: 'Run board' }) as HTMLButtonElement).disabled).toBe(false);
+    await click('New team');
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'New team' }));
+    fireEvent.submit(screen.getByRole('form', { name: 'New team' }));
+    await flush();
+    fireEvent.keyDown(screen.getByRole('form', { name: 'New team' }), { key: 'Escape' });
+    await flush();
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog', { name: 'New team' })).toBeTruthy();
+    const disabled = (name: string) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
+    expect(disabled('Saving…')).toBe(true);
+    expect(disabled('Cancel')).toBe(true);
+    expect(disabled('New team')).toBe(true);
+    for (const name of ['Rename team', 'Delete team']) expect(disabled(name)).toBe(true);
+    expect(disabled('Run board')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Run board' }));
+    expect(runBoard).not.toHaveBeenCalled();
+    gate.resolve(ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    await flush();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(disabled('New team')).toBe(false);
+    expect(disabled('Rename team')).toBe(false);
+    expect(disabled('Run board')).toBe(false);
+  });
+
+  it('sidebar_create_rejected_promise_is_retryable_without_phantom_selection', async () => {
+    const createTeam = vi.fn().mockRejectedValueOnce(new Error('ipc down'))
+      .mockResolvedValueOnce(ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    const fake = fakeManagement({ overview: [ok(overviewFixture([team()])), ok(overviewFixture([team(), team({ id: 'qa-team', name: 'QA Team', members: [] })]))], calls: { createTeam } });
+    render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
+    await flush();
+    await click('New team');
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    await click('Create team');
+    const dialog = within(screen.getByRole('dialog', { name: 'New team' }));
+    expect(dialog.getByRole('alert').textContent).toContain('INTERNAL: ipc down');
+    expect((screen.getByLabelText('Team name') as HTMLInputElement).value).toBe('QA Team');
+    expect(screen.getByRole('button', { name: /^Open Dev Team,/ }).getAttribute('aria-current')).toBe('page');
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', { name: 'Create team' }) as HTMLButtonElement).disabled).toBe(false);
+    await click('Create team');
+    expect(createTeam).toHaveBeenCalledTimes(2);
+    expect(createTeam).toHaveBeenLastCalledWith('ws-a', { name: 'QA Team' });
+    expect(fake.overview).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('button', { name: /^Open QA Team,/ }).getAttribute('aria-current')).toBe('page');
+  });
 });

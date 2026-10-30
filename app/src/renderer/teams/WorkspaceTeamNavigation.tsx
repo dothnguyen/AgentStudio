@@ -8,6 +8,15 @@ export interface WorkspaceTeamNavigationProps {
   active: boolean;
   onOpenTeam(teamKey: string): void;
   parentButtonRef: RefObject<HTMLButtonElement | null>;
+  /** The single creation trigger; omitted where creation is not offered. */
+  newTeam?: {
+    disabled: boolean;
+    /** Unavailable but still focusable (stale data), so focus can return here after a failed refresh. */
+    softDisabled?: boolean;
+    buttonRef: RefObject<HTMLButtonElement | null>;
+    onClick(): void;
+    registerRow(teamKey: string, element: HTMLButtonElement | null): void;
+  };
 }
 
 export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JSX.Element {
@@ -58,6 +67,11 @@ export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JS
 
   return (
     <div className="team-nav">
+      {props.newTeam !== undefined && (
+        <button type="button" className="team-nav-new" ref={props.newTeam.buttonRef} disabled={props.newTeam.disabled} aria-disabled={props.newTeam.softDisabled === true ? true : undefined} onClick={props.newTeam.softDisabled === true ? undefined : props.newTeam.onClick}>
+          New team
+        </button>
+      )}
       {items.length > 0 && (
         <ul className="team-nav-list" aria-label="Workspace teams">
           {items.map((item) => {
@@ -76,6 +90,7 @@ export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JS
                   ref={(element) => {
                     if (element === null) rows.current.delete(item.key);
                     else rows.current.set(item.key, element);
+                    props.newTeam?.registerRow(item.key, element);
                   }}
                   onFocus={() => { focusedKey.current = item.key; }}
                   onBlur={(event) => { if (event.relatedTarget !== null && focusedKey.current === item.key) focusedKey.current = null; }}

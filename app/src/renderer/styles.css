@@ -1326,6 +1326,13 @@ ul[aria-label="Workspaces"] {
   .teams-member-settings { grid-template-columns: minmax(0, 1fr); }
 }
 
+.team-nav-new { align-self: flex-start; min-width: 0; max-width: 100%; font-size: 0.9em; overflow-wrap: anywhere; }
+.team-nav-new:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teams-create-dialog { width: min(480px, 100%); max-height: 100%; padding: 16px; overflow: auto; border: 1px solid #464646; border-radius: 4px; background: var(--surface-raised); box-shadow: 0 12px 28px rgb(0 0 0 / 45%); overflow-wrap: anywhere; }
+.teams-create-dialog .teams-edit-form { margin-top: 0; }
+.teams-create-dialog :is(input, button):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.teams-create-dialog input { min-width: 0; max-width: 100%; }
+
 /* Roles browser (P05-S35) */
 .roles-screen, .roles-layout > *, .roles-detail-pane, .roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
 .roles-search { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }

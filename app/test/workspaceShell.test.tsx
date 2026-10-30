@@ -6,7 +6,7 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
-import { fakeManagement, member, overviewFixture, team, twoTeams, connectionFixture, deferred } from './teamsFixtures';
+import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred } from './teamsFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -328,7 +328,7 @@ describe('WorkspaceShell', () => {
   it('nav buttons show an aria-hidden icon and their label', () => {
     const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
-    const buttons = result.container.querySelectorAll('nav button');
+    const buttons = result.container.querySelectorAll('nav button.nav-item');
     expect(buttons).toHaveLength(7);
     buttons.forEach((button, index) => {
       expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
@@ -339,10 +339,10 @@ describe('WorkspaceShell', () => {
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(8);
+    expect(buttons).toHaveLength(9);
     expect(buttons[0].className).toContain('workspace-selector');
-    expect(buttons.slice(1, 7).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Configuration']);
-    expect(buttons[7].className).toContain('switch-workspace');
+    expect(buttons.slice(1, 8).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Boards', 'Configuration']);
+    expect(buttons[8].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');
@@ -543,6 +543,8 @@ describe('T-084 sidebar team navigation', () => {
     const view = render(ui(fake));
     await settle();
     teamsButton(view).focus();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
     await userEvent.tab();
     expect(document.activeElement).toBe(row(view, 'Dev Team'));
     await userEvent.tab();
@@ -749,7 +751,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     expect(view.getByText('Team list unavailable. Showing previously loaded teams. overview unreadable')).toBeTruthy();
     expect(rows(view)).toHaveLength(2);
-    expect((view.getByRole('button', { name: 'New team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((view.getByRole('button', { name: 'New team' }) as HTMLButtonElement).getAttribute('aria-disabled')).toBe('true');
     expect((view.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
     const before = [fake.agents, fake.roles, fake.boardSettings].map((f) => f.mock.calls.length);
     fireEvent.click(within(view.getByRole('complementary')).getByRole('button', { name: 'Retry teams' }));
@@ -906,5 +908,374 @@ describe('T-084 sidebar team navigation', () => {
     );
     await settle();
     expect(absent.container.querySelector('.team-nav')).toBeNull();
+  });
+});
+
+describe('T-085 sidebar team creation', () => {
+  const other: Workspace = { id: 'ws-other', name: 'Other', path: '/work/other', missing: false, exists: true };
+  const ui = (fake: ReturnType<typeof fakeManagement>, ws: Workspace = workspace, conn: ConnectionStatus = connection) => (
+    <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />
+  );
+  const settle = () => act(async () => {});
+  const ok = <T,>(data: T) => ({ ok: true as const, data });
+  const created = (id = 'qa-team', name = 'QA Team') => ok({ team: teamDefinition({ id, name }), problems: [] });
+  const withQa = (id = 'qa-team') => overviewFixture([...twoTeams().teams, team({ id, name: 'QA Team', members: [] })]);
+  const newTeam = (view: ReturnType<typeof render>) => view.getByRole('button', { name: 'New team' }) as HTMLButtonElement;
+  const row = (view: ReturnType<typeof render>, name: string) => view.getByRole('button', { name: new RegExp(`^Open ${name},`) });
+  const dialog = (view: ReturnType<typeof render>) => view.queryByRole('dialog', { name: 'New team' });
+  const create = async (view: ReturnType<typeof render>, name = 'QA Team') => {
+    fireEvent.click(newTeam(view));
+    await settle();
+    fireEvent.change(view.getByLabelText('Team name'), { target: { value: name } });
+    fireEvent.click(view.getByRole('button', { name: 'Create team' }));
+    await settle();
+  };
+
+  it('sidebar_exposes_exactly_one_new_team_action_for_empty_and_populated_data', async () => {
+    for (const data of [twoTeams(), overviewFixture([])]) {
+      const view = render(ui(fakeManagement({ overview: [ok(data)] })));
+      await settle();
+      expect(view.getAllByRole('button', { name: 'New team' })).toHaveLength(1);
+      expect(newTeam(view).closest('.team-nav')).not.toBeNull();
+      expect(newTeam(view).disabled).toBe(false);
+      fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+      await settle();
+      expect(view.getAllByRole('button', { name: 'New team' })).toHaveLength(1);
+      expect(view.container.querySelector('main button.teams-new-button, main .dashboard-actions')?.textContent ?? '').not.toContain('New team');
+      view.unmount();
+    }
+  });
+
+  it('sidebar_new_team_is_disabled_for_loading_stale_disconnected_and_pending_states', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const loading = render(ui(fakeManagement({ calls: { overview: () => gate.promise } })));
+    await settle();
+    expect(newTeam(loading).getAttribute('aria-disabled')).toBe('true');
+    gate.resolve(ok(twoTeams()));
+    await settle();
+    expect(newTeam(loading).disabled).toBe(false);
+    loading.unmount();
+
+    const stale = render(ui(fakeManagement({ overview: [ok(twoTeams()), { ok: false, error: { code: 'INTERNAL', message: 'offline', retryable: true } }] })));
+    await settle();
+    fireEvent.click(stale.getByRole('button', { name: 'Teams' }));
+    await settle();
+    fireEvent.click(stale.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(row(stale, 'Dev Team')).toBeTruthy();
+    expect(newTeam(stale).getAttribute('aria-disabled')).toBe('true');
+    stale.unmount();
+
+    for (const state of ['connecting', 'lost'] as const) {
+      const view = render(ui(fakeManagement(), workspace, connectionFixture(state)));
+      await settle();
+      expect(newTeam(view).disabled).toBe(true);
+      view.unmount();
+    }
+
+    const writeGate = deferred<ReturnType<typeof created>>();
+    const pending = render(ui(fakeManagement({ calls: { createTeam: () => writeGate.promise } })));
+    await settle();
+    fireEvent.click(newTeam(pending));
+    await settle();
+    expect(newTeam(pending).disabled).toBe(true);
+    fireEvent.change(pending.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    fireEvent.click(pending.getByRole('button', { name: 'Create team' }));
+    await settle();
+    expect(newTeam(pending).disabled).toBe(true);
+    writeGate.resolve(created());
+    await settle();
+    expect(newTeam(pending).disabled).toBe(false);
+  });
+
+  it('sidebar_new_team_cancel_and_escape_restore_trigger_focus', async () => {
+    const createTeam = vi.fn();
+    const view = render(ui(fakeManagement({ calls: { createTeam } })));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    expect(dialog(view)).not.toBeNull();
+    expect(document.activeElement).toBe(view.getByLabelText('Team name'));
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+
+    newTeam(view).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(dialog(view)).not.toBeNull();
+    await userEvent.keyboard('{Escape}');
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+    expect(createTeam).not.toHaveBeenCalled();
+  });
+
+  it('open_create_dialog_blocks_submission_during_disconnect_and_recovers_after_refresh', async () => {
+    const createTeam = vi.fn(async () => created());
+    const fake = fakeManagement({ overview: [ok(twoTeams()), ok(twoTeams()), ok(withQa())], calls: { createTeam } });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    fireEvent.change(view.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    view.rerender(ui(fake, workspace, connectionFixture('lost')));
+    await settle();
+    expect(dialog(view)).not.toBeNull();
+    expect((view.getByRole('button', { name: 'Create team' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(view.getByRole('form', { name: 'New team' }));
+    await settle();
+    expect(createTeam).not.toHaveBeenCalled();
+    expect((view.getByLabelText('Team name') as HTMLInputElement).value).toBe('QA Team');
+    view.rerender(ui(fake, workspace, connectionFixture('connected')));
+    await settle();
+    expect((view.getByRole('button', { name: 'Create team' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(view.getByRole('button', { name: 'Create team' }));
+    await settle();
+    expect(createTeam).toHaveBeenCalledOnce();
+    expect(row(view, 'QA Team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('create_dialog_escape_from_error_dismiss_button_closes_and_restores_focus', async () => {
+    const createTeam = vi.fn(async () => ({ ok: false as const, error: { code: 'TEAM_EXISTS', message: 'dup', retryable: false } }));
+    const view = render(ui(fakeManagement({ calls: { createTeam } })));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    fireEvent.change(view.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    fireEvent.click(view.getByRole('button', { name: 'Create team' }));
+    await settle();
+    const dismiss = view.getByRole('button', { name: 'Dismiss' });
+    dismiss.focus();
+    await userEvent.keyboard('{Escape}');
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+    expect(createTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it('create_dialog_cancel_after_backend_error_restores_trigger_without_refresh', async () => {
+    const createTeam = vi.fn(async () => ({ ok: false as const, error: { code: 'TEAM_EXISTS', message: 'dup', retryable: false } }));
+    const fake = fakeManagement({ calls: { createTeam } });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Dev Team'));
+    await settle();
+    await create(view);
+    expect(view.getByRole('alert').textContent).toContain('TEAM_EXISTS: dup');
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('create_dialog_traps_tab_within_its_controls', async () => {
+    const view = render(ui(fakeManagement()));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    expect(document.activeElement).toBe(view.getByLabelText('Team name'));
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Cancel' }));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByLabelText('Team name'));
+  });
+
+  it('create_dialog_traps_tab_after_backend_error_adds_dismiss_control', async () => {
+    const createTeam = vi.fn(async () => ({ ok: false as const, error: { code: 'TEAM_EXISTS', message: 'dup', retryable: false } }));
+    const view = render(ui(fakeManagement({ calls: { createTeam } })));
+    await settle();
+    await create(view);
+    expect(document.activeElement).toBe(view.getByLabelText('Team name'));
+    const dismiss = view.getByRole('button', { name: 'Dismiss' });
+    dismiss.focus();
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Cancel' }));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(dismiss);
+  });
+
+  it('sidebar_creation_focuses_confirmed_refreshed_team_row', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof withQa>>>>();
+    const createTeam = vi.fn(async () => created());
+    const fake = fakeManagement({ overview: [ok(twoTeams())], calls: { createTeam } });
+    let reads = 0;
+    fake.api.overview = vi.fn(async () => (reads++ === 0 ? ok(twoTeams()) : gate.promise));
+    const view = render(ui(fake));
+    await settle();
+    await create(view);
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(createTeam).toHaveBeenCalledWith(workspace.id, { name: 'QA Team' });
+    expect(dialog(view)).not.toBeNull();
+    expect(view.queryByRole('button', { name: /^Open QA Team,/ })).toBeNull();
+    gate.resolve(ok(withQa()));
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(row(view, 'QA Team'));
+    expect(row(view, 'QA Team').getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(view.getByRole('status').textContent).toContain('Created team "QA Team".');
+  });
+
+  it('sidebar_creation_refresh_failure_preserves_success_and_selection', async () => {
+    const fake = fakeManagement({
+      overview: [ok(twoTeams()), { ok: false, error: { code: 'INTERNAL', message: 'offline', retryable: true } }, ok(withQa())],
+      calls: { createTeam: async () => created() },
+    });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    await create(view);
+    expect(dialog(view)).toBeNull();
+    expect(view.getByText('Created team "QA Team". Team list refresh failed (INTERNAL: offline). Refresh Teams to select it.')).toBeTruthy();
+    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(document.activeElement).toBe(newTeam(view));
+    const refresh = view.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement;
+    expect(refresh.disabled).toBe(false);
+    fireEvent.click(refresh);
+    await settle();
+    expect(row(view, 'QA Team')).toBeTruthy();
+    expect(newTeam(view).disabled).toBe(false);
+  });
+
+  it('sidebar_creation_missing_from_refresh_does_not_select_by_name_or_index', async () => {
+    const fake = fakeManagement({
+      overview: [ok(twoTeams()), ok(withQa('different-id'))],
+      calls: { createTeam: async () => created() },
+    });
+    const view = render(ui(fake));
+    await settle();
+    await create(view);
+    expect(dialog(view)).toBeNull();
+    expect(view.getByText('Created team "QA Team". The refreshed team list did not include team "qa-team"; refresh Teams to select it.')).toBeTruthy();
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(row(view, 'QA Team').getAttribute('aria-current')).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+  });
+
+  it('sidebar_creation_does_not_select_runtime_only_row_matching_created_id_key', async () => {
+    const runtimeOnly = team({ id: null, name: 'Runtime Foo', members: [], runtime: { state: 'running', teamId: 'foo', status: 'running' } });
+    const fake = fakeManagement({
+      overview: [ok(twoTeams()), ok(overviewFixture([...twoTeams().teams, runtimeOnly]))],
+      calls: { createTeam: async () => created('runtime:foo', 'Foo') },
+    });
+    const view = render(ui(fake));
+    await settle();
+    await create(view);
+    expect(view.getByText(/did not include team "runtime:foo"/)).toBeTruthy();
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(document.activeElement).toBe(newTeam(view));
+  });
+
+  it('missing_created_and_previous_team_does_not_select_an_unrelated_row', async () => {
+    const unrelated = team({ id: 'different-id', name: 'QA Team', members: [] });
+    const fake = fakeManagement({
+      overview: [ok(twoTeams()), ok(overviewFixture([unrelated]))],
+      calls: { createTeam: async () => created() },
+    });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    await create(view);
+    expect(view.getByText(/did not include team "qa-team"/)).toBeTruthy();
+    expect(row(view, 'QA Team').getAttribute('aria-current')).toBeNull();
+    expect(view.queryByRole('heading', { level: 2, name: 'QA Team' })).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+  });
+
+  it('navigation_away_during_create_keeps_request_until_refresh_finishes', async () => {
+    const gate = deferred<ReturnType<typeof created>>();
+    const fake = fakeManagement({ overview: [ok(twoTeams()), ok(withQa())], calls: { createTeam: () => gate.promise } });
+    const view = render(ui(fake));
+    await settle();
+    await create(view);
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    expect(dialog(view)).not.toBeNull();
+    gate.resolve(created());
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(fake.overview).toHaveBeenCalledTimes(2);
+    expect(view.getByText('Created team "QA Team".')).toBeTruthy();
+    expect(row(view, 'QA Team').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('workspace_switch_closes_create_dialog_without_restoring_old_focus', async () => {
+    const fake = fakeManagement();
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    const oldTrigger = newTeam(view);
+    expect(dialog(view)).not.toBeNull();
+    view.rerender(ui(fake, other));
+    await settle();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).not.toBe(oldTrigger);
+    expect(document.contains(document.activeElement)).toBe(true);
+  });
+
+  it('sidebar_create_result_after_workspace_switch_is_ignored', async () => {
+    const gate = deferred<ReturnType<typeof created>>();
+    const fake = fakeManagement({ calls: { createTeam: () => gate.promise } });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(newTeam(view));
+    await settle();
+    fireEvent.change(view.getByLabelText('Team name'), { target: { value: 'QA Team' } });
+    fireEvent.click(view.getByRole('button', { name: 'Create team' }));
+    await settle();
+    view.rerender(ui(fake, other));
+    await settle();
+    const reads = fake.overview.mock.calls.length;
+    const before = document.activeElement;
+    gate.resolve(created());
+    await settle();
+    expect(fake.overview.mock.calls.length).toBe(reads);
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(before);
+    expect(newTeam(view).disabled).toBe(false);
+  });
+
+  it('sidebar_create_refresh_result_after_workspace_switch_is_ignored', async () => {
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof withQa>>>>();
+    const fake = fakeManagement({ calls: { createTeam: async () => created() } });
+    fake.api.overview = vi.fn(async (workspaceId: string) => {
+      if (workspaceId === workspace.id && fake.api.overview.mock.calls.length > 1) return gate.promise;
+      return ok(twoTeams());
+    });
+    const view = render(ui(fake));
+    await settle();
+    await create(view);
+    expect(dialog(view)).not.toBeNull();
+    view.rerender(ui(fake, other));
+    await settle();
+    const focusBefore = document.activeElement;
+    gate.resolve(ok(withQa()));
+    await settle();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+    expect(dialog(view)).toBeNull();
+    expect(view.queryByText('Created team "QA Team".')).toBeNull();
+    expect(document.activeElement).toBe(focusBefore);
+  });
+
+  it('sidebar_creation_keeps_definition_problems_before_refresh_warning', async () => {
+    const fake = fakeManagement({
+      overview: [ok(twoTeams()), { ok: false, error: { code: 'INTERNAL', message: 'offline', retryable: true } }],
+      calls: { createTeam: async () => ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [{ code: 'MEMBER_UNKNOWN_AGENT', message: 'unknown agent' }] }) },
+    });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Dev Team'));
+    await settle();
+    await create(view);
+    expect(view.getByText('Created team "QA Team". The team still has 1 problem; see the team details. Team list refresh failed (INTERNAL: offline). Refresh Teams to select it.')).toBeTruthy();
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
   });
 });

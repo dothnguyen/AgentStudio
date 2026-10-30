@@ -72,6 +72,94 @@ describe('team editing', () => {
     expect(screen.queryByRole('form', { name: 'New team' })).toBeNull();
   });
 
+  it('sidebar_create_trims_name_calls_create_once_and_selects_after_refresh', async () => {
+    const createTeam = vi.fn(async () => ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    const after = overviewFixture([...twoTeams().teams, team({ id: 'qa-team', name: 'QA Team', members: [] })]);
+    const gate = deferred<ReturnType<typeof ok<typeof after>>>();
+    const fake = fakeManagement({ overview: [ok(twoTeams())], calls: { createTeam } });
+    let reads = 0;
+    fake.api.overview = vi.fn(async () => (reads++ === 0 ? ok(twoTeams()) : gate.promise));
+    render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
+    await flush();
+    await click('New team');
+    expect(screen.getAllByRole('button', { name: 'New team' })).toHaveLength(1);
+    type('Team name', '  QA Team  ');
+    await click('Create team');
+    fireEvent.submit(screen.getByRole('form', { name: 'New team' }));
+    await flush();
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(createTeam).toHaveBeenCalledWith('ws-a', { name: 'QA Team' });
+    expect(cardPressed('Dev Team')).toBe('page');
+    expect(screen.getByRole('dialog', { name: 'New team' })).toBeTruthy();
+    gate.resolve(ok(after));
+    await flush();
+    expect(cardPressed('QA Team')).toBe('page');
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('status').textContent).toContain('Created team "QA Team".');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(fake.api.overview).toHaveBeenCalledTimes(2);
+  });
+
+  it('sidebar_create_is_available_in_a_fresh_empty_workspace', async () => {
+    const createTeam = vi.fn(async () => ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    const { fake } = await renderScreen({
+      overview: [ok(overviewFixture([])), ok(overviewFixture([team({ id: 'qa-team', name: 'QA Team', members: [] })]))],
+      calls: { createTeam },
+    });
+    expect((screen.getByRole('button', { name: 'New team' }) as HTMLButtonElement).disabled).toBe(false);
+    await click('New team');
+    type('Team name', 'QA Team');
+    await click('Create team');
+    expect(createTeam).toHaveBeenCalledTimes(1);
+    expect(cardPressed('QA Team')).toBe('page');
+    expect(screen.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(fake.overview).toHaveBeenCalledTimes(2);
+  });
+
+  it('sidebar_create_blank_name_is_not_sent', async () => {
+    const createTeam = vi.fn();
+    await renderScreen({ calls: { createTeam } });
+    await click('New team');
+    type('Team name', '   ');
+    await click('Create team');
+    expect(screen.getByText('Enter a team name.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText('Team name'));
+    expect(createTeam).not.toHaveBeenCalled();
+  });
+
+  it('sidebar_create_backend_error_preserves_value_and_details', async () => {
+    const createTeam = vi.fn(async () => fail({ code: 'TEAM_EXISTS', message: 'A team with that name exists.', remediation: 'Choose another name.', data: { problems: [{ path: 'name', message: 'name clashes with dev-team' }, { path: 'id', message: 'id is already in use' }] } }));
+    const { fake } = await renderScreen({ calls: { createTeam } });
+    await click('New team');
+    type('Team name', 'Dev Team');
+    await click('Create team');
+    const dialog = within(screen.getByRole('dialog', { name: 'New team' }));
+    expect(dialog.getByRole('alert').textContent).toContain('TEAM_EXISTS: A team with that name exists.');
+    expect(dialog.getByRole('alert').textContent).toContain('Choose another name.');
+    expect(dialog.getByRole('alert').textContent).toContain('name: name clashes with dev-team');
+    expect(dialog.getByRole('alert').textContent).toContain('id: id is already in use');
+    expect((screen.getByLabelText('Team name') as HTMLInputElement).value).toBe('Dev Team');
+    expect(document.activeElement).toBe(screen.getByLabelText('Team name'));
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(cardPressed('Dev Team')).toBe('page');
+  });
+
+  it('sidebar_create_success_reports_definition_problems', async () => {
+    const createTeam = vi.fn(async () => ok({
+      team: teamDefinition({ id: 'qa-team', name: 'QA Team' }),
+      problems: [{ code: 'MEMBER_UNKNOWN_AGENT', message: 'unknown agent' }],
+    }));
+    await renderScreen({
+      overview: [ok(twoTeams()), ok(overviewFixture([...twoTeams().teams, team({ id: 'qa-team', name: 'QA Team', members: [] })]))],
+      calls: { createTeam },
+    });
+    await click('New team');
+    type('Team name', 'QA Team');
+    await click('Create team');
+    expect(screen.getByRole('status').textContent).toBe('Created team "QA Team". The team still has 1 problem; see the team details.');
+  });
+
   it('rename_running_team_applies_on_next_start', async () => {
     const renameTeam = vi.fn(async () =>
       ok({ team: teamDefinition({ name: 'Core Team' }), problems: [], appliesOnNextStart: true }));
