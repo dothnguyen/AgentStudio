@@ -6,7 +6,7 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
-import { fakeManagement, member, overviewFixture, team, twoTeams } from './teamsFixtures';
+import { fakeManagement, member, overviewFixture, team, twoTeams, connectionFixture } from './teamsFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -422,5 +422,82 @@ describe('WorkspaceShell', () => {
     await waitFor(() => expect(pressed(/^Dev Team/)).toBe('true'));
     expect(selected()).toEqual(['Overview']);
     expect(fake.overview).toHaveBeenLastCalledWith('b');
+  });
+
+  describe('T-082 teams shell behavior', () => {
+    const shell = (fake: ReturnType<typeof fakeManagement>, ws: Workspace, conn: ConnectionStatus = connection) =>
+      <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />;
+    const structure = (view: ReturnType<typeof render>) => {
+      expect(view.getAllByRole('main')).toHaveLength(1);
+      expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    };
+
+    it('teams_focus_and_selection_reset_on_workspace_switch', async () => {
+      const other = overviewFixture([team({ id: 'b-team', name: 'Only B', members: [member({ memberId: 'bee', name: 'bee' })] })]);
+      const overview = vi.fn(async (id: string) => ({ ok: true as const, data: id === 'b' ? other : twoTeams() }));
+      const fake = fakeManagement({ calls: { overview } });
+      const view = render(shell(fake, workspace));
+      fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+      fireEvent.click(await view.findByRole('tab', { name: 'Members' }));
+      fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
+      await waitFor(() => expect(document.activeElement?.id).toBe('teams-member-detail-title'));
+      expect(overview).toHaveBeenLastCalledWith('a');
+      view.rerender(shell(fake, { ...workspace, id: 'b', name: 'Workspace B' }));
+      await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
+      expect(view.queryByText('Dev Team')).toBeNull();
+      fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+      await view.findByRole('button', { name: /^Only B/ });
+      expect(overview).toHaveBeenLastCalledWith('b');
+      structure(view);
+      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+      expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
+      expect(view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent)).toEqual(['Overview']);
+      expect(view.queryByRole('region', { name: 'dev' })).toBeNull();
+      const h2 = view.getAllByRole('heading', { level: 2 }).map(h => h.textContent);
+      expect(h2.indexOf('Workspace teams')).toBeLessThan(h2.indexOf('Only B'));
+      expect(h2.indexOf('Only B')).toBeGreaterThan(-1);
+    });
+
+    it('home_agents_roles_and_teams_navigation_remain_keyboard_reachable', async () => {
+      const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
+      const view = render(shell(fake, workspace));
+      for (const name of ['Agents', 'Roles', 'Teams', 'Home']) {
+        const nav = view.getByRole('button', { name });
+        expect(nav.tagName).toBe('BUTTON'); expect(nav.hasAttribute('tabindex')).toBe(false);
+        nav.focus();
+        await userEvent.keyboard('{Enter}');
+        await waitFor(() => expect(view.getByRole('button', { name }).getAttribute('aria-current')).toBe('page'));
+        expect(currentButtons(view.container)).toHaveLength(1);
+        structure(view);
+        expect(document.activeElement).toBe(view.getByRole('button', { name }));
+      }
+      view.getByRole('button', { name: 'Teams' }).focus();
+      await userEvent.keyboard(' ');
+      await view.findByRole('tab', { name: 'Overview' });
+      structure(view);
+      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+    });
+
+    it('teams_connection_recovery_does_not_duplicate_management_reads', async () => {
+      const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
+      const reads = () => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map(f => f.mock.calls.length);
+      const view = render(shell(fake, workspace));
+      fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+      await view.findByRole('tab', { name: 'Members' });
+      fireEvent.click(view.getByRole('tab', { name: 'Members' }));
+      const before = reads();
+      expect(before).toEqual([1, 1, 1, 1]);
+      view.rerender(shell(fake, workspace, connectionFixture('lost')));
+      await waitFor(() => expect(view.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy());
+      expect(reads()).toEqual(before);
+      view.rerender(shell(fake, workspace, connectionFixture('connected')));
+      await waitFor(() => expect(reads()).toEqual([2, 2, 2, 2]));
+      view.rerender(shell(fake, workspace, connectionFixture('connected')));
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(reads()).toEqual([2, 2, 2, 2]);
+      expect(fake.overview.mock.calls.every(c => c[0] === 'a')).toBe(true);
+      expect(view.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected')).toBe('true');
+      structure(view);
+    });
   });
 });

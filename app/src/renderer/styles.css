@@ -1178,10 +1178,8 @@ ul[aria-label="Workspaces"] {
 .teams-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; min-width: 0; padding: 10px 12px; text-align: left; }
 .teams-card[aria-pressed="true"] { border-color: var(--focus); background: var(--surface-hover); }
 .teams-card-name, .teams-member-name { min-width: 0; color: var(--text-bright); overflow-wrap: anywhere; }
-.teams-card-facts, .teams-detail-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); }
-.teams-cell-note, .teams-role-description { color: var(--text-muted); overflow-wrap: anywhere; }
-.teams-members-table th { text-align: left; color: var(--text-muted); font-weight: 600; }
-.teams-members-table th, .teams-members-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.teams-card-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-muted); }
+.teams-cell-note { color: var(--text-muted); overflow-wrap: anywhere; }
 .teams-member-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .teams-member-list-head, .teams-member-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 8px 12px; }
 .teams-member-list-head { padding: 0 12px; color: var(--text-muted); font-weight: 600; }
@@ -1189,7 +1187,7 @@ ul[aria-label="Workspaces"] {
 .teams-member-row[aria-current="true"] { border-color: var(--focus); background: var(--surface-hover); }
 .teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .teams-member-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-@media (max-width: 760px) { .teams-member-list-head { display: none; } .teams-member-row { grid-template-columns: minmax(0, 1fr); } }
+
 
 .teams-feedback-success { color: var(--success); overflow-wrap: anywhere; }
 .teams-team-actions, .teams-member-actions { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1197,8 +1195,8 @@ ul[aria-label="Workspaces"] {
 .teams-edit-form label { display: flex; flex-direction: column; gap: 4px; }
 .teams-field-error { color: var(--danger); }
 .teams-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-.teams-member-detail { display: flex; flex-direction: column; gap: 12px; }
-.teams-member-settings { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+.teams-member-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.teams-member-settings { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 4px 12px; }
 .teams-member-settings dt { color: var(--text-muted); }
 .teams-member-settings dd { margin: 0; }
 .teams-back-button { align-self: flex-start; }
@@ -1286,13 +1284,40 @@ ul[aria-label="Workspaces"] {
 
 .agents-screen button:focus-visible, .agents-screen a:focus-visible, .agents-screen input:focus-visible, .agents-screen select:focus-visible, .agents-screen textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-.teams-overview { display: flex; flex-direction: column; gap: 12px; }
+.teams-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .teams-overview-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 0; }
 .teams-overview-facts dt { color: var(--text-muted); font-size: 12px; }
 .teams-overview-facts dd { margin: 2px 0 0; color: var(--text-bright); min-width: 0; overflow-wrap: anywhere; }
 .teams-overview-availability { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; }
 .teams-overview-actions { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); }
 @media (max-width: 560px) { .teams-overview-facts { grid-template-columns: minmax(0, 1fr); } .teams-team-actions, .teams-board-actions { display: grid; grid-template-columns: minmax(0, 1fr); } }
+
+/* Teams states, accessibility and responsive behavior (P05-S47) */
+.teams-overview > *, .teams-member-detail > *, .teams-members-view > *, .teams-layout > *, .teams-screen > * { min-width: 0; }
+.teams-overview > .teams-overview-facts, .teams-overview > .teams-problems { grid-column: 1 / -1; }
+.teams-member-detail > * { grid-column: 1 / -1; }
+.teams-members-view { display: flex; flex-direction: column; gap: 8px; }
+.teams-screen :is(button, a, input:not([type="checkbox"]), select, textarea, summary) { min-height: 36px; max-width: 100%; }
+.teams-screen :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teams-screen :is(h1, h2, h3, h4)[tabindex="-1"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teams-screen :is(.entity-id, .teams-subtitle, .panel-error, .panel-note, .panel-empty, .teams-feedback, .teams-notices li, .teams-field-error, .teams-cell-note, .teams-member-field, .teams-card-name, .teams-card-facts, .teams-live-actions li, .teams-live-reason, .teams-overview-facts dd, .teams-member-settings dd, .routing-problem, .routing-table :is(th, td), .status-badge, .teams-live-modal) { overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+.teams-live-modal [role="dialog"] { box-sizing: border-box; max-width: min(32rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; }
+.routing-table-wrap:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 900px) {
+  .teams-layout, .teams-overview, .teams-member-detail, .routing-rule-grid, .routing-escalation-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .teams-member-list-head { position: absolute; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+  .teams-member-row { grid-template-columns: minmax(0, 1fr); }
+  .teams-member-field[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: 12px; font-weight: 600; }
+  .routing-table-wrap { overflow-x: auto; max-width: 100%; }
+}
+@media (max-width: 560px) {
+  .teams-team-actions, .teams-board-actions, .teams-member-actions, .teams-confirm, .teams-live-modal .dialog-actions, .teams-screen .dashboard-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .teams-live-modal [role="dialog"] { width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; }
+  .teams-screen :is(button, input, select, textarea) { max-width: 100%; }
+  .teams-member-settings { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Roles browser (P05-S35) */
 .roles-screen, .roles-layout > *, .roles-detail-pane, .roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }

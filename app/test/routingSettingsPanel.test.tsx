@@ -3,7 +3,11 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, expect, it, vi } from 'vitest';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
-import { fakeManagement, routingSettingsFixture } from './teamsFixtures';
+import userEvent from '@testing-library/user-event';
+import type { BoardSettings } from '../src/renderer/api';
+import { RoutingSettingsPanel } from '../src/renderer/teams/RoutingSettingsPanel';
+import { rolesFixture, roleItem } from './rolesFixtures';
+import { fakeManagement, routingSettingsFixture, escalationSettingsFixture, invalidBoardSettings, missingBoardSettings, longRoutingSettings, onFailureLimitRouting, LONG_UNBROKEN, managementError } from './teamsFixtures';
 afterEach(cleanup);
 it.each(['board', 'roles'] as const)('blocks an open routing editor when refreshed %s configuration becomes invalid', async invalidFile => {
   const { RoutingSettingsPanel } = await import('../src/renderer/teams/RoutingSettingsPanel');
@@ -276,6 +280,19 @@ it('associates validation messages with invalid controls and graph errors with a
   expect(document.getElementById(descriptionId!)?.textContent).toContain('baseBranch: Use 1–64 lowercase letters');
   fireEvent.change(panel.getAllByLabelText('Pass status')[0], { target: { value: 'dev-ready' } });
   expect(within(panel.getByRole('alert')).getByText('rules: No routing path reaches a done status.')).toBeTruthy();
+});
+
+it('routing_validation_alert_does_not_duplicate_section_error_alert', async () => {
+  const fake = fakeManagement({ boardSettings: [{ ok: true as const, data: routingSettingsFixture() }], roles: [{ ok: true as const, data: rolesFixture() }, managementError('ROLES_DOWN', 'roles unreadable')] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+  fireEvent.change(panel.getAllByLabelText('Pass status')[0], { target: { value: 'dev-ready' } });
+  expect(view.getAllByRole('alert')).toHaveLength(1);
+  expect(document.body.textContent).toContain('ROLES_DOWN: roles unreadable');
+  expect(document.body.textContent).toContain('No routing path reaches a done status.');
 });
 
 it('removes an existing optional blocked route from the submitted raw rule', async () => {
@@ -565,4 +582,318 @@ it('only writes board settings when saving a routing change', async () => {
   for (const method of ['createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'addMember', 'updateMember', 'removeMember', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent'] as const) {
     expect(fake.api[method]).not.toHaveBeenCalled();
   }
+});
+
+type Section = Parameters<typeof RoutingSettingsPanel>[0]['section'];
+const sectionOf = (over: Partial<Section>): Section => ({ state: 'ready', data: null, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}), ...over });
+const noWrites = () => ({ updateBoardSettings: vi.fn(), updateRole: vi.fn(), updateMember: vi.fn(), switchMemberAgent: vi.fn(), cancelAssignment: vi.fn() });
+const saveForm = (panel: ReturnType<typeof within>) => panel.getByRole('button', { name: 'Save' }).closest('form')!;
+
+it('loading_missing_invalid_disconnected_stale_and_retry_states', async () => {
+  const fake = fakeManagement();
+  const mount = (section: Section, connected = true) => render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected={connected} section={section} />);
+  const loading = mount(sectionOf({ state: 'loading', loading: true }));
+  expect(loading.getByRole('status').textContent).toBe('Loading settings…');
+  expect(loading.queryByRole('table')).toBeNull(); expect(loading.queryByRole('button', { name: 'Edit routing settings' })).toBeNull();
+  loading.unmount();
+  const reloadFresh = vi.fn(async () => ({ ok: false as const, error: { code: 'READ_FAILED', message: 'boom', retryable: true } }));
+  const failed = mount(sectionOf({ state: 'error', error: { code: 'READ_FAILED', message: 'boom', retryable: true, remediation: 'Restart the coordinator.' }, reloadFresh }));
+  expect(failed.getByRole('alert').textContent).toContain('READ_FAILED: boom');
+  expect(failed.getByRole('alert').textContent).toContain('Restart the coordinator.');
+  await act(async () => { fireEvent.click(failed.getByRole('button', { name: 'Retry' })); });
+  expect(reloadFresh).toHaveBeenCalledTimes(1);
+  expect(document.activeElement).toBe(failed.getByRole('button', { name: 'Retry' }));
+  failed.unmount();
+  const noRemediation = mount(sectionOf({ state: 'error', error: { code: 'X', message: 'y', retryable: false } }));
+  expect(noRemediation.getByRole('alert').querySelectorAll('p')[1]!.textContent!.length).toBeGreaterThan(0);
+  noRemediation.unmount();
+  const missing = mount(sectionOf({ data: missingBoardSettings() }));
+  expect(missing.getByText('No workspace board is configured, so no routing is shown.')).toBeTruthy();
+  expect((missing.queryByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
+  missing.unmount();
+  const invalid = mount(sectionOf({ data: invalidBoardSettings() }));
+  expect(invalid.getByText(/configuration is invalid/)).toBeTruthy(); expect(invalid.getByText('rules[0]: bad rule')).toBeTruthy();
+  invalid.unmount();
+  const stale = mount(sectionOf({ state: 'error', data: null, error: { code: 'READ_FAILED', message: 'boom', retryable: true } }), false);
+  stale.unmount();
+  const good = routingSettingsFixture();
+  const first = mount(sectionOf({ data: good }), false);
+  expect(first.getByText('Disconnected from the backend. Routing is read-only until the connection returns.')).toBeTruthy();
+  expect((first.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
+  first.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ state: 'error', data: null, error: { code: 'READ_FAILED', message: 'boom', retryable: true } })} />);
+  expect(first.getByText('Showing the last loaded routing; it may be out of date.')).toBeTruthy();
+  expect(first.getByRole('table', { name: 'Routing transitions' })).toBeTruthy();
+  expect((first.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(first.getAllByRole('alert')).toHaveLength(1);
+});
+
+it('failed_board_refresh_keeps_open_routing_draft_read_only_until_retry_succeeds', async () => {
+  const settings = routingSettingsFixture();
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const fake = fakeManagement({
+    boardSettings: [{ ok: true, data: settings }, managementError('BOARD_DOWN', 'board unreadable'), { ok: true, data: settings }],
+    calls: { updateBoardSettings: update },
+  });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft-branch' } });
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Refresh' })); });
+  expect(panel.getByText('Showing the last loaded routing; it may be out of date.')).toBeTruthy();
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft-branch');
+  const save = panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  fireEvent.submit(save.closest('form')!);
+  expect(update).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Retry' })); });
+  expect(fake.boardSettings).toHaveBeenCalledTimes(3);
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft-branch');
+  expect((panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it('failed_board_refresh_identifies_previously_loaded_routing_in_its_warning', async () => {
+  const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }, managementError('BOARD_DOWN', 'board unreadable')] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+  await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Refresh' })); });
+  const alert = within(view.getByRole('region', { name: 'Workspace board routing' })).getByRole('alert');
+  expect(alert.textContent).toContain('Showing previously loaded data.');
+  expect(alert.textContent).toContain('BOARD_DOWN: board unreadable');
+});
+
+it('routing_disclosures_are_native_and_keyboard_operable', async () => {
+  const { panel } = await setup();
+  const toggles = ['Merge and worktree settings', 'Failure escalation', 'Protected conflict routing', 'Action rules', 'Workflow availability'].map(n => panel.getByRole('button', { name: n }));
+  for (const t of toggles) {
+    expect(t.tagName).toBe('BUTTON'); expect(t.getAttribute('aria-expanded')).toBe('false');
+    const region = document.getElementById(t.getAttribute('aria-controls')!)!;
+    expect(region.hidden).toBe(true); expect(region.getAttribute('aria-labelledby')).toBe(t.id);
+    t.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(t.getAttribute('aria-expanded')).toBe('true'); expect(region.hidden).toBe(false); expect(document.activeElement).toBe(t);
+    await userEvent.keyboard(' ');
+    expect(t.getAttribute('aria-expanded')).toBe('false'); expect(region.hidden).toBe(true);
+  }
+  expect(panel.getByRole('region', { name: 'Routing transitions (scrollable)' }).tabIndex).toBe(0);
+});
+
+it('long_dynamic_routes_and_failure_escalation_are_not_hard_coded', async () => {
+  const long = await setup({}, [longRoutingSettings()]);
+  expect(long.panel.getAllByText(new RegExp(LONG_UNBROKEN)).length).toBeGreaterThan(0);
+  cleanup();
+  const custom = await setup({}, [onFailureLimitRouting(7, 'custom-escalation')]);
+  fireEvent.click(custom.panel.getByRole('button', { name: 'Failure escalation' }));
+  const chains = custom.panel.getByRole('list', { name: 'Failure escalation chains' }).textContent!;
+  expect(chains).toContain('after 7 failed runs'); expect(chains).toContain('custom-escalation');
+  expect(chains).not.toContain('after 3 failed runs');
+  cleanup();
+  const none = await setup({}, [onFailureLimitRouting(null)]);
+  fireEvent.click(none.panel.getByRole('button', { name: 'Failure escalation' }));
+  expect(none.panel.getByText('No failure escalation is configured.')).toBeTruthy();
+});
+
+it('role_links_use_stable_ids_or_render_diagnostics', async () => {
+  const fake = fakeManagement(); const onViewRole = vi.fn();
+  const settings = routingSettingsFixture();
+  const items = rolesFixture({ items: [roleItem('Developer', { name: 'Developer Display' })] }).items;
+  const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ data: settings })} roleItems={items} onViewRole={onViewRole} />);
+  fireEvent.click(view.getByRole('button', { name: 'View Developer Display in Roles (rule 1)' }));
+  expect(onViewRole).toHaveBeenCalledTimes(1); expect(onViewRole).toHaveBeenCalledWith('Developer');
+  expect(view.getAllByText('Role not in catalog').length).toBeGreaterThan(0);
+  expect(view.queryByRole('button', { name: /View TeamLead/ })).toBeNull();
+  view.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ data: settings })} roleItems={null} onViewRole={onViewRole} />);
+  expect(view.queryAllByRole('button', { name: /in Roles/ })).toHaveLength(0);
+  expect(view.getAllByText('Role catalog unavailable').length).toBeGreaterThan(0);
+  expect(view.getByText('Role names are unavailable; rules show stable role ids.')).toBeTruthy();
+});
+
+it('validation_focuses_first_invalid_field_and_announces_once', async () => {
+  const update = vi.fn(async () => ({ ok: false as const, error: { code: 'BOARD_CONFIG_INVALID', message: 'invalid', retryable: false, data: { problems: [{ path: 'rules[1].onPass', message: 'Rejected pass' }, { path: 'rules[0].role', message: 'Rejected role' }] } } }));
+  const { panel } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'next' } });
+  const save = panel.getByRole('button', { name: 'Save' }); save.focus();
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  const invalid = Array.from(document.querySelectorAll<HTMLElement>('[aria-invalid="true"]'));
+  expect(invalid.length).toBe(2);
+  expect(document.activeElement).toBe(save);
+  expect(panel.getAllByRole('alert')).toHaveLength(1);
+  expect(panel.getAllByText('rules[0].role: Rejected role')).toHaveLength(1);
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('client_validation_moves_focus_to_the_first_invalid_field', async () => {
+  const update = vi.fn(); const { panel } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getAllByLabelText('Source status')[1], { target: { value: 'backlog' } });
+  const invalid = Array.from(document.querySelectorAll<HTMLElement>('[aria-invalid="true"]'));
+  expect(invalid.length).toBeGreaterThan(0);
+  expect(document.activeElement).toBe(invalid[0]);
+  expect((panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(update).not.toHaveBeenCalled();
+});
+
+it('client_validation_focuses_the_first_of_multiple_invalid_fields', async () => {
+  const update = vi.fn(); const { panel } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const base = panel.getByLabelText('Base branch');
+  fireEvent.change(base, { target: { value: '' } });
+  const source = panel.getAllByLabelText('Source status')[1];
+  source.focus();
+  fireEvent.change(source, { target: { value: 'backlog' } });
+  const invalid = Array.from(document.querySelectorAll<HTMLElement>('[aria-invalid="true"]'));
+  expect(invalid.length).toBeGreaterThan(1);
+  expect(document.activeElement).toBe(invalid[0]);
+  expect((panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(update).not.toHaveBeenCalled();
+});
+
+it('routing_server_failure_retains_keyboard_submit_focus_and_draft', async () => {
+  const update = vi.fn(async () => ({ ok: false as const, error: { code: 'INTERNAL', message: 'Save failed', retryable: true } }));
+  const { panel } = await setup({ updateBoardSettings: update });
+  const user = userEvent.setup();
+  await user.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  const base = panel.getByLabelText('Base branch') as HTMLInputElement;
+  await user.clear(base); await user.type(base, 'next');
+  const save = panel.getByRole('button', { name: 'Save' });
+  save.focus(); await user.keyboard('{Enter}');
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(panel.getByText('INTERNAL: Save failed')).toBeTruthy();
+  expect(base.value).toBe('next');
+  expect(document.activeElement).toBe(save);
+});
+
+it('routing_write_failure_without_backend_remediation_offers_a_next_step', async () => {
+  const update = vi.fn(async () => ({ ok: false as const, error: { code: 'WRITE_FAILED', message: 'Could not save routing', retryable: true } }));
+  const { panel } = await setup({ updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'next' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  const alert = panel.getByRole('alert');
+  expect(within(alert).getByText('WRITE_FAILED: Could not save routing')).toBeTruthy();
+  expect(alert.querySelectorAll('p').length).toBeGreaterThan(1);
+  expect(Array.from(alert.querySelectorAll('p')).slice(1).some(p => p.textContent?.trim())).toBe(true);
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('next');
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('no_op_cancel_double_submit_and_config_changed_reload_are_safe', async () => {
+  const hold: { resolve?: (v: unknown) => void } = {};
+  const update = vi.fn()
+    .mockImplementationOnce(() => new Promise(resolve => { hold.resolve = resolve; }))
+    .mockResolvedValue({ ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
+  const s = routingSettingsFixture(); const latest = routingSettingsFixture({ worktree: { baseBranch: 'fresh', worktreeStatuses: [] } });
+  const { panel, fake } = await setup({ updateBoardSettings: update }, [s, latest]);
+  const edit = panel.getByRole('button', { name: 'Edit routing settings' });
+  fireEvent.click(edit);
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  expect(update).not.toHaveBeenCalled(); expect(panel.getByText('No routing changes to save.')).toBeTruthy();
+  fireEvent.click(panel.getByRole('button', { name: 'Cancel' })); expect(document.activeElement).toBe(panel.getByRole('button', { name: 'Edit routing settings' }));
+  expect(panel.queryByLabelText('Base branch')).toBeNull();
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  fireEvent.submit(saveForm(panel)); fireEvent.submit(saveForm(panel));
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(update).toHaveBeenCalledWith('ws-a', expect.objectContaining({ baseBranch: 'draft' }), s.board.sha256);
+  await act(async () => { hold.resolve!({ ok: false, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } }); });
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft');
+  const reload = panel.getByRole('button', { name: 'Reload latest settings' });
+  expect(document.activeElement).toBe(reload);
+  expect(panel.getAllByRole('alert')).toHaveLength(1);
+  expect((panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { fireEvent.click(reload); });
+  expect(fake.boardSettings).toHaveBeenCalledTimes(2);
+  expect(panel.queryByLabelText('Base branch')).toBeNull();
+  expect(panel.getByText('Base branch: fresh')).toBeTruthy();
+  expect(document.activeElement).toBe(panel.getByRole('heading', { name: 'Workspace board routing' }));
+});
+
+it('failed_config_changed_reload_retains_draft_and_focus', async () => {
+  const update = vi.fn().mockResolvedValue({ ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
+  const view = await (async () => {
+    const fake = fakeManagement({ calls: { updateBoardSettings: update } });
+    const reloadFresh = vi.fn(async () => ({ ok: false as const, error: { code: 'READ_FAILED', message: 'still down', retryable: true } }));
+    const section = sectionOf({ data: routingSettingsFixture(), reloadFresh });
+    const v = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={section} />);
+    return { v, reloadFresh };
+  })();
+  const panel = within(view.v.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Reload latest settings' })); });
+  expect(view.reloadFresh).toHaveBeenCalledTimes(1);
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft');
+  expect(panel.getByText(/READ_FAILED: still down/)).toBeTruthy();
+  expect(panel.getAllByRole('button', { name: /Reload latest settings|Retry latest settings/ }).some(b => b === document.activeElement)).toBe(true);
+});
+
+it('failed_conflict_reload_shows_backend_remediation_with_the_error', async () => {
+  const update = vi.fn().mockResolvedValue({ ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
+  const fake = fakeManagement({ calls: { updateBoardSettings: update } });
+  const reloadFresh = vi.fn(async () => ({ ok: false as const, error: { code: 'READ_FAILED', message: 'still down', retryable: true, remediation: 'Check the workspace configuration.' } }));
+  const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ data: routingSettingsFixture(), reloadFresh })} />);
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Reload latest settings' })); });
+  const alert = panel.getByRole('alert');
+  expect(alert.textContent).toContain('READ_FAILED: still down');
+  expect(alert.textContent).toContain('Check the workspace configuration.');
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft');
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('thrown_conflict_reload_has_actionable_internal_error_and_retains_draft', async () => {
+  const update = vi.fn().mockResolvedValue({ ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
+  const fake = fakeManagement({ calls: { updateBoardSettings: update } });
+  const reloadFresh = vi.fn().mockRejectedValue(new Error('read unavailable'));
+  const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ data: routingSettingsFixture(), reloadFresh })} />);
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Reload latest settings' })); });
+  const alert = panel.getByRole('alert');
+  expect(alert.textContent).toContain('INTERNAL: read unavailable');
+  expect(alert.textContent).toContain('Retry loading the latest settings');
+  expect(alert.textContent).not.toContain('Error: read unavailable');
+  expect((panel.getByLabelText('Base branch') as HTMLInputElement).value).toBe('draft');
+  expect(document.activeElement).toBe(panel.getByRole('button', { name: 'Reload latest settings' }));
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
+it('unknown_fields_protected_routes_and_failure_escalation_survive_submit', async () => {
+  const s = escalationSettingsFixture();
+  const raw = s.board.config!.rules as Array<Record<string, unknown>>;
+  raw[0] = { ...raw[0], futureField: { nested: ['kept'] } };
+  (s.board.config as Record<string, unknown>).topLevelUnknown = 'kept';
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'trunk' } });
+  fireEvent.change(within(panel.getByRole('group', { name: 'Rule 1 — agent' })).getByLabelText('Workspace'), { target: { value: 'main' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  expect(update).toHaveBeenCalledTimes(1);
+  const expected = structuredClone(raw); expected[0] = { ...expected[0], workspace: 'main' };
+  expect(update).toHaveBeenCalledWith('ws-a', { baseBranch: 'trunk', rules: expected }, s.board.sha256);
+  const sent = (update.mock.calls[0] as unknown as [string, { rules: Array<Record<string, unknown>> }])[1].rules;
+  expect(sent[0]!.futureField).toEqual({ nested: ['kept'] });
+  expect(sent[5]!.onFailureLimit).toEqual({ count: 3, status: 'need-escalate' });
+  expect(sent[3]).toEqual(raw[3]); expect(sent[4]).toEqual(raw[4]);
+});
+
+it('routing_never_calls_role_member_or_assignment_apis', async () => {
+  const calls = noWrites();
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ ...calls, updateBoardSettings: update });
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'trunk' } });
+  await act(async () => { fireEvent.submit(saveForm(panel)); });
+  expect(update).toHaveBeenCalledTimes(1);
+  for (const [name, fn] of Object.entries(calls)) if (name !== 'updateBoardSettings') expect(fn).not.toHaveBeenCalled();
 });

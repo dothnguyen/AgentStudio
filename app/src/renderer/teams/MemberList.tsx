@@ -8,11 +8,11 @@ export function MemberList({ team, roleItems, currentMemberId, rowRef, onOpen }:
   function fields(m: OverviewMember): JSX.Element {
     const identity = memberIdentity(m), role = memberRoleSummary(m, roleItems), agent = memberAgentSummary(m);
     return <>
-      <span className="teams-member-field" data-field="name"><span className="teams-member-name">{identity.name}</span>{identity.id && <code className="entity-id">{identity.id}</code>}{identity.note && <span className="teams-cell-note">{identity.note}</span>}</span>
-      <span className="teams-member-field" data-field="role"><span className="teams-role-name">{role.label}</span>{role.roleId && <code className="entity-id">{role.roleId}</code>}{role.note && <span className="teams-cell-note">{role.note}</span>}</span>
-      <span className="teams-member-field" data-field="agent"><span className={`teams-member-agent teams-member-agent-${agent.kind}`}>{agent.text}</span>{agent.note && <span className="teams-cell-note">{agent.note}</span>}</span>
-      <span className="teams-member-field" data-field="availability"><span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}><span className="status-dot" aria-hidden="true" />{presenceLabel(m.presence)}</span></span>
-      <span className="teams-member-field" data-field="work">{workSummary(m.work)}</span>
+      <span className="teams-member-field" data-field="name" data-label="Member"><span className="teams-member-name">{identity.name}</span>{identity.id && <code className="entity-id">{identity.id}</code>}{identity.note && <span className="teams-cell-note">{identity.note}</span>}</span>
+      <span className="teams-member-field" data-field="role" data-label="Role"><span className="teams-role-name">{role.label}</span>{role.roleId && <code className="entity-id">{role.roleId}</code>}{role.note && <span className="teams-cell-note">{role.note}</span>}</span>
+      <span className="teams-member-field" data-field="agent" data-label="Agent"><span className={`teams-member-agent teams-member-agent-${agent.kind}`}>{agent.text}</span>{agent.note && <span className="teams-cell-note">{agent.note}</span>}</span>
+      <span className="teams-member-field" data-field="availability" data-label="Availability"><span className={`status-badge teams-presence teams-tone-${presenceTone(m.presence)}`}><span className="status-dot" aria-hidden="true" />{presenceLabel(m.presence)}</span></span>
+      <span className="teams-member-field" data-field="work" data-label="Current work">{workSummary(m.work)}</span>
     </>;
   }
   return <><div className="teams-member-list-head" aria-hidden="true"><span>Member</span><span>Role</span><span>Agent</span><span>Availability</span><span>Current work</span></div>

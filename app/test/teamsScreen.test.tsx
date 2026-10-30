@@ -6,9 +6,58 @@ import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
-import { catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field } from './teamsFixtures';
-
+import {
+  catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
+  boardSettingsFixture, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
+  teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
+} from './teamsFixtures';
 afterEach(cleanup);
+
+it('disconnected_with_pending_board_load_announces_only_one_status', async () => {
+  const boardGate = deferred<ReturnType<typeof okR<ReturnType<typeof boardSettingsFixture>>>>();
+  const fake = fakeManagement({ boardSettings: [boardGate.promise] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture('lost')} />);
+  await act(async () => {});
+  expect(view.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy();
+  expect(view.getByText('Loading board state…')).toBeTruthy();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect((view.getByRole('button', { name: 'New team' }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => { boardGate.resolve(okR(boardSettingsFixture())); });
+});
+
+it('routing_refresh_with_overview_pending_announces_only_one_status', async () => {
+  const overviewGate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+  const boardGate = deferred<ReturnType<typeof okR<ReturnType<typeof boardSettingsFixture>>>>();
+  const fake = fakeManagement({ overview: [okR(twoTeams()), overviewGate.promise], boardSettings: [okR(boardSettingsFixture()), boardGate.promise] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  await act(async () => {});
+  expect(view.getByText(/Refreshing teams… Showing previously loaded data/)).toBeTruthy();
+  expect(view.getByText(/Refreshing routing settings… Showing previously loaded data/)).toBeTruthy();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  await act(async () => { overviewGate.resolve(okR(twoTeams())); boardGate.resolve(okR(boardSettingsFixture())); });
+});
+
+it('retained_refresh_success_does_not_duplicate_pending_or_connection_status', async () => {
+  const overviewGate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+  const fake = fakeManagement({ overview: [okR(twoTeams()), okR(twoTeams()), overviewGate.promise] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture('connected')} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  await act(async () => {});
+  expect(view.getByRole('status').textContent).toContain('Teams data refreshed.');
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  await act(async () => {});
+  expect(view.queryByText('Teams data refreshed.')).toBeNull();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByRole('status').textContent).toContain('Refreshing teams');
+  view.rerender(<TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture('lost')} />);
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByRole('status').textContent).toContain('Connection lost.');
+  await act(async () => { overviewGate.resolve(okR(twoTeams())); });
+});
 
 async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const fake = fakeManagement(opts);
@@ -516,11 +565,17 @@ describe('focused navigation', () => {
       overview: [{ ok: true, data: overviewFixture(twoTeams().teams, { truncated: true }) }],
       calls: { createTeam: vi.fn(async () => ({ ok: false as const, error: { code: 'BAD_REQUEST', message: 'dup', retryable: false } })) },
     });
-    const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={{ state: 'lost', error: null, distro: null, command: 'serve' }} />);
+    const conn = (state: 'connected' | 'lost') => ({ state, error: null, distro: null, command: 'serve' });
+    const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={conn('connected')} />);
     await act(async () => {});
     fireEvent.click(result.getByRole('button', { name: 'New team' }));
     fireEvent.change(result.getByLabelText('Team name'), { target: { value: 'X' } });
     fireEvent.click(result.getByRole('button', { name: 'Create team' }));
+    await act(async () => {});
+    expect(result.getAllByRole('alert')).toHaveLength(1);
+    expect(result.getByRole('alert').textContent).toContain('BAD_REQUEST: dup');
+    expect(result.getByRole('button', { name: 'Retry loading roles' }).parentElement?.textContent).toContain('INTERNAL: roles down');
+    result.rerender(<TeamsScreen workspace={workspaceA} management={fake.api} connection={conn('lost')} />);
     await act(async () => {});
     for (const name of ['Overview', 'Members', 'Routing']) {
       await openTab(result, name);
@@ -528,7 +583,7 @@ describe('focused navigation', () => {
       const outside = [
         result.getByRole('list', { name: 'Data notices' }),
         result.getByRole('button', { name: 'Retry loading roles' }),
-        result.getByText(/Connection to the backend was lost\./),
+        result.getByText('Connection lost. Showing previously loaded data.'),
         result.getAllByRole('alert').find((a) => a.textContent?.includes('BAD_REQUEST: dup'))!,
         result.getByRole('button', { name: 'New team' }),
         result.getByRole('button', { name: 'Refresh' }),
@@ -645,7 +700,7 @@ describe('member roster', () => {
     expect(screen.getByRole('region', {name: 'qa'}).textContent).toContain('Reviewer');
     fireEvent.click(screen.getByRole('button', {name: 'Refresh'})); await act(async () => {});
     expect(screen.queryByRole('region', {name: 'qa'})).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('Member "qa" is no longer in this team. Showing all members.');
+    expect(screen.getByText('Member "qa" is no longer in this team. Showing all members.').getAttribute('role')).toBe('status');
     expect(memberRow('dev')).toBeTruthy();
   });
   it('truncated_refresh_reports_selected_member_not_returned', async () => {
@@ -658,7 +713,7 @@ describe('member roster', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Refresh'}));
     await act(async () => {});
     expect(screen.queryByRole('region', {name: 'qa'})).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('Member "qa" is not among the returned members (the member list is truncated). Showing the returned members.');
+    expect(screen.getByText('Member "qa" is not among the returned members (the member list is truncated). Showing the returned members.').getAttribute('role')).toBe('status');
     expect(memberRow('dev')).toBeTruthy();
   });
   it('navigation_between_roster_and_detail_does_not_read_management', async () => {
@@ -760,7 +815,7 @@ describe('member detail focus and settings', () => {
   });
   it('focuses the heading and restores the roster row on return', async () => {
     await renderScreen(); showMembers(); openMember('dev');
-    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 3}));
+    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
     expect(screen.getByRole('heading', {name: 'Member settings'})).toBeTruthy();
     expect(screen.getByRole('heading', {name: 'Agent options — next team start'})).toBeTruthy();
     expect(screen.getByRole('heading', {name: 'Live agent'})).toBeTruthy();
@@ -784,4 +839,649 @@ describe('member detail focus and settings', () => {
     fireEvent.click(within(screen.getByRole('form', {name: 'Add member'})).getByRole('button', {name: 'Cancel'}));
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
+});
+
+const okR = <T,>(data: T) => ({ ok: true as const, data });
+const board = () => screen.getByRole('region', { name: 'Board control' });
+const calls = (fake: ReturnType<typeof fakeManagement>) => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map(f => f.mock.calls.length);
+const btn = (r: { getByRole: (role: string, o: { name: string | RegExp }) => HTMLElement }, name: string | RegExp) => r.getByRole('button', { name }) as HTMLButtonElement;
+
+describe('T-082 states', () => {
+  it('member_activation_focuses_the_member_detail_h2', async () => {
+    await renderMembers();
+    fireEvent.click(memberRow('dev'));
+    const heading = screen.getByRole('heading', { name: 'dev', level: 2 });
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('refresh_is_single_flight_and_waits_for_every_section_before_success', async () => {
+    const gate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+    const { fake, result } = await renderScreen({ overview: [okR(twoTeams()), gate.promise] });
+    const refresh = btn(result, 'Refresh');
+    fireEvent.click(refresh);
+    fireEvent.click(refresh);
+    await act(async () => {});
+    expect(calls(fake)).toEqual([2, 2, 2, 2]);
+    expect(result.queryByText('Teams data refreshed.')).toBeNull();
+    await act(async () => { gate.resolve(okR(twoTeams())); });
+    expect(result.getByRole('status').textContent).toContain('Teams data refreshed.');
+    expect(document.activeElement).toBe(refresh);
+  });
+
+  it('mixed_refresh_failure_does_not_announce_success_and_retries_only_failed_source', async () => {
+    const { fake, result } = await renderScreen({
+      roles: [okR(rolesFixture()), managementError('ROLES_DOWN', 'catalog unavailable', 'Check roles.'), okR(rolesFixture())],
+    });
+    const refresh = btn(result, 'Refresh');
+    refresh.focus();
+    fireEvent.click(refresh);
+    await act(async () => {});
+
+    expect(calls(fake)).toEqual([2, 2, 2, 2]);
+    expect(document.activeElement).toBe(refresh);
+    expect(result.queryByText('Teams data refreshed.')).toBeNull();
+    expect(result.getByRole('alert').textContent).toContain('ROLES_DOWN: catalog unavailable');
+    expect(result.getByRole('alert').textContent).toContain('Showing previously loaded data.');
+    expect(result.getByRole('tab', { name: 'Members' }).hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(btn(result, 'Retry loading roles'));
+    await act(async () => {});
+    expect(calls(fake)).toEqual([2, 2, 2, 3]);
+    expect(result.queryByRole('alert')).toBeNull();
+    expect(result.queryByText('Teams data refreshed.')).toBeNull();
+  });
+
+  it('initial_loading_and_empty_workspace_are_truthful', async () => {
+    const pending = deferred<ReturnType<typeof okR<ReturnType<typeof emptyWorkspace>>>>();
+    const fake = fakeManagement({ overview: [pending.promise as never] });
+    const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+    await act(async () => {});
+    expect(result.getByRole('status').textContent).toBe('Loading teams…');
+    expect(result.queryByRole('tablist')).toBeNull();
+    expect(btn(result, 'New team').disabled).toBe(true);
+    expect(btn(result, 'Refresh').disabled).toBe(false);
+    pending.resolve(okR(emptyWorkspace()));
+    await act(async () => {});
+    expect(result.getByText('No teams defined in this workspace.')).toBeTruthy();
+    expect(btn(result, 'New team').disabled).toBe(false);
+    expect(result.queryByRole('tablist')).toBeNull();
+    expect(result.container.querySelectorAll('.teams-card')).toHaveLength(0);
+  });
+
+  it('empty_roster_keeps_add_member_available', async () => {
+    const { result } = await renderMembers({ overview: [okR(emptyRoster())] });
+    expect(result.getByText('This team has no members.')).toBeTruthy();
+    expect(btn(result, 'Add member').disabled).toBe(false);
+    expect(result.queryAllByRole('listitem').filter(li => li.querySelector('.teams-member-row'))).toHaveLength(0);
+  });
+
+  it('partial_truncated_and_unavailable_notices_use_returned_data', async () => {
+    const unavailable = await renderScreen({ overview: [okR(runtimeUnavailable('RUNTIME_DOWN', 'tmux is not reachable'))] });
+    expect(within(unavailable.result.getByRole('list', { name: 'Data notices' })).getByText('Live team state unavailable — tmux is not reachable')).toBeTruthy();
+    unavailable.result.unmount();
+    const stopped = await renderScreen({ overview: [okR(coordinatorStopped())] });
+    expect(stopped.result.getByText(/Coordinator/)).toBeTruthy();
+    expect(btn(stopped.result, 'Run board').disabled).toBe(true);
+    stopped.result.unmount();
+    const partial = await renderScreen({ overview: [okR(partialOverview())] });
+    expect(partial.result.getByText('Some team definitions could not be read.')).toBeTruthy();
+    partial.result.unmount();
+    const truncated = await renderScreen({ overview: [okR(truncatedOverview())] });
+    expect(truncated.result.getByText(/Showing the first 1 team\. More teams exist/)).toBeTruthy();
+    expect(truncated.result.queryByText(/of \d+ teams/)).toBeNull();
+    truncated.result.unmount();
+    await renderMembers({ overview: [okR(memberTruncatedOverview())] });
+    expect(screen.getByText('Showing the first 1 members.')).toBeTruthy();
+  });
+
+  it('failed_refresh_retains_stale_overview_and_retries_only_overview', async () => {
+    const runBoard = vi.fn();
+    const { fake, result } = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'overview unreadable', 'Check the coordinator.'), okR(twoTeams())], calls: { runBoard } });
+    expect(btn(result, 'Run board').disabled).toBe(false);
+    fireEvent.click(btn(result, 'Refresh'));
+    await act(async () => {});
+    expect(calls(fake)).toEqual([2, 2, 2, 2]);
+    expect(document.activeElement).toBe(btn(result, 'Refresh'));
+    const alerts = result.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.textContent).toContain('Showing previously loaded data.');
+    expect(alerts[0]!.textContent).toContain('READ_FAILED: overview unreadable');
+    expect(alerts[0]!.textContent).toContain('Check the coordinator.');
+    expect(result.getByRole('button', { name: /^Dev Team/ })).toBeTruthy();
+    expect(btn(result, 'New team').disabled).toBe(true);
+    expect(btn(result, 'Rename team').disabled).toBe(true);
+    expect(btn(result, 'Run board').disabled).toBe(true);
+    fireEvent.click(btn(result, 'Run board'));
+    expect(runBoard).not.toHaveBeenCalled();
+    expect(result.getByRole('tab', { name: 'Members' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(btn(result, 'Retry'));
+    await act(async () => {});
+    expect(calls(fake)).toEqual([3, 2, 2, 2]);
+    expect(result.queryByRole('alert')).toBeNull();
+    expect(document.activeElement).toBe(document.getElementById('teams-list-title'));
+    expect(btn(result, 'New team').disabled).toBe(false);
+    expect(btn(result, 'Run board').disabled).toBe(false);
+  });
+
+  it('open_team_write_forms_disable_submit_when_overview_goes_stale', async () => {
+    const { result } = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'overview unreadable'), managementError('READ_FAILED', 'overview unreadable')] });
+    fireEvent.click(btn(result, 'Rename team'));
+    expect(btn(result, 'Save name').disabled).toBe(false);
+    fireEvent.click(btn(result, 'Refresh')); await act(async () => {});
+    expect(btn(result, 'Save name').disabled).toBe(true);
+    expect(btn(result, 'Cancel').disabled).toBe(false);
+    result.unmount();
+    const del = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'overview unreadable')] });
+    fireEvent.click(btn(del.result, 'Delete team'));
+    expect(btn(del.result, 'Confirm delete').disabled).toBe(false);
+    fireEvent.click(btn(del.result, 'Refresh')); await act(async () => {});
+    expect(btn(del.result, 'Confirm delete').disabled).toBe(true);
+    expect(btn(del.result, 'Cancel').disabled).toBe(false);
+  });
+
+  it('open_new_team_form_disables_creation_when_connection_is_lost', async () => {
+    const createTeam = vi.fn();
+    const fake = fakeManagement({ calls: { createTeam } });
+    const ui = (state: 'connected' | 'lost') => <TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+    const result = render(ui('connected'));
+    await act(async () => {});
+    fireEvent.click(btn(result, 'New team'));
+    fireEvent.change(result.getByLabelText('Team name'), { target: { value: 'New team name' } });
+    expect(btn(result, 'Create team').disabled).toBe(false);
+    result.rerender(ui('lost'));
+    expect(btn(result, 'Create team').disabled).toBe(true);
+    expect(btn(result, 'Cancel').disabled).toBe(false);
+    fireEvent.click(btn(result, 'Create team'));
+    expect(createTeam).not.toHaveBeenCalled();
+    expect((result.getByLabelText('Team name') as HTMLInputElement).value).toBe('New team name');
+  });
+
+  it('member_validation_alert_does_not_duplicate_section_error_alert', async () => {
+    await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unreadable')] });
+    fireEvent.click(memberRow('dev')); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: /^Remove OpenCode Sonnet/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert').textContent).not.toContain('ROLES_DOWN');
+    expect(document.body.textContent).toContain('ROLES_DOWN: roles unreadable');
+  });
+
+  it.each(['roles', 'agents'] as const)('stale %s catalog blocks dependent member changes until retry', async (source) => {
+    const updateMember = vi.fn();
+    const failure = managementError('CATALOG_DOWN', 'catalog unavailable');
+    const opts = source === 'roles'
+      ? { roles: [okR(rolesFixture()), failure, okR(rolesFixture())] }
+      : { agents: [okR(catalogFixture()), failure, okR(catalogFixture())] };
+    await renderMembers({ ...opts, calls: { updateMember } });
+    fireEvent.click(memberRow('dev')); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
+    else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.submit(save.closest('form')!);
+    expect(updateMember).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: source === 'roles' ? 'Retry loading roles' : 'Retry loading agents' }));
+    await act(async () => {});
+    expect(save.disabled).toBe(false);
+    if (source === 'roles') expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('Reviewer');
+    else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
+  });
+
+  it.each(['roles', 'agents'] as const)('pending %s refresh blocks dependent member changes until fresh data arrives', async (source) => {
+    const updateMember = vi.fn();
+    const roleGate = deferred<ReturnType<typeof okR<ReturnType<typeof rolesFixture>>>>();
+    const agentGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>>>();
+    const opts = source === 'roles'
+      ? { roles: [okR(rolesFixture()), roleGate.promise] }
+      : { agents: [okR(catalogFixture()), agentGate.promise] };
+    await renderMembers({ ...opts, calls: { updateMember } });
+    fireEvent.click(memberRow('dev')); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
+    else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.submit(save.closest('form')!);
+    expect(updateMember).not.toHaveBeenCalled();
+    await act(async () => {
+      if (source === 'roles') roleGate.resolve(okR(rolesFixture()));
+      else agentGate.resolve(okR(catalogFixture()));
+    });
+    expect(save.disabled).toBe(false);
+    if (source === 'roles') expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('Reviewer');
+    else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
+  });
+
+  it('stale catalogs do not block an unrelated member name change', async () => {
+    const updateMember = vi.fn(async () => okR({ team: {}, member: { name: 'Renamed' }, problems: [], appliesOnNextStart: false }));
+    await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unavailable')], agents: [managementError('AGENTS_DOWN', 'agents unavailable')], calls: { updateMember } });
+    fireEvent.click(memberRow('dev')); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Renamed' } });
+    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save); await act(async () => {});
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { name: 'Renamed' });
+  });
+
+  it('refresh_with_overview_and_board_pending_announces_one_status', async () => {
+    const o = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+    const b = deferred<ReturnType<typeof okR<ReturnType<typeof boardSettingsFixture>>>>();
+    const { fake, result } = await renderScreen();
+    fake.overview.mockImplementationOnce(() => o.promise);
+    fake.boardSettings.mockImplementationOnce(() => b.promise);
+    fireEvent.click(btn(result, 'Refresh')); await act(async () => {});
+    expect(result.getAllByRole('status')).toHaveLength(1);
+    expect(document.body.textContent).toContain('Refreshing board state');
+    o.resolve(okR(twoTeams())); b.resolve(okR(boardSettingsFixture())); await act(async () => {});
+  });
+
+  it('connecting_while_overview_pending_announces_one_status', async () => {
+    const o = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+    const fake = fakeManagement();
+    fake.overview.mockImplementationOnce(() => o.promise);
+    const result = render(<TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture('connecting')} />);
+    await act(async () => {});
+    expect(result.getAllByRole('status')).toHaveLength(1);
+    expect(document.body.textContent).toContain('Connecting to Agent Studio…');
+    expect(document.body.textContent).toContain('Loading teams…');
+    o.resolve(okR(twoTeams())); await act(async () => {});
+  });
+
+  it('catalog_role_and_board_failures_are_independent', async () => {
+    const { fake, result } = await renderScreen({
+      roles: [managementError('ROLES_DOWN', 'roles unreadable'), managementError('ROLES_DOWN', 'still unreadable'), okR(invalidRoleCatalog())],
+      agents: [managementError('AGENTS_DOWN', 'agents unreadable', 'Fix agents.json.')],
+      boardSettings: [managementError('BOARD_DOWN', 'board unreadable')],
+    });
+    expect(result.getAllByRole('alert')).toHaveLength(1);
+    const errors = Array.from(document.querySelectorAll('.panel-error'));
+    expect(errors.map(a => a.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('ROLES_DOWN: roles unreadable'), expect.stringContaining('Fix agents.json.'), expect.stringContaining('BOARD_DOWN: board unreadable')]));
+    for (const a of errors) expect(within(a as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    expect(errors.every(a => /\S/.test(a.querySelectorAll('p')[1]?.textContent ?? ''))).toBe(true);
+    expect(result.queryByRole('button', { name: 'Run board' })).toBeNull();
+    expect(calls(fake)).toEqual([1, 1, 1, 1]);
+    fireEvent.click(btn(result, 'Retry loading roles')); await act(async () => {});
+    expect(calls(fake)).toEqual([1, 1, 1, 2]);
+    expect(document.activeElement).toBe(btn(result, 'Retry loading roles'));
+    expect(result.getByRole('alert').textContent).toContain('ROLES_DOWN: still unreadable');
+    fireEvent.click(btn(result, 'Retry loading roles')); await act(async () => {});
+    expect(calls(fake)).toEqual([1, 1, 1, 3]);
+    expect(result.queryByRole('button', { name: 'Retry loading roles' })).toBeNull();
+    expect(document.activeElement).toBe(document.getElementById('teams-detail-title'));
+    expect(result.getByRole('button', { name: 'Retry loading agents' })).toBeTruthy();
+    fireEvent.click(within(board()).getByRole('button', { name: 'Retry' })); await act(async () => {});
+    expect(calls(fake)).toEqual([1, 1, 2, 3]);
+  });
+
+  it('connecting_lost_and_reconnected_disable_only_unsafe_actions', async () => {
+    const writes = Object.fromEntries(['createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'runBoard', 'stopBoard'].map(n => [n, vi.fn()]));
+    const fake = fakeManagement({ calls: writes });
+    const ui = (state: 'connecting' | 'connected' | 'lost') => <TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+    const result = render(ui('connecting'));
+    await act(async () => {});
+    expect(result.getByText('Connecting to Agent Studio…')).toBeTruthy();
+    result.rerender(ui('connected')); await act(async () => {});
+    expect(result.queryByText('Connecting to Agent Studio…')).toBeNull();
+    expect(calls(fake)).toEqual([2, 2, 2, 2]);
+    result.rerender(ui('lost')); await act(async () => {});
+    expect(result.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy();
+    expect(btn(result, 'New team').disabled).toBe(true);
+    expect(btn(result, 'Rename team').disabled).toBe(true);
+    expect(btn(result, 'Run board').disabled).toBe(true);
+    expect(btn(result, 'Refresh').disabled).toBe(false);
+    expect(result.getByRole('tab', { name: 'Routing' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(result.getByRole('tab', { name: 'Members' }));
+    expect(openMember('dev')).toBeTruthy();
+    expect(btn(result, 'Edit dev').disabled).toBe(true);
+    expect(btn(result, 'Back to members').disabled).toBe(false);
+    result.rerender(ui('connected')); await act(async () => {});
+    expect(calls(fake)).toEqual([3, 3, 3, 3]);
+    expect(btn(result, 'Edit dev').disabled).toBe(false);
+    expect(result.getByRole('region', { name: 'dev' })).toBeTruthy();
+    for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled();
+  });
+
+  it('team_tabs_and_team_chooser_roving_keyboard_behavior', async () => {
+    const { result } = await renderScreen();
+    const tabs = result.getAllByRole('tab');
+    expect(tabs.filter(t => t.tabIndex === 0)).toHaveLength(1);
+    tabs[0]!.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Members' }));
+    expect(result.getByRole('tab', { name: 'Members' }).getAttribute('aria-selected')).toBe('true');
+    await userEvent.keyboard('{End}');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
+    await userEvent.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Overview' }));
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
+    await userEvent.keyboard('{Home}');
+    expect(result.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    const list = result.getByRole('list', { name: 'Choose a team' });
+    const cards = within(list).getAllByRole('button');
+    expect(cards.filter(c => c.tabIndex === 0)).toHaveLength(1);
+    const selected = cards.find(c => c.getAttribute('aria-pressed') === 'true')!;
+    selected.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    const next = cards.find(c => c !== selected && c.getAttribute('aria-pressed') === 'true') ?? within(list).getAllByRole('button').find(c => c.getAttribute('aria-pressed') === 'true')!;
+    expect(next).not.toBe(selected);
+    expect(document.activeElement).toBe(next);
+    expect(result.getByRole('heading', { level: 2, name: next.querySelector('.teams-card-name')!.textContent! })).toBeTruthy();
+    await userEvent.keyboard('{Home}');
+    expect(document.activeElement).toBe(cards[0]);
+    await userEvent.keyboard('{End}');
+    expect(document.activeElement).toBe(cards[cards.length - 1]);
+    await userEvent.keyboard('{Enter}');
+    expect(document.activeElement).toBe(document.getElementById('teams-detail-title'));
+    cards[0]!.focus();
+    await userEvent.keyboard(' ');
+    expect(document.activeElement).toBe(document.getElementById('teams-detail-title'));
+    expect(document.getElementById('teams-detail-title')!.textContent).toBe(cards[0]!.querySelector('.teams-card-name')!.textContent);
+  });
+
+  it('refresh_never_moves_focus_to_another_team', async () => {
+    const { result } = await renderScreen();
+    const list = result.getByRole('list', { name: 'Choose a team' });
+    const second = within(list).getAllByRole('button')[1]!;
+    second.focus(); await userEvent.keyboard('{Enter}');
+    const heading = document.getElementById('teams-detail-title')!;
+    const name = heading.textContent;
+    fireEvent.click(btn(result, 'Refresh')); await act(async () => {});
+    expect(document.activeElement).toBe(btn(result, 'Refresh'));
+    expect(document.getElementById('teams-detail-title')!.textContent).toBe(name);
+  });
+
+  it('member_open_back_save_remove_and_error_focus_is_deterministic', async () => {
+    const updateMember = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error: { code: 'BAD_REQUEST', message: 'nope', retryable: false } })
+      .mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'dev2', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
+    const removeMember = vi.fn().mockResolvedValue({ ok: false, error: { code: 'TEAM_ALREADY_RUNNING', message: 'running', retryable: false } });
+    await renderMembers({ calls: { updateMember, removeMember } });
+    const row = memberRow('dev');
+    fireEvent.click(row); await act(async () => {});
+    const heading = screen.getByRole('heading', { name: 'dev', level: 2 });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.getAttribute('tabindex')).toBe('-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to members' })); await act(async () => {});
+    expect(document.activeElement).toBe(memberRow('dev'));
+    fireEvent.click(memberRow('dev')); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' })); await act(async () => {});
+    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    expect(updateMember).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByLabelText('Member name'));
+    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'dev2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save member' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); await act(async () => {});
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove dev' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel removing dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm remove dev' })); await act(async () => {});
+    expect(removeMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Confirm remove dev' }));
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' }); await act(async () => {});
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove dev' }));
+  });
+
+  it('successful_member_edit_retains_selection_and_focuses_updated_heading', async () => {
+    const refreshed = twoTeams();
+    refreshed.teams[1]!.members[0]!.name = 'Updated developer';
+    const updateMember = vi.fn().mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'Updated developer', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
+    await renderMembers({ overview: [okR(twoTeams()), okR(refreshed)], calls: { updateMember } });
+    openMember('dev');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Updated developer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save member' }));
+    await act(async () => {});
+    expect(updateMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev', { name: 'Updated developer' });
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Updated developer', level: 2 }));
+    expect(screen.queryByRole('button', { name: 'Save member' })).toBeNull();
+  });
+
+  it('successful_removal_clears_detail_and_focuses_the_next_action_after_refresh', async () => {
+    const initial = twoTeams();
+    const refreshed = twoTeams();
+    refreshed.teams[1]!.members = refreshed.teams[1]!.members.filter(m => m.memberId !== 'dev');
+    const removeMember = vi.fn().mockResolvedValue(okR({ removed: { id: 'dev', name: 'dev' }, problems: [] }));
+    const { result } = await renderMembers({ overview: [okR(initial), okR(refreshed)], calls: { removeMember } });
+    openMember('dev');
+    fireEvent.click(btn(result, 'Remove dev'));
+    fireEvent.click(btn(result, 'Confirm remove dev'));
+    await act(async () => {});
+    expect(removeMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev');
+    expect(result.queryByRole('region', { name: 'dev' })).toBeNull();
+    expect(result.queryByRole('button', { name: /^dev\b/ })).toBeNull();
+    expect(memberRow('lead')).toBeTruthy();
+    expect(document.activeElement).toBe(btn(result, 'Add member'));
+  });
+
+  it('status_and_missing_evidence_are_not_color_only', async () => {
+    const o = overviewFixture([team({ members: [
+      member({ memberId: 'a', name: 'a', presence: 'limit_reached', work: { state: 'unavailable', reason: 'offline' } }),
+      member({ memberId: 'b', name: 'b', presence: 'brand_new_state', role: null, roleState: 'undefined' as never, agentDefId: null, provider: null, model: null, agentOptions: [], defaultAgent: null }),
+    ] })]);
+    const { result } = await renderMembers({ overview: [okR(o)] });
+    for (const dot of Array.from(result.container.querySelectorAll('.status-dot'))) {
+      expect(dot.getAttribute('aria-hidden')).toBe('true');
+      expect(dot.parentElement!.textContent!.trim().length).toBeGreaterThan(0);
+    }
+    for (const badge of Array.from(result.container.querySelectorAll('.status-badge'))) expect(badge.textContent!.trim()).not.toBe('');
+    expect(field(memberRow('a'), 'availability')).toBe('Limit reached');
+    expect(field(memberRow('a'), 'work')).toBe('Not available — offline');
+    expect(field(memberRow('b'), 'availability').length).toBeGreaterThan(0);
+    expect(field(memberRow('b'), 'role').length).toBeGreaterThan(0);
+    expect(field(memberRow('b'), 'agent').length).toBeGreaterThan(0);
+  });
+
+  it('no_illustrative_design_data_is_rendered', async () => {
+    const empty = await renderScreen({ overview: [okR(emptyWorkspace())], agents: [okR(catalogFixture({ agents: [] }))], boardSettings: [okR(boardSettingsFixture())], roles: [okR(invalidRoleCatalog())] });
+    const text = empty.result.container.textContent!;
+    for (const sample of ['Dev Team', 'Release Team', 'OpenCode', 'Codex', 'Claude', 'gpt', 'sonnet', 'T-0', 'running', 'idle']) expect(text).not.toContain(sample);
+    expect(empty.result.container.querySelectorAll('.status-badge')).toHaveLength(0);
+    empty.result.unmount();
+    const long = await renderMembers({ overview: [okR(longContentOverview())], boardSettings: [okR(missingBoardSettings())] });
+    expect(long.result.container.textContent).toContain(LONG_UNBROKEN);
+    expect(long.result.container.textContent).not.toContain('Dev Team');
+    long.result.unmount();
+    const invalid = await renderScreen({ boardSettings: [okR(invalidBoardSettings())] });
+    expect(invalid.result.container.textContent).not.toContain('Release Team→');
+  });
+  it('cancel_rename_and_delete_restore_focus_to_the_invoking_action', async () => {
+    const { result } = await renderScreen();
+    for (const name of ['Rename team', 'Delete team']) {
+      fireEvent.click(btn(result, name));
+      fireEvent.click(btn(result, 'Cancel'));
+      await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+      expect(document.activeElement).toBe(btn(result, name));
+    }
+  });
+
+  it('catalog_retry_in_empty_workspace_focuses_an_existing_heading', async () => {
+    const { result } = await renderScreen({ overview: [okR(overviewFixture([]))], roles: [managementError('ROLES_DOWN', 'roles unreadable'), okR(rolesFixture())] });
+    fireEvent.click(btn(result, 'Retry loading roles')); await act(async () => {});
+    expect(document.activeElement).toBe(document.getElementById('teams-list-title'));
+  });
+
+  it('cancelling_new_team_restores_focus_to_its_invoking_action', async () => {
+    const { result } = await renderScreen({ overview: [okR(overviewFixture([]))] });
+    const opener = btn(result, 'New team');
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(btn(result, 'Cancel'));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('agent_catalog_retry_in_empty_workspace_restores_focus_on_failure_and_success', async () => {
+    const { result, fake } = await renderScreen({
+      overview: [okR(overviewFixture([]))],
+      agents: [managementError('AGENTS_DOWN', 'agents unreadable'), managementError('AGENTS_DOWN', 'still unreadable'), okR(catalogFixture())],
+    });
+    const retry = btn(result, 'Retry loading agents');
+    retry.focus();
+    fireEvent.click(retry);
+    await act(async () => {});
+    expect(document.activeElement).toBe(btn(result, 'Retry loading agents'));
+    expect(result.getByRole('alert').textContent).toContain('AGENTS_DOWN: still unreadable');
+    fireEvent.click(btn(result, 'Retry loading agents'));
+    await act(async () => {});
+    expect(document.activeElement).toBe(document.getElementById('teams-list-title'));
+    expect(fake.agents).toHaveBeenCalledTimes(3);
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+});
+
+it('pending_role_and_agent_catalog_loads_are_named_with_one_status', async () => {
+  const rolesGate = deferred<ReturnType<typeof okR<ReturnType<typeof teamRolesFixture>>>>();
+  const agentsGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>>>();
+  const fake = fakeManagement({ roles: [rolesGate.promise as never], agents: [agentsGate.promise as never] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  expect(view.getByText('Loading the role catalog…')).toBeTruthy();
+  expect(view.getByText('Loading the agent catalog…')).toBeTruthy();
+  expect(view.queryAllByRole('status').length).toBeLessThanOrEqual(1);
+  await act(async () => { rolesGate.resolve(okR(teamRolesFixture())); agentsGate.resolve(okR(catalogFixture())); });
+  expect(view.queryByText('Loading the role catalog…')).toBeNull();
+});
+
+it('refreshing_catalogs_identify_retained_data_until_each_load_succeeds', async () => {
+  const rolesGate = deferred<ReturnType<typeof okR<ReturnType<typeof teamRolesFixture>>>>();
+  const agentsGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>>>();
+  const fake = fakeManagement({ roles: [okR(teamRolesFixture()), rolesGate.promise], agents: [okR(catalogFixture()), agentsGate.promise] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  await act(async () => {});
+
+  expect(view.getByText('Refreshing the role catalog… Showing previously loaded data.')).toBeTruthy();
+  expect(view.getByText('Refreshing the agent catalog… Showing previously loaded data.')).toBeTruthy();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  await act(async () => { rolesGate.resolve(okR(teamRolesFixture())); });
+  expect(view.queryByText('Refreshing the role catalog… Showing previously loaded data.')).toBeNull();
+  expect(view.getByRole('status').textContent).toContain('Refreshing the agent catalog');
+  await act(async () => { agentsGate.resolve(okR(catalogFixture())); });
+  expect(view.queryByText('Refreshing the agent catalog… Showing previously loaded data.')).toBeNull();
+});
+
+it.each(['roles', 'agents'] as const)('failed %s refresh remains independent of the other pending catalog', async (failed) => {
+  const rolesGate = deferred<ReturnType<typeof okR<ReturnType<typeof teamRolesFixture>>> | ReturnType<typeof managementError>>();
+  const agentsGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>> | ReturnType<typeof managementError>>();
+  const fake = fakeManagement({
+    roles: [okR(teamRolesFixture()), rolesGate.promise, okR(teamRolesFixture())],
+    agents: [okR(catalogFixture()), agentsGate.promise, okR(catalogFixture())],
+  });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+  await act(async () => {});
+  await act(async () => {
+    if (failed === 'roles') rolesGate.resolve(managementError('CATALOG_DOWN', 'Role catalog failed', 'Retry roles.'));
+    else agentsGate.resolve(managementError('CATALOG_DOWN', 'Agent catalog failed', 'Retry agents.'));
+  });
+  const remaining = failed === 'roles' ? 'agent' : 'role';
+  expect(view.getByRole('alert').textContent).toContain('CATALOG_DOWN:');
+  expect(view.getByRole('alert').textContent).toContain('Showing previously loaded data.');
+  expect(view.getByRole('status').textContent).toContain(`Refreshing the ${remaining} catalog`);
+  expect(view.queryByText('Teams data refreshed.')).toBeNull();
+  await act(async () => {
+    if (failed === 'roles') agentsGate.resolve(okR(catalogFixture()));
+    else rolesGate.resolve(okR(teamRolesFixture()));
+  });
+  fireEvent.click(view.getByRole('button', { name: `Retry loading ${failed}` }));
+  await act(async () => {});
+  expect(view.queryByRole('alert')).toBeNull();
+  expect(calls(fake)).toEqual(failed === 'roles' ? [2, 2, 2, 3] : [2, 3, 2, 2]);
+});
+
+it.each(['roles', 'agents'] as const)('initial_%s_catalog_load_is_announced_when_other_sections_are_ready', async (source) => {
+  const gate = deferred<ReturnType<typeof okR<ReturnType<typeof teamRolesFixture> | ReturnType<typeof catalogFixture>>>>();
+  const fake = fakeManagement({ [source]: [gate.promise] } as Parameters<typeof fakeManagement>[0]);
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+
+  const message = source === 'roles' ? 'Loading the role catalog…' : 'Loading the agent catalog…';
+  expect(view.getByText(message)).toBeTruthy();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByRole('status').textContent).toContain(message);
+
+  await act(async () => { gate.resolve(okR(source === 'roles' ? teamRolesFixture() : catalogFixture())); });
+});
+
+it.each(['roles', 'agents'] as const)('pending_catalog_announcement_moves_to_remaining_source_after_%s_loads', async (first) => {
+  const rolesGate = deferred<ReturnType<typeof okR<ReturnType<typeof teamRolesFixture>>>>();
+  const agentsGate = deferred<ReturnType<typeof okR<ReturnType<typeof catalogFixture>>>>();
+  const fake = fakeManagement({ roles: [rolesGate.promise], agents: [agentsGate.promise] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+
+  expect(view.getByText('Loading the role catalog…')).toBeTruthy();
+  expect(view.getByText('Loading the agent catalog…')).toBeTruthy();
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByRole('status').textContent).toContain('Loading the role catalog…');
+
+  await act(async () => {
+    if (first === 'roles') rolesGate.resolve(okR(teamRolesFixture()));
+    else agentsGate.resolve(okR(catalogFixture()));
+  });
+  const remaining = first === 'roles' ? 'agent' : 'role';
+  expect(view.getAllByRole('status')).toHaveLength(1);
+  expect(view.getByRole('status').textContent).toContain(`Loading the ${remaining} catalog…`);
+
+  await act(async () => {
+    if (first === 'roles') agentsGate.resolve(okR(catalogFixture()));
+    else rolesGate.resolve(okR(teamRolesFixture()));
+  });
+  expect(view.queryByText('Loading the role catalog…')).toBeNull();
+  expect(view.queryByText('Loading the agent catalog…')).toBeNull();
+});
+
+it('empty_workspace_shows_board_loading_and_error_with_independent_retry', async () => {
+  const fake = fakeManagement({ overview: [okR({ ...twoTeams(), teams: [] })], boardSettings: [managementError('BOARD_DOWN', 'Board is down'), okR(boardSettingsFixture())] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  expect(view.getByRole('alert').textContent).toContain('BOARD_DOWN: Board is down');
+  expect(view.getAllByRole('alert')).toHaveLength(1);
+  fireEvent.click(view.getByRole('button', { name: /Retry/ }));
+  await act(async () => {});
+  expect(view.queryByRole('alert')).toBeNull();
+});
+
+it('successful_board_retry_in_empty_workspace_focuses_an_existing_heading', async () => {
+  const fake = fakeManagement({ overview: [okR({ ...twoTeams(), teams: [] })], boardSettings: [managementError('BOARD_DOWN', 'Board is down'), okR(boardSettingsFixture())] });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  const retry = view.getByRole('button', { name: /Retry/ });
+  retry.focus();
+  fireEvent.click(retry);
+  await act(async () => {});
+  expect(view.queryByRole('alert')).toBeNull();
+  expect(document.activeElement?.tagName).toMatch(/^H[1-6]$/);
+  expect(document.activeElement?.textContent).toBeTruthy();
+  expect(document.activeElement?.isConnected).toBe(true);
+});
+
+it('failed_board_retry_in_empty_workspace_keeps_focus_and_reloads_only_board', async () => {
+  const fake = fakeManagement({
+    overview: [okR({ ...twoTeams(), teams: [] })],
+    boardSettings: [managementError('BOARD_DOWN', 'Board is down'), managementError('BOARD_DOWN', 'Still unavailable')],
+  });
+  const view = render(<TeamsScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  const before = calls(fake);
+  const retry = view.getByRole('button', { name: /Retry/ });
+  retry.focus();
+  fireEvent.click(retry);
+  await act(async () => {});
+  expect(view.getByRole('alert').textContent).toContain('BOARD_DOWN: Still unavailable');
+  expect(document.activeElement).toBe(view.getByRole('button', { name: /Retry/ }));
+  expect(calls(fake)).toEqual([before[0], before[1], before[2]! + 1, before[3]]);
 });

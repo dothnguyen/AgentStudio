@@ -15,8 +15,10 @@ import {
   runner,
   team,
   teamDefinition,
-  twoTeams, catalogFixture,
+  twoTeams, catalogFixture, connectionFixture, managementError, switchEvidence,
 } from './teamsFixtures';
+import { SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT } from '../src/renderer/teams/memberAgentActionsModel';
+import userEvent from '@testing-library/user-event';
 
 afterEach(cleanup);
 
@@ -137,6 +139,38 @@ describe('board controls', () => {
     await flush();
     expect(screen.queryByText('Starting board…')).toBeNull();
     expect(runBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('pending_board_action_and_refresh_share_one_status_region', async () => {
+    const action = deferred<typeof runResult>();
+    const boardRefresh = deferred<ReturnType<typeof boardOk>>();
+    const runBoard = vi.fn(() => action.promise);
+    await renderScreen({ boardSettings: [boardOk(), boardRefresh.promise], calls: { runBoard } });
+    fireEvent.click(boardButton('Run board'));
+    fireEvent.click(button('Refresh'));
+    await flush();
+    expect(screen.getByText('Starting board…')).toBeTruthy();
+    expect(screen.getByText('Refreshing board state… Showing previously loaded data.')).toBeTruthy();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(runBoard).toHaveBeenCalledWith('ws-a', 't-1');
+    await act(async () => { boardRefresh.resolve(boardOk()); action.resolve(runResult); });
+  });
+
+  it('pending_stop_and_board_refresh_share_one_status_region', async () => {
+    const stopped = ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: 't-1' } });
+    const action = deferred<typeof stopped>();
+    const boardRefresh = deferred<ReturnType<typeof boardOk>>();
+    const stopBoard = vi.fn(() => action.promise);
+    await renderScreen({ boardSettings: [boardOk(runningRunner()), boardRefresh.promise], calls: { stopBoard } });
+    fireEvent.click(boardButton('Stop board'));
+    fireEvent.click(button('Refresh'));
+    await flush();
+    expect(screen.getByText('Stopping board…')).toBeTruthy();
+    expect(screen.getByText('Refreshing board state… Showing previously loaded data.')).toBeTruthy();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(stopBoard).toHaveBeenCalledTimes(1);
+    expect(stopBoard).toHaveBeenCalledWith('ws-a');
+    await act(async () => { boardRefresh.resolve(boardOk(runningRunner())); action.resolve(stopped); });
   });
 
   it('stop_board_reflects_backend_outcome', async () => {
@@ -275,20 +309,20 @@ describe('board controls', () => {
     await flush();
     rerender(ui({ state: 'lost', error: 'serve exited', distro: null, command: null }));
     await flush();
-    expect(screen.getByText('Connection to the backend was lost. Live state may be out of date and board controls are disabled.')).toBeTruthy();
+    expect(screen.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy();
     expect(board().textContent).toContain('Board: Disconnected');
     expect(boardButton('Run board').disabled).toBe(true);
     expect(boardButton('Stop board').disabled).toBe(true);
     for (const f of [fake.overview, fake.agents, fake.boardSettings]) expect(f).toHaveBeenCalledTimes(1);
     rerender(ui(connected));
     await flush();
-    expect(screen.queryByText(/Connection to the backend was lost/)).toBeNull();
+    expect(screen.queryByText(/Connection lost\./)).toBeNull();
     for (const f of [fake.overview, fake.agents, fake.boardSettings]) expect(f).toHaveBeenCalledTimes(2);
   });
 
   it('connecting_shows_banner', async () => {
     await renderScreen({}, { state: 'connecting', error: null, distro: null, command: null });
-    expect(screen.getByText(/^Connecting to the backend…/)).toBeTruthy();
+    expect(screen.getByText('Connecting to Agent Studio…')).toBeTruthy();
   });
 
   it('unmount_during_action_ignores_result', async () => {
@@ -413,6 +447,15 @@ describe('live member actions', () => {
     fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await act(async () => {});
     expect(call).toHaveBeenLastCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt', {cancelActive: true, assignmentId: 'B'});
   });
+  it('changed_assignment_and_catalog_error_share_one_alert', async () => {
+    const call = vi.fn().mockResolvedValueOnce(confirmation('A')).mockResolvedValueOnce(confirmation('B'));
+    const {result} = await renderLive({overview: [ok(data())], roles: [managementError('ROLES_DOWN', 'Roles unavailable', 'Retry roles')], calls: {switchMemberAgent: call}});
+    fireEvent.click(result.getByRole('button', {name: 'Switch'})); await flush();
+    fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await flush();
+    expect(result.getByText(/ROLES_DOWN/)).toBeTruthy();
+    expect(result.getByText(/fresh confirmation is required/)).toBeTruthy();
+    expect(result.getAllByRole('alert')).toHaveLength(1);
+  });
   it('dismissed_confirmation_stays_closed_when_changed_assignment_arrives', async () => {
     for (const dismissal of ['cancel', 'escape'] as const) {
       const response = deferred<ReturnType<typeof confirmation>>();
@@ -461,10 +504,10 @@ describe('live member actions', () => {
     const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     const trigger = result.getByRole('button', {name: 'Switch'}); trigger.focus(); fireEvent.click(trigger); await act(async () => {});
     const dialog = result.getByRole('dialog'); const confirm = within(dialog).getByRole('button', {name: 'Confirm cancellation'}); const cancel = within(dialog).getByRole('button', {name: 'Cancel'});
-    expect(dialog.getAttribute('aria-modal')).toBe('true'); expect(dialog.getAttribute('aria-labelledby')).toBeTruthy(); expect(dialog.getAttribute('aria-describedby')).toBeTruthy(); expect(document.activeElement).toBe(confirm);
-    fireEvent.keyDown(confirm, {key: 'Tab', shiftKey: true}); expect(document.activeElement).toBe(cancel);
+    expect(dialog.getAttribute('aria-modal')).toBe('true'); expect(dialog.getAttribute('aria-labelledby')).toBeTruthy(); expect(dialog.getAttribute('aria-describedby')).toBeTruthy(); expect(document.activeElement).toBe(cancel);
     fireEvent.keyDown(cancel, {key: 'Tab'}); expect(document.activeElement).toBe(confirm);
-    fireEvent.keyDown(confirm, {key: 'Escape'}); expect(document.activeElement).toBe(trigger); expect(call).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(confirm, {key: 'Tab', shiftKey: true}); expect(document.activeElement).toBe(cancel);
+    fireEvent.keyDown(cancel, {key: 'Escape'}); expect(document.activeElement).toBe(trigger); expect(call).toHaveBeenCalledTimes(1);
   });
 
   it('connection_loss_disables_open_confirmation_without_sending_cancellation', async () => {
@@ -795,7 +838,7 @@ describe('live member actions', () => {
     const {result} = await renderLive({overview: [{ok: true, data: data()}], calls: {switchMemberAgent: call}});
     fireEvent.click(result.getByRole('button', {name: 'Switch'})); await act(async () => {});
     fireEvent.click(result.getByRole('button', {name: 'Confirm cancellation'})); await act(async () => {});
-    expect(document.activeElement).toBe(result.getByRole('button', {name: 'Confirm cancellation'}));
+    expect(document.activeElement).toBe(result.getByRole('button', {name: 'Cancel'}));
     expect(call).toHaveBeenCalledTimes(2);
   });
   it('disabled_states_and_missing_catalog_are_visible', async () => {
@@ -951,4 +994,188 @@ describe('live member actions', () => {
     expect(result.getByText('Switch to Codex GPT pending.')).toBeTruthy();
   });
 
+});
+
+describe('T-082 live controls', () => {
+  const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
+  const data = (runtime = live) => overviewFixture([team({ runtime: { state: 'running', teamId: RUN_TEAM_ID, status: 'running' }, members: [member({ runtime })] })]);
+  const accepted = { ok: true as const, data: { teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p' } };
+  const needsConfirmation = (id: string) => ({ ok: false as const, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: id } } });
+  async function renderLive(opts: Parameters<typeof fakeManagement>[0] = {}, connection?: ConnectionStatus) {
+    const out = await renderScreen(opts, connection);
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' }));
+    openMember('dev');
+    await flush();
+    return out;
+  }
+  const switchButton = () => screen.getByRole('button', { name: 'Switch' }) as HTMLButtonElement;
+
+  it('disconnected_unavailable_and_stale_runtime_disable_live_actions', async () => {
+    const switchMemberAgent = vi.fn(); const resumeMemberAgent = vi.fn();
+    const held = { ...live, quotaHolds: { 'codex-gpt': null } };
+    const first = await renderLive({ overview: [ok(data(held))], calls: { switchMemberAgent, resumeMemberAgent } }, connectionFixture('lost'));
+    expect(screen.getAllByText(/Backend disconnected; live actions are disabled\./).length).toBeGreaterThan(0);
+    expect(button('Resume').disabled).toBe(true);
+    first.result.unmount();
+    const stale = await renderLive({ overview: [ok(data({ ...held, stale: true }))], calls: { switchMemberAgent, resumeMemberAgent } });
+    expect(screen.getAllByText(/stale/i).length).toBeGreaterThan(0);
+    expect(button('Resume').disabled).toBe(true);
+    stale.result.unmount();
+    const failed = await renderLive({ overview: [ok(data()), managementError('READ_FAILED', 'unreadable')], calls: { switchMemberAgent, resumeMemberAgent } });
+    expect(switchButton().disabled).toBe(false);
+    fireEvent.click(button('Refresh')); await flush();
+    expect(screen.getByRole('region', { name: 'dev' })).toBeTruthy();
+    expect(switchButton().disabled).toBe(true);
+    fireEvent.click(switchButton());
+    expect(failed.fake.overview).toHaveBeenCalledTimes(2);
+    expect(switchMemberAgent).not.toHaveBeenCalled(); expect(resumeMemberAgent).not.toHaveBeenCalled();
+  });
+
+  it('rapid_switch_resume_and_board_clicks_send_one_typed_call', async () => {
+    const holdSwitch = deferred<typeof accepted>();
+    const switchMemberAgent = vi.fn(() => holdSwitch.promise);
+    const runBoard = vi.fn(() => new Promise(() => {}));
+    await renderLive({ overview: [ok(data())], calls: { switchMemberAgent, runBoard } });
+    fireEvent.click(switchButton()); fireEvent.click(switchButton());
+    expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+    expect(switchMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+    expect(switchButton().disabled).toBe(true);
+    cleanup();
+    const holdResume = deferred<{ ok: true; data: { teamId: string; memberId: string; agentId: string; option: string; cleared: boolean; activeAgent: string } }>();
+    const resumeMemberAgent = vi.fn(() => holdResume.promise);
+    await renderLive({ overview: [ok(data({ ...live, quotaHolds: { 'codex-gpt': null } }))], calls: { resumeMemberAgent } });
+    fireEvent.click(button('Resume')); fireEvent.click(button('Resume'));
+    expect(resumeMemberAgent).toHaveBeenCalledTimes(1);
+    expect(resumeMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+    cleanup();
+    await renderScreen({ overview: [ok(data())], calls: { runBoard } });
+    fireEvent.click(boardButton('Run board')); fireEvent.click(boardButton('Run board'));
+    expect(runBoard).toHaveBeenCalledTimes(1);
+    expect(runBoard).toHaveBeenCalledWith('ws-a', RUN_TEAM_ID);
+  });
+
+  it('assigned_switch_dialog_traps_focus_escapes_and_restores_opener', async () => {
+    const switchMemberAgent = vi.fn().mockResolvedValue(needsConfirmation('assignment-A'));
+    await renderLive({ overview: [ok(data())], calls: { switchMemberAgent } });
+    const opener = switchButton(); opener.focus();
+    await userEvent.keyboard('{Enter}'); await flush();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(document.getElementById(dialog.getAttribute('aria-labelledby')!)!.textContent).toBe('Confirm cancellation');
+    expect(document.getElementById(dialog.getAttribute('aria-describedby')!)!.textContent).toContain('assignment-A');
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' }); const confirm = within(dialog).getByRole('button', { name: 'Confirm cancellation' });
+    expect(document.activeElement).toBe(cancel);
+    await userEvent.tab(); expect(document.activeElement).toBe(confirm);
+    await userEvent.tab(); expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab({ shift: true }); expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+    expect(switchMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+  });
+
+  it('stale_overview_disables_an_open_assignment_confirmation', async () => {
+    const switchMemberAgent = vi.fn().mockResolvedValue(needsConfirmation('assignment-A'));
+    await renderLive({ overview: [ok(data()), managementError('READ_FAILED', 'overview unavailable'), ok(data())], calls: { switchMemberAgent } });
+    fireEvent.click(switchButton()); await flush();
+    fireEvent.click(button('Refresh')); await flush();
+    const confirm = button('Confirm cancellation');
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+    fireEvent.click(button('Retry')); await flush();
+    expect(button('Confirm cancellation').disabled).toBe(false);
+  });
+
+  it('changed_assignment_requires_fresh_confirmation', async () => {
+    const switchMemberAgent = vi.fn().mockResolvedValueOnce(needsConfirmation('A')).mockResolvedValueOnce(needsConfirmation('B')).mockResolvedValue(accepted);
+    await renderLive({ overview: [ok(data())], calls: { switchMemberAgent } });
+    fireEvent.click(switchButton()); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm cancellation' })); await flush();
+    expect(switchMemberAgent).toHaveBeenNthCalledWith(2, 'ws-a', 'dev-team', 'dev', 'codex-gpt', { cancelActive: true, assignmentId: 'A' });
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('B'); expect(dialog.textContent).not.toContain('assignment A');
+    expect(within(dialog).getByRole('alert').textContent).toContain('fresh confirmation is required');
+    expect(switchMemberAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it('known_and_unknown_holds_resume_active_and_inactive_options_truthfully', async () => {
+    const resumeMemberAgent = vi.fn().mockResolvedValue({ ok: true, data: { teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet' } });
+    const held = { ...live, quotaHolds: { 'codex-gpt': '2099-01-02T03:04:00Z', 'opencode-sonnet': null } };
+    await renderLive({ overview: [ok(data(held)), ok(data({ ...held, quotaHolds: { 'opencode-sonnet': null } }))], calls: { resumeMemberAgent } });
+    expect(screen.getByText(/Resets at 2099-01-02 03:04 UTC/)).toBeTruthy();
+    expect(screen.getByText(/Reset time unknown/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Resume' })).toHaveLength(2);
+    const inactive = screen.getAllByRole('listitem').find(li => li.textContent!.includes('Codex GPT') && li.querySelector('button'))!;
+    fireEvent.click(within(inactive).getByRole('button', { name: 'Resume' })); await flush();
+    expect(resumeMemberAgent).toHaveBeenCalledTimes(1);
+    expect(resumeMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+    expect(screen.getByText('Quota hold cleared for inactive option Codex GPT; quota was not verified. The live agent and assignment were not changed.')).toBeTruthy();
+  });
+
+  it('disconnect_and_unmount_clear_polling_without_late_updates', async () => {
+    const switchMemberAgent = vi.fn().mockResolvedValue(accepted);
+    const fake = fakeManagement({ overview: [ok(data())], calls: { switchMemberAgent } });
+    const ui = (state: 'connected' | 'lost') => <TeamsScreen workspace={workspaceA} management={fake.api} connection={connectionFixture(state)} />;
+    const result = render(ui('connected')); await flush();
+    fireEvent.click(screen.getByRole('tab', { name: 'Members' })); openMember('dev'); await flush();
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(switchButton()); await flush();
+      result.rerender(ui('lost')); await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 2)); });
+      expect(fake.overview).toHaveBeenCalledTimes(1);
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      expect(screen.getByRole('alert').textContent).toContain('DISCONNECTED');
+      result.rerender(ui('connected')); await flush();
+      expect(fake.overview).toHaveBeenCalledTimes(2);
+      fireEvent.click(switchButton()); await flush();
+      result.unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 2)); });
+      expect(fake.overview).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('switch_polling_matches_requested_agent_and_handles_failure_and_timeout', async () => {
+    const switchMemberAgent = vi.fn().mockResolvedValue(accepted);
+    const withSwitch = (state: 'pending' | 'completed' | 'failed', agent = 'codex-gpt') => ok(data({ ...live, lastSwitch: switchEvidence(state, agent) }));
+    vi.useFakeTimers();
+    try {
+      const other = await renderLive({ overview: [ok(data()), withSwitch('completed', 'opencode-sonnet'), withSwitch('completed', 'codex-gpt')], calls: { switchMemberAgent } });
+      fireEvent.click(switchButton()); await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS); });
+      expect(other.fake.overview).toHaveBeenCalledTimes(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS); });
+      expect(other.fake.overview).toHaveBeenCalledTimes(3);
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * 3); });
+      expect(other.fake.overview).toHaveBeenCalledTimes(3);
+      expect(switchMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+      other.result.unmount();
+      const timeout = await renderLive({ overview: [ok(data()), withSwitch('pending')], calls: { switchMemberAgent } });
+      fireEvent.click(switchButton()); await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 3)); });
+      expect(timeout.fake.overview).toHaveBeenCalledTimes(1 + SWITCH_REFRESH_LIMIT);
+      expect(screen.getByText('Switch accepted; completion is still pending. Refresh to check again.')).toBeTruthy();
+      expect(screen.queryByText(/completed/)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('board_run_stop_preserve_runtime_id_conflict_and_pending_results', async () => {
+    const runBoard = vi.fn().mockResolvedValueOnce({ ok: false, error: { code: 'BOARD_ALREADY_RUNNING', message: 'Another team owns the board.', retryable: false } }).mockResolvedValue({ ok: true, data: { board: { workspace: '/work/alpha', status: 'running', teamId: RUN_TEAM_ID }, rules: 3 } });
+    const stopBoard = vi.fn().mockResolvedValue({ ok: false, error: { code: 'PENDING', message: 'The command was recorded but the coordinator has not answered yet.', retryable: true, data: { idempotencyKey: 'k-00000001' } } });
+    const running = team({ runtime: { state: 'running', teamId: RUN_TEAM_ID, status: 'running' } });
+    await renderScreen({ overview: [ok(overviewFixture([running]))], boardSettings: [boardOk(runner({ status: 'not_bound', coordinatorRunning: true })), boardOk(runner({ status: 'not_bound', coordinatorRunning: true })), boardOk(runningRunner())], calls: { runBoard, stopBoard } });
+    fireEvent.click(boardButton('Run board')); fireEvent.click(boardButton('Run board')); await flush();
+    expect(runBoard).toHaveBeenCalledTimes(1);
+    expect(runBoard).toHaveBeenLastCalledWith('ws-a', RUN_TEAM_ID);
+    expect(screen.getByRole('alert').textContent).toContain('BOARD_ALREADY_RUNNING');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    fireEvent.click(boardButton('Run board')); await flush();
+    expect(runBoard).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status').textContent).toContain('Board is running');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(stopBoard).not.toHaveBeenCalled();
+  });
 });

@@ -33,7 +33,8 @@ describe('dashboard styles', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
     expect(flat).toContain('.teams-member-row[aria-current="true"] {');
-    expect(flat).toMatch(/@media \(max-width: 760px\) \{\s*\.teams-member-list-head \{ display: none; \}/);
+    expect(flat).toMatch(/@media \(max-width: 700px\) \{\s*\.teams-member-list-head \{ position: absolute;[^}]*clip-path: inset\(50%\);/);
+    expect(flat).not.toMatch(/\.teams-member-list-head \{[^}]*display: none/);
   });
   it('keeps team list item spacing separate from card layout', () => {
     const flat = squash(css);

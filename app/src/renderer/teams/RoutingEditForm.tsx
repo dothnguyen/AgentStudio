@@ -1,23 +1,27 @@
 import { useRef, type JSX } from 'react';
 import type { BoardSettings, Problem } from '../../shared/management';
 import type { EditableRuleField, RoutingDraft } from './routingSettingsModel';
-export interface RoutingEditFormProps { draft: RoutingDraft; settings: BoardSettings; problems: Problem[]; pending: boolean; connected: boolean; locked: boolean; canEdit: boolean; conflict: boolean; onChange(index: number, field: EditableRuleField, value: string): void; onBaseBranchChange(value: string): void; onFailureChange(index: number, count: number, status: string): void; onFailureRemove(index: number): void; onSubmit(): void; onCancel(): void }
+export interface RoutingEditFormProps { draft: RoutingDraft; settings: BoardSettings; problems: Problem[]; pending: boolean; connected: boolean; locked: boolean; canEdit: boolean; conflict: boolean; alert?: boolean; onChange(index: number, field: EditableRuleField, value: string): void; onBaseBranchChange(value: string): void; onFailureChange(index: number, count: number, status: string): void; onFailureRemove(index: number): void; onSubmit(): void; onCancel(): void }
 const modes: Record<string, string> = { '': 'Default', main: 'Main workspace', worktree: 'Isolated worktree', none: 'No workspace' };
 const val = (v: unknown) => typeof v === 'string' ? v : '';
-export function RoutingEditForm({ draft, settings, problems, pending, connected, locked, canEdit, conflict, onChange, onBaseBranchChange, onFailureChange, onFailureRemove, onSubmit, onCancel }: RoutingEditFormProps): JSX.Element {
-  const focusEscalation = useRef<number | null>(null);
-  function field(index: number, name: EditableRuleField, label: string, value: string, options: Array<{ value: string; label: string; disabled?: boolean }>) {
-    const path = `rules[${index}].${name === 'status' ? 'when.status' : name}`; const matches = problems.filter(p => p.path === path); const id = `routing-${index}-${name}`;
-    return <label htmlFor={id}>{label}<select id={id} value={value} disabled={pending || !connected || locked} aria-invalid={matches.length > 0} aria-describedby={matches.length ? `${id}-error` : undefined} onChange={e => onChange(index, name, e.target.value)}>{options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}</select>{matches.length > 0 && <span id={`${id}-error`} className="routing-problem">{matches.map(p => <span key={p.message}>{path}: {p.message}</span>)}</span>}</label>;
-  }
-  const statusOptions = settings.statuses.map(s => ({ value: s.id, label: s.name && s.name !== s.id ? `${s.name} (${s.id})` : s.id })) ?? [];
-  const summaryProblems = problems.filter(p => {
+/** Problems that have no inline field, shown in one summary message. */
+export function routingSummaryProblems(problems: Problem[], draft: RoutingDraft | null): Problem[] {
+  return problems.filter(p => {
     if (p.path === 'baseBranch') return false;
     const match = /^rules\[(\d+)\]\.(when\.status|role|workflow|workspace|onPass|onFail|onBlocked|onFailureLimit\.count|onFailureLimit\.status)$/.exec(p.path);
     if (!match || !draft?.rules[Number(match[1])]) return true;
     const rule = draft.rules[Number(match[1])];
     return (['role', 'workflow', 'workspace', 'onBlocked', 'onFailureLimit.count', 'onFailureLimit.status'].includes(match[2]) && rule.type !== 'agent') || (match[2].startsWith('onFailureLimit.') && !('onFailureLimit' in rule));
   });
+}
+export function RoutingEditForm({ draft, settings, problems, pending, connected, locked, canEdit, conflict, alert = true, onChange, onBaseBranchChange, onFailureChange, onFailureRemove, onSubmit, onCancel }: RoutingEditFormProps): JSX.Element {
+  const focusEscalation = useRef<number | null>(null);
+  function field(index: number, name: EditableRuleField, label: string, value: string, options: Array<{ value: string; label: string; disabled?: boolean }>) {
+    const path = `rules[${index}].${name === 'status' ? 'when.status' : name}`; const matches = problems.filter(p => p.path === path); const id = `routing-${index}-${name}`;
+    return <label htmlFor={id}>{label}<select id={id} value={value} disabled={pending || !connected || locked} aria-invalid={matches.length > 0} aria-describedby={matches.length ? `${id}-error` : undefined} onChange={e => onChange(index, name, e.target.value)}>{options.map(o => <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>)}</select>{matches.length > 0 && <span id={`${id}-error`} className="routing-problem">{matches.map(p => <span key={p.message}>{path}: {p.message}</span>)}</span>}</label>;
+  }
+  const statusOptions = settings.statuses.map(s => ({ value: s.id, label: s.name && s.name !== s.id ? `${s.name} (${s.id})` : s.id })) ?? [];
+  const summaryProblems = routingSummaryProblems(problems, draft);
   return <form onSubmit={e => { e.preventDefault(); onSubmit(); }}>
         <h3>Worktrees</h3><label htmlFor="routing-base">Base branch<input id="routing-base" value={draft.baseBranch} disabled={pending || !connected || locked} aria-invalid={problems.some(p => p.path === 'baseBranch')} aria-describedby={problems.some(p => p.path === 'baseBranch') ? 'routing-base-error' : undefined} onChange={e => onBaseBranchChange(e.target.value)} /></label>
         {problems.filter(p => p.path === 'baseBranch').map(p => <p id="routing-base-error" className="routing-problem" key={p.message}>{p.path}: {p.message}</p>)}
@@ -27,7 +31,7 @@ export function RoutingEditForm({ draft, settings, problems, pending, connected,
           {field(i, 'onPass', 'Pass status', val(r.onPass), statusOptions)}{field(i, 'onFail', 'Fail status', val(r.onFail), statusOptions)}{r.type === 'agent' && field(i, 'onBlocked', 'Blocked status', val(r.onBlocked), [{ value: '', label: 'None' }, ...statusOptions])}
           {r.type === 'agent' && (() => { const policy = r.onFailureLimit && typeof r.onFailureLimit === 'object' && !Array.isArray(r.onFailureLimit) ? r.onFailureLimit as Record<string, unknown> : {}; const enabled = 'onFailureLimit' in r; const count = typeof policy.count === 'number' ? policy.count : NaN; const status = val(policy.status); const countPath = `rules[${i}].onFailureLimit.count`; const statusPath = `rules[${i}].onFailureLimit.status`; const countProblems = problems.filter(p => p.path === countPath); const statusProblems = problems.filter(p => p.path === statusPath); return <div className="routing-escalation"><h4>Failure escalation</h4><label><input type="checkbox" checked={enabled} disabled={pending || !connected || locked} onChange={e => { focusEscalation.current = e.target.checked ? i : null; if (e.target.checked) onFailureChange(i, 1, settings.statuses[0]?.id ?? ''); else onFailureRemove(i); }} /> Escalate after repeated failures</label>{enabled && <div className="routing-escalation-fields"><label htmlFor={`routing-${i}-count`}>Failure count<input id={`routing-${i}-count`} type="number" autoFocus={focusEscalation.current === i} min="1" step="1" value={Number.isNaN(count) ? '' : count} disabled={pending || !connected || locked} aria-invalid={countProblems.length > 0} aria-describedby={countProblems.length ? `routing-${i}-count-error` : undefined} onChange={e => onFailureChange(i, e.target.value === '' ? NaN : Number(e.target.value), status)} />{countProblems.length > 0 && <span id={`routing-${i}-count-error`} className="routing-problem">{countProblems.map((p, j) => <span key={j}>{p.path}: {p.message}</span>)}</span>}</label><label htmlFor={`routing-${i}-target`}>Escalation target status<select id={`routing-${i}-target`} value={status} disabled={pending || !connected || locked} aria-invalid={statusProblems.length > 0} aria-describedby={statusProblems.length ? `routing-${i}-target-error` : undefined} onChange={e => onFailureChange(i, count, e.target.value)}>{!statusOptions.some(o => o.value === status) && <option value={status} disabled>{status || 'Choose a status'}</option>}{statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{statusProblems.length > 0 && <span id={`routing-${i}-target-error`} className="routing-problem">{statusProblems.map((p, j) => <span key={j}>{p.path}: {p.message}</span>)}</span>}</label></div>}</div>; })()}
         </fieldset>; })}</div>
-        {summaryProblems.length > 0 && <div role="alert" className="routing-problem">{summaryProblems.map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}</div>}
+        {summaryProblems.length > 0 && <div role={alert ? 'alert' : undefined} className="routing-problem">{summaryProblems.map((p, i) => <p key={i}>{p.path}: {p.message}</p>)}</div>}
         <p>Saved changes apply workspace-wide to future board claims and transitions. They do not change member roles or shared role instructions, cancel current assignments, or reroute work already in flight.</p>
         <button type="submit" disabled={!canEdit || pending || locked || problems.length > 0 || conflict}>Save</button> <button type="button" disabled={pending || locked} onClick={onCancel}>Cancel</button>
       </form>;

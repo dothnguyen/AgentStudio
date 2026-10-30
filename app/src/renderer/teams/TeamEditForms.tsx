@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
 import type { AgentDef, ResolvedAgentOption, RoleCatalogItem } from '../api';
 import {
   addAgentOption, removeAgentOption, moveAgentOption, TICKET_PERMISSION_HINT, TICKET_PERMISSION_UNKNOWN,
@@ -19,6 +19,9 @@ function escapeCancel(onCancel: () => void) {
   };
 }
 
+/** Lets a form report that it holds the single active role=alert, so independent section errors stay visible without a second alert. */
+export const FormAlertContext = createContext<(active: boolean) => void>(() => undefined);
+
 function FieldError(props: { id: string; message: string | undefined }): JSX.Element | null {
   if (props.message === undefined) return null;
   return <p className="teams-field-error" id={props.id}>{props.message}</p>;
@@ -29,6 +32,7 @@ export function TeamNameForm(props: {
   submitLabel: string;
   initialName: string;
   pending: boolean;
+  readOnly?: boolean;
   onSubmit(name: string): void;
   onCancel(): void;
 }): JSX.Element {
@@ -38,16 +42,19 @@ export function TeamNameForm(props: {
   const errorId = `${uid}-name-error`;
   const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | undefined>(undefined);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   function submit(e: FormEvent): void {
     e.preventDefault();
     const trimmed = name.trim();
     if (trimmed === '') {
       setError('Enter a team name.');
+      inputRef.current?.focus();
       return;
     }
     if (initialName !== '' && trimmed === initialName) {
       setError('Enter a different name.');
+      inputRef.current?.focus();
       return;
     }
     setError(undefined);
@@ -60,6 +67,7 @@ export function TeamNameForm(props: {
       <label htmlFor={inputId}>Team name</label>
       <input
         id={inputId}
+        ref={inputRef}
         type="text"
         autoFocus
         value={name}
@@ -69,7 +77,7 @@ export function TeamNameForm(props: {
       />
       <FieldError id={errorId} message={error} />
       <div className="teams-team-actions">
-        <button type="submit" disabled={pending}>{pending ? 'Saving…' : submitLabel}</button>
+        <button type="submit" disabled={pending || props.readOnly === true}>{pending ? 'Saving…' : submitLabel}</button>
         <button type="button" onClick={onCancel}>Cancel</button>
       </div>
     </form>
@@ -86,6 +94,7 @@ export function MemberForm(props: {
   roles: readonly RoleCatalogItem[] | null;
   roleCatalogMessage: string | null;
   pending: boolean;
+  readOnly?: boolean;
   onSubmit(values: MemberFormValues): void;
   onCancel(): void;
 }): JSX.Element {
@@ -97,21 +106,32 @@ export function MemberForm(props: {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const submitted = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [invalidSubmit, setInvalidSubmit] = useState(0);
+  const reportAlert = useContext(FormAlertContext);
+  const localAlert = errors.agents !== undefined || formError !== null;
+  useEffect(() => { reportAlert(localAlert); return () => reportAlert(false); }, [localAlert, reportAlert]);
+  useEffect(() => { if (invalidSubmit > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus(); }, [invalidSubmit]);
   const wasPending = useRef(pending);
   useEffect(() => { headingRef.current?.focus(); }, []);
   useEffect(() => { if (wasPending.current && !pending && submitted.current && submitRef.current?.isConnected) { submitted.current = false; submitRef.current.focus(); } wasPending.current = pending; }, [pending]);
 
   const available = (agents ?? []).filter((a) => !values.agents.includes(a.id));
+  const changes = mode === 'edit' ? memberChanges(initial, values) : null;
+  const catalogBlocked = mode === 'add'
+    ? roles === null || (values.useCatalogAgents && agents === null)
+    : (changes?.role !== undefined && roles === null) || (changes?.agents !== undefined && agents === null);
   const missing = new Set(values.agents.filter((id) => agents === null
     ? originalOptions.some((o) => o.id === id && o.state === 'missing')
     : !agents.some((a) => a.id === id)));
 
   function submit(e: FormEvent): void {
     e.preventDefault();
+    if (pending || props.readOnly || catalogBlocked) return;
     const found = validateMemberForm(values, mode, missing);
     setErrors(found);
     setFormError(null);
-    if (Object.keys(found).length > 0) return;
+    if (Object.keys(found).length > 0) { setInvalidSubmit(n => n + 1); return; }
     if (mode === 'edit' && memberChanges(initial, values) === null) {
       setFormError('No changes to save.');
       return;
@@ -138,7 +158,7 @@ export function MemberForm(props: {
   const set = (key: 'name' | 'role', value: string) => setValues((v) => ({ ...v, [key]: value }));
 
   return (
-    <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel)}>
+    <form ref={formRef} aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel)}>
       <h3 ref={headingRef} tabIndex={-1}>{heading}</h3>
       {!values.useCatalogAgents && inlineContext !== null && (
         <>
@@ -214,9 +234,9 @@ export function MemberForm(props: {
       <FieldError id={nameF.err} message={errors.name} />
       <div className="teams-permission-field"><input id={`${uid}-canAddTickets`} type="checkbox" checked={values.canAddTickets === true} disabled={pending || (mode === 'edit' && values.canAddTickets === undefined)} aria-describedby={`${uid}-canAddTickets-hint`} onChange={e => setValues(v => ({ ...v, canAddTickets: e.target.checked }))} /><label htmlFor={`${uid}-canAddTickets`}>Can add tickets</label></div>
       <p id={`${uid}-canAddTickets-hint`} className="panel-note">{mode === 'edit' && values.canAddTickets === undefined ? TICKET_PERMISSION_UNKNOWN : TICKET_PERMISSION_HINT}</p>
-      {formError !== null && <p className="teams-field-error" role="alert">{formError}</p>}
+      {formError !== null && <p className="teams-field-error" role={errors.agents ? undefined : 'alert'}>{formError}</p>}
       <div className="teams-team-actions">
-        <button ref={submitRef} type="submit" disabled={pending || (mode === 'add' && roles === null)}>
+        <button ref={submitRef} type="submit" disabled={pending || props.readOnly === true || catalogBlocked}>
           {pending ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save member'}
         </button>
         <button type="button" onClick={onCancel}>Cancel</button>
@@ -225,14 +245,14 @@ export function MemberForm(props: {
   );
 }
 
-export function WriteFeedbackView(props: { feedback: WriteFeedback | null; onDismiss(): void }): JSX.Element | null {
+export function WriteFeedbackView(props: { feedback: WriteFeedback | null; alert?: boolean; announce?: boolean; onDismiss(): void }): JSX.Element | null {
   const { feedback, onDismiss } = props;
   if (feedback === null) return null;
   if (feedback.kind === 'success') {
-    return <p className="teams-feedback teams-feedback-success" role="status">{feedback.text}</p>;
+    return <p className="teams-feedback teams-feedback-success" role={props.announce === false ? undefined : 'status'}>{feedback.text}</p>;
   }
   return (
-    <div className="panel-error teams-feedback" role="alert">
+    <div className="panel-error teams-feedback" role={props.alert === false ? undefined : 'alert'}>
       <p><strong>{feedback.title}</strong></p>
       <p><code className="entity-id">{feedback.code}</code>: {feedback.message}</p>
       {feedback.remediation !== null && <p>{feedback.remediation}</p>}

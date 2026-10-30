@@ -5,6 +5,7 @@ import { TeamsScreen } from '../src/renderer/teams/TeamsScreen';
 import { workspaceA } from './dashboardFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import {
+  catalogFixture,
   openMember,
   deferred,
   fakeManagement,
@@ -154,6 +155,7 @@ describe('team editing', () => {
     await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { role: 'Reviewer' });
     expect(screen.getByRole('status').textContent).toMatch(/^Saved dev\./);
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'dev', level: 2 }));
   });
 
   it('edit_inline_member_switches_to_catalog_agent', async () => {
@@ -267,7 +269,7 @@ describe('team editing', () => {
     const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     const saved = member({agentMode: 'ordered_catalog', agentOptions: [...member().agentOptions, missing]});
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'QA'}, problems: [], appliesOnNextStart: false}));
-    await renderScreen({overview: [ok(overviewFixture([team({members: [saved]})]))], agents: [fail({code: 'OFFLINE', message: 'offline'})], calls: {updateMember}});
+    await renderScreen({overview: [ok(overviewFixture([team({members: [saved]})]))], agents: [fail({code: 'OFFLINE', message: 'offline'}), ok(catalogFixture())], calls: {updateMember}});
     await click('Edit dev');
     expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'})).toBeTruthy();
     expect(screen.getByRole('button', {name: 'Remove gone'})).toBeTruthy();
@@ -277,6 +279,9 @@ describe('team editing', () => {
     await click('Save member');
     expect(within(screen.getByRole('form', {name: 'Edit dev'})).getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
     await click('Remove gone');
+    expect((screen.getByRole('button', {name: 'Save member'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(updateMember).not.toHaveBeenCalled();
+    await click('Retry loading agents');
     await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {role: 'QA', agents: ['opencode-sonnet']});
   });
@@ -596,7 +601,7 @@ describe('ticket permission and member focus', () => {
     fireEvent.click(screen.getByLabelText('Can add tickets'));
     await click('Save member');
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {canAddTickets: true});
-    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit dev'}));
+    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
   });
   it('keeps unknown permission out of role edits', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'QA'}, problems: []}));
@@ -613,15 +618,15 @@ describe('ticket permission and member focus', () => {
     expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('QA');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Save member'}));
   });
-  it('confirms the exact member and restores focus on failure', async () => {
+  it('confirms the exact member and retains confirm focus on failure', async () => {
     const removeMember = vi.fn(async () => fail({code: 'TEAM_ALREADY_RUNNING', message: 'running'}));
     await renderScreen({calls: {removeMember}}); await click('Remove lead');
     expect(screen.getByRole('alertdialog').textContent).toContain('Remove lead (lead) from Dev Team?');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Cancel removing lead'}));
     await click('Confirm remove lead');
     expect(removeMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead');
-    expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Remove lead'}));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Confirm remove lead'}));
   });
 });
 
@@ -649,9 +654,9 @@ describe('member creation and removal focus', () => {
     expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', {role: 'QA', agents: ['codex-gpt'], canAddTickets: true});
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
-  it('returns to the members panel after removal', async () => {
+  it('moves focus to Add member after removal', async () => {
     const removeMember = vi.fn(async () => ok({removed: {id: 'lead', name: 'lead'}, problems: []}));
     await renderScreen({calls: {removeMember}}); await click('Remove lead'); await click('Confirm remove lead');
-    expect(document.activeElement).toBe(document.getElementById('teams-panel-members'));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
 });

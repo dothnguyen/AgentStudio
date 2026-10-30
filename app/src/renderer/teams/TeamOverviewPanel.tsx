@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import type { BoardSettings, OverviewTeam, TeamOverview } from '../api';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import { boardControlView, type BoardAction } from './boardControlModel';
@@ -23,19 +23,25 @@ export interface BoardControlProps {
   connected: boolean;
   action: BoardAction | null;
   pending: boolean;
+  lastSettings?: BoardSettings | null;
+  alert?: boolean;
+  /** False when another live region already announces pending state. */
+  announce?: boolean;
+  onRetry?(): void;
   onRun(team: OverviewTeam): void;
   onStop(team: OverviewTeam): void;
 }
 
 export function BoardControl(props: BoardControlProps): JSX.Element {
   const { team, section, connected, action, pending, onRun, onStop } = props;
-  const settings = section.state === 'ready' ? section.data : null;
-  const view = settings === null ? null : boardControlView(team, settings.runner, connected);
+  const settings = section.data ?? props.lastSettings ?? null;
+  const stale = settings !== null && (section.state !== 'ready' || section.data === null);
+  const view = settings === null ? null : boardControlView(team, settings.runner, connected && !stale);
   return (
     <section className="teams-board" aria-labelledby="teams-board-title">
-      <h3 id="teams-board-title">Board control</h3>
-      {section.state === 'loading' && <p className="panel-loading">Loading board state…</p>}
-      {section.state === 'error' && <SectionError section={section} />}
+      <h3 id="teams-board-title" tabIndex={-1}>Board control</h3>
+      {section.state === 'loading' && <p className="panel-loading" role={props.announce === false ? undefined : 'status'}>{stale ? 'Refreshing board state… Showing previously loaded data.' : 'Loading board state…'}</p>}
+      {section.state === 'error' && <SectionError section={section} alert={props.alert} label="Board" stale={stale} retryId="teams-retry-board" onRetry={props.onRetry} />}
       {view !== null && (
         <>
           <p className={`status-badge teams-board-status teams-tone-${view.tone}`}>
@@ -51,7 +57,7 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
         </>
       )}
       {action !== null && (
-        <p className="panel-loading" role="status">{action === 'run' ? 'Starting board…' : 'Stopping board…'}</p>
+        <p className="panel-loading" role={props.announce === false || section.state === 'loading' ? undefined : 'status'}>{action === 'run' ? 'Starting board…' : 'Stopping board…'}</p>
       )}
     </section>
   );
@@ -63,12 +69,20 @@ export interface TeamOverviewPanelProps {
   overview: TeamOverview;
   writes: Pick<TeamWrites, 'rename' | 'deleteTeam'>;
   pending: boolean;
+  readOnly?: boolean;
   board: Omit<BoardControlProps, 'team' | 'pending'>;
 }
 
 export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
   const { team, overview, writes, pending, board } = props;
+  const writeBlocked = pending || props.readOnly === true;
   const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
+  const renameRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const cancelForm = (invoker: 'rename' | 'delete'): void => {
+    setTeamForm(null);
+    setTimeout(() => (invoker === 'rename' ? renameRef : deleteRef).current?.focus(), 0);
+  };
   const unNote = uneditableNote(team);
   const runNote = liveNote(team);
   const coordinator = coordinatorText(overview);
@@ -137,8 +151,8 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
         {runNote !== null && <p className="panel-note">{runNote}</p>}
         {canEditTeam(team) && (
           <div className="teams-team-actions">
-            <button type="button" disabled={pending} onClick={() => setTeamForm('rename')}>Rename team</button>
-            <button type="button" disabled={pending} onClick={() => setTeamForm('delete')}>Delete team</button>
+            <button type="button" ref={renameRef} disabled={writeBlocked} onClick={() => setTeamForm('rename')}>Rename team</button>
+            <button type="button" ref={deleteRef} disabled={writeBlocked} onClick={() => setTeamForm('delete')}>Delete team</button>
           </div>
         )}
         {teamForm === 'rename' && (
@@ -147,8 +161,9 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
             submitLabel="Save name"
             initialName={team.name ?? ''}
             pending={pending}
+            readOnly={props.readOnly === true}
             onSubmit={(name) => { void writes.rename(team, name).then((ok) => { if (ok) setTeamForm(null); }); }}
-            onCancel={() => setTeamForm(null)}
+            onCancel={() => cancelForm('rename')}
           />
         )}
         {teamForm === 'delete' && (
@@ -156,12 +171,12 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
             <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
             <button
               type="button"
-              disabled={pending}
+              disabled={writeBlocked}
               onClick={() => { void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
             >
               Confirm delete
             </button>
-            <button type="button" onClick={() => setTeamForm(null)}>Cancel</button>
+            <button type="button" onClick={() => cancelForm('delete')}>Cancel</button>
           </div>
         )}
       </section>

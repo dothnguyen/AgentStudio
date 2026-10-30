@@ -1,4 +1,4 @@
-import { useRef, type JSX } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import { RUNTIME_LABELS, definitionBadge, memberCountText, runtimeTone, teamLabel } from './teamsModel';
 import { rovingIndex, type TeamViewItem } from './teamsViewModel';
 
@@ -8,7 +8,14 @@ export function TeamChooser(props: {
   onSelect(key: string): void;
 }): JSX.Element {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  const focusHeading = useRef(false);
   const { items } = props;
+  const heading = (): void => document.getElementById('teams-detail-title')?.focus();
+  useEffect(() => {
+    if (!focusHeading.current) return;
+    focusHeading.current = false;
+    heading();
+  }, [props.selectedKey]);
   return (
     <ul className="teams-card-list" aria-label="Choose a team">
       {items.map((item, index) => {
@@ -22,7 +29,7 @@ export function TeamChooser(props: {
               aria-pressed={item.key === props.selectedKey}
               tabIndex={item.key === props.selectedKey ? 0 : -1}
               ref={(el) => { refs.current[index] = el; }}
-              onClick={() => props.onSelect(item.key)}
+              onClick={() => { if (item.key === props.selectedKey) { heading(); return; } focusHeading.current = true; props.onSelect(item.key); }}
               onKeyDown={(e) => {
                 const next = rovingIndex(e.key, index, items.length, 'vertical');
                 if (next === null) return;

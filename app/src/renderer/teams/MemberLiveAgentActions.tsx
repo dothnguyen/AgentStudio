@@ -4,7 +4,7 @@ import { memberAgentActions, type MemberActionInFlight } from './memberAgentActi
 
 export interface MemberLiveAgentActionsProps {
   team: OverviewTeam; member: OverviewMember; catalog: AgentDef[] | null; connected: boolean;
-  inFlight: MemberActionInFlight; polling: boolean;
+  inFlight: MemberActionInFlight; polling: boolean; announce?: boolean;
   onSwitch(agentId: string, agentLabel: string, trigger: HTMLButtonElement): void;
   onResume(agentId: string, agentLabel: string): void;
 }
@@ -16,7 +16,7 @@ export function MemberLiveAgentActions(props: MemberLiveAgentActionsProps): JSX.
     {!view.visible ? <p>Live controls are unavailable because this member has no running runtime record.</p> : <>
       <p>Active agent: <span>{view.activeText}</span></p><p>Availability: <span>{view.availabilityText}</span></p><p>Current assignment: <span>{view.assignmentText}</span></p>
       {view.pendingText && <p>{view.pendingText}</p>}{view.lastResultText && <p>{view.lastResultText}</p>}{view.notice && <p>{view.notice}</p>}
-      {inFlight && !polling && <p role="status">Requesting…</p>}
+      {inFlight && !polling && <p role={props.announce === false ? undefined : 'status'}>Requesting…</p>}
       <h5>Live agent options — frozen at team start</h5>
       {member.runtime?.configuredAgents === null && <p>Live agent eligibility is unavailable.</p>}
       <ul>{view.options.map(option => <li key={option.id}><span>{option.label}{option.active && ' · Active'}{option.holdText && ` · ${option.holdText}`}</span>

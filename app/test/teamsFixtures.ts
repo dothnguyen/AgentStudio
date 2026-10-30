@@ -10,6 +10,7 @@ import type {
   OverviewTeam,
   Result,
   RoleCatalogList,
+  RuntimeSwitchState,
   TeamDefinition,
   TeamOverview,
 } from '../src/renderer/api';
@@ -275,4 +276,70 @@ export function escalationRoutingFixture(): BoardSettings {
   const raw = s.board.config!.rules as Array<Record<string, unknown>>;
   for (const r of s.rules.slice(5)) raw[r.index] = { ...raw[r.index], workflow: r.workflow, onPass: r.onPass, ...(r.onBlocked ? { onBlocked: r.onBlocked } : {}), ...(r.maxRounds !== null ? { maxRounds: r.maxRounds } : {}), ...(r.priority !== null ? { priority: r.priority } : {}) };
   return s;
+}
+
+// --- T-082 state overrides: each helper returns a real-shaped value, never illustrative data. ---
+export type ConnectionState = 'connecting' | 'connected' | 'lost';
+export function connectionFixture(state: ConnectionState) {
+  return { state, error: state === 'lost' ? 'serve exited' : null, distro: null, command: 'serve' };
+}
+export function emptyWorkspace(overrides: Partial<TeamOverview> = {}): TeamOverview {
+  return overviewFixture([], overrides);
+}
+export function emptyRoster(overrides: Partial<OverviewTeam> = {}): TeamOverview {
+  return overviewFixture([team({ members: [], ...overrides })]);
+}
+export function coordinatorStopped(): TeamOverview {
+  return overviewFixture([team()], { coordinator: { running: false } });
+}
+export function runtimeUnavailable(code = 'RUNTIME_DOWN', message = 'tmux is not reachable'): TeamOverview {
+  return overviewFixture([team()], { runtimeState: { available: false, error: { code, message, retryable: true } } } as Partial<TeamOverview>);
+}
+export function partialOverview(): TeamOverview {
+  return overviewFixture([team({ definition: { state: 'unreadable', problems: [{ path: 'members', message: 'cannot read' }] } as never })], { partial: true });
+}
+export function truncatedOverview(): TeamOverview {
+  return overviewFixture([team()], { truncated: true });
+}
+export function memberTruncatedOverview(): TeamOverview {
+  return overviewFixture([team({ membersTruncated: true })]);
+}
+export function missingRoleCatalog(): TeamOverview {
+  return overviewFixture([team()], { roles: { state: 'missing', message: 'roles.json is missing' } } as Partial<TeamOverview>);
+}
+export function invalidRoleCatalog(): RoleCatalogList {
+  return rolesFixture({ state: 'invalid', items: [] } as never);
+}
+export function invalidBoardSettings(): BoardSettings {
+  return { ...boardSettingsFixture(), board: { state: 'invalid', sha256: null, message: 'board.json is invalid', problems: [{ path: 'rules[0]', message: 'bad rule' }], config: null } } as unknown as BoardSettings;
+}
+export function missingBoardSettings(): BoardSettings {
+  return { ...boardSettingsFixture(), board: { state: 'missing', sha256: null, message: null, problems: [], config: null }, rules: [] } as unknown as BoardSettings;
+}
+export function managementError(code: string, message: string, remediation?: string) {
+  return { ok: false as const, error: { code, message, retryable: true, ...(remediation === undefined ? {} : { remediation }) } };
+}
+export const LONG_UNBROKEN = 'x'.repeat(240);
+export function longContentOverview(): TeamOverview {
+  return overviewFixture([team({
+    id: `team-${LONG_UNBROKEN}`,
+    name: `Team ${LONG_UNBROKEN}`,
+    members: [member({
+      memberId: `member-${LONG_UNBROKEN}`, name: `Ünï ${LONG_UNBROKEN}`, role: `Role-${LONG_UNBROKEN}`,
+      work: { state: 'working', assignment: { goal: `Goal ${LONG_UNBROKEN}` }, ticket: null } as never,
+    })],
+  })]);
+}
+export function longRoutingSettings(): BoardSettings {
+  const base = routingSettingsFixture();
+  const route = `route-${LONG_UNBROKEN}`;
+  return { ...base, statuses: [...base.statuses, { id: route, name: null, kind: null }],
+    rules: base.rules.map((r, i) => i === 0 ? { ...r, onPass: route } : r) } as BoardSettings;
+}
+export function onFailureLimitRouting(count: number | null = 3, status = 'need-escalate'): BoardSettings {
+  const base = escalationSettingsFixture();
+  return { ...base, rules: base.rules.map(r => r.onFailureLimit ? { ...r, onFailureLimit: count === null ? null : { count, status } } : r) };
+}
+export function switchEvidence(state: 'pending' | 'completed' | 'failed', requestedAgent = 'codex-gpt'): RuntimeSwitchState {
+  return { state, requestedAgent, assignmentId: null, code: state === 'failed' ? 'SWITCH_FAILED' : null, message: state === 'failed' ? 'Switch failed' : null, at: '2026-01-01T00:00:00Z' };
 }
