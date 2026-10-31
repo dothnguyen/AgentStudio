@@ -103,21 +103,22 @@ describe('dashboard styles', () => {
       ['--text on --surface', readToken('--text'), readToken('--surface')],
       ['--text-bright on --surface', readToken('--text-bright'), readToken('--surface')],
       ['--text-muted on --surface', readToken('--text-muted'), readToken('--surface')],
-      ['white on --accent', '#ffffff', readToken('--accent')],
+      ['--text-label on --surface', readToken('--text-label'), readToken('--surface')],
+      ['--accent-text on --accent', readToken('--accent-text'), readToken('--accent')],
       ['--danger on error surface', readToken('--danger'), '#241f1f'],
       ['warning text on warning surface', '#d7ba7d', '#29271d'],
       ['--text-muted on --surface-raised', readToken('--text-muted'), readToken('--surface-raised')],
       ['--text-muted on --bg', readToken('--text-muted'), readToken('--bg')],
-      ['breadcrumb current on --bg', '#4daafc', readToken('--bg')],
-      ['active nav text', readToken('--text-bright'), '#04395e'],
+      ['--success-text on --surface', readToken('--success-text'), readToken('--surface')],
+      ['--link on --surface', readToken('--link'), readToken('--surface')],
+      ['--info-text on --info-bg', readToken('--info-text'), readToken('--info-bg')],
+      ['active nav text', readToken('--text-bright'), readToken('--nav-active-bg')],
     ];
     for (const [label, foreground, background] of pairs) {
       expect(contrastRatio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
     }
     expect(css).toContain('#241f1f');
     expect(css).toContain('#29271d');
-    expect(css).toContain('#04395e');
-    expect(css).toContain('#4daafc');
   });
 
   it('limits monospace styling to paths keys ids and code', () => {
@@ -236,9 +237,8 @@ describe('icon tones', () => {
     for (const tone of ['success', 'info', 'warning', 'danger']) {
       expect(flat).toContain(`.icon-${tone} { color: var(--${tone}); }`);
     }
-    expect(readToken('--success')).toBe('#89d185');
-    expect(readToken('--info')).toBe('#4daafc');
-    for (const value of ['#89d185', '#4daafc']) expect(css.split(value).length).toBeGreaterThan(2);
+    expect(readToken('--success')).toBe('#4ac26b');
+    expect(readToken('--info')).toBe('#7fb2ff');
     for (const token of ['--success', '--info', '--warning', '--danger']) {
       expect(contrastRatio(readToken(token), readToken('--surface'))).toBeGreaterThanOrEqual(3);
     }

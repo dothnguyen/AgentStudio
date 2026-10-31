@@ -30,9 +30,9 @@ describe('Electron project wiring', () => {
 
   it('defines the dark workbench palette, focus treatment, and reduced-motion fallback', () => {
     const styles = read('src/renderer/styles.css');
-    expect(styles).toContain('--bg: #181818');
-    expect(styles).toContain('--surface: #1f1f1f');
-    expect(styles).toContain('--accent: #0e639c');
+    expect(styles).toContain('--bg: #111316');
+    expect(styles).toContain('--surface: #16191d');
+    expect(styles).toContain('--accent: #5b9cff');
     expect(styles).toContain(':focus-visible');
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('width: min(720px, 100%)');
@@ -64,7 +64,7 @@ describe('Electron project wiring', () => {
 
     expect(contrast(token('--text'), token('--bg'))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(token('--text-muted'), token('--surface'))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#ffffff', token('--accent'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(token('--accent-text'), token('--accent'))).toBeGreaterThanOrEqual(4.5);
   });
 
   it('applies visible keyboard focus and disables motion under reduced-motion preference', () => {
