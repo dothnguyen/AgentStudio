@@ -1,5 +1,5 @@
 version: 1
-description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria and has the coordinator run the suite (delegated test-all); QA gives the verdict, which passes only when test-all passed on the final code.
+description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria and has the coordinator run the test suite that fits the change (delegated); QA gives the verdict, which passes only when that suite passed on the final code.
 maxSteps: 4
 stages:
   - id: qa_tests
@@ -12,6 +12,6 @@ stages:
     role: QA
     permission: read_only
     maxVisits: 1
-    passRequiresCommands: [test-all]   # QA's added tests included: test-all must pass in this run on this code
+    passRequiresCommands: [test-all, test-backend, test-ui]   # the suite the changed files need must pass in this run, on exactly this code
     promptFile: workflows/prompts/board-qa.md
     next: { pass: $succeed, fail: $fail }

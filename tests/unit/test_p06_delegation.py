@@ -409,3 +409,124 @@ class VerifyPass(unittest.TestCase):
     def test_cannot_fingerprint(self):
         self.add("test-all", "succeeded", "F2")
         self.assertIn("could not fingerprint", self.verify(now=None))
+
+
+class RequiredSuite(unittest.TestCase):
+    def test_the_changed_files_pick_the_suite(self):
+        r = lambda *paths: delegation.required_suite(set(paths))[0]
+        self.assertEqual(r("app/src/renderer/a.tsx", "app/test/a.test.tsx", "app/package.json"), "test-ui")
+        self.assertEqual(r("backend/agent_studio/a.py", "tests/unit/test_a.py"), "test-backend")
+        self.assertEqual(r("tests/integration/test_a.py"), "test-backend")
+        self.assertEqual(r("app/src/a.ts", "backend/a.py"), "test-all")
+        self.assertEqual(r("scripts/validate.py"), "test-all")
+        self.assertEqual(r("app/src/a.ts", "scripts/validate.py"), "test-all")
+        self.assertEqual(r("phases/phase-05/README.md", "design/x.png", ".agent-studio/commands.json"), "test-all")
+        self.assertEqual(r(), "test-all")
+        self.assertEqual(r("app/src/a.ts", "phases/phase-05/README.md"), "test-ui")   # docs alongside do not widen it
+        self.assertEqual(delegation.required_suite(None)[0], "test-all")
+        self.assertIn("only the app", delegation.required_suite({"app/a.ts"})[1])
+
+    def test_a_directory_named_like_a_prefix_does_not_count(self):
+        self.assertEqual(delegation.required_suite({"application/x.ts", "backendish/y.py"})[0], "test-all")
+
+
+class ChangedPaths(unittest.TestCase):
+    def setUp(self):
+        self.ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.ws)
+        self.git = lambda *a: subprocess.run(["git", "-C", self.ws] + list(a), check=True, capture_output=True)
+        self.git("init", "-q")
+        self.git("config", "user.email", "t@example.invalid")
+        self.git("config", "user.name", "t")
+        self.write("README.md", "x\n")
+        self.write("app/old.ts", "x\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+        self.git("branch", "-f", "main", "HEAD")   # the base branch the run branched from
+
+    def write(self, rel, text):
+        path = os.path.join(self.ws, rel)
+        os.makedirs(os.path.dirname(path) or self.ws, exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+
+    def test_committed_uncommitted_untracked_and_deleted_all_count(self):
+        self.git("checkout", "-q", "-b", "ticket")
+        self.assertEqual(delegation.changed_paths(self.ws), set())
+        self.write("backend/a.py", "x\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "round 1")          # committed since leaving main
+        self.assertEqual(delegation.changed_paths(self.ws), {"backend/a.py"})
+        self.write("README.md", "changed\n")           # uncommitted
+        self.write("tests/unit/new_test.py", "x\n")    # untracked
+        os.remove(os.path.join(self.ws, "app", "old.ts"))   # deleted, still tracked
+        self.assertEqual(delegation.changed_paths(self.ws),
+                         {"backend/a.py", "README.md", "tests/unit/new_test.py", "app/old.ts"})
+        self.assertEqual(delegation.required_suite(delegation.changed_paths(self.ws))[0], "test-all")
+
+    def test_ui_only_branch_and_the_board_json_base_branch(self):
+        self.git("checkout", "-q", "-b", "ticket")
+        self.write(".agent-studio/board.json", json.dumps({"baseBranch": "develop"}))
+        self.git("add", "-A")
+        self.git("commit", "-qm", "board")
+        self.git("branch", "develop", "HEAD")           # the configured base leaves main behind
+        self.write("app/src/a.tsx", "x\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "ui")
+        self.assertEqual(delegation.changed_paths(self.ws), {"app/src/a.tsx"})
+        self.assertEqual(delegation.required_suite(delegation.changed_paths(self.ws))[0], "test-ui")
+
+    def test_not_a_repository(self):
+        self.assertIsNone(delegation.changed_paths(tempfile.mkdtemp()))
+
+
+class VerifyPassBySuite(VerifyPass):
+    """The standard suites: the changed files decide which one must have passed on this code."""
+    IDS = ("test-all", "test-backend", "test-ui")
+
+    def verify_for(self, paths, now="F2"):
+        with mock.patch.object(delegation, "workspace_fingerprint", return_value=now), \
+                mock.patch.object(delegation, "changed_paths", return_value=paths):
+            return delegation.verify_pass(self.tx, {"id": "w1"}, self.IDS, "/ws")
+
+    def test_a_ui_only_change_needs_test_ui_not_test_backend(self):
+        self.add("test-backend", "succeeded", "F2")
+        msg = self.verify_for({"app/src/a.ts"})
+        self.assertIn("test-ui or test-all was not run", msg)
+        self.assertIn("only the app", msg)
+        self.add("test-ui", "succeeded", "F2")
+        self.assertIsNone(self.verify_for({"app/src/a.ts"}))
+
+    def test_a_backend_only_change_needs_test_backend_not_test_ui(self):
+        self.add("test-ui", "succeeded", "F2")
+        self.assertIn("test-backend or test-all was not run", self.verify_for({"backend/a.py"}))
+        self.add("test-backend", "succeeded", "F2")
+        self.assertIsNone(self.verify_for({"backend/a.py"}))
+
+    def test_test_all_covers_any_change(self):
+        self.add("test-all", "succeeded", "F2")
+        for paths in ({"app/a.ts"}, {"backend/a.py"}, {"app/a.ts", "backend/a.py"}, set(), None):
+            self.assertIsNone(self.verify_for(paths), paths)
+
+    def test_a_change_to_both_sides_needs_test_all(self):
+        self.add("test-ui", "succeeded", "F2")
+        self.add("test-backend", "succeeded", "F2")
+        self.assertIn("test-all was not run", self.verify_for({"app/a.ts", "backend/a.py"}))
+
+    def test_a_failing_wider_run_does_not_cancel_a_passing_required_one(self):
+        self.add("test-ui", "succeeded", "F2")
+        self.add("test-all", "failed", "F2", exitCode=1)   # newer, but the backend failed for an unrelated reason
+        self.assertIsNone(self.verify_for({"app/a.ts"}))
+
+    def test_failures_and_stale_runs_are_reported_for_the_required_suite(self):
+        self.add("test-ui", "failed", "F2", exitCode=1)
+        self.assertIn("latest test-ui run on the final code failed (exit 1)", self.verify_for({"app/a.ts"}))
+        self.add("test-ui", "succeeded", "F1")
+        self.assertIn("latest test-ui run on the final code failed", self.verify_for({"app/a.ts"}))
+        self.assertIn("code changed after the last test-ui or test-all run", self.verify_for({"app/a.ts"}, now="F3"))
+
+    def test_a_stage_with_only_other_commands_keeps_any_of_semantics(self):
+        self.add("test-all", "succeeded", "F2")
+        with mock.patch.object(delegation, "workspace_fingerprint", return_value="F2"), \
+                mock.patch.object(delegation, "changed_paths", side_effect=AssertionError("not consulted")):
+            self.assertIsNone(delegation.verify_pass(self.tx, {"id": "w1"}, ("test-all",), "/ws"))

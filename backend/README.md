@@ -383,7 +383,12 @@ sections holding each result.
 - `passRequiresCommands: [ids]` on a verdict stage: a `pass` counts only if one of those commands succeeded in the
   same workflow run on exactly the code the stage hands over (HEAD, tracked changes and untracked files are
   fingerprinted after each delegated run). Otherwise the pass becomes a `fail` with a BLOCKER finding and the event
-  `workflow_run.pass_rejected`. The board workflows use it with `test-all` instead of a validation stage.
+  `workflow_run.pass_rejected`. The board workflows use it instead of a validation stage, listing
+  `[test-all, test-backend, test-ui]`: when a stage lists those, the files the branch changed (committed since it left
+  the base branch, uncommitted, untracked) pick the one that must have passed - only `app/` changed: `test-ui`
+  (`scripts/validate.py --ui`); only `backend/` and `tests/`: `test-backend` (`--backend`: unit + all integration
+  modules, no app); both, neither, or unknown: `test-all`. `scripts/` counts as both. `test-all` is accepted for any
+  change, and a stage listing other commands keeps "any one of them" semantics.
 - The prompt of a stage that may delegate gets a `DELEGATED_COMMANDS` section listing what it may ask for (use
   `{{delegated_commands}}` in a template to place it).
 

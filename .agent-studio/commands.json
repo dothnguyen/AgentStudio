@@ -68,7 +68,7 @@
       ]
     },
     "test-all": {
-      "description": "Run the full test suite outside your sandbox: backend unit and integration tests, and app test, typecheck and build (scripts/validate.py --all). A pass verdict needs a successful run on your final code.",
+      "description": "Run the whole test suite outside your sandbox: backend unit and integration tests, and app test, typecheck and build (scripts/validate.py --all). Use it when your change touches both the app (app/) and the backend (backend/, tests/, scripts/), or neither (docs, configuration).",
       "argv": [
         "python3",
         "scripts/validate.py",
@@ -76,6 +76,41 @@
       ],
       "network": true,
       "timeoutMs": 1500000,
+      "maxPerVisit": 8,
+      "maxPerRun": 20,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA",
+        "Reviewer"
+      ]
+    },
+    "test-backend": {
+      "description": "Run the backend test suites outside your sandbox: the unit suite and every integration module, without the app (scripts/validate.py --backend). Use it when your change touches only the backend (backend/, tests/) and nothing under app/.",
+      "argv": [
+        "python3",
+        "scripts/validate.py",
+        "--backend"
+      ],
+      "timeoutMs": 1500000,
+      "maxPerVisit": 8,
+      "maxPerRun": 20,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA",
+        "Reviewer"
+      ]
+    },
+    "test-ui": {
+      "description": "Run the app test suite outside your sandbox: npm test, typecheck and build for app/ (scripts/validate.py --ui). Use it when your change touches only the app (app/) and nothing in the backend, tests/ or scripts/.",
+      "argv": [
+        "python3",
+        "scripts/validate.py",
+        "--ui"
+      ],
+      "network": true,
+      "timeoutMs": 900000,
       "maxPerVisit": 8,
       "maxPerRun": 20,
       "roles": [

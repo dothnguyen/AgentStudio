@@ -5,6 +5,9 @@
     validate.py --touched    the unit suite, then the integration modules the change added or modified
                              (git status), run in parallel. `team commit` uses this.
     validate.py --all        the unit suite, then every integration module, in parallel.
+    validate.py --backend    --all without the Node packages: the unit suite and every integration module.
+    validate.py --ui         only the Node packages: `npm ci` when node_modules is missing, then test, typecheck, build.
+                             For changes that touch only the app; the backend suites are not run.
 
 Node packages: a top-level directory with a package.json (the Electron app under app/, for example) is also
 checked by --touched when the change touches it, and always by --all: `npm ci` when node_modules is missing, then
@@ -26,7 +29,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UNIT = ["python3", "-W", "ignore", "-m", "unittest", "discover", "-s", "tests/unit", "-t", "."]
-MODES = ("--unit", "--touched", "--all")
+MODES = ("--unit", "--touched", "--all", "--backend", "--ui")
 
 
 def integration_modules(porcelain: str) -> list:
@@ -67,7 +70,7 @@ def branch_changes() -> str:
 def parse_mode(argv: list) -> str:
     modes = [a for a in argv if a in MODES]
     if len(modes) != 1 or len(argv) != 1:
-        raise SystemExit("usage: validate.py --unit | --touched | --all")
+        raise SystemExit("usage: validate.py --unit | --touched | --all | --backend | --ui")
     return modes[0]
 
 
@@ -157,12 +160,20 @@ def run_integration(mods: list) -> bool:
 
 def main(argv: list) -> int:
     mode = parse_mode(argv)
-    code, text = run_step(UNIT)
-    ok = report("unit tests", code, text)
+    ok = True
+    if mode != "--ui":
+        code, text = run_step(UNIT)
+        ok = report("unit tests", code, text)
     if mode == "--unit":
+        return 0 if ok else 1
+    if mode == "--ui":
+        for name in node_packages():
+            ok = run_node_package(name) and ok
         return 0 if ok else 1
     if mode == "--all":
         mods, packages = all_integration_modules(), node_packages()
+    elif mode == "--backend":
+        mods, packages = all_integration_modules(), []
     else:
         status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT,
                                 stdout=subprocess.PIPE, text=True).stdout

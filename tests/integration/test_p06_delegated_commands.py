@@ -6,7 +6,7 @@ import time
 import unittest
 
 from tests.helpers import key, req, wait_until
-from tests.integration.test_p01_s04_start import FINAL, StartCase, fake
+from tests.integration.test_p01_s04_start import FINAL, StartCase, fake, git
 
 DEV = "Implement.\n{{task}}\n{{delegated_commands}}"
 SHIP = {"version": 1, "stages": [
@@ -246,10 +246,6 @@ class DirectRequests(DelegationCase):
         self.assertEqual(self.attempts(d)[:2], [("develop", 1, "delegated"), ("develop", 1, "done")])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class PassNeedsVerifiedTests(DelegationCase):
     """A verdict stage with passRequiresCommands: the agent's pass counts only if the command passed in this run on
     exactly the code it hands over."""
@@ -273,3 +269,79 @@ class PassNeedsVerifiedTests(DelegationCase):
         wf, d = self.run_def({"develop": fake("verdict_pass")}, name="verified")
         self.assertEqual(d["workflowRun"]["status"], "failed")
         self.assertIn("check was not run", self.events(d, "workflow_run.pass_rejected")[0]["data"]["reason"])
+
+
+SUITES = {"version": 1, "stages": [
+    {"id": "develop", "role": "Developer", "permission": "workspace_write", "maxVisits": 1, "prompt": DEV,
+     "passRequiresCommands": ["test-all", "test-backend", "test-ui"], "next": {"pass": "$succeed", "fail": "$fail"}}]}
+
+
+class PassNeedsTheSuiteForTheChange(DelegationCase):
+    """With the standard suites listed, the files the branch changed decide which one must have passed."""
+
+    def setUp(self):
+        super().setUp()
+        cat = dict(CATALOG, commands=dict(CATALOG["commands"]))
+        for name in ("test-all", "test-backend", "test-ui"):
+            cat["commands"][name] = {"description": name, "argv": ["python3", "-c", f"print('{name} passed')"],
+                                     "roles": ["Developer"]}
+        with open(os.path.join(self.ws, ".agent-studio", "commands.json"), "w") as f:
+            json.dump(cat, f)
+        with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
+            json.dump({"baseBranch": "p06-base"}, f)
+        self.write_def("suites", SUITES)
+        self.commit("suites")
+        git(self.ws, "branch", "-f", "p06-base", "HEAD")   # what the ticket branch left; files below are its changes
+
+    def change(self, *paths):
+        for rel in paths:
+            full = os.path.join(self.ws, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as f:
+                f.write("changed by the ticket\n")
+        self.commit("ticket changes")
+
+    def go(self, command):
+        wf, d = self.run_def({"develop": asks(command, scenario="verdict_pass")}, name="suites")
+        return d, [e["data"]["reason"] for e in self.events(d, "workflow_run.pass_rejected")]
+
+    def test_ui_only_change_passes_on_test_ui(self):
+        self.change("app/src/a.tsx", "app/test/a.test.tsx")
+        d, rejected = self.go("test-ui")
+        self.assertEqual((d["workflowRun"]["status"], rejected), ("succeeded", []))
+        self.assertEqual([r["command"] for r in d["commandRequests"]], ["test-ui"])
+
+    def test_ui_only_change_is_not_accepted_on_test_backend(self):
+        self.change("app/src/a.tsx")
+        d, rejected = self.go("test-backend")
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        self.assertEqual(len(rejected), 1)
+        self.assertIn("test-ui or test-all", rejected[0])
+        self.assertIn("only the app", rejected[0])
+
+    def test_backend_only_change_passes_on_test_backend(self):
+        self.change("backend/agent_studio/a.py", "tests/unit/test_a.py")
+        d, rejected = self.go("test-backend")
+        self.assertEqual((d["workflowRun"]["status"], rejected), ("succeeded", []))
+
+    def test_backend_only_change_is_not_accepted_on_test_ui(self):
+        self.change("backend/agent_studio/a.py")
+        d, rejected = self.go("test-ui")
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        self.assertIn("test-backend or test-all", rejected[0])
+
+    def test_a_change_to_both_sides_needs_test_all(self):
+        self.change("app/src/a.tsx", "backend/agent_studio/a.py")
+        d, rejected = self.go("test-ui")
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        self.assertIn("test-all was not run", rejected[0])
+        self.assertIn("both the app and the backend", rejected[0])
+
+    def test_test_all_is_always_accepted(self):
+        self.change("app/src/a.tsx")
+        d, rejected = self.go("test-all")
+        self.assertEqual((d["workflowRun"]["status"], rejected), ("succeeded", []))
+
+
+if __name__ == "__main__":
+    unittest.main()

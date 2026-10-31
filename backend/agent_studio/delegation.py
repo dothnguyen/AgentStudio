@@ -646,29 +646,94 @@ def workspace_fingerprint(root: str) -> Optional[str]:
     return h.hexdigest()
 
 
+UI_PREFIXES = ("app/",)
+BACKEND_PREFIXES = ("backend/", "tests/")
+BOTH_PREFIXES = ("scripts/",)   # the test runner itself: a change there can break either side
+SUITE_ALL, SUITE_UI, SUITE_BACKEND = "test-all", "test-ui", "test-backend"
+
+
+def changed_paths(root: str) -> Optional[set]:
+    """Every path this branch changed: committed since it left the base branch, uncommitted, and untracked.
+    None when git cannot tell. The base branch is board.json's baseBranch, else main or master."""
+    names = []
+    try:
+        with open(os.path.join(root, ".agent-studio", "board.json"), encoding="utf-8") as f:
+            names.append(json.load(f).get("baseBranch"))
+    except (OSError, ValueError, AttributeError):
+        pass
+    paths = set()
+    for base in [n for n in names if isinstance(n, str)] + ["main", "master"]:
+        merge_base = _git(root, "merge-base", "HEAD", base)
+        if merge_base is not None and merge_base.strip():
+            diff = _git(root, "diff", "--name-only", "-z", merge_base.strip().decode("ascii", "replace"), "HEAD")
+            if diff is None:
+                return None
+            paths |= {p.decode("utf-8", "replace") for p in diff.split(b"\0") if p}
+            break
+    for args in (("diff", "--name-only", "-z", "HEAD"), ("ls-files", "--others", "--exclude-standard", "-z")):
+        out = _git(root, *args)
+        if out is None:
+            return None
+        paths |= {p.decode("utf-8", "replace") for p in out.split(b"\0") if p}
+    return paths
+
+
+def required_suite(paths) -> tuple:
+    """(suite command id, why) for a set of changed paths: only app/ changed -> test-ui; only backend changed ->
+    test-backend; both, or neither (docs, config), or git could not tell -> test-all."""
+    if paths is None:
+        return SUITE_ALL, "the changed files could not be determined"
+    ui = any(p.startswith(UI_PREFIXES + BOTH_PREFIXES) for p in paths)
+    backend = any(p.startswith(BACKEND_PREFIXES + BOTH_PREFIXES) for p in paths)
+    if ui and not backend:
+        return SUITE_UI, "the changes touch only the app (app/)"
+    if backend and not ui:
+        return SUITE_BACKEND, "the changes touch only the backend (backend/, tests/)"
+    if ui and backend:
+        return SUITE_ALL, "the changes touch both the app and the backend"
+    return SUITE_ALL, "the changes touch neither the app nor the backend"
+
+
 def verify_pass(tx, wf: dict, ids, workspace: str) -> Optional[str]:
-    """None when one of the commands `ids` succeeded in this run on exactly the code in `workspace` now (its newest
-    run on this code passed); otherwise the BLOCKER finding that turns a pass verdict into a fail."""
+    """None when the suite this change needs succeeded in this run on exactly the code in `workspace` now (its newest
+    run on this code passed); otherwise the BLOCKER finding that turns a pass verdict into a fail.
+
+    A stage lists the commands it accepts (`passRequiresCommands`). When those include the standard suites
+    (test-all, test-backend, test-ui) the changed files decide which one is required: test-ui or test-backend for a
+    change confined to one side, test-all otherwise; test-all always counts for any of them, being the superset.
+    For any other list, one successful run of any listed command is enough."""
+    ids = tuple(ids)
+    why = None
+    if SUITE_ALL in ids and (SUITE_UI in ids or SUITE_BACKEND in ids):
+        suite, why = required_suite(changed_paths(workspace))
+        ids = tuple(dict.fromkeys([suite, SUITE_ALL])) if suite in ids else ids
     names = " or ".join(ids)
+    needed = f" ({why})" if why else ""
     marks = ",".join("?" * len(ids))
     rows = [dict(r) for r in tx.conn.execute(
         f"SELECT * FROM command_requests WHERE workflow_run_id = ? AND command_id IN ({marks}) "
         f"AND status IN ('succeeded', 'failed') ORDER BY ordinal DESC", (wf["id"],) + tuple(ids)).fetchall()]
     if not rows:
-        return (f"BLOCKER: {names} was not run in this stage's workflow run - a pass needs a successful {names} "
-                f"run on the final code (request it as a delegated command, then judge its result)")
+        return (f"BLOCKER: {names} was not run in this stage's workflow run{needed} - a pass needs a successful "
+                f"{names} run on the final code (request it as a delegated command, then judge its result)")
     current = workspace_fingerprint(workspace)
     if current is None:
         return "BLOCKER: Agent Studio could not fingerprint the workspace to check which code the tests ran on"
-    for r in rows:
+    failed, seen = None, set()
+    for r in rows:   # newest first; each accepted command's newest run on this exact code decides for that command
         res = _loads(r["result_json"], {}) or {}
-        if res.get("workspaceFingerprint") != current:
+        if res.get("workspaceFingerprint") != current or r["command_id"] in seen:
             continue
+        seen.add(r["command_id"])
         if r["status"] == "succeeded":
             return None
-        why = res.get("error") or ("timed out" if res.get("timedOut") else f"exit {res.get('exitCode')}")
-        return f"BLOCKER: the latest {r['command_id']} run on the final code failed ({why}); fix it and run it again"
-    return (f"BLOCKER: the code changed after the last {names} run, so the final code was never tested - run "
+        if failed is None:
+            fail = res.get("error") or ("timed out" if res.get("timedOut") else f"exit {res.get('exitCode')}")
+            failed = (f"BLOCKER: the latest {r['command_id']} run on the final code failed ({fail}); fix it and run "
+                      f"{names} again")
+    if failed:
+        return failed
+    return (f"BLOCKER: the code changed after the last {names} run, so the final code was never tested{needed} - run "
             f"{names} again after your last change")
 
 
@@ -737,6 +802,7 @@ def run_delegated(run_dir: str) -> int:
                     if written >= MAX_OUTPUT:
                         res["outputTruncated"] = True
             p.wait()
+            p.stdout.close()
             res["exitCode"] = p.returncode
             res["outputTail"] = keep.decode("utf-8", "replace")[-2000:]
         except OSError as e:

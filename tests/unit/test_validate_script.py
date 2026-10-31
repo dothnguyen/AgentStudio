@@ -42,7 +42,9 @@ class Modes(unittest.TestCase):
     def test_exactly_one_mode(self):
         self.assertEqual(validate.parse_mode(["--unit"]), "--unit")
         self.assertEqual(validate.parse_mode(["--touched"]), "--touched")
-        for bad in ([], ["--unit", "--all"], ["--fast"], ["--all", "x"]):
+        self.assertEqual(validate.parse_mode(["--backend"]), "--backend")
+        self.assertEqual(validate.parse_mode(["--ui"]), "--ui")
+        for bad in ([], ["--unit", "--all"], ["--fast"], ["--all", "x"], ["--ui", "--backend"]):
             with self.assertRaises(SystemExit):
                 validate.parse_mode(bad)
 
@@ -61,6 +63,41 @@ class Modes(unittest.TestCase):
             self.assertEqual(validate.main(["--unit"]), 0)
         self.assertEqual(calls, [validate.UNIT])
         integ.assert_not_called()
+
+    def test_backend_mode_runs_unit_and_every_integration_module_but_no_node_package(self):
+        calls = []
+        with mock.patch.object(validate, "run_step", side_effect=lambda a: calls.append(a) or (0, "ok")), \
+                mock.patch.object(validate, "all_integration_modules", return_value=["tests.integration.test_a"]), \
+                mock.patch.object(validate, "run_integration", return_value=True) as integ, \
+                mock.patch.object(validate, "node_packages", return_value=["app"]), \
+                mock.patch.object(validate, "run_node_package") as node:
+            self.assertEqual(validate.main(["--backend"]), 0)
+        self.assertEqual(calls, [validate.UNIT])
+        integ.assert_called_once_with(["tests.integration.test_a"])
+        node.assert_not_called()
+
+    def test_backend_mode_fails_when_an_integration_module_fails(self):
+        with mock.patch.object(validate, "run_step", return_value=(0, "ok")), \
+                mock.patch.object(validate, "all_integration_modules", return_value=["m"]), \
+                mock.patch.object(validate, "run_integration", return_value=False):
+            self.assertEqual(validate.main(["--backend"]), 1)
+
+    def test_ui_mode_runs_only_the_node_packages(self):
+        with mock.patch.object(validate, "run_step") as step, \
+                mock.patch.object(validate, "run_integration") as integ, \
+                mock.patch.object(validate, "node_packages", return_value=["app"]), \
+                mock.patch.object(validate, "run_node_package", return_value=True) as node:
+            self.assertEqual(validate.main(["--ui"]), 0)
+        node.assert_called_once_with("app")
+        step.assert_not_called()
+        integ.assert_not_called()
+
+    def test_ui_mode_fails_when_a_package_fails(self):
+        with mock.patch.object(validate, "run_step") as step, \
+                mock.patch.object(validate, "node_packages", return_value=["app"]), \
+                mock.patch.object(validate, "run_node_package", return_value=False):
+            self.assertEqual(validate.main(["--ui"]), 1)
+        step.assert_not_called()
 
     def test_touched_mode_runs_modules_and_fails_when_one_fails(self):
         with mock.patch.object(validate, "run_step", return_value=(0, "ok")), \
