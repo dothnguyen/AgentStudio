@@ -16,3 +16,7 @@ lifetime-evidence.json
 _to_delete/
 scripts/windows/live-gate-windows-evidence*.json
 .agent-studio/cache/tags
+
+# Agent Studio bridge (scripts/windows/as-bridge.ps1) and diagnose reports
+.agent-studio-bridge/
+diag-*.txt
