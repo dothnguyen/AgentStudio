@@ -1,6 +1,6 @@
 # P05-S59 — Members table identical to v4
 
-Status: To Do
+Status: Done (2026-11-01)
 Depends on: P05-S58
 Architecture: [Teams overview v4 fidelity](../README.md#teams-overview-v4-fidelity)
 
@@ -37,4 +37,8 @@ Architecture: [Teams overview v4 fidelity](../README.md#teams-overview-v4-fideli
 - [ ] `npm --prefix app test`, `npm --prefix app run typecheck`, `npm --prefix app run build` pass.
 
 ## Evidence
-(filled in when the story is done)
+- Implementation: `app/src/renderer/teams/MembersView.tsx`, `app/src/renderer/teams/MemberList.tsx`, `app/src/renderer/teams/teamsModel.ts`, `app/src/renderer/icons/Icon.tsx`, `app/src/renderer/styles.css`.
+- Tests: `app/test/teamsScreen.test.tsx` (`v4 members card`, updated "member roster" suites), `app/test/teamsModel.test.ts` (initials, live agent, row work, filters), `app/test/dashboardStyles.test.ts` (`members_card_uses_v4_values`), `app/test/teamsA11y.test.tsx`, `app/test/teamsLiveControls.test.tsx`, `app/test/teamEdit.test.tsx`.
+- Local run: `npx vitest run` in `app/` — 59 files, 1405 tests passed.
+- Delegated `test-ui` (`python3 scripts/validate.py --ui`): npm test, typecheck and build pass.
+- Operator visual check at 1440×1000 against `design/teams-overview-v4.png` remains an operator check, not a condition for this story.

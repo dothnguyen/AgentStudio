@@ -778,8 +778,7 @@ describe('team overview', () => {
 
 describe('member roster', () => {
   const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
-  const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
-  const avail = () => screen.getByRole('combobox', { name: 'Availability' }) as HTMLSelectElement;
+  const search = () => screen.getByLabelText('Filter members') as HTMLInputElement;
   const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
   const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'ALPHA-two', presence: 'busy' })];
 
@@ -797,24 +796,24 @@ describe('member roster', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('combines text and availability filters, clears them, and preserves backend row order', async () => {
+  it('combines_text_filter_and_status_text_and_preserves_order', async () => {
     const { fake } = await renderScreen({ overview: [roster(trio())] });
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
     fireEvent.change(search(), { target: { value: '   ' } });
     expect(names()).toEqual(['a', 'b', 'c']);
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
     fireEvent.change(search(), { target: { value: 'AlPhA' } });
-    expect(names()).toEqual(['a', 'c']);
-    fireEvent.change(avail(), { target: { value: 'busy' } });
     expect(names()).toEqual(['a', 'c']);
     fireEvent.change(search(), { target: { value: 'two' } });
     expect(names()).toEqual(['c']);
-    fireEvent.change(avail(), { target: { value: 'idle' } });
+    fireEvent.change(search(), { target: { value: 'working' } });
+    expect(names()).toEqual(['a', 'c']);
+    fireEvent.change(search(), { target: { value: 'zzz' } });
     expect(screen.getByText('No returned members match the current filters.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
     expect(names()).toEqual(['a', 'b', 'c']);
-    expect(search().value).toBe(''); expect(avail().value).toBe('');
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
+    expect(search().value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Clear filter' })).toBeNull();
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
@@ -848,15 +847,17 @@ describe('member roster', () => {
     expect(screen.queryByText('No returned members match the current filters.')).toBeNull();
   });
 
-  it('offers unknown raw availability and renders a member without an id as a static row', async () => {
+  it('filters_unknown_raw_status_and_renders_static_row', async () => {
     await renderScreen({ overview: [roster([
       member({ memberId: null, name: 'Anonymous', presence: 'mystery' }),
       member({ memberId: 'known', name: 'Known', presence: 'mystery-extra' }),
     ])] });
-    expect(within(avail()).getByRole('option', { name: 'mystery (1)' }).getAttribute('value')).toBe('mystery');
-    fireEvent.change(avail(), { target: { value: 'mystery' } });
+    fireEvent.change(search(), { target: { value: 'mystery-extra' } });
+    expect(screen.getByText('Known')).toBeTruthy();
+    expect(screen.queryByText('Anonymous')).toBeNull();
+    fireEvent.change(search(), { target: { value: 'mystery' } });
     expect(screen.getByText('Anonymous')).toBeTruthy();
-    expect(screen.queryByText('Known')).toBeNull();
+    expect(screen.getByText('Known')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Anonymous/ })).toBeNull();
     expect(screen.getByText('No member id returned')).toBeTruthy();
   });
@@ -864,36 +865,29 @@ describe('member roster', () => {
   it('opens detail from Overview and restores the invoking row after Back with filters preserved', async () => {
     const { fake } = await renderScreen({ overview: [roster(trio())] });
     fireEvent.change(search(), { target: { value: 'alpha' } });
-    fireEvent.change(avail(), { target: { value: 'busy' } });
     openMember('ALPHA-two');
     expect(screen.queryByRole('list', { name: /^Members of / })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Availability' })).toBeNull();
     expect(screen.getAllByRole('region', { name: 'ALPHA-two' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
-    expect(search().value).toBe('alpha'); expect(avail().value).toBe('busy');
+    expect(search().value).toBe('alpha');
     expect(document.activeElement).toBe(document.querySelector('[data-member-row="c"]'));
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps filters across refresh, resets a vanished availability only, and falls back to the Members heading when the row is filtered out', async () => {
-    const after = trio().map(m => m.memberId === 'c' ? { ...m, presence: 'idle' } : m);
-    const onlyIdle = trio().map(m => ({ ...m, presence: 'idle' }));
-    await renderScreen({ overview: [roster(trio()), roster(after), roster(onlyIdle)] });
-    fireEvent.change(search(), { target: { value: 'alpha' } });
-    fireEvent.change(avail(), { target: { value: 'busy' } });
+  it('keeps filters across refresh and falls back to the Members heading when the row is filtered out', async () => {
+    const after = trio().map(m => m.memberId === 'c' ? { ...m, name: 'Charlie' } : m);
+    await renderScreen({ overview: [roster(trio()), roster(after)] });
+    fireEvent.change(search(), { target: { value: 'two' } });
     openMember('ALPHA-two');
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
-    expect(screen.getAllByRole('region', { name: 'ALPHA-two' })).toHaveLength(1);
+    expect(screen.getAllByRole('region', { name: 'Charlie' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
-    expect(names()).toEqual(['a']);
+    expect(names()).toEqual([]);
+    expect(search().value).toBe('two');
     expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Members' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
     expect(names()).toEqual(['a', 'b', 'c']);
-    fireEvent.change(search(), { target: { value: 'alpha' } });
-    fireEvent.change(avail(), { target: { value: 'busy' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
-    expect(avail().value).toBe(''); expect(search().value).toBe('alpha');
-    expect(names()).toEqual(['a', 'c']);
   });
 
   it('clears detail on team change and reports a refreshed missing member before focusing the roster', async () => {
@@ -922,33 +916,40 @@ describe('member roster', () => {
     const result = render(ui('connected'));
     await act(async () => {});
     fireEvent.change(search(), { target: { value: 'alpha' } });
-    fireEvent.change(avail(), { target: { value: 'busy' } });
     result.rerender(ui('lost'));
     result.rerender(ui('connected'));
     await act(async () => {});
-    expect(search().value).toBe('alpha'); expect(avail().value).toBe('busy');
+    expect(search().value).toBe('alpha');
     result.rerender(ui('connected', { ...workspaceA, id: 'ws-b' }));
     await act(async () => {});
-    expect(search().value).toBe(''); expect(avail().value).toBe('');
+    expect(search().value).toBe('');
   });
 
   it('clears detail and filters when switching to another team', async () => {
     const { result } = await renderScreen();
     fireEvent.change(search(), { target: { value: 'dev' } });
-    fireEvent.change(avail(), { target: { value: 'busy' } });
     openMember('dev');
     fireEvent.click(teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'Release Team'));
     await act(async () => {});
     expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
     expect(search().value).toBe('');
-    expect(avail().value).toBe('');
   });
-  it('roster_shows_only_returned_identity_role_agent_availability_and_work', async () => {
+  it('roster_shows_only_returned_identity_role_live_agent_status_and_work', async () => {
     const { fake } = await renderScreen();
     const dev = memberRow('dev');
-    expect(['name', 'role', 'agent', 'availability', 'work'].map(f => field(dev, f))).toEqual(['dev', 'Developer', 'Active: opencode-sonnet · opencode · claude-sonnet', 'Working', 'T-031 Teams screen']);
+    expect(dev.querySelector('.teams-member-name')!.textContent).toBe('dev');
+    expect(dev.querySelector('.teams-member-id')!.textContent).toBe('dev');
+    expect(field(dev, 'role')).toBe('Developer');
+    expect(dev.querySelector('[data-part="agent-name"]')!.textContent).toBe('OpenCode Sonnet');
+    expect(dev.querySelector('[data-part="agent-meta"]')!.textContent).toBe('opencode · claude-sonnet');
+    expect(dev.querySelector('[data-part="agent-switched"]')).toBeNull();
+    expect(field(dev, 'availability')).toBe('Working');
+    expect(field(dev, 'work')).toBe('T-031 Teams screen');
     const lead = memberRow('lead');
-    expect(['role', 'agent', 'availability', 'work'].map(f => field(lead, f))).toEqual(['TeamLead', 'Not running · saved inline: codex · model not set', 'Available', 'No current work']);
+    expect(field(lead, 'role')).toBe('TeamLead');
+    expect(lead.querySelector('[data-part="agent-name"]')!.textContent).toBe('Not running · saved inline: codex · model not set');
+    expect(field(lead, 'availability')).toBe('Available');
+    expect(field(lead, 'work')).toBe('Idle');
     const list = showMembers();
     expect(within(list).queryByRole('button', {name: /in Roles|Switch|Resume|Edit|Remove/})).toBeNull();
     expect(list.textContent).not.toMatch(/Implements scoped tickets\.|Default —/);
@@ -1017,11 +1018,144 @@ describe('member roster', () => {
   });
 });
 
+describe('v4 members card', () => {
+  const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
+  const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'Charlie', presence: 'busy' })];
+  const card = (r: { getByRole: (role: string, o: { name: string }) => HTMLElement }) => r.getByRole('region', { name: 'Members' });
+
+  it('members_card_header_has_count_filter_and_primary_add', async () => {
+    const { result } = await renderScreen({ overview: [roster(trio())] });
+    const region = card(result);
+    expect(region.className).toContain('teams-members-card');
+    expect(region.querySelector('.teams-members-count')!.textContent).toBe('3');
+    const search = within(region).getByLabelText('Filter members') as HTMLInputElement;
+    expect(search.getAttribute('type')).toBe('search');
+    expect(search.getAttribute('placeholder')).toBe('Filter members');
+    expect(within(region).queryByRole('combobox')).toBeNull();
+    const add = within(region).getByRole('button', { name: 'Add member' });
+    expect(add.className).toContain('teams-members-add');
+    expect(add.querySelector('svg[data-icon="plus"]')).toBeTruthy();
+    result.unmount();
+    const truncated = await renderScreen({ overview: [roster(trio(), { membersTruncated: true })] });
+    expect(card(truncated.result).querySelector('.teams-members-count')!.textContent).toBe('3+');
+  });
+
+  it('column_heads_are_member_role_live_agent_status_current_work', async () => {
+    const { result } = await renderScreen({ overview: [roster(trio())] });
+    const head = card(result).querySelector('.teams-member-list-head')!;
+    expect(head.getAttribute('aria-hidden')).toBe('true');
+    expect(Array.from(head.querySelectorAll('span')).map(s => s.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '']);
+  });
+
+  it('rows_render_avatar_role_chip_status_dot_and_chevron', async () => {
+    await renderScreen({ overview: [roster([member({ memberId: 'dev-1', name: 'dev-1', presence: 'idle', work: { state: 'none' } })])] });
+    const row = memberRow('dev-1');
+    expect(row.tagName).toBe('BUTTON');
+    expect(row.getAttribute('data-member-row')).toBe('dev-1');
+    const avatar = row.querySelector('.teams-member-avatar')!;
+    expect(avatar.textContent).toBe('D1');
+    expect(avatar.getAttribute('aria-hidden')).toBe('true');
+    expect(row.querySelector('.teams-role-chip')!.textContent).toBe('Developer');
+    expect(field(row, 'availability')).toBe('Available');
+    expect(row.querySelector('[data-field="availability"] .status-dot')!.getAttribute('aria-hidden')).toBe('true');
+    expect(row.querySelector('.status-badge')).toBeNull();
+    const work = row.querySelector('[data-field="work"]')!;
+    expect(work.textContent).toBe('Idle');
+    expect(work.className).toContain('teams-member-work-muted');
+    expect(row.querySelector('svg[data-icon="chevron-right"]')).toBeTruthy();
+  });
+
+  it('switched_and_not_switched_live_agents', async () => {
+    const live = twoTeams().teams[1]!.members[0]!.runtime!;
+    const switched = member({
+      memberId: 'switched', name: 'switched',
+      runtime: { ...live, activeAgent: 'codex-gpt', provider: 'codex', model: 'gpt-6', reasoning: 'medium' },
+      agentOptions: [
+        member().agentOptions[0]!,
+        { id: 'codex-gpt', name: 'Codex GPT', provider: 'codex', model: 'gpt-6', reasoning: 'medium', description: null, state: 'ok' },
+      ],
+      defaultAgent: 'opencode-sonnet',
+    });
+    await renderScreen({ overview: [roster([switched, member({ memberId: 'plain', name: 'plain', runtime: live })])] });
+    const s = memberRow('switched');
+    expect(s.querySelector('[data-part="agent-name"]')!.textContent).toBe('Codex GPT');
+    expect(s.querySelector('[data-part="agent-switched"]')!.textContent).toBe('Switched');
+    expect(s.querySelector('[data-part="agent-meta"]')!.textContent).toBe('codex · gpt-6 · medium');
+    const n = memberRow('plain');
+    expect(n.querySelector('[data-part="agent-name"]')!.textContent).toBe('OpenCode Sonnet');
+    expect(n.querySelector('[data-part="agent-switched"]')).toBeNull();
+  });
+
+  it('working_member_shows_work_summary_not_idle', async () => {
+    await renderScreen({ overview: [roster([member({ memberId: 'busy', name: 'busy', presence: 'busy', work: { state: 'working', assignment: null, ticket: { key: 'T-031', title: 'Teams screen', status: 'dev-ready', workflowRunId: null } } })])] });
+    const work = memberRow('busy').querySelector('[data-field="work"]')!;
+    expect(work.textContent).toBe('T-031 Teams screen');
+    expect(work.className).not.toContain('teams-member-work-muted');
+  });
+
+  it('add_member_form_opens_inside_the_card', async () => {
+    const { result } = await renderScreen();
+    const region = card(result);
+    fireEvent.click(within(region).getByRole('button', { name: 'Add member' }));
+    const form = within(region).getByRole('form', { name: 'Add member' });
+    expect(region.contains(form)).toBe(true);
+    const head = region.querySelector('.teams-members-head')!;
+    expect(head.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(within(region).getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(within(region).getByRole('button', { name: 'Add member' }));
+  });
+
+  it('empty_team_card_shows_zero_count_and_empty_note_without_columns', async () => {
+    const { result } = await renderScreen({ overview: [roster([])] });
+    const region = card(result);
+    expect(region.querySelector('.teams-members-count')!.textContent).toBe('0');
+    expect(within(region).getByText('This team has no members.')).toBeTruthy();
+    expect(region.querySelector('.teams-member-list-head')).toBeNull();
+    expect(within(region).queryByRole('list')).toBeNull();
+    expect(within(region).getByRole('button', { name: 'Add member' })).toBeTruthy();
+  });
+
+  it('truncation_and_no_match_notes_live_inside_the_card', async () => {
+    const { result } = await renderScreen({ overview: [roster(trio(), { membersTruncated: true })] });
+    const region = card(result);
+    expect(within(region).getByText('Showing 3 of 3 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
+    const search = within(region).getByLabelText('Filter members');
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(within(region).getByText('No returned members match the current filters.')).toBeTruthy();
+    expect(within(region).getByRole('button', { name: 'Clear filter' })).toBeTruthy();
+    expect(region.querySelector('.teams-member-list')).toBeNull();
+    expect(within(region).getByText('Showing 0 of 3 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
+  });
+
+  it('count_badge_counts_returned_members_not_filtered_rows', async () => {
+    const { result } = await renderScreen({ overview: [roster(trio())] });
+    const region = card(result);
+    fireEvent.change(within(region).getByLabelText('Filter members'), { target: { value: 'Alpha' } });
+    expect(Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'))).toEqual(['a']);
+    expect(region.querySelector('.teams-members-count')!.textContent).toBe('3');
+  });
+
+  it('rows_render_six_columns_in_order_and_static_rows_stay_non_interactive', async () => {
+    await renderScreen({ overview: [roster([
+      member({ memberId: 'dev-1', name: 'dev-1' }),
+      member({ memberId: null, name: 'Anonymous', source: 'runtime' }),
+    ])] });
+    const row = memberRow('dev-1');
+    expect(Array.from(row.children).map(el => el.getAttribute('data-field') ?? el.getAttribute('data-icon'))).toEqual(['name', 'role', 'agent', 'availability', 'work', 'chevron-right']);
+    const staticRow = memberRow('Anonymous');
+    expect(staticRow.tagName).toBe('DIV');
+    expect(staticRow.hasAttribute('data-member-row')).toBe(false);
+    expect(staticRow.querySelector('.teams-member-id')).toBeNull();
+    expect(staticRow.querySelector('[data-field="name"] .teams-cell-note')!.textContent).toBe('No member id returned');
+    expect(staticRow.querySelector('svg[data-icon="chevron-right"]')).toBeTruthy();
+  });
+});
+
 describe('roster evidence and team removal', () => {
   it('roster_saved_fallback_is_never_labelled_active', async () => {
     const option = {...member().agentOptions[0]!, name: 'Saved choice'};
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member({runtime: null, agentOptions: [option]}), member({memberId: 'missing', name: 'missing', runtime: null, agentOptions: [{...option, id: 'gone', name: null, state: 'missing'}]}), member({memberId: 'runtime', name: 'runtime', runtime: null, source: 'runtime'})]})])}]});
-    expect(field(memberRow('dev'), 'agent')).toBe('Not running · saved default: Saved choice');
+    expect(memberRow('dev').querySelector('[data-part="agent-name"]')!.textContent).toBe('Not running · saved default: Saved choice');
     expect(field(memberRow('missing'), 'agent')).toContain('Saved default is missing from the catalog');
     expect(field(memberRow('runtime'), 'agent')).toBe('No live or saved agent');
   });
@@ -2067,8 +2201,7 @@ describe('T-084 shared sidebar navigation controller', () => {
 describe('T-090 state and roster completion', () => {
   const okR = <T,>(data: T) => ({ ok: true as const, data });
   const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
-  const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
-  const avail = () => screen.getByRole('combobox', { name: 'Availability' }) as HTMLSelectElement;
+  const search = () => screen.getByLabelText('Filter members') as HTMLInputElement;
   const settle = () => act(async () => {});
 
   it('overview_state_matrix_renders_zero_one_many_partial_truncated_invalid_and_runtime_states_truthfully', async () => {
@@ -2176,13 +2309,10 @@ describe('T-090 state and roster completion', () => {
     ];
     await renderScreen({ overview: [okR(overviewFixture([team({ members })]))] });
     expect(names()).toEqual(['zed-id', 'amy-id', 'mid-id']);
-    for (const [query, expectIds] of [['zed-id', ['zed-id']], ['reviewer', ['amy-id']], ['live-agent-x', ['zed-id']], ['T-900', ['zed-id']], ['developer', ['zed-id', 'mid-id']]] as const) {
+    for (const [query, expectIds] of [['zed-id', ['zed-id']], ['reviewer', ['amy-id']], ['live-agent-x', ['zed-id']], ['T-900', ['zed-id']], ['developer', ['zed-id', 'mid-id']], ['available', ['amy-id', 'mid-id']]] as const) {
       fireEvent.change(search(), { target: { value: query } });
       expect(names(), query).toEqual(expectIds);
     }
-    fireEvent.change(search(), { target: { value: '' } });
-    fireEvent.change(avail(), { target: { value: 'idle' } });
-    expect(names()).toEqual(['amy-id', 'mid-id']);
   });
 
   it('integrated_roster_explains_zero_matches_and_truncated_filter_scope', async () => {
@@ -2190,7 +2320,7 @@ describe('T-090 state and roster completion', () => {
     fireEvent.change(search(), { target: { value: 'nothing-matches' } });
     expect(screen.getByText('No returned members match the current filters.')).toBeTruthy();
     expect(screen.getByText('Showing 0 of 1 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clear filter' })).toBeTruthy();
     expect(names()).toEqual([]);
   });
 
@@ -2204,7 +2334,8 @@ describe('T-090 state and roster completion', () => {
       const row = memberRow(`${s}-member`);
       expect(field(row, 'availability')).toBe(labels[s]);
       expect(row.querySelector('.status-dot')!.getAttribute('aria-hidden')).toBe('true');
-      expect(field(row, 'agent')).toContain('Active: opencode-sonnet');
+      expect(row.querySelector('[data-part="agent-name"]')!.textContent).toBe('OpenCode Sonnet');
+      expect(row.querySelector('[data-part="agent-meta"]')!.textContent).toBe('opencode · claude-sonnet');
     }
     expect(field(memberRow('busy-member'), 'work')).toContain('T-busy');
     expect(field(memberRow('ghost-role'), 'role')).toContain('Role not defined in roles.json');

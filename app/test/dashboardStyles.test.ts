@@ -32,9 +32,20 @@ describe('dashboard styles', () => {
   it('member_roster_styles_have_focus_and_selection', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
-    expect(flat).toContain('.teams-member-row[aria-current="true"] {');
-    expect(flat).toMatch(/@media \(max-width: 700px\) \{\s*\.teams-member-list-head \{ position: absolute;[^}]*clip-path: inset\(50%\);/);
+    expect(flat).toContain('.teams-screen .teams-member-row[aria-current="true"] {');
+    expect(flat).toContain('.teams-members-scroll { overflow-x: auto; max-width: 100%; }');
+    expect(flat).toContain('.teams-members-table { min-width: 820px; }');
     expect(flat).not.toMatch(/\.teams-member-list-head \{[^}]*display: none/);
+  });
+  it('members_card_uses_v4_values', () => {
+    const flat = squash(css);
+    expect(flat).toContain('.teams-roster { display: flex; flex-direction: column; min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden; }');
+    expect(flat).toContain('grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px; gap: 16px;');
+    expect(flat).toContain('text-transform: uppercase; letter-spacing: 0.04em;');
+    expect(flat).toContain('background: #5b9cff; color: #0b1220;');
+    expect(flat).toContain('color: #f0b453; background: rgba(240, 180, 83, 0.12);');
+    expect(flat).toContain('background: #1f2630; color: #9ec3ff;');
+    expect(flat).toContain('.teams-screen button.teams-member-row:hover:not(:disabled) { background: #1b1f25;');
   });
   it('removes_the_in_content_team_chooser_styles', () => {
     const flat = squash(css);

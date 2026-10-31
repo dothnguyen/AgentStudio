@@ -71,8 +71,8 @@ describe('live team state', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(name => memberRow(name));
     expect(rows.map(r => field(r, 'availability'))).toEqual(['Available', 'Working', 'Waiting for input', 'Limit reached', 'Offline', 'Not in runtime', 'Unavailable']);
-    ['ok', 'busy', 'warning', 'warning', 'danger', 'muted', 'muted'].forEach((tone, i) => expect(rows[i]!.querySelector('.status-badge')!.className).toContain(`teams-tone-${tone}`));
-    expect(rows.map(r => field(r, 'work'))).toEqual(['No current work', 'T-7 Fix login', 'Answer question', 'No current work', 'Not available — offline', 'Not available — member is not in the running team', 'Not available — live state unavailable']);
+    ['ok', 'busy', 'warning', 'warning', 'danger', 'muted', 'muted'].forEach((tone, i) => expect(rows[i]!.querySelector('.teams-member-status')!.className).toContain(`teams-tone-${tone}`));
+    expect(rows.map(r => field(r, 'work'))).toEqual(['Idle', 'T-7 Fix login', 'Answer question', 'Idle', 'Not available — offline', 'Not available — member is not in the running team', 'Not available — live state unavailable']);
   });
 
   it('stopped_team_members_say_unavailable', async () => {
@@ -81,9 +81,9 @@ describe('live team state', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     const row = memberRow('qa');
     expect(field(row, 'availability')).toBe('Stopped');
-    expect(row.querySelector('.status-badge')!.className).toContain('teams-tone-muted');
+    expect(row.querySelector('.teams-member-status')!.className).toContain('teams-tone-muted');
     expect(field(row, 'work')).toBe('Not available — team stopped');
-    expect(field(row, 'agent')).toBe('Not running · saved default: OpenCode Sonnet');
+    expect(row.querySelector('[data-part="agent-name"]')!.textContent).toBe('Not running · saved default: OpenCode Sonnet');
     const badge = (name: string) => screen.getByRole('button', { name: new RegExp(`^Open ${name},`) }).querySelector('.team-nav-state')!;
     expect(badge('Release Team').textContent).toBe('Stopped');
     expect(badge('Dev Team').textContent).toBe('Running');
@@ -471,7 +471,7 @@ describe('roster runtime evidence', () => {
   it('stale_and_pending_live_agent_evidence_is_labelled', async () => {
     const live = member().runtime ?? { ...((await import('./teamsFixtures')).twoTeams().teams[1]!.members[0]!.runtime!) };
     await renderScreen({overview: [ok(overviewFixture([team({members: [member({runtime: {...live, stale: true, activeAgent: 'codex-gpt', pendingAgent: 'codex-gpt'}}), member({memberId: 'next', name: 'next', presence: 'not_started', work: {state: 'unavailable', reason: 'not_started'}})]})]))]});
-    expect(field(memberRow('dev'), 'agent')).toContain('Last live agent: codex-gpt (team not running)');
+    expect(field(memberRow('dev'), 'agent')).toContain('Last live agent: Codex GPT (team not running)');
     expect(field(memberRow('dev'), 'agent')).toContain('Switch to codex-gpt pending');
     expect(field(memberRow('next'), 'availability')).toBe('Not started'); expect(field(memberRow('next'), 'work')).toBe('Not available — team not started');
   });

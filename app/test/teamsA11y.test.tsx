@@ -108,7 +108,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
   expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview, \.teams-member-detail, \.routing-rule-grid, \.routing-escalation-fields \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   expect(flat).toMatch(/\.teams-overview > \*, \.teams-member-detail > \*[^{]*\{ min-width: 0; \}/);
   expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.routing-table-wrap \{ overflow-x: auto; max-width: 100%; \}/);
-  expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.teams-member-row \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  expect(flat).toMatch(/\.teams-members-scroll \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-live-modal \[role="dialog"\] \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
   expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-team-actions[^{]*\{ display: grid; grid-template-columns: minmax\(0, 1fr\); \}/);
   expect(flat).toMatch(/overflow-wrap: anywhere; min-width: 0; max-width: 100%/);
@@ -118,7 +118,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
     expect(body, selector).not.toMatch(/display: ?none/);
     expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);
     expect(body, selector).not.toMatch(/white-space: ?nowrap/);
-    if (!/status-dot/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
+    if (!/status-dot|teams-members-table|teams-visually-hidden/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
   }
   expect(rules.find(r => /teams-live-modal/.test(r.selector) && /overflow-x: hidden/.test(r.body))).toBeTruthy();
 });
@@ -182,7 +182,7 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
   const overviewOrder = await tabNames(22);
-  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
+  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdevDeveloper/]);
     // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
   const row = memberRow('dev');
   row.focus();
@@ -250,13 +250,13 @@ it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_co
   expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
   // structural CSS contract per breakpoint
   expect(flat).toMatch(/\.teams-overview-summaries \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(220px, 1fr\)\);/);
-  expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: minmax\(0, /);
+  expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1\.2fr\)/);
   expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview-summaries \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
-  expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.teams-member-field\[data-label\]::before \{ content: attr\(data-label\);/);
+  expect(flat).toMatch(/\.teams-members-scroll \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/\.team-nav :is\(\.team-nav-item, \.team-nav-label[^)]*\), [^{]*\{ overflow-wrap: anywhere; min-width: 0; max-width: 100%; \}/);
   // only genuine routing tables may scroll horizontally
   const scrollers = Array.from(css.matchAll(/([^{}]+)\{([^{}]*overflow-x: ?(?:auto|scroll)[^{}]*)\}/g)).map(m => m[1]!.trim()).filter(sel => /\.(teams-|team-nav)/.test(sel));
-  expect(scrollers.filter(sel => !/routing-table-wrap/.test(sel))).toEqual([]);
+  expect(scrollers.filter(sel => !/routing-table-wrap|teams-members-scroll/.test(sel))).toEqual([]);
   for (const { selector, body } of teamsRules()) {
     expect(body, selector).not.toMatch(/white-space: ?nowrap/);
     expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);

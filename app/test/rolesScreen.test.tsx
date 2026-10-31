@@ -236,7 +236,7 @@ describe('RolesScreen', () => {
 
   it('roles_layout_css_stacks_wraps_and_has_no_wide_overflow_rule', () => {
     const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8');
-    const rules = css.slice(css.indexOf('/* Roles browser')).replace(/\s+/g, ' ');
+    const rules = css.slice(css.indexOf('/* Roles browser'), css.indexOf('/* Teams v4 Members card')).replace(/\s+/g, ' ');
     expect(rules).toMatch(/\.roles-layout \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 2fr\)/);
     expect(rules).toMatch(/@media \(max-width: 900px\) \{ \.roles-layout \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
     expect(rules).toMatch(/min-width: 0; overflow-wrap: anywhere/);

@@ -3,11 +3,12 @@ import { MemberDetailPanel, type MemberDetailPanelProps } from './MemberDetailPa
 import { MemberLiveAgentActions } from './MemberLiveAgentActions';
 import { memberActionKey, type MemberActionInFlight } from './memberAgentActionsModel';
 import type { OverviewMember, OverviewTeam } from '../api';
+import { Icon } from '../icons/Icon';
 import { MemberList } from './MemberList';
 import { MemberForm } from './TeamEditForms';
 import { canEditTeam, emptyMemberForm } from './teamEditModel';
 import { teamsPanelId } from './teamsViewModel';
-import { availabilityCounts, filterMembers, missingMemberNotice, presenceLabel, resolveMemberSelection, type MemberSelection } from './teamsModel';
+import { filterMembers, missingMemberNotice, resolveMemberSelection, type MemberSelection } from './teamsModel';
 
 export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'liveActions'> { announce?: boolean; onNoticeChange?(active: boolean): void; actions: Record<string, MemberActionInFlight>; polling: Record<string, boolean>; onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void; onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void; teamKey: string; selection: MemberSelection | null; onSelect(s: MemberSelection | null): void; summary: JSX.Element }
 export function MembersView(props: MembersViewProps): JSX.Element {
@@ -16,16 +17,13 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   const [lost, setLost] = useState<string | null>(null);
   const [lastOpened, setLastOpened] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [availability, setAvailability] = useState<string | null>(null);
   const rows = useRef(new Map<string, HTMLButtonElement>());
   const [returnFocus, setReturnFocus] = useState<{ memberId: string | null } | 'add' | null>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   const result = resolveMemberSelection(team, teamKey, selection);
-  const counts = availabilityCounts(team.members);
-  const filtered = filterMembers(team.members, props.roleItems, { query, availability });
-  const filtersActive = query.trim() !== '' || availability !== null;
+  const filtered = filterMembers(team.members, props.roleItems, props.agents, query);
+  const filterActive = query.trim() !== '';
   const headingId = useId();
-  useEffect(() => { if (availability !== null && !team.members.some(m => m.presence === availability)) setAvailability(null); }, [team.members, availability]);
   useEffect(() => { props.onNoticeChange?.(lost !== null && result.state !== 'selected'); return () => props.onNoticeChange?.(false); }, [lost, result.state, props.onNoticeChange]);
   useEffect(() => {
     if (result.state === 'missing') { setLost(result.memberId); setReturnFocus({ memberId: null }); onSelect(null); }
@@ -39,19 +37,20 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   const empty = team.members.length === 0;
   return <div className="teams-members teams-members-view">
     {props.summary}
-    <section className="teams-roster" aria-labelledby={headingId}>
-      <h2 id={headingId} tabIndex={-1}>Members</h2>
-      {lost !== null && <p className="panel-note" role={props.announce === false ? undefined : 'status'}>{missingMemberNotice(lost, team.membersTruncated)}</p>}
-      {canEditTeam(team) && <div className="teams-members-actions"><button ref={addRef} type="button" disabled={props.pending || props.readOnly === true || adding} onClick={() => setAdding(true)}>Add member</button></div>}
-      {adding && <MemberForm mode="add" heading="Add member" initial={emptyMemberForm()} originalOptions={[]} inlineContext={null} agents={props.agentsFresh === false ? null : props.agents} roles={props.rolesFresh === false ? null : props.roleItems} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} onSubmit={values => { void props.writes.addMember(team, values).then(ok => { if (ok) { setAdding(false); setReturnFocus('add'); } }); }} onCancel={() => { setAdding(false); setReturnFocus('add'); }} />}
-      <div className="teams-member-filters">
-        <label className="teams-member-filter"><span>Search members</span><input type="search" value={query} placeholder="Name, role, agent, or current work" onChange={e => setQuery(e.target.value)} /></label>
-        <label className="teams-member-filter"><span>Availability</span><select value={availability ?? ''} onChange={e => setAvailability(e.target.value === '' ? null : e.target.value)}><option value="">All availability</option>{counts.map(c => <option key={c.presence} value={c.presence}>{`${presenceLabel(c.presence)} (${c.count})`}</option>)}</select></label>
-        {filtersActive && <button type="button" className="teams-member-filter-clear" onClick={() => { setQuery(''); setAvailability(null); }}>Clear filters</button>}
+    <section className="teams-roster teams-members-card" aria-labelledby={headingId}>
+      <div className="teams-members-head">
+        <div className="teams-members-title"><h3 id={headingId} tabIndex={-1}>Members</h3><span className="teams-members-count">{team.membersTruncated ? `${team.members.length}+` : String(team.members.length)}</span></div>
+        <div className="teams-members-tools">
+          <label className="teams-members-filter"><Icon name="search" size={14} /><span className="teams-visually-hidden">Filter members</span><input type="search" value={query} placeholder="Filter members" onChange={e => setQuery(e.target.value)} /></label>
+          {filterActive && <button type="button" className="teams-members-clear" onClick={() => setQuery('')}>Clear filter</button>}
+          {canEditTeam(team) && <button ref={addRef} type="button" className="teams-members-add" disabled={props.pending || props.readOnly === true || adding} onClick={() => setAdding(true)}><Icon name="plus" size={13} />Add member</button>}
+        </div>
       </div>
-      {empty ? <p className="panel-empty">This team has no members.</p> : filtered.length === 0 && <p className="panel-empty">No returned members match the current filters.</p>}
-      {filtered.length > 0 && <MemberList team={team} members={filtered} roleItems={props.roleItems} currentMemberId={lastOpened} rowRef={(id, el) => { if (el) rows.current.set(id, el); else rows.current.delete(id); }} onOpen={open} />}
-      {team.membersTruncated && <p className="panel-note">{`Showing ${filtered.length} of ${team.members.length} returned members. More members may exist; filters apply only to returned members.`}</p>}
+      {lost !== null && <p className="panel-note teams-members-note" role={props.announce === false ? undefined : 'status'}>{missingMemberNotice(lost, team.membersTruncated)}</p>}
+      {adding && <div className="teams-members-inline"><MemberForm mode="add" heading="Add member" initial={emptyMemberForm()} originalOptions={[]} inlineContext={null} agents={props.agentsFresh === false ? null : props.agents} roles={props.rolesFresh === false ? null : props.roleItems} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} onSubmit={values => { void props.writes.addMember(team, values).then(ok => { if (ok) { setAdding(false); setReturnFocus('add'); } }); }} onCancel={() => { setAdding(false); setReturnFocus('add'); }} /></div>}
+      {empty ? <p className="panel-empty teams-members-note">This team has no members.</p> : filtered.length === 0 && <p className="panel-empty teams-members-note">No returned members match the current filters.</p>}
+      {filtered.length > 0 && <MemberList team={team} members={filtered} roleItems={props.roleItems} agents={props.agents} currentMemberId={lastOpened} rowRef={(id, el) => { if (el) rows.current.set(id, el); else rows.current.delete(id); }} onOpen={open} />}
+      {team.membersTruncated && <p className="panel-note teams-members-note teams-members-truncated">{`Showing ${filtered.length} of ${team.members.length} returned members. More members may exist; filters apply only to returned members.`}</p>}
     </section>
   </div>;
 }

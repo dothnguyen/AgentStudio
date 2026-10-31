@@ -488,7 +488,7 @@ describe('Role create and edit', () => {
     expect(css).toMatch(/\.roles-form :is\(button, input, select, textarea\):focus-visible \{ outline: 2px solid/);
     const form = s.view.getByRole('dialog');
     for (const cls of ['roles-form', 'roles-skill-row', 'roles-form-actions']) expect(form.classList.contains(cls) || form.querySelector(`.${cls}`)).toBeTruthy();
-    const roleCss = css.slice(css.indexOf('.roles-toolbar'));
+    const roleCss = css.slice(css.indexOf('.roles-toolbar'), css.indexOf('/* Teams v4 Members card'));
     expect(roleCss).not.toMatch(/overflow-x: ?scroll/);
     expect(roleCss).not.toMatch(/(?<!max-)width: ?\d{3,}px/);
   });

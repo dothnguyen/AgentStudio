@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, filterMembers, resolveMemberSelection, missingMemberNotice } from "../src/renderer/teams/teamsModel";
+import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, filterMembers, resolveMemberSelection, missingMemberNotice, memberInitials, memberLiveAgent, memberRowWork } from "../src/renderer/teams/teamsModel";
 import { roleItem } from './rolesFixtures';
 import {
   availabilityCounts,
@@ -20,7 +20,7 @@ import {
 } from '../src/renderer/teams/teamsModel';
 import type { OverviewRuntimeState } from '../src/renderer/api';
 import { RUNNING_TEAM_NOTICE, runningTeamNotice } from '../src/renderer/teams/teamEditModel';
-import { member, overviewFixture, team, twoTeams } from './teamsFixtures';
+import { catalogFixture, member, overviewFixture, team, twoTeams } from './teamsFixtures';
 
 function withState(id: string, state: OverviewRuntimeState) {
   return { team: team({ id, runtime: { state, teamId: null, status: null } }) };
@@ -179,6 +179,49 @@ describe('roster evidence summaries', () => {
     expect(memberAgentSummary(member({runtime: null, agentOptions: [{...first, state: 'missing'}]})).note).toBe('Saved default is missing from the catalog');
     expect(memberAgentSummary(member({runtime: null, agentMode: 'inline', provider: 'codex', model: null})).text).toBe('Not running · saved inline: codex · model not set');
   });
+  it('member_initials_cases', () => {
+    expect(memberInitials('dev-1')).toBe('D1');
+    expect(memberInitials('lead')).toBe('LE');
+    expect(memberInitials('qa')).toBe('QA');
+    expect(memberInitials('reviewer')).toBe('RE');
+    expect(memberInitials('Ada Lovelace')).toBe('AL');
+    expect(memberInitials('x')).toBe('X');
+    expect(memberInitials('  ')).toBe('?');
+    expect(memberInitials('release_bot two')).toBe('RB');
+  });
+  it('member_initials_keeps_unicode_characters_whole', () => {
+    expect(memberInitials('Ünï')).toBe('ÜN');
+    expect(memberInitials('😀 smile')).toBe('😀S');
+    expect(memberInitials('a.b_c-d')).toBe('AB');
+    expect(memberInitials('.hidden')).toBe('HI');
+  });
+  it('member_live_agent_cases', () => {
+    const live = twoTeams().teams[1]!.members[0]!.runtime!;
+    expect(memberLiveAgent(member({ runtime: live }), null)).toEqual({ kind: 'active', name: 'OpenCode Sonnet', meta: 'opencode · claude-sonnet', switched: false, note: null });
+    expect(memberLiveAgent(member({ runtime: { ...live, activeAgent: 'codex-gpt', provider: 'codex', model: 'gpt-6', reasoning: 'medium' } }), catalogFixture().agents))
+      .toEqual({ kind: 'active', name: 'Codex GPT', meta: 'codex · gpt-6 · medium', switched: true, note: null });
+    expect(memberLiveAgent(member({ runtime: live }), [{ id: 'opencode-sonnet', name: 'Catalog Name', provider: 'opencode' }]).name).toBe('Catalog Name');
+    expect(memberLiveAgent(member({ runtime: { ...live, activeAgent: 'live-agent-q' } }), null).name).toBe('live-agent-q');
+    expect(memberLiveAgent(member({ runtime: { ...live, stale: true } }), null))
+      .toMatchObject({ kind: 'stale', name: 'Last live agent: OpenCode Sonnet (team not running)', switched: false });
+    expect(memberLiveAgent(member({ runtime: { ...live, activeAgent: null } }), null)).toMatchObject({ kind: 'none', name: 'No live agent reported', meta: null });
+    expect(memberLiveAgent(member({ runtime: null }), null))
+      .toEqual({ kind: 'saved', name: 'Not running · saved default: OpenCode Sonnet', meta: 'opencode · sonnet', switched: false, note: null });
+    expect(memberLiveAgent(member({ runtime: null, agentMode: 'inline', provider: 'codex', model: null }), null))
+      .toEqual({ kind: 'saved', name: 'Not running · saved inline: codex · model not set', meta: null, switched: false, note: null });
+    expect(memberLiveAgent(member({ runtime: live, defaultAgent: null, agentOptions: [] }), null).switched).toBe(false);
+    expect(memberLiveAgent(member({ runtime: { ...live, pendingAgent: 'codex-gpt' } }), null).note).toBe('Switch to codex-gpt pending');
+    const first = member().agentOptions[0]!;
+    expect(memberLiveAgent(member({ runtime: null, agentOptions: [{ ...first, state: 'missing' }] }), null).note).toBe('Saved default is missing from the catalog');
+  });
+  it('member_row_work_cases', () => {
+    expect(memberRowWork({ state: 'none' })).toEqual({ text: 'Idle', muted: true });
+    expect(memberRowWork({ state: 'unavailable', reason: 'stopped' })).toEqual({ text: 'Not available — team stopped', muted: true });
+    const ticket = { key: 'T-031', title: 'Teams screen', status: 'dev', workflowRunId: null };
+    expect(memberRowWork({ state: 'working', ticket, assignment: null })).toEqual({ text: 'T-031 Teams screen', muted: false });
+    const delegation = { state: 'working' as const, ticket: { key: 'T-090', title: 'Fix the list', status: 'dev-ready', workflowRunId: null }, assignment: null, delegation: { commands: ['app-deps-install'], state: 'running' as const } };
+    expect(memberRowWork(delegation)).toEqual({ text: 'T-090 · Waiting on coordinator: app-deps-install', muted: false });
+  });
   it('work_summary_cases', () => {
     const ticket = {key: 'T-031', title: 'Teams screen', status: 'dev', workflowRunId: null};
     const assignment = {id: 'a', goal: 'Fix bug', status: 'working', taskId: null, workflowRunId: null};
@@ -192,7 +235,6 @@ describe('roster evidence summaries', () => {
 });
 
 describe('filterMembers', () => {
-  const none = { query: '', availability: null };
   const live = twoTeams().teams[1]!.members[0]!.runtime!;
   const members = [
     member({ memberId: 'id-only-zz', name: 'Alpha' }),
@@ -204,7 +246,7 @@ describe('filterMembers', () => {
     member({ memberId: 'g', name: 'Golf', work: { state: 'working', ticket: null, assignment: { id: 'a1', goal: 'Polish the kiwi' } } as never }),
     member({ memberId: 'h', name: 'Hotel', work: { state: 'unavailable', reason: 'stopped' } }),
   ];
-  const ids = (query: string) => filterMembers(members, [roleItem('Developer', { name: 'Builder Role' })], { query, availability: null }).map((m) => m.memberId);
+  const ids = (query: string) => filterMembers(members, [roleItem('Developer', { name: 'Builder Role' })], null, query).map((m) => m.memberId);
 
   it('filters returned members case-insensitively across every displayed text field and preserves backend order', () => {
     expect(ids('ID-ONLY')).toEqual(['id-only-zz']);
@@ -222,7 +264,7 @@ describe('filterMembers', () => {
     expect(ids('no-such-text')).toEqual([]);
   });
 
-  it('combines an exact availability filter with text and does not mutate the source', () => {
+  it('filters_by_status_label_and_does_not_mutate_the_source', () => {
     const mixed = [
       member({ memberId: 'a', name: 'a', presence: 'busy' }),
       member({ memberId: 'b', name: 'b', presence: 'idle' }),
@@ -230,16 +272,42 @@ describe('filterMembers', () => {
       member({ memberId: 'd', name: 'delta-unique', presence: 'busy' }),
     ];
     const before = JSON.stringify(mixed);
-    expect(filterMembers(mixed, null, { query: '', availability: 'busy' }).map((m) => m.memberId)).toEqual(['a', 'd']);
-    expect(filterMembers(mixed, null, { query: 'DELTA-unique', availability: 'busy' }).map((m) => m.memberId)).toEqual(['d']);
-    expect(filterMembers(mixed, null, { query: '', availability: 'busy-ish' }).map((m) => m.memberId)).toEqual(['c']);
-    expect(filterMembers(mixed, null, { query: 'busy', availability: null })).toEqual([]);
+    expect(filterMembers(mixed, null, null, 'working').map((m) => m.memberId)).toEqual(['a', 'd']);
+    expect(filterMembers(mixed, null, null, 'busy-ish').map((m) => m.memberId)).toEqual(['c']);
+    expect(filterMembers(mixed, null, null, 'busy').map((m) => m.memberId)).toEqual(['c']);
+    expect(filterMembers(mixed, null, null, 'delta-unique').map((m) => m.memberId)).toEqual(['d']);
     expect(JSON.stringify(mixed)).toBe(before);
   });
 
-  it('treats whitespace query and null availability as no filters', () => {
-    expect(filterMembers(members, null, { query: '   ', availability: null })).toEqual(members);
-    expect(filterMembers(members, null, none)).not.toBe(members);
+  it('treats whitespace query as no filter and never returns the source array', () => {
+    expect(filterMembers(members, null, null, '   ')).toEqual(members);
+    expect(filterMembers(members, null, null, '   ')).not.toBe(members);
+    expect(filterMembers(members, null, null, '')).not.toBe(members);
+  });
+
+  it('filters_by_idle_and_switched_text', () => {
+    const idle = member({ memberId: 'x', name: 'x', work: { state: 'none' } });
+    const working = member({ memberId: 'w', name: 'w', presence: 'busy' });
+    expect(filterMembers([idle, working], null, null, 'idle').map((m) => m.memberId)).toEqual(['x']);
+    const switched = member({ memberId: 's', name: 's', runtime: { ...live, activeAgent: 'codex-gpt', provider: 'codex', model: 'gpt-6' } });
+    expect(filterMembers([idle, switched], null, null, 'switched').map((m) => m.memberId)).toEqual(['s']);
+    expect(filterMembers([idle, switched], null, catalogFixture().agents, 'codex gpt').map((m) => m.memberId)).toEqual(['s']);
+  });
+
+  it('filters_identity_notes_role_ids_and_live_metadata', () => {
+    const roles = [roleItem('dev-role', { name: 'Builder' })];
+    const examples = [
+      member({ memberId: 'rt', name: 'rt', source: 'runtime' }),
+      member({ memberId: null, name: 'noid' }),
+      member({ memberId: 'roled', name: 'roled', role: 'dev-role' }),
+      member({ memberId: 'live', name: 'live', runtime: { ...live, provider: 'provider-meta', model: 'model-meta' } }),
+    ];
+    const find = (query: string) => filterMembers(examples, roles, null, query).map((m) => m.memberId);
+    expect(find('runtime only — not in the saved team definition')).toEqual(['rt']);
+    expect(find('no member id returned')).toEqual([null]);
+    expect(find('dev-role')).toEqual(['roled']);
+    expect(find('builder')).toEqual(['roled']);
+    expect(find('provider-meta · model-meta')).toEqual(['live']);
   });
 
   it('searches live provider and model, pending and missing-agent notes, and role fallbacks', () => {
@@ -249,7 +317,7 @@ describe('filterMembers', () => {
       member({ memberId: 'norole', role: null }),
       member({ memberId: 'fallback', role: 'uncatalogued-role' }),
     ];
-    const find = (query: string) => filterMembers(examples, null, { query, availability: null }).map(m => m.memberId);
+    const find = (query: string) => filterMembers(examples, null, null, query).map(m => m.memberId);
     expect(find('PROVIDER-UNIQUE')).toEqual(['live']);
     expect(find('MODEL-UNIQUE')).toEqual(['live']);
     expect(find('pending-unique pending')).toEqual(['live']);

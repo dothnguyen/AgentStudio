@@ -832,7 +832,7 @@ describe('member creation and removal focus', () => {
   it('adds ordered agents from Overview without clearing the roster filter', async () => {
     const addMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'new', name: 'New', role: 'QA'}, problems: [], appliesOnNextStart: true}));
     await renderScreen({calls: {addMember}});
-    type('Search members', 'dev');
+    type('Filter members', 'dev');
     await click('Add member');
     type('Role', 'QA');
     fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'opencode-sonnet'}});
@@ -844,7 +844,7 @@ describe('member creation and removal focus', () => {
     expect(addMember).toHaveBeenCalledWith('ws-a', 'dev-team', {role: 'QA', agents: ['codex-gpt', 'opencode-sonnet'], canAddTickets: true});
     expect(screen.getByRole('status').textContent).toBe('Added New to Dev Team. Saved configuration applies on the next team start; the running member is unchanged.');
     expect(screen.queryByRole('form', {name: 'Add member'})).toBeNull();
-    expect((screen.getByLabelText('Search members') as HTMLInputElement).value).toBe('dev');
+    expect((screen.getByLabelText('Filter members') as HTMLInputElement).value).toBe('dev');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
   });
   it('adds permission and restores add button focus', async () => {

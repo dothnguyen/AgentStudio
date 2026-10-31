@@ -1,4 +1,4 @@
-import type { RoleCatalogItem, ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
+import type { AgentDef, RoleCatalogItem, ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
 
 
 export function text(value: unknown): string | null {
@@ -234,17 +234,17 @@ export function runtimeTone(state: string): Tone {
   }
 }
 
-export interface MemberListFilters { query: string; availability: string | null }
-
 /** Filters only the returned members, by the text the roster actually displays; keeps backend order. */
-export function filterMembers(members: readonly OverviewMember[], roles: readonly RoleCatalogItem[] | null, filters: MemberListFilters): OverviewMember[] {
-  const query = filters.query.trim().toLowerCase();
+export function filterMembers(members: readonly OverviewMember[], roles: readonly RoleCatalogItem[] | null, agents: readonly AgentDef[] | null, query: string): OverviewMember[] {
+  const q = query.trim().toLowerCase();
+  if (q === '') return [...members];
   return members.filter((m) => {
-    if (filters.availability !== null && m.presence !== filters.availability) return false;
-    if (query === '') return true;
-    const identity = memberIdentity(m), role = memberRoleSummary(m, roles), agent = memberAgentSummary(m);
-    return [identity.name, identity.id, m.role, role.label, role.roleId, agent.text, agent.note, workSummary(m.work)]
-      .some((v) => v !== null && v.toLowerCase().includes(query));
+    const identity = memberIdentity(m), role = memberRoleSummary(m, roles), live = memberLiveAgent(m, agents);
+    return [
+      identity.name, m.memberId, identity.note, m.role, role.label, role.roleId,
+      live.name, live.meta, live.note, live.switched ? 'Switched' : null,
+      m.runtime?.activeAgent ?? null, presenceLabel(m.presence), memberRowWork(m.work).text,
+    ].some((v) => v !== null && v.toLowerCase().includes(q));
   });
 }
 
@@ -312,6 +312,61 @@ export function memberAgentSummary(m: OverviewMember): { text: string; kind: 'ac
     : result.kind === 'saved' && m.agentMode !== 'inline' && first?.state === 'missing' ? 'Saved default is missing from the catalog'
     : null;
   return { ...result, note };
+}
+
+/** Two-character avatar label: first letters of two words, or the first two characters of one. */
+export function memberInitials(name: string): string {
+  const parts = name.trim().split(/[\s\-_.]+/).filter((p) => p !== '');
+  if (parts.length === 0) return '?';
+  if (parts.length >= 2) return `${Array.from(parts[0]!)[0] ?? ''}${Array.from(parts[1]!)[0] ?? ''}`.toUpperCase();
+  return Array.from(parts[0]!).slice(0, 2).join('').toUpperCase();
+}
+
+export interface MemberLiveAgent { name: string; meta: string | null; switched: boolean; kind: 'active' | 'stale' | 'none' | 'saved'; note: string | null }
+
+/** The live or saved agent a roster row shows, resolved through the Agents catalog when it is available. */
+export function memberLiveAgent(m: OverviewMember, agents: readonly AgentDef[] | null): MemberLiveAgent {
+  const display = (id: string) => text(agents?.find((a) => a.id === id)?.name) ?? text(m.agentOptions.find((o) => o.id === id)?.name) ?? id;
+  const metaOf = (provider: string | null, model: string | null, reasoning: string | null): string | null => {
+    const meta = [provider, model, reasoning].filter((v): v is string => v !== null && v.trim() !== '').join(' · ');
+    return meta === '' ? null : meta;
+  };
+  const r = m.runtime;
+  const active = r ? text(r.activeAgent) : null;
+  const first = m.agentOptions[0];
+  const defaultId = m.defaultAgent ?? first?.id ?? null;
+  let result: Omit<MemberLiveAgent, 'note'>;
+  if (r && active && !r.stale) {
+    result = {
+      kind: 'active', name: display(active), meta: metaOf(r.provider, r.model, r.reasoning),
+      switched: defaultId !== null && active !== defaultId,
+    };
+  } else if (r && active) {
+    result = { kind: 'stale', name: `Last live agent: ${display(active)} (team not running)`, meta: metaOf(r.provider, r.model, r.reasoning), switched: false };
+  } else if (r) {
+    result = { kind: 'none', name: 'No live agent reported', meta: null, switched: false };
+  } else if (m.source === 'runtime') {
+    result = { kind: 'none', name: 'No live or saved agent', meta: null, switched: false };
+  } else if (m.agentMode === 'inline') {
+    result = m.provider === null
+      ? { kind: 'none', name: 'No live or saved agent', meta: null, switched: false }
+      : { kind: 'saved', name: `Not running · saved inline: ${providerModelText(m.provider, m.model)}`, meta: null, switched: false };
+  } else {
+    result = first === undefined
+      ? { kind: 'none', name: 'No live or saved agent', meta: null, switched: false }
+      : { kind: 'saved', name: `Not running · saved default: ${text(first.name) ?? display(first.id)}`, meta: metaOf(first.provider, first.model, first.reasoning), switched: false };
+  }
+  const note = r && text(r.pendingAgent) ? `Switch to ${r.pendingAgent} pending`
+    : result.kind === 'saved' && m.agentMode !== 'inline' && first?.state === 'missing' ? 'Saved default is missing from the catalog'
+    : null;
+  return { ...result, note };
+}
+
+/** Current work column: no work reads as "Idle"; unavailable/stopped text stays muted. */
+export function memberRowWork(work: MemberWork): { text: string; muted: boolean } {
+  if (work.state === 'none') return { text: 'Idle', muted: true };
+  if (work.state === 'unavailable') return { text: workSummary(work), muted: true };
+  return { text: workSummary(work), muted: false };
 }
 
 export const WORK_UNAVAILABLE_REASONS: Record<string, string> = {
