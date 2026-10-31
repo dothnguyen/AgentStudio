@@ -73,6 +73,12 @@ export function liveNote(team: OverviewTeam): string | null {
     : null;
 }
 
+export const RUNNING_TEAM_NOTICE = 'The team is running. Member edits apply on next start; stop the team to remove members or delete it.';
+
+export function runningTeamNotice(team: OverviewTeam): string | null {
+  return isLiveTeam(team) ? RUNNING_TEAM_NOTICE : null;
+}
+
 export function canEditMember(team: OverviewTeam, m: OverviewMember): boolean {
   return canEditTeam(team) && m.memberId !== null && m.source !== 'runtime';
 }

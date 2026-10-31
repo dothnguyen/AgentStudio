@@ -1,17 +1,14 @@
-import type { JSX } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import type { BoardSettings, OverviewTeam, TeamOverview } from '../api';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
-import { boardControlView, type BoardAction } from './boardControlModel';
-import { liveNote, uneditableNote } from './teamEditModel';
+import { boardButtonAction, boardControlView, type BoardAction } from './boardControlModel';
+import { runningTeamNotice, uneditableNote } from './teamEditModel';
 import {
   RUNTIME_LABELS,
-  availabilityCounts,
-  coordinatorText,
+  availabilitySummary,
   definitionStateText,
-  liveStateText,
-  memberCountText,
+  runtimeDetailText,
   runtimeTone,
-  teamLabel,
 } from './teamsModel';
 import { SectionError } from './SectionError';
 
@@ -28,6 +25,7 @@ export interface BoardControlProps {
   onRetry?(): void;
   onRun(team: OverviewTeam): void;
   onStop(team: OverviewTeam): void;
+  onOpenBoard?(): void;
 }
 
 export function BoardControl(props: BoardControlProps): JSX.Element {
@@ -35,22 +33,54 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
   const settings = section.data ?? props.lastSettings ?? null;
   const stale = settings !== null && (section.state !== 'ready' || section.data === null);
   const view = settings === null ? null : boardControlView(team, settings.runner, connected && !stale);
+  const buttonAction = view === null ? null : boardButtonAction(view);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const hadFocus = useRef(false);
+  useEffect(() => {
+    if (!hadFocus.current) return;
+    const a = document.activeElement;
+    if (a !== null && a !== document.body && a !== buttonRef.current) { hadFocus.current = false; return; }
+    if (buttonAction !== null) { buttonRef.current?.focus(); return; }
+    // Wait out transient states (reload, write in flight, brief disconnect): the button may come back.
+    if (section.state === 'loading' || action !== null || pending || !connected) return;
+    hadFocus.current = false;
+    document.getElementById('teams-board-title')?.focus();
+  }, [buttonAction, section.state, action, pending, connected]);
   return (
-    <section className="teams-board" aria-labelledby="teams-board-title">
-      <h2 id="teams-board-title" tabIndex={-1}>Board</h2>
+    <section className="teams-board teams-summary-card" aria-labelledby="teams-board-title">
+      <div className="teams-board-head">
+        <h2 id="teams-board-title" className="teams-summary-label" tabIndex={-1}>Board</h2>
+        {props.onOpenBoard && <button type="button" className="teams-summary-link" onClick={props.onOpenBoard}>Open board</button>}
+      </div>
       {section.state === 'loading' && <p className="panel-loading" role={props.announce === false ? undefined : 'status'}>{stale ? 'Refreshing board state… Showing previously loaded data.' : 'Loading board state…'}</p>}
       {section.state === 'error' && <SectionError section={section} alert={props.alert} label="Board" stale={stale} retryId="teams-retry-board" onRetry={props.onRetry} />}
       {view !== null && (
         <>
-          <p className={`status-badge teams-board-status teams-tone-${view.tone}`}>
+          <p className={`teams-summary-value teams-tone-${view.tone}`}>
             <span className="status-dot" aria-hidden="true" />
             {view.status}
           </p>
-          {view.detail !== null && <p className="panel-note">{view.detail}</p>}
-          {view.runHint !== null && <p className="panel-note">{view.runHint}</p>}
-          <div className="teams-board-actions">
-            <button type="button" disabled={pending || !view.canRun} onClick={() => onRun(team)}>Run board</button>
-            <button type="button" disabled={pending || !view.canStop} onClick={() => onStop(team)}>Stop board</button>
+          <div className="teams-board-foot">
+            <div className="teams-board-text">
+              {view.detail !== null && <p>{view.detail}</p>}
+              {view.runHint !== null && <p>{view.runHint}</p>}
+            </div>
+            {buttonAction !== null && (
+              <button
+                type="button"
+                ref={buttonRef}
+                className="teams-board-button"
+                disabled={pending}
+                onFocus={() => { hadFocus.current = true; }}
+                onBlur={() => { hadFocus.current = false; }}
+                onClick={() => (buttonAction === 'stop' ? onStop(team) : onRun(team))}
+              >
+                {buttonAction === 'stop'
+                  ? <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
+                  : <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>}
+                {buttonAction === 'stop' ? 'Stop board' : 'Run board'}
+              </button>
+            )}
           </div>
         </>
       )}
@@ -61,26 +91,19 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
   );
 }
 
-
-export function TeamStatusSummary(props: { team: OverviewTeam; overview: TeamOverview; stale: boolean }): JSX.Element {
+export function RuntimeSummary(props: { team: OverviewTeam; overview: TeamOverview; stale: boolean }): JSX.Element {
   const { team, overview } = props;
-  const coordinator = coordinatorText(overview);
-  const live = liveStateText(overview);
   return (
-    <section className="teams-summary-card" aria-labelledby="teams-status-title">
-      <h2 id="teams-status-title">Team status</h2>
-      <p className="teams-summary-name">{teamLabel(team)}</p>
-      <p className={`status-badge teams-runtime teams-tone-${runtimeTone(team.runtime.state)}`}>
+    <section className="teams-summary-card" aria-labelledby="teams-runtime-title">
+      <h2 id="teams-runtime-title" className="teams-summary-label">Runtime</h2>
+      <p className={`teams-summary-value teams-tone-${runtimeTone(team.runtime.state)}`}>
         <span className="status-dot" aria-hidden="true" />
         {RUNTIME_LABELS[team.runtime.state] ?? team.runtime.state}
       </p>
-      <ul className="teams-summary-list">
-        <li>{`Definition: ${definitionStateText(team)}`}</li>
-        <li>{`Coordinator: ${coordinator.text}`}</li>
-        <li>{`Live state: ${live.text}`}</li>
-      </ul>
-      {props.stale && <p className="panel-note">Team data is stale — showing previously loaded data.</p>}
-      {overview.partial && <p className="panel-note">Some team details could not be read.</p>}
+      <p className="teams-summary-detail">{runtimeDetailText(overview)}</p>
+      {team.definition.state !== 'valid' && <p className="teams-summary-note">{`Definition: ${definitionStateText(team)}`}</p>}
+      {props.stale && <p className="teams-summary-note">Team data is stale — showing previously loaded data.</p>}
+      {overview.partial && <p className="teams-summary-note">Some team details could not be read.</p>}
       {team.definition.problems.length > 0 && (
         <ul className="teams-problems" aria-label="Definition problems">
           {team.definition.problems.map((p, i) => <li key={i}>{`${p.path}: ${p.message}`}</li>)}
@@ -90,28 +113,30 @@ export function TeamStatusSummary(props: { team: OverviewTeam; overview: TeamOve
   );
 }
 
-export function MemberAvailabilitySummary(props: { team: OverviewTeam }): JSX.Element {
+export function MemberAvailabilityCard(props: { team: OverviewTeam }): JSX.Element {
   const { team } = props;
+  const s = availabilitySummary(team);
   return (
     <section className="teams-summary-card" aria-labelledby="teams-availability-title">
-      <h2 id="teams-availability-title">Member availability</h2>
-      <p>{memberCountText(team)}</p>
-      {team.members.length === 0 ? <p>No members</p> : (
-        <ul className="teams-overview-availability" aria-label="Member availability counts">
-          {availabilityCounts(team.members).map((c) => (
-            <li key={c.presence}>
-              <span className={`status-badge teams-presence teams-tone-${c.tone}`}>
-                <span className="status-dot" aria-hidden="true" />
-                {`${c.count} ${c.label}`}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <h2 id="teams-availability-title" className="teams-summary-label">Availability</h2>
+      <p className="teams-summary-value teams-availability-value"><span>{s.available}</span> <span className="teams-availability-total">{`/ ${s.totalText} available`}</span></p>
+      <div className="teams-availability-bar" role="img" aria-label={s.barLabel}>
+        <div className="teams-availability-fill" style={{ width: `${s.percent}%` }} />
+      </div>
+      {team.members.length === 0 ? <p className="teams-summary-detail">No members</p> : s.others !== null && <p className="teams-summary-detail">{s.others}</p>}
       {team.membersTruncated && (
-        <p className="teams-cell-note">{`Counts cover the ${team.members.length} members shown; more members exist.`}</p>
+        <p className="teams-summary-note">{`Counts cover the ${team.members.length} members shown; more members exist.`}</p>
       )}
     </section>
+  );
+}
+
+function InfoBanner(props: { text: string }): JSX.Element {
+  return (
+    <p className="teams-info-banner">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7fb2ff" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></svg>
+      <span>{props.text}</span>
+    </p>
   );
 }
 
@@ -126,16 +151,16 @@ export interface TeamOverviewPanelProps {
 export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
   const { team, overview, pending, board } = props;
   const unNote = uneditableNote(team);
-  const runNote = liveNote(team);
+  const runNotice = runningTeamNotice(team);
   return (
     <div className="teams-overview">
       <div className="teams-overview-summaries">
-        <TeamStatusSummary team={team} overview={overview} stale={props.stale} />
+        <RuntimeSummary team={team} overview={overview} stale={props.stale} />
+        <MemberAvailabilityCard team={team} />
         <BoardControl team={team} pending={pending} {...board} />
-        <MemberAvailabilitySummary team={team} />
       </div>
-      {unNote !== null && <p className="panel-note">{unNote}</p>}
-      {runNote !== null && <p className="panel-note">{runNote}</p>}
+      {unNote !== null && <InfoBanner text={unNote} />}
+      {runNotice !== null && <InfoBanner text={runNotice} />}
     </div>
   );
 }

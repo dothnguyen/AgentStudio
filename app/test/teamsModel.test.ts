@@ -3,6 +3,8 @@ import { memberIdentity, memberRoleSummary, memberAgentSummary, workSummary, fil
 import { roleItem } from './rolesFixtures';
 import {
   availabilityCounts,
+  availabilitySummary,
+  runtimeDetailText,
   coordinatorText,
   definitionStateText,
   liveStateText,
@@ -17,6 +19,7 @@ import {
   workText,
 } from '../src/renderer/teams/teamsModel';
 import type { OverviewRuntimeState } from '../src/renderer/api';
+import { RUNNING_TEAM_NOTICE, runningTeamNotice } from '../src/renderer/teams/teamEditModel';
 import { member, overviewFixture, team, twoTeams } from './teamsFixtures';
 
 function withState(id: string, state: OverviewRuntimeState) {
@@ -273,5 +276,38 @@ describe('delegated commands in member work (P06)', () => {
     expect(workSummary({ state: 'working', ticket, assignment: null })).toBe('T-090 Fix the list');
     expect(workSummary({ state: 'working', ticket, assignment: null, delegation: { commands: [], state: 'queued' } }))
       .toBe('T-090 Fix the list');
+  });
+
+  it('availability_summary_full_partial_truncated_and_empty', () => {
+    const t = (presences: string[], membersTruncated = false) =>
+      team({ members: presences.map((presence, i) => member({ memberId: `m${i}`, presence })), membersTruncated });
+    expect(availabilitySummary(t(Array(6).fill('idle')))).toEqual({ available: 6, totalText: '6', percent: 100, others: null, barLabel: '6 of 6 members available' });
+    expect(availabilitySummary(t(['busy', 'idle']))).toEqual({ available: 1, totalText: '2', percent: 50, others: '1 working', barLabel: '1 of 2 members available' });
+    expect(availabilitySummary(t(['idle', 'idle', 'offline']))).toMatchObject({ percent: 67, others: '1 offline' });
+    expect(availabilitySummary(t(['busy', 'busy', 'future_state'], true))).toEqual({
+      available: 0, totalText: '3+', percent: 0, others: '2 working · 1 future_state', barLabel: '0 of 3+ members available',
+    });
+    expect(availabilitySummary(t([]))).toEqual({ available: 0, totalText: '0', percent: 0, others: null, barLabel: '0 of 0 members available' });
+    expect(availabilitySummary(t([], true)).totalText).toBe('0+');
+  });
+
+  it('runtime_detail_text_combines_coordinator_and_live_state', () => {
+    expect(runtimeDetailText(overviewFixture([], { coordinator: { running: true } }))).toBe('Coordinator running · live state available');
+    expect(runtimeDetailText(overviewFixture([], {
+      coordinator: { running: false },
+      runtimeState: { available: false, error: { code: 'X', message: 'state db locked' } },
+    }))).toBe('Coordinator not running · live state unavailable — state db locked');
+    expect(runtimeDetailText(overviewFixture([], {
+      coordinator: { running: false },
+      runtimeState: { available: false, error: null },
+    }))).toBe('Coordinator not running · live state unavailable — runtime not reachable');
+  });
+
+  it('running_team_notice_only_for_live_teams', () => {
+    const t = (state: 'running' | 'starting' | 'stopped' | 'not_started') => team({ runtime: { state, teamId: null, status: null } });
+    expect(runningTeamNotice(t('running'))).toBe(RUNNING_TEAM_NOTICE);
+    expect(runningTeamNotice(t('starting'))).toBe(RUNNING_TEAM_NOTICE);
+    expect(runningTeamNotice(t('stopped'))).toBeNull();
+    expect(runningTeamNotice(t('not_started'))).toBeNull();
   });
 });

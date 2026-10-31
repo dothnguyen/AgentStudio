@@ -5,11 +5,12 @@ import userEvent from '@testing-library/user-event';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { TeamsHarness, teamRow } from './teamsHarness';
 import type { TeamsNavigationController } from '../src/renderer/teams/useTeamsNavigationController';
+import { RUNNING_TEAM_NOTICE } from '../src/renderer/teams/teamEditModel';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import {
   catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
-  boardSettingsFixture, boardRunnerFixture, chooseDeleteTeam, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
+  boardSettingsFixture, boardRunnerFixture, chooseDeleteTeam, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
   teamDefinition, teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
 } from './teamsFixtures';
 afterEach(cleanup);
@@ -91,21 +92,20 @@ describe('compact team overview', () => {
       members: [member({ memberId: 'a', name: 'a', presence: 'busy' }), member({ memberId: 'b', name: 'b', presence: 'idle' })],
     })]);
     const { result } = await renderScreen({ overview: [{ ok: true, data }] });
-    for (const heading of ['Team status', 'Board', 'Member availability']) {
-      expect(result.getByRole('heading', { name: heading })).toBeTruthy();
-    }
-    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Team status', 'Board', 'Member availability', 'Members']);
-    const status = result.getByRole('heading', { name: 'Team status' }).closest('section')!;
-    const availability = result.getByRole('heading', { name: 'Member availability' }).closest('section')!;
-    expect(within(status).getByText('Dev Team')).toBeTruthy();
-    expect(within(status).getByText('Running')).toBeTruthy();
-    expect(within(status).getByText('Definition: Valid')).toBeTruthy();
-    expect(within(status).getByText('Coordinator: Running')).toBeTruthy();
-    expect(within(status).getByText('Live state: Available')).toBeTruthy();
-    expect(within(availability).getByText('2 members')).toBeTruthy();
-    expect(within(availability).getByText('1 Working')).toBeTruthy();
-    expect(within(availability).getByText('1 Available')).toBeTruthy();
+    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Runtime', 'Availability', 'Board', 'Members']);
+    expect(result.queryByRole('heading', { name: 'Team status' })).toBeNull();
+    expect(result.queryByRole('heading', { name: 'Member availability' })).toBeNull();
+    const status = result.getByRole('heading', { name: 'Runtime' }).closest('section')!;
+    const availability = result.getByRole('region', { name: 'Availability' });
+    expect(status.querySelector('.teams-summary-value')!.textContent).toBe('Running');
+    expect(within(status).getByText('Coordinator running · live state available')).toBeTruthy();
+    expect(status.textContent).not.toContain('Definition:');
+    expect(availability.querySelector('.teams-summary-value')!.textContent).toBe('1 / 2 available');
+    expect(within(availability).getByRole('img', { name: '1 of 2 members available' })).toBeTruthy();
+    expect((availability.querySelector('.teams-availability-fill') as HTMLElement).style.width).toBe('50%');
+    expect(within(availability).getByText('1 working')).toBeTruthy();
     for (const card of [status, availability]) {
+      expect(card.textContent).not.toContain('Dev Team');
       expect(card.textContent).not.toContain('dev-team-id');
       expect(card.textContent).not.toContain(RUNTIME_ID);
     }
@@ -128,8 +128,12 @@ describe('compact team overview', () => {
     expect(result.getByText('members[0]: unknown role')).toBeTruthy();
     expect(result.getByText('Counts cover the 0 members shown; more members exist.')).toBeTruthy();
     expect(result.getByText('No members')).toBeTruthy();
-    expect(within(result.getByRole('region', { name: 'Member availability' })).queryByRole('list', { name: 'Member availability counts' })).toBeNull();
-    expect(result.getAllByText(/state db locked/).length).toBeGreaterThan(0);
+    const availability = result.getByRole('region', { name: 'Availability' });
+    expect(availability.querySelector('.teams-summary-value')!.textContent).toBe('0 / 0+ available');
+    expect((availability.querySelector('.teams-availability-fill') as HTMLElement).style.width).toBe('0%');
+    const runtime = result.getByRole('region', { name: 'Runtime' });
+    expect(runtime.textContent).toContain('live state unavailable — state db locked');
+    expect(runtime.textContent).toContain('Definition: Has 1 problem');
   });
 
   it('availability_counts_only_returned_members_and_preserves_unknown_presence', async () => {
@@ -142,12 +146,10 @@ describe('compact team overview', () => {
       ],
     })]);
     const { result } = await renderScreen({ overview: [{ ok: true, data }] });
-    const summary = within(result.getByRole('region', { name: 'Member availability' }));
+    const summary = within(result.getByRole('region', { name: 'Availability' }));
     expect(summary.getByText('Counts cover the 3 members shown; more members exist.')).toBeTruthy();
-    const buckets = within(summary.getByRole('list', { name: 'Member availability counts' })).getAllByRole('listitem');
-    expect(buckets.map((bucket) => bucket.textContent)).toEqual(['2 Working', '1 future_state']);
-    expect(buckets[0]!.querySelector('.teams-tone-busy')).toBeTruthy();
-    expect(buckets[1]!.querySelector('.teams-tone-muted')).toBeTruthy();
+    expect(summary.getByText('2 working · 1 future_state')).toBeTruthy();
+    expect(result.getByRole('region', { name: 'Availability' }).querySelector('.teams-summary-value')!.textContent).toBe('0 / 3+ available');
   });
 
   it('retained_overview_is_stale_and_team_writes_are_locked_during_refresh_and_disconnection', async () => {
@@ -383,7 +385,7 @@ describe('TeamsScreen', () => {
       agents: [{ ok: true, data: catalog }],
     });
     const hits = result.getAllByText(long);
-    expect(hits).toHaveLength(4);
+    expect(hits).toHaveLength(3);
     for (const h of hits) expect(h.textContent).toBe(long);
     await openTab(result, 'Overview');
     expect(result.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
@@ -706,15 +708,14 @@ describe('focused navigation', () => {
 
 describe('team overview', () => {
   const panel = () => screen.getByRole('tabpanel', { name: 'Overview' });
-  const summary = () => within(panel()).getByRole('list', { hidden: true, name: 'Member availability counts' });
 
   it('overview_shows_definition_runtime_members_and_coordinator', async () => {
     await renderScreen();
     const facts = panel().textContent ?? '';
-    for (const text of ['Dev Team', 'Definition: Valid', 'Running', '2 members', '1 Working', '1 Available', 'Live state: Available']) {
+    for (const text of ['Runtime', 'Running', 'Coordinator running · live state available', '1 / 2 available', '1 working']) {
       expect(facts).toContain(text);
     }
-    expect(summary()).toBeTruthy();
+    expect(within(panel()).getByRole('img', { name: '1 of 2 members available' })).toBeTruthy();
     expect(within(panel()).queryByRole('table')).toBeNull();
   });
 
@@ -725,7 +726,7 @@ describe('team overview', () => {
     );
     await renderScreen({ overview: [{ ok: true, data }] });
     const text = panel().textContent ?? '';
-    for (const t of ['No definition (runtime only)', 'rt-9', 'Coordinator: Not running', 'Unavailable — state db locked',
+    for (const t of ['Definition: No definition (runtime only)', 'Coordinator not running · live state unavailable — state db locked',
       'Some team details could not be read.',
       'This team has no definition file; it cannot be edited here.']) expect(text).toContain(t);
     expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
@@ -743,7 +744,7 @@ describe('team overview', () => {
     await renderScreen({ overview: [{ ok: true, data }] });
     const text = panel().textContent ?? '';
     expect(text).toContain('Has 1 problem');
-    expect(text).toContain('2+ members');
+    expect(text).toContain('0 / 2+ available');
     expect(text).toContain('Counts cover the 2 members shown; more members exist.');
     expect(within(within(panel()).getByRole('list', { name: 'Definition problems' })).getByText('members[0].agent: unknown agent')).toBeTruthy();
   });
@@ -753,7 +754,6 @@ describe('team overview', () => {
     expect(panel().textContent).toContain('No members');
     expect(panel().textContent).toContain('Counts cover the 0 members shown; more members exist.');
     expect(within(panel()).queryByText(/^0 /)).toBeNull();
-    expect(within(panel()).queryByRole('list', { name: 'Member availability counts' })).toBeNull();
     for (const sample of ['Developer', 'QA', 'T-031']) expect(panel().textContent).not.toContain(sample);
   });
 
@@ -770,17 +770,16 @@ describe('team overview', () => {
       coordinator: { running: true }, runtimeState: { available: false, error: null },
     });
     await renderScreen({ overview: [{ ok: true, data }] });
-    const status = within(panel()).getByRole('heading', { name: 'Team status' }).closest('section')!;
-    expect(within(status).getByText('Stopped')).toBeTruthy();
-    expect(within(status).getByText('Coordinator: Running')).toBeTruthy();
-    expect(within(status).getByText('Live state: Unavailable — runtime not reachable')).toBeTruthy();
+    const status = within(panel()).getByRole('region', { name: 'Runtime' });
+    expect(status.querySelector('.teams-summary-value')!.textContent).toBe('Stopped');
+    expect(within(status).getByText('Coordinator running · live state unavailable — runtime not reachable')).toBeTruthy();
   });
 });
 
 describe('member roster', () => {
   const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
   const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
-  const avail = () => screen.getByLabelText('Availability') as HTMLSelectElement;
+  const avail = () => screen.getByRole('combobox', { name: 'Availability' }) as HTMLSelectElement;
   const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
   const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'ALPHA-two', presence: 'busy' })];
 
@@ -791,7 +790,7 @@ describe('member roster', () => {
     expect(result.getAllByRole('tabpanel')).toHaveLength(1);
     expect(result.getAllByRole('list', { name: /^Members of / })).toHaveLength(1);
     const heading = result.getByRole('heading', { name: 'Members' });
-    const summary = result.getByRole('heading', { name: 'Member availability' });
+    const summary = result.getByRole('heading', { name: 'Availability', level: 2 });
     expect(summary.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(result.getAllByRole('button', { name: 'Add member' })).toHaveLength(1);
     const ids = names();
@@ -868,7 +867,7 @@ describe('member roster', () => {
     fireEvent.change(avail(), { target: { value: 'busy' } });
     openMember('ALPHA-two');
     expect(screen.queryByRole('list', { name: /^Members of / })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Member availability' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Availability' })).toBeNull();
     expect(screen.getAllByRole('region', { name: 'ALPHA-two' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' }));
     expect(search().value).toBe('alpha'); expect(avail().value).toBe('busy');
@@ -1349,7 +1348,8 @@ describe('T-082 states', () => {
     unavailable.result.unmount();
     const stopped = await renderScreen({ overview: [okR(coordinatorStopped())] });
     expect(stopped.result.getByText(/Coordinator/)).toBeTruthy();
-    expect(btn(stopped.result, 'Run board').disabled).toBe(true);
+    expect(stopped.result.queryByRole('button', { name: 'Run board' })).toBeNull();
+    expect(stopped.result.getByText(/^Start this team to run the board \(team: /)).toBeTruthy();
     stopped.result.unmount();
     const partial = await renderScreen({ overview: [okR(partialOverview())] });
     expect(partial.result.getByText('Some team definitions could not be read.')).toBeTruthy();
@@ -1379,8 +1379,7 @@ describe('T-082 states', () => {
     expect(teamRow(result.container, 'Dev Team')).toBeTruthy();
     expect(btn(result, 'New team').disabled).toBe(true);
     expect(btn(result, 'Rename team').disabled).toBe(true);
-    expect(btn(result, 'Run board').disabled).toBe(true);
-    fireEvent.click(btn(result, 'Run board'));
+    expect(result.queryByRole('button', { name: 'Run board' })).toBeNull();
     expect(runBoard).not.toHaveBeenCalled();
     expect(result.getByRole('tab', { name: 'Overview' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(btn(result, 'Retry'));
@@ -1561,7 +1560,7 @@ describe('T-082 states', () => {
     expect(result.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy();
     expect(btn(result, 'New team').disabled).toBe(true);
     expect(btn(result, 'Rename team').disabled).toBe(true);
-    expect(btn(result, 'Run board').disabled).toBe(true);
+    expect(result.queryByRole('button', { name: 'Run board' })).toBeNull();
     expect(btn(result, 'Refresh').disabled).toBe(false);
     expect(result.getByRole('tab', { name: 'Routing' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(result.getByRole('tab', { name: 'Overview' }));
@@ -2069,7 +2068,7 @@ describe('T-090 state and roster completion', () => {
   const okR = <T,>(data: T) => ({ ok: true as const, data });
   const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
   const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
-  const avail = () => screen.getByLabelText('Availability') as HTMLSelectElement;
+  const avail = () => screen.getByRole('combobox', { name: 'Availability' }) as HTMLSelectElement;
   const settle = () => act(async () => {});
 
   it('overview_state_matrix_renders_zero_one_many_partial_truncated_invalid_and_runtime_states_truthfully', async () => {
@@ -2092,8 +2091,9 @@ describe('T-090 state and roster completion', () => {
     for (const definition of definitions) {
       const data = overviewFixture([team({ id: `def-${definition.state}`, name: `Def ${definition.state}`, definition: definition as never, members: [member(), member({ memberId: 'qa', name: 'qa' })] })]);
       out = await renderScreen({ overview: [okR(data)] });
-      const region = screen.getByRole('heading', { name: 'Team status' }).closest('section')!;
-      expect(region.textContent).toMatch(new RegExp(`Definition: ${({ valid: 'Valid', problems: 'Has 1 problem', unreadable: 'Unreadable', missing: 'No definition \\(runtime only\\)' })[definition.state]}`));
+      const region = screen.getByRole('region', { name: 'Runtime' });
+      if (definition.state === 'valid') expect(region.textContent).not.toContain('Definition:');
+      else expect(region.textContent).toMatch(new RegExp(`Definition: ${({ problems: 'Has 1 problem', unreadable: 'Unreadable', missing: 'No definition \\(runtime only\\)' })[definition.state]}`));
       for (const problem of definition.problems) expect(screen.getAllByText(`${problem.path}: ${problem.message}`).length).toBeGreaterThan(0);
       out.result.unmount();
     }
@@ -2101,8 +2101,8 @@ describe('T-090 state and roster completion', () => {
     for (const state of runtimes) {
       const data = overviewFixture([team({ runtime: { state, teamId: state === 'not_started' ? null : `rt-${state}`, status: state } as never })]);
       out = await renderScreen({ overview: [okR(data)] });
-      const region = screen.getByRole('heading', { name: 'Team status' }).closest('section')!;
-      expect(region.querySelector('.status-badge')!.textContent!.trim().length, state).toBeGreaterThan(0);
+      const region = screen.getByRole('region', { name: 'Runtime' });
+      expect(region.querySelector('.teams-summary-value')!.textContent!.trim().length, state).toBeGreaterThan(0);
       for (const dot of Array.from(region.querySelectorAll('.status-dot'))) expect(dot.getAttribute('aria-hidden')).toBe('true');
       out.result.unmount();
     }
@@ -2149,17 +2149,17 @@ describe('T-090 state and roster completion', () => {
 
   it('board_summary_distinguishes_stopped_running_this_running_other_and_unavailable', async () => {
     const expected = {
-      stopped: 'Board: Stopped',
-      running_this: 'Board: Running with this team',
-      running_other: 'Board: Running with another team',
-      unavailable: 'Board: State unavailable',
+      stopped: 'Stopped',
+      running_this: 'RunningWith this team',
+      running_other: 'RunningTeam ',
+      unavailable: 'State unavailable',
     } as const;
     const seen = new Set<string>();
     for (const state of Object.keys(expected) as Array<keyof typeof expected>) {
       const data = overviewFixture([team({ runtime: { state: 'running', teamId: RUN_TEAM_ID, status: 'running' } })]);
       const out = await renderScreen({ overview: [okR(data)], boardSettings: [okR(boardSettingsFixture(boardRunnerFixture(state)))] });
       const board = screen.getByRole('heading', { name: 'Board' }).closest('section')!;
-      expect(board.textContent, state).toContain(expected[state]);
+      expect(board.textContent!.replace('Board', ''), state).toContain(expected[state]);
       seen.add(board.textContent!);
       for (const dot of Array.from(board.querySelectorAll('.status-dot'))) expect(dot.getAttribute('aria-hidden')).toBe('true');
       out.result.unmount();
@@ -2283,5 +2283,81 @@ describe('T-090 state and roster completion', () => {
     openMember('dev');
     const link = screen.queryByRole('button', { name: /Developer.*Roles|View .*role|in Roles/i });
     if (link) { link.focus(); await userEvent.keyboard('{Enter}'); expect(onViewRole).toHaveBeenCalledWith('Developer'); }
+  });
+});
+
+describe('v4 summary cards and running notice', () => {
+  const runtime = (state: 'running' | 'stopped') => ({ state, teamId: state === 'running' ? RUN_TEAM_ID : null, status: state } as never);
+  const matrix = [
+    { name: 'running_here', state: 'running', runner: boardRunnerFixture('running_this'), value: 'Running', tone: 'ok', detail: 'With this team', button: 'Stop board', banner: true },
+    { name: 'running_other', state: 'running', runner: { ...boardRunnerFixture('running_other'), teamDefId: 'release' }, value: 'Running', tone: 'warning', detail: 'Team release runs this board.', button: 'Stop board', banner: true },
+    { name: 'stopped', state: 'running', runner: boardRunnerFixture('stopped'), value: 'Stopped', tone: 'muted', detail: 'Running work finishes', button: 'Run board', banner: true },
+    { name: 'unavailable', state: 'running', runner: boardRunnerFixture('unavailable'), value: 'State unavailable', tone: 'danger', detail: 'runner is unreachable', button: null, banner: true },
+    { name: 'not_bound_stopped_team', state: 'stopped', runner: { ...boardRunnerFixture('stopped'), status: 'not_bound' as const }, value: 'Not running', tone: 'muted', detail: 'Start this team to run the board', button: null, banner: false },
+  ] as const;
+
+  it.each(matrix)('summary_cards_banner_matrix: $name', async (c) => {
+    const data = overviewFixture([team({ runtime: runtime(c.state) })]);
+    const { result } = await renderScreen({ overview: [okR(data)], boardSettings: [okR(boardSettingsFixture(c.runner as never))] });
+    const summaries = result.container.querySelector('.teams-overview-summaries')!;
+    expect(Array.from(summaries.querySelectorAll(':scope > section')).map((el) => el.querySelector('h2')!.textContent)).toEqual(['Runtime', 'Availability', 'Board']);
+    const board = result.getByRole('region', { name: 'Board' });
+    const value = board.querySelector('.teams-summary-value')!;
+    expect(value.textContent).toBe(c.value);
+    expect(value.classList.contains(`teams-tone-${c.tone}`)).toBe(true);
+    expect(board.textContent).toContain(c.detail);
+    const buttons = within(board).queryAllByRole('button', { name: /^(Run|Stop) board$/ });
+    expect(buttons.map((b) => b.textContent)).toEqual(c.button === null ? [] : [c.button]);
+    for (const b of buttons) expect(b.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    const banners = result.container.querySelectorAll('.teams-info-banner');
+    expect(Array.from(banners).map((b) => b.textContent)).toEqual(c.banner ? [RUNNING_TEAM_NOTICE] : []);
+  });
+
+  it('availability_card_shows_full_partial_and_empty_bar_ratios', async () => {
+    const cases = [
+      { presences: ['idle', 'idle', 'idle', 'idle', 'idle', 'idle'], value: '6 / 6 available', bar: '6 of 6 members available', width: '100%', others: null },
+      { presences: ['idle', 'idle', 'offline'], value: '2 / 3 available', bar: '2 of 3 members available', width: '67%', others: '1 offline' },
+      { presences: [], value: '0 / 0 available', bar: '0 of 0 members available', width: '0%', others: null },
+    ];
+    for (const c of cases) {
+      const data = overviewFixture([team({ members: c.presences.map((presence, i) => member({ memberId: `m${i}`, presence })) })]);
+      const { result } = await renderScreen({ overview: [okR(data)] });
+      const availability = result.getByRole('region', { name: 'Availability' });
+      expect(availability.querySelector('.teams-summary-value')!.textContent, c.value).toBe(c.value);
+      expect(within(availability).getByRole('img', { name: c.bar })).toBeTruthy();
+      expect((availability.querySelector('.teams-availability-fill') as HTMLElement).style.width, c.value).toBe(c.width);
+      if (c.others !== null) expect(within(availability).getByText(c.others)).toBeTruthy();
+      if (c.presences.length === 0) expect(within(availability).getByText('No members')).toBeTruthy();
+      result.unmount();
+    }
+  });
+
+  it('running_notice_shows_for_starting_teams_and_alongside_the_uneditable_notice', async () => {
+    const starting = overviewFixture([team({ runtime: { state: 'starting', teamId: 'rt-start', status: 'starting' } })]);
+    const first = await renderScreen({ overview: [okR(starting)] });
+    expect(Array.from(first.result.container.querySelectorAll('.teams-info-banner')).map((b) => b.textContent)).toEqual([RUNNING_TEAM_NOTICE]);
+    first.result.unmount();
+
+    const both = overviewFixture([team({
+      id: null, name: null,
+      definition: { state: 'missing', problems: [] },
+      runtime: { state: 'running', teamId: 'rt-run', status: 'running' },
+    })]);
+    const second = await renderScreen({ overview: [okR(both)] });
+    const banners = Array.from(second.result.container.querySelectorAll('.teams-info-banner')).map((b) => b.textContent);
+    expect(banners).toEqual(['This team has no definition file; it cannot be edited here.', RUNNING_TEAM_NOTICE]);
+    expect(banners).toHaveLength(2);
+  });
+
+  it('open_board_link_calls_onOpenBoard_and_is_hidden_without_it', async () => {
+    const onOpenBoard = vi.fn();
+    const fake = fakeManagement();
+    const withLink = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onOpenBoard={onOpenBoard} />);
+    await act(async () => {});
+    fireEvent.click(within(withLink.getByRole('region', { name: 'Board' })).getByRole('button', { name: 'Open board' }));
+    expect(onOpenBoard).toHaveBeenCalledTimes(1);
+    withLink.unmount();
+    const without = await renderScreen();
+    expect(without.result.queryByRole('button', { name: 'Open board' })).toBeNull();
   });
 });

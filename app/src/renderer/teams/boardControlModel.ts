@@ -27,47 +27,52 @@ export function boardControlView(team: OverviewTeam, runner: BoardRunner, connec
 
   if (!connected) {
     return make(
-      'Board: Disconnected', 'danger',
+      'Disconnected', 'danger',
       'The backend connection is not available; board state cannot be read or changed.', false, false,
     );
   }
   switch (runner.status) {
     case 'unavailable':
       return make(
-        'Board: State unavailable', 'danger',
+        'State unavailable', 'danger',
         runner.error?.message ?? 'Runtime state could not be read.', false, false,
       );
     case 'not_bound':
-      return make('Board: Not running', 'muted', 'No team runs this board.', runnable, false, hint);
+      return make('Not running', 'muted', 'No team runs this board.', runnable, false, hint);
     case 'stopped':
       return make(
-        'Board: Stopped', 'muted',
+        'Stopped', 'muted',
         here ? `This team ran the board last. ${STOPPED_NOTE}` : STOPPED_NOTE,
         runnable, false, hint,
       );
     case 'team_not_running':
       return make(
-        'Board: Team not running', 'warning',
+        'Team not running', 'warning',
         `The bound team is ${runner.teamStatus ?? 'missing'}; no new tickets are claimed.`,
         runnable, true, hint,
       );
     case 'disconnected':
       return make(
-        'Board: Disconnected', 'danger',
+        'Disconnected', 'danger',
         'The coordinator is not running; the board cannot claim work or be controlled. Run: agent-studio coordinator start',
         false, false,
       );
     case 'running':
       return here
-        ? make('Board: Running with this team', 'ok', null, false, true)
+        ? make('Running', 'ok', 'With this team', false, true)
         : make(
-          'Board: Running with another team', 'warning',
+          'Running', 'warning',
           `Team ${runner.teamDefId ?? runner.teamId ?? 'unknown'} runs this board. Stop it before running the board with this team.`,
           false, true,
         );
     default:
-      return make(`Board: ${String(runner.status)}`, 'muted', null, false, false);
+      return make(String(runner.status), 'muted', null, false, false);
   }
+}
+
+/** The one board button the card shows: Stop wins when both apply (team_not_running). */
+export function boardButtonAction(view: BoardControlView): BoardAction | null {
+  return view.canStop ? 'stop' : view.canRun ? 'run' : null;
 }
 
 export function boardResultText(action: BoardAction, team: OverviewTeam, result: BoardRunResult): string {

@@ -192,7 +192,7 @@ describe('RolesScreen delete flow', () => {
     expect(alert.textContent).not.toContain(long);
     expect(within(alert).queryByRole('button')).toBeNull();
     expect(view.queryByRole('button', { name: /force|rewrite|migrate|repair/i })).toBeNull();
-    expect(document.activeElement).toBe(trigger(view));
+    await waitFor(() => expect(document.activeElement).toBe(trigger(view)));
     expect(ids(view)).toEqual(['a']);
   });
 

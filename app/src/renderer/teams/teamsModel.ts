@@ -153,6 +153,37 @@ export function availabilityCounts(members: readonly OverviewMember[]): Availabi
   }));
 }
 
+export interface AvailabilitySummary {
+  available: number;
+  totalText: string;
+  percent: number;
+  others: string | null;
+  barLabel: string;
+}
+
+export function availabilitySummary(team: OverviewTeam): AvailabilitySummary {
+  const counts = availabilityCounts(team.members);
+  const available = counts.find((c) => c.presence === 'idle')?.count ?? 0;
+  const total = team.members.length;
+  const totalText = team.membersTruncated ? `${total}+` : `${total}`;
+  const others = counts.filter((c) => c.presence !== 'idle').map((c) => `${c.count} ${c.label.toLowerCase()}`);
+  return {
+    available,
+    totalText,
+    percent: total === 0 ? 0 : Math.round((available / total) * 100),
+    others: others.length > 0 ? others.join(' · ') : null,
+    barLabel: `${available} of ${totalText} members available`,
+  };
+}
+
+export function runtimeDetailText(o: TeamOverview): string {
+  const coordinator = o.coordinator.running === true ? 'Coordinator running' : 'Coordinator not running';
+  const live = o.runtimeState.available
+    ? 'live state available'
+    : `live state unavailable — ${o.runtimeState.error?.message ?? 'runtime not reachable'}`;
+  return `${coordinator} · ${live}`;
+}
+
 export function coordinatorText(o: TeamOverview): { text: string; tone: Tone } {
   return o.coordinator.running === true ? { text: 'Running', tone: 'ok' } : { text: 'Not running', tone: 'danger' };
 }

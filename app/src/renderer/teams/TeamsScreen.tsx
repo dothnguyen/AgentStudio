@@ -52,6 +52,7 @@ export interface TeamsScreenProps {
   navigation: TeamsNavigationController;
   connection?: ConnectionStatus;
   onViewRole?(roleId: string): void;
+  onOpenBoard?(): void;
   createTeamRequested: boolean;
   onCreateTeamRequestedChange(requested: boolean): void;
   onTeamsWritePendingChange(pending: boolean): void;
@@ -554,6 +555,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
               action: boardAction,
               onRun: (t) => { void boardWrite('run', t); },
               onStop: (t) => { void boardWrite('stop', t); },
+              onOpenBoard: props.onOpenBoard,
             }}
           />
         )}
@@ -595,6 +597,7 @@ function TeamDetailPanel(props: {
     action: BoardAction | null;
     onRun(team: OverviewTeam): void;
     onStop(team: OverviewTeam): void;
+    onOpenBoard?(): void;
   };
 }): JSX.Element {
   const { team, overview, writes, pending, board } = props;

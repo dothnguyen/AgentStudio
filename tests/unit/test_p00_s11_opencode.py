@@ -232,6 +232,7 @@ class RealCli(unittest.TestCase):
         self.assertTrue(info["configInjection"])
         self.assertEqual(info["missingFlags"], [])
         p = OPENCODE.probe({"PATH": "/nonexistent", "HOME": os.path.expanduser("~")})
+        self.assertEqual(p["executable"], real)
         self.assertTrue(p["login"]["loggedIn"] or p["code"] == "AUTH_REQUIRED")
         self.assertEqual(p["policies"], OPENCODE.describe({})["policies"])
 

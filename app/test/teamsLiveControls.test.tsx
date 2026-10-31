@@ -38,7 +38,13 @@ const flush = () => act(async () => {});
 const board = () => screen.getByRole('region', { name: 'Board' });
 const overviewPanel = () => screen.getByRole('tabpanel', { name: 'Overview' });
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
+const boardValue = () => board().querySelector('.teams-summary-value')!.textContent;
 const boardButton = (name: string) => within(board()).getByRole('button', { name }) as HTMLButtonElement;
+function expectBoardButton(run: boolean, stop: boolean, why?: string) {
+  const buttons = within(board()).queryAllByRole('button', { name: /^(Run|Stop) board$/ });
+  const want = stop ? ['Stop board'] : run ? ['Run board'] : [];
+  expect(buttons.map((b) => b.textContent), why).toEqual(want);
+}
 const runResult = { ok: true as const, data: { board: { workspace: '/work/alpha', status: 'running' as const, teamId: 't-1' }, rules: 3 } };
 
 describe('live team state', () => {
@@ -89,7 +95,7 @@ describe('board controls', () => {
     const runBoard = vi.fn(async () => runResult);
     const { fake } = await renderScreen({ boardSettings: [boardOk(), boardOk(runningRunner())], calls: { runBoard } });
     expect(overviewPanel().contains(board())).toBe(true);
-    expect(board().textContent).toContain('Board: Not running');
+    expect(boardValue()).toBe('Not running');
     fireEvent.click(boardButton('Run board'));
     await flush();
     expect(runBoard).toHaveBeenCalledTimes(1);
@@ -98,28 +104,26 @@ describe('board controls', () => {
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.boardSettings).toHaveBeenCalledTimes(2);
     expect(fake.agents).toHaveBeenCalledTimes(1);
-    expect(board().textContent).toContain('Board: Running with this team');
-    expect(boardButton('Run board').disabled).toBe(true);
-    expect(boardButton('Stop board').disabled).toBe(false);
+    expect(boardValue()).toBe('Running');
+    expectBoardButton(false, true);
   });
 
   it('overview_board_relationship_matrix', async () => {
     const cases = [
-      { runner: runner({ status: 'running', teamId: 't-1' }), status: 'Board: Running with this team', run: false, stop: true },
-      { runner: runner({ status: 'running', teamId: 'other', teamDefId: 'release' }), status: 'Board: Running with another team', run: false, stop: true, detail: 'Team release runs this board.' },
-      { runner: runner({ status: 'stopped', teamId: 't-1' }), status: 'Board: Stopped', run: true, stop: false, detail: 'This team ran the board last.' },
-      { runner: runner(), status: 'Board: Not running', run: true, stop: false },
-      { runner: runner({ status: 'disconnected' }), status: 'Board: Disconnected', run: false, stop: false },
-      { runner: runner({ status: 'unavailable' }), status: 'Board: State unavailable', run: false, stop: false },
-      { runner: runner(), status: 'Board: Disconnected', run: false, stop: false, lost: true },
+      { runner: runner({ status: 'running', teamId: 't-1' }), status: 'Running', run: false, stop: true },
+      { runner: runner({ status: 'running', teamId: 'other', teamDefId: 'release' }), status: 'Running', run: false, stop: true, detail: 'Team release runs this board.' },
+      { runner: runner({ status: 'stopped', teamId: 't-1' }), status: 'Stopped', run: true, stop: false, detail: 'This team ran the board last.' },
+      { runner: runner(), status: 'Not running', run: true, stop: false },
+      { runner: runner({ status: 'disconnected' }), status: 'Disconnected', run: false, stop: false },
+      { runner: runner({ status: 'unavailable' }), status: 'State unavailable', run: false, stop: false },
+      { runner: runner(), status: 'Disconnected', run: false, stop: false, lost: true },
     ];
     for (const c of cases) {
       const { result } = await renderScreen({ boardSettings: [boardOk(c.runner)] }, c.lost ? { state: 'lost', error: 'offline', distro: null, command: null } : connected);
       expect(overviewPanel().contains(board())).toBe(true);
-      expect(board().textContent).toContain(c.status);
+      expect(boardValue()).toBe(c.status);
       if (c.detail) expect(board().textContent).toContain(c.detail);
-      expect(boardButton('Run board').disabled).toBe(!c.run);
-      expect(boardButton('Stop board').disabled).toBe(!c.stop);
+      expectBoardButton(c.run, c.stop);
       result.unmount();
     }
   });
@@ -127,22 +131,21 @@ describe('board controls', () => {
   it('compact_board_summary_preserves_runner_state_matrix', async () => {
     const lost: ConnectionStatus = { state: 'lost', error: 'offline', distro: null, command: null };
     const cases = [
-      { name: 'running here', runner: runner({ status: 'running', teamId: 't-1' }), status: 'Board: Running with this team', detail: null, run: false, stop: true },
-      { name: 'running other', runner: runner({ status: 'running', teamId: 'other', teamDefId: 'release' }), status: 'Board: Running with another team', detail: 'Team release runs this board. Stop it before running the board with this team.', run: false, stop: true },
-      { name: 'stopped', runner: runner({ status: 'stopped', teamId: 't-1' }), status: 'Board: Stopped', detail: 'This team ran the board last. Running work finishes; no new tickets are claimed.', run: true, stop: false },
-      { name: 'not_bound', runner: runner({ status: 'not_bound' }), status: 'Board: Not running', detail: 'No team runs this board.', run: true, stop: false },
-      { name: 'team_not_running', runner: runner({ status: 'team_not_running', teamId: 'old', teamStatus: 'stopped' }), status: 'Board: Team not running', detail: 'The bound team is stopped; no new tickets are claimed.', run: true, stop: true },
-      { name: 'disconnected', runner: runner({ status: 'disconnected' }), status: 'Board: Disconnected', detail: 'The coordinator is not running; the board cannot claim work or be controlled. Run: agent-studio coordinator start', run: false, stop: false },
-      { name: 'unavailable', runner: runner({ status: 'unavailable' }), status: 'Board: State unavailable', detail: 'Runtime state could not be read.', run: false, stop: false },
-      { name: 'lost connection', runner: runner({ status: 'running', teamId: 't-1' }), status: 'Board: Disconnected', detail: 'The backend connection is not available; board state cannot be read or changed.', run: false, stop: false, lost: true },
+      { name: 'running here', runner: runner({ status: 'running', teamId: 't-1' }), status: 'Running', detail: 'With this team', run: false, stop: true },
+      { name: 'running other', runner: runner({ status: 'running', teamId: 'other', teamDefId: 'release' }), status: 'Running', detail: 'Team release runs this board. Stop it before running the board with this team.', run: false, stop: true },
+      { name: 'stopped', runner: runner({ status: 'stopped', teamId: 't-1' }), status: 'Stopped', detail: 'This team ran the board last. Running work finishes; no new tickets are claimed.', run: true, stop: false },
+      { name: 'not_bound', runner: runner({ status: 'not_bound' }), status: 'Not running', detail: 'No team runs this board.', run: true, stop: false },
+      { name: 'team_not_running', runner: runner({ status: 'team_not_running', teamId: 'old', teamStatus: 'stopped' }), status: 'Team not running', detail: 'The bound team is stopped; no new tickets are claimed.', run: true, stop: true },
+      { name: 'disconnected', runner: runner({ status: 'disconnected' }), status: 'Disconnected', detail: 'The coordinator is not running; the board cannot claim work or be controlled. Run: agent-studio coordinator start', run: false, stop: false },
+      { name: 'unavailable', runner: runner({ status: 'unavailable' }), status: 'State unavailable', detail: 'Runtime state could not be read.', run: false, stop: false },
+      { name: 'lost connection', runner: runner({ status: 'running', teamId: 't-1' }), status: 'Disconnected', detail: 'The backend connection is not available; board state cannot be read or changed.', run: false, stop: false, lost: true },
     ];
     for (const c of cases) {
       const { result } = await renderScreen({ boardSettings: [boardOk(c.runner)] }, c.lost ? lost : connected);
       const text = board().textContent ?? '';
-      expect(text, c.name).toContain(c.status);
+      expect(boardValue(), c.name).toBe(c.status);
       if (c.detail !== null) expect(text, c.name).toContain(c.detail);
-      expect(boardButton('Run board').disabled, c.name).toBe(!c.run);
-      expect(boardButton('Stop board').disabled, c.name).toBe(!c.stop);
+      expectBoardButton(c.run, c.stop, c.name);
       result.unmount();
     }
   });
@@ -158,7 +161,7 @@ describe('board controls', () => {
     expect(runBoard).toHaveBeenCalledTimes(1);
     expect(runBoard).toHaveBeenCalledWith('ws-a', 't-1');
     expect(screen.getByRole('status').textContent).toBe('Starting board…');
-    for (const name of ['Run board', 'Stop board', 'Rename team']) expect(button(name).disabled).toBe(true);
+    for (const name of ['Run board', 'Rename team']) expect(button(name).disabled).toBe(true);
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
     d.resolve(runResult);
@@ -179,7 +182,7 @@ describe('board controls', () => {
     expect(stopped.fake.overview).toHaveBeenCalledTimes(1);
     expect(stopped.fake.boardSettings).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('status').textContent).toBe('Stopping board…');
-    for (const name of ['Run board', 'Stop board', 'Rename team']) expect(button(name).disabled).toBe(true);
+    for (const name of ['Stop board', 'Rename team']) expect(button(name).disabled).toBe(true);
     s.resolve(ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: 't-1' } }));
     await flush();
     expect(screen.getByRole('status').textContent).toContain('Board stopped.');
@@ -205,7 +208,7 @@ describe('board controls', () => {
     await flush();
     expect(runBoard).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('status').textContent).toBe('Starting board…');
-    for (const name of ['Run board', 'Stop board', 'Rename team', 'New team']) expect(button(name).disabled).toBe(true);
+    for (const name of ['Run board', 'Rename team', 'New team']) expect(button(name).disabled).toBe(true);
     d.resolve(runResult);
     await flush();
     expect(screen.queryByText('Starting board…')).toBeNull();
@@ -256,7 +259,7 @@ describe('board controls', () => {
     expect(stopBoard).toHaveBeenCalledWith('ws-a');
     expect(screen.getByRole('status').textContent).toBe('Board stopped. Running work finishes; no new tickets are claimed.');
     expect(fake.boardSettings).toHaveBeenCalledTimes(2);
-    expect(board().textContent).toContain('Board: Stopped');
+    expect(boardValue()).toBe('Stopped');
   });
 
   it('run_error_shows_backend_error_and_refreshes', async () => {
@@ -322,27 +325,24 @@ describe('board controls', () => {
 
   it('board_running_with_another_team', async () => {
     await renderScreen({ boardSettings: [boardOk(runner({ status: 'running', teamId: 'other', teamDefId: 'release' }))] });
-    expect(board().textContent).toContain('Board: Running with another team');
-    expect(boardButton('Run board').disabled).toBe(true);
-    expect(boardButton('Stop board').disabled).toBe(false);
+    expect(boardValue()).toBe('Running');
+    expectBoardButton(false, true);
   });
 
   it('coordinator_disconnected_disables_controls', async () => {
     await renderScreen({ boardSettings: [boardOk(runner({ status: 'disconnected', coordinatorRunning: false }))] });
-    expect(board().textContent).toContain('Board: Disconnected');
+    expect(boardValue()).toBe('Disconnected');
     expect(board().textContent).toContain('agent-studio coordinator start');
-    expect(boardButton('Run board').disabled).toBe(true);
-    expect(boardButton('Stop board').disabled).toBe(true);
+    expectBoardButton(false, false);
   });
 
   it('board_state_unavailable', async () => {
     await renderScreen({
       boardSettings: [boardOk(runner({ status: 'unavailable', error: { code: 'DB', message: 'database locked' } }))],
     });
-    expect(board().textContent).toContain('Board: State unavailable');
+    expect(boardValue()).toBe('State unavailable');
     expect(board().textContent).toContain('database locked');
-    expect(boardButton('Run board').disabled).toBe(true);
-    expect(boardButton('Stop board').disabled).toBe(true);
+    expectBoardButton(false, false);
   });
 
   it('board_settings_error_has_retry', async () => {
@@ -366,10 +366,35 @@ describe('board controls', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
+  it('board_button_keeps_focus_when_stop_flips_to_run', async () => {
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: 't-1' } }));
+    await renderScreen({ boardSettings: [boardOk(runningRunner()), boardOk(runner({ status: 'stopped', teamId: 't-1' }))], calls: { stopBoard } });
+    const stop = boardButton('Stop board');
+    stop.focus();
+    fireEvent.click(stop);
+    await flush();
+    expect(stopBoard).toHaveBeenCalledTimes(1);
+    const run = boardButton('Run board');
+    expect(document.activeElement).toBe(run);
+  });
+
+  it('board_button_removal_moves_focus_to_board_heading', async () => {
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: 'old' } }));
+    const stoppedTeam = team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' } });
+    const bound = runner({ status: 'team_not_running', teamId: 'old', teamStatus: 'stopped' });
+    await renderScreen({ overview: [ok(overviewFixture([stoppedTeam]))], boardSettings: [boardOk(bound), boardOk(runner({ status: 'stopped', teamId: 'old' }))], calls: { stopBoard } });
+    const stop = boardButton('Stop board');
+    stop.focus();
+    fireEvent.click(stop);
+    await flush();
+    expect(within(board()).queryAllByRole('button', { name: /^(Run|Stop) board$/ })).toHaveLength(0);
+    expect(document.activeElement).toBe(document.getElementById('teams-board-title'));
+  });
+
   it('stopped_team_cannot_run', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
-    expect(boardButton('Run board').disabled).toBe(true);
+    expectBoardButton(false, false);
     expect(board().textContent).toContain('Start this team to run the board (team: Stopped).');
   });
 
@@ -381,9 +406,8 @@ describe('board controls', () => {
     rerender(ui({ state: 'lost', error: 'serve exited', distro: null, command: null }));
     await flush();
     expect(screen.getByText('Connection lost. Showing previously loaded data.')).toBeTruthy();
-    expect(board().textContent).toContain('Board: Disconnected');
-    expect(boardButton('Run board').disabled).toBe(true);
-    expect(boardButton('Stop board').disabled).toBe(true);
+    expect(boardValue()).toBe('Disconnected');
+    expectBoardButton(false, false);
     for (const f of [fake.overview, fake.agents, fake.boardSettings]) expect(f).toHaveBeenCalledTimes(1);
     rerender(ui(connected));
     await flush();

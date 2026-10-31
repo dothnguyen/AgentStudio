@@ -16,7 +16,7 @@ import {
   teamDefinition,
   twoTeams,
 } from './teamsFixtures';
-import { MEMBER_TIMING_NOTE, ROLE_SHARING_NOTE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
+import { MEMBER_TIMING_NOTE, ROLE_SHARING_NOTE, RUNNING_TEAM_NOTICE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
 
 afterEach(cleanup);
 
@@ -238,7 +238,8 @@ describe('team editing', () => {
   it('delete_running_team_shows_backend_error', async () => {
     const deleteTeam = vi.fn(async () => fail({ code: 'TEAM_ALREADY_RUNNING', message: 'Team is running.' }));
     await renderScreen({ calls: { deleteTeam } });
-    expect(overviewPanel().textContent).toContain('This team is running. Stop it before deleting the team or removing members; other edits apply the next time it starts.');
+    expect(screen.getByText(RUNNING_TEAM_NOTICE).closest('.teams-info-banner')).toBeTruthy();
+    expect(overviewPanel().textContent).toContain(RUNNING_TEAM_NOTICE);
     expect((screen.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(false);
     chooseDeleteTeam(); await flush();
     await click('Confirm delete');
@@ -664,7 +665,7 @@ describe('team editing', () => {
       remediation: 'run agent-studio team stop --team dev-team',
     }));
     const { fake } = await renderScreen({ calls: { deleteTeam, removeMember } });
-    expect(screen.getByText(/^This team is running\./)).toBeTruthy();
+    expect(screen.getByText(RUNNING_TEAM_NOTICE)).toBeTruthy();
     chooseDeleteTeam(); await flush();
     await click('Confirm delete');
     let alert = screen.getByRole('alert');

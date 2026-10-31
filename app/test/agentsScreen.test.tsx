@@ -688,7 +688,7 @@ describe('T-061 independent states', () => {
     await view.findByRole('list', { name: 'Saved agents' });
     expect(fake.agents).toHaveBeenCalledTimes(2); expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(view.queryByRole('alert')).toBeNull();
-    expect(document.activeElement).toBe(view.getByRole('heading', { name: /catalog/i }));
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: /catalog/i })));
   });
 
   it('usage_error_is_partial_and_retries_independently', async () => {

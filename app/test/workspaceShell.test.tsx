@@ -538,6 +538,32 @@ describe('T-084 sidebar team navigation', () => {
   const tabs = (view: ReturnType<typeof render>) => view.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
   const running = (t: ReturnType<typeof team>) => ({ ...t, runtime: { state: 'running' as const, teamId: 'live', status: 'running' } });
 
+  it('open_board_from_team_overview_navigates_to_boards', async () => {
+    const fake = fakeManagement();
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Dev Team'));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Open board' }));
+    await settle();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Boards');
+  });
+
+  it('open_board_link_is_hidden_when_boards_is_missing_or_disabled', async () => {
+    for (const items of [
+      NAV_ITEMS.filter((item) => item.id !== 'boards'),
+      NAV_ITEMS.map((item) => (item.id === 'boards' ? { ...item, disabled: true } : item)),
+    ] as Array<readonly NavItem[]>) {
+      const fake = fakeManagement();
+      const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} items={items} onSwitchWorkspace={vi.fn()} />);
+      await settle();
+      fireEvent.click(row(view, 'Dev Team'));
+      await settle();
+      expect(view.queryByRole('button', { name: 'Open board' })).toBeNull();
+      view.unmount();
+    }
+  });
+
   it('sidebar_teams_are_loaded_once_and_selecting_child_opens_overview', async () => {
     const fake = fakeManagement();
     const view = render(ui(fake));
@@ -1414,8 +1440,6 @@ describe('T-090 sidebar completion', () => {
     expect(buttons.every((b) => b.getAttribute('aria-current') === null)).toBe(true);
     // The complete long name stays in the accessible name even when visually wrapped.
     expect(buttons.some((b) => (b.getAttribute('aria-label') ?? '').includes(longName))).toBe(true);
-    await userEvent.tab();
-    expect(document.activeElement).toBe(newTeam(view));
     await userEvent.tab();
     expect(document.activeElement).toBe(buttons[0]);
     await userEvent.tab(); await userEvent.tab();

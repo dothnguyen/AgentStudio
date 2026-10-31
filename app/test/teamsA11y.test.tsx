@@ -182,7 +182,7 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
   const overviewOrder = await tabNames(22);
-  inOrder(overviewOrder, ['New team', /^Open Dev Team,/, /^Open Second Team,/, 'Rename team', 'Overview', 'Run board', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
+  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
     // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
   const row = memberRow('dev');
   row.focus();
@@ -263,7 +263,9 @@ it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_co
     expect(body, selector).not.toMatch(/display: ?none/);
   }
   for (const m of css.matchAll(/([^{}]*\.team-nav[^{}]*)\{([^{}]*)\}/g)) {
-    expect(m[2], m[1]).not.toMatch(/white-space: ?nowrap|text-overflow: ?ellipsis|display: ?none/);
+    // the sidebar label truncates visually (T-092); its full name stays in the button's accessible name
+    const pattern = m[1]!.trim() === '.team-nav-label' ? /display: ?none/ : /white-space: ?nowrap|text-overflow: ?ellipsis|display: ?none/;
+    expect(m[2], m[1]).not.toMatch(pattern);
   }
 });
 
@@ -271,7 +273,6 @@ it('v4_v6_dialogs_are_viewport_bounded_and_reduced_motion_preserves_focus_visibi
   expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-live-modal \[role="dialog"\] \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
   expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-create-dialog \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
   expect(flat).toMatch(/\.teams-create-dialog \{ width: min\(480px, 100%\); max-height: 100%;/);
-  expect(flat).toMatch(/\.team-nav-new:focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
   expect(flat).toMatch(/\.team-nav :is\(button\):focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
   expect(flat).toMatch(/\.teams-member-row:focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
   // reduced motion only suppresses motion globally: no outline, border, display or text changes

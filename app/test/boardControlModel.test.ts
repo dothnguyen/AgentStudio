@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardControlView, boardErrorFeedback, boardResultText } from '../src/renderer/teams/boardControlModel';
+import { boardButtonAction, boardControlView, boardErrorFeedback, boardResultText } from '../src/renderer/teams/boardControlModel';
 import { RUN_TEAM_ID, runner, team } from './teamsFixtures';
 
 const NOTE = 'Running work finishes; no new tickets are claimed.';
@@ -9,7 +9,7 @@ const stoppedTeam = () => team({ runtime: { state: 'stopped', teamId: 'x', statu
 describe('boardControlView', () => {
   it('view_disconnected_connection_disables_everything', () => {
     expect(boardControlView(running(), runner({ status: 'running', teamId: RUN_TEAM_ID }), false)).toEqual({
-      status: 'Board: Disconnected',
+      status: 'Disconnected',
       tone: 'danger',
       detail: 'The backend connection is not available; board state cannot be read or changed.',
       canRun: false,
@@ -20,7 +20,7 @@ describe('boardControlView', () => {
 
   it('view_unavailable_uses_runtime_error', () => {
     const v = boardControlView(running(), runner({ status: 'unavailable', error: { code: 'X', message: 'database locked' } }), true);
-    expect(v.status).toBe('Board: State unavailable');
+    expect(v.status).toBe('State unavailable');
     expect(v.detail).toBe('database locked');
     expect([v.canRun, v.canStop]).toEqual([false, false]);
     expect(boardControlView(running(), runner({ status: 'unavailable' }), true).detail).toBe('Runtime state could not be read.');
@@ -28,7 +28,7 @@ describe('boardControlView', () => {
 
   it('view_not_bound_running_team_can_run', () => {
     const v = boardControlView(running(), runner(), true);
-    expect(v).toMatchObject({ status: 'Board: Not running', canRun: true, canStop: false, runHint: null });
+    expect(v).toMatchObject({ status: 'Not running', canRun: true, canStop: false, runHint: null });
   });
 
   it('view_not_bound_stopped_team_has_hint', () => {
@@ -55,7 +55,7 @@ describe('boardControlView', () => {
 
   it('view_coordinator_disconnected', () => {
     expect(boardControlView(running(), runner({ status: 'disconnected' }), true)).toMatchObject({
-      status: 'Board: Disconnected',
+      status: 'Disconnected',
       detail: 'The coordinator is not running; the board cannot claim work or be controlled. Run: agent-studio coordinator start',
       canRun: false,
       canStop: false,
@@ -64,9 +64,10 @@ describe('boardControlView', () => {
 
   it('view_running_here_and_elsewhere', () => {
     expect(boardControlView(running(), runner({ status: 'running', teamId: RUN_TEAM_ID }), true))
-      .toMatchObject({ status: 'Board: Running with this team', tone: 'ok', canRun: false, canStop: true });
+      .toMatchObject({ status: 'Running', detail: 'With this team', tone: 'ok', canRun: false, canStop: true });
     expect(boardControlView(running(), runner({ status: 'running', teamId: 'o', teamDefId: 'release' }), true)).toMatchObject({
-      status: 'Board: Running with another team',
+      status: 'Running',
+      tone: 'warning',
       detail: 'Team release runs this board. Stop it before running the board with this team.',
       canRun: false,
       canStop: true,
@@ -75,7 +76,22 @@ describe('boardControlView', () => {
 
   it('view_unknown_status_is_inert', () => {
     expect(boardControlView(running(), runner({ status: 'paused' as never }), true))
-      .toMatchObject({ status: 'Board: paused', canRun: false, canStop: false });
+      .toMatchObject({ status: 'paused', canRun: false, canStop: false });
+  });
+
+  it('status_strings_use_the_short_v4_values', () => {
+    const cases = [
+      { r: runner({ status: 'unavailable' }), status: 'State unavailable' },
+      { r: runner({ status: 'not_bound' }), status: 'Not running' },
+      { r: runner({ status: 'stopped' }), status: 'Stopped' },
+      { r: runner({ status: 'team_not_running', teamId: 'old' }), status: 'Team not running' },
+      { r: runner({ status: 'disconnected' }), status: 'Disconnected' },
+      { r: runner({ status: 'running', teamId: RUN_TEAM_ID }), status: 'Running' },
+      { r: runner({ status: 'running', teamId: 'other' }), status: 'Running' },
+      { r: runner({ status: 'paused' as never }), status: 'paused' },
+    ];
+    for (const c of cases) expect(boardControlView(running(), c.r, true).status, String(c.r.status)).toBe(c.status);
+    expect(boardControlView(running(), runner({ status: 'running', teamId: RUN_TEAM_ID }), false).status).toBe('Disconnected');
   });
 });
 
@@ -113,13 +129,23 @@ describe('selected runtime id', () => {
   it('view_selected_runtime_id_drives_relationship', () => {
     const t2 = team({ runtime: { state: 'running', teamId: 't-2', status: 'running' } });
     const other = boardControlView(t2, runner({ status: 'running', teamId: 't-1' }), true);
-    expect(other.status).toBe('Board: Running with another team');
+    expect(other.status).toBe('Running');
     expect([other.canRun, other.canStop]).toEqual([false, true]);
-    expect(boardControlView(t2, runner({ status: 'running', teamId: 't-2' }), true).status).toBe('Board: Running with this team');
+    expect(boardControlView(t2, runner({ status: 'running', teamId: 't-2' }), true).detail).toBe('With this team');
   });
 
   it('result_text_never_reports_pending_board_status_as_success', () => {
     const result = { board: { status: 'stopped' } } as unknown as Parameters<typeof boardResultText>[2];
     expect(boardResultText('run', running(), result)).toBe('Board reported status "stopped".');
+  });
+});
+
+describe('boardButtonAction', () => {
+  it('board_button_action_prefers_stop_then_run_else_none', () => {
+    const v = (canRun: boolean, canStop: boolean) => ({ status: 's', tone: 'muted' as const, detail: null, runHint: null, canRun, canStop });
+    expect(boardButtonAction(v(false, true))).toBe('stop');
+    expect(boardButtonAction(v(true, true))).toBe('stop');
+    expect(boardButtonAction(v(true, false))).toBe('run');
+    expect(boardButtonAction(v(false, false))).toBeNull();
   });
 });
