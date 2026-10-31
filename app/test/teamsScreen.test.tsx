@@ -8,7 +8,7 @@ import type { TeamsNavigationController } from '../src/renderer/teams/useTeamsNa
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import {
-  catalogFixture, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
+  catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
   boardSettingsFixture, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
   teamDefinition, teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
 } from './teamsFixtures';
@@ -232,7 +232,7 @@ describe('TeamsScreen', () => {
     const row = openMember('dev');
     expect(row.textContent).toContain('Developer');
     expect(row.textContent).toContain('OpenCode Sonnet');
-    expect(failed.result.getByRole('button', { name: 'Edit dev' })).toBeTruthy();
+    expect(failed.result.getByRole('button', { name: 'Edit saved configuration' })).toBeTruthy();
   });
 
   it('saved_options_are_distinct_from_live_agent', async () => {
@@ -242,7 +242,7 @@ describe('TeamsScreen', () => {
     const {result} = await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [m]})])}]});
     const row = openMember('dev');
     const savedText = within(row).getByRole('list', {name: 'Saved agent options'}).textContent;
-    expect(savedText).toBe('Default — Saved choice · saved-provider · saved-model');
+    expect(savedText).toBe('Saved choice saved Next-start default saved-provider · saved-model');
     expect(row.textContent).toContain('live-id · live-provider · live-model');
     expect(savedText).not.toContain('live-id');
   });
@@ -257,8 +257,8 @@ describe('TeamsScreen', () => {
     const savedCell = within(row).getByRole('list', {name: 'Saved agent options'});
     const items = within(savedCell).getAllByRole('listitem');
     expect(items.map(item => item.textContent)).toEqual([
-      'Default — First · saved-provider · saved-model · Reasoning: low',
-      'gone · Not available · Missing from catalog',
+      'First first Next-start default saved-provider · saved-model · Reasoning: low',
+      'gone Missing from catalog Not available',
     ]);
     expect(row.textContent).toContain('live-id · live-provider · live-model · Reasoning: high');
   });
@@ -274,7 +274,7 @@ describe('TeamsScreen', () => {
     expect(detail.textContent).toContain('Running');
     await openTab(result, 'Overview');
     const r1 = openMember('dev').textContent;
-    expect(r1).toContain('Default — OpenCode Sonnet · opencode · sonnet');
+    expect(r1).toContain('Next-start default opencode · sonnet');
     expect(r1).toContain('T-031 · Teams screen');
     fireEvent.click(result.getByRole('button', { name: 'Back to members' }));
     const r2 = openMember('lead').textContent;
@@ -495,7 +495,7 @@ describe('live member actions', () => {
     expect(result.queryByRole('button', {name: 'Switch'})).toBeNull();
     expect(result.queryByRole('button', {name: 'Resume'})).toBeNull();
     const detail = openMember('dev');
-    expect(detail.textContent).toContain('Agent options — next team start');
+    expect(detail.textContent).toContain('Agent options');
     expect(detail.textContent).toContain('Live agent options — frozen at team start');
     expect(detail.textContent).toContain('assignment-1 · working · task-1');
     expect(detail.textContent).toContain('Switch to Codex GPT pending.');
@@ -1075,7 +1075,7 @@ describe('member detail focus and settings', () => {
     expect(detail.textContent).toContain('Inline agent — codex · model not set');
     fireEvent.click(within(detail).getByRole('button', {name: 'Back to members'}));
     detail = openMember('live');
-    expect(detail.textContent).toContain('Saved options are not available for runtime-only members.');
+    expect(detail.textContent).toContain('Saved configuration is not available for runtime-only members.');
     expect(within(detail).queryByRole('button', {name: /^(Edit|Remove) live$/})).toBeNull();
   });
   it('keeps a missing role visible and repairable without a link', async () => {
@@ -1083,14 +1083,14 @@ describe('member detail focus and settings', () => {
     const detail = openMember('dev');
     expect(detail.textContent).toContain('Choose an existing role by editing this member.');
     expect(within(detail).queryByRole('button', {name: /in Roles/})).toBeNull();
-    fireEvent.click(within(detail).getByRole('button', {name: 'Edit dev'}));
+    fireEvent.click(within(detail).getByRole('button', {name: 'Edit saved configuration'}));
     expect(within(screen.getByLabelText('Role')).getByRole('option', {name: 'retired — missing from role catalog'})).toBeTruthy();
   });
   it('focuses the heading and restores the roster row on return', async () => {
     await renderScreen(); showMembers(); openMember('dev');
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
-    expect(screen.getByRole('heading', {name: 'Member settings'})).toBeTruthy();
-    expect(screen.getByRole('heading', {name: 'Agent options — next team start'})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Saved configuration', level: 3})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Agent options', level: 4})).toBeTruthy();
     expect(screen.getByRole('heading', {name: 'Live', level: 3})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
     expect(document.activeElement).toBe(document.querySelector('[data-member-row="dev"]'));
@@ -1099,7 +1099,7 @@ describe('member detail focus and settings', () => {
     await renderScreen(); showMembers(); const detail = openMember('dev');
     const h2 = within(detail).getByRole('heading', {name: 'dev', level: 2});
     const live = within(detail).getByRole('heading', {name: 'Live', level: 3});
-    const settings = within(detail).getByRole('heading', {name: 'Member settings'});
+    const settings = within(detail).getByRole('heading', {name: 'Saved configuration', level: 3});
     expect(h2.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(live.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(detail).getAllByRole('region', {name: 'Live for dev'})).toHaveLength(1);
@@ -1110,6 +1110,114 @@ describe('member detail focus and settings', () => {
     }
     expect(detail.textContent).not.toContain('Current work:');
     expect(detail.textContent).not.toContain('Live state comes from the running team');
+  });
+  it('member_detail_places_saved_configuration_after_live_state', async () => {
+    await renderScreen(); showMembers(); const detail = openMember('dev');
+    const live = within(detail).getByRole('heading', {name: 'Live', level: 3});
+    const saved = within(detail).getByRole('heading', {name: 'Saved configuration', level: 3});
+    expect(live.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(detail).getAllByRole('region', {name: 'Live for dev'})).toHaveLength(1);
+    expect(within(detail).getAllByRole('region', {name: 'Saved configuration'})).toHaveLength(1);
+    const section = within(detail).getByRole('region', {name: 'Saved configuration'});
+    expect(section.textContent).toContain('apply the next time the team starts');
+    for (const label of ['Active agent', 'Availability', 'Current assignment']) expect(within(section).queryByText(label)).toBeNull();
+  });
+  it('saved_configuration_labels_next_start_default_only_on_first_option', async () => {
+    const a = {id: 'a', name: 'A', provider: 'p', model: 'm', reasoning: null, description: 'First agent', state: 'ok' as const};
+    const b = {id: 'b', name: 'B', provider: 'p', model: 'm2', reasoning: 'low', description: null, state: 'ok' as const};
+    const gone = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
+    await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [a, b, gone]})]})])}]});
+    const section = within(openMember('dev')).getByRole('region', {name: 'Saved configuration'});
+    const items = within(section).getAllByRole('listitem');
+    expect(items.map(i => i.textContent?.includes('Next-start default'))).toEqual([true, false, false]);
+    expect(items[0]!.textContent).toContain('First agent');
+    expect(items[2]!.textContent).toContain('Missing from catalog');
+    expect(within(section).getByText('Name')).toBeTruthy();
+  });
+  it('saved_configuration_fixture_matrix', async () => {
+    const opt = (id: string, over = {}) => ({id, name: id.toUpperCase(), provider: 'p', model: `m-${id}`, reasoning: null, description: null, state: 'ok' as const, ...over});
+    const gone = opt('gone', {name: null, provider: null, model: null, state: 'missing'});
+    const members = [
+      member({memberId: 'ord', name: 'ord', agentMode: 'ordered_catalog', agentOptions: [opt('a'), opt('b')]}),
+      member({memberId: 'single', name: 'single', agentMode: 'single_catalog', agentOptions: [opt('s')]}),
+      member({memberId: 'miss', name: 'miss', agentMode: 'ordered_catalog', agentOptions: [opt('a'), gone]}),
+      member({memberId: 'inl', name: 'inl', agentMode: 'inline', agentOptions: [], provider: 'inline-p', model: 'inline-m'}),
+      member({memberId: 'rt', name: 'rt', source: 'runtime', runtime: null, agentOptions: []}),
+    ];
+    await renderMembers({overview: [okR(overviewFixture([team({members})]))]});
+    const savedOf = (id: string) => { const d = openMember(id); const r = within(d).getByRole('region', {name: 'Saved configuration'}); return {d, r}; };
+    let {r} = savedOf('ord');
+    expect(r.textContent).toContain('ord');
+    expect(within(r).getAllByRole('listitem').map(i => i.textContent?.includes('Next-start default'))).toEqual([true, false]);
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    ({r} = savedOf('single'));
+    expect(within(r).getAllByRole('listitem').map(i => i.textContent?.includes('Next-start default'))).toEqual([true]);
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    ({r} = savedOf('miss'));
+    expect(within(r).getAllByRole('listitem').map(i => i.textContent?.includes('Next-start default'))).toEqual([true, false]);
+    expect(r.textContent).toContain('Missing from catalog');
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    ({r} = savedOf('inl'));
+    expect(r.textContent).toContain('inline-p');
+    expect(r.textContent).not.toContain('Next-start default');
+    fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
+    const rt = savedOf('rt');
+    expect(rt.r.textContent).toContain('Saved configuration is not available for runtime-only members.');
+    expect(within(rt.r).queryByRole('button', {name: 'Edit saved configuration'})).toBeNull();
+    expect(rt.r.textContent).toContain('Can add tickets: Not available for this member');
+  });
+  it('saved_edits_do_not_change_live_member', async () => {
+    const running = {state: 'running' as const, teamId: 't', status: 'running'};
+    const live = {...twoTeams().teams[1]!.members[0]!.runtime!, activeAgent: 'live-agent', provider: 'live-p', model: 'live-m'};
+    const mk = (name: string) => overviewFixture([team({runtime: running, members: [member({name, runtime: live})]})]);
+    const updateMember = vi.fn().mockResolvedValue(okR({team: {id: 'dev-team', name: 'Dev Team', members: []}, member: {id: 'dev', name: 'renamed', role: 'Developer'}, appliesOnNextStart: true, problems: []}));
+    const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn();
+    await renderMembers({overview: [okR(mk('dev')), okR(mk('renamed'))], calls: {updateMember, switchMemberAgent, resumeMemberAgent}});
+    const live0 = () => within(screen.getByRole('region', {name: /^Live for/})).getByText('live-p', {exact: false}).closest('section')!.textContent;
+    openMember('dev');
+    const before = live0();
+    fireEvent.click(screen.getByRole('button', {name: 'Edit saved configuration'}));
+    fireEvent.change(screen.getByLabelText('Member name'), {target: {value: 'renamed'}});
+    fireEvent.click(screen.getByRole('button', {name: 'Save changes'}));
+    expect(live0()).toBe(before);
+    await act(async () => {});
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    expect(switchMemberAgent).not.toHaveBeenCalled();
+    expect(resumeMemberAgent).not.toHaveBeenCalled();
+    const after = screen.getByRole('region', {name: /^Live for/}).textContent!;
+    expect(after).toContain('live-agent');
+    expect(after).toContain('live-p');
+  });
+  it('remove_member_confirmation_names_exact_entities_and_restores_focus', async () => {
+    const removeMember = vi.fn()
+      .mockResolvedValueOnce({ok: false, error: {code: 'TEAM_ALREADY_RUNNING', message: 'running', retryable: false}})
+      .mockResolvedValue(okR({removed: {id: 'dev', name: 'dev'}, problems: []}));
+    const refreshed = twoTeams();
+    refreshed.teams[1]!.members = refreshed.teams[1]!.members.filter(m => m.memberId !== 'dev');
+    await renderMembers({overview: [okR(twoTeams()), okR(refreshed)], calls: {removeMember}});
+    openMember('dev');
+    const remove = () => screen.getByRole('button', {name: 'Remove dev'});
+    fireEvent.click(remove());
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('dev');
+    expect(dialog.textContent).toContain('Dev Team');
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Cancel removing dev'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel removing dev'}));
+    expect(removeMember).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(remove());
+    fireEvent.click(remove());
+    fireEvent.keyDown(screen.getByRole('alertdialog'), {key: 'Escape'});
+    expect(removeMember).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(remove());
+    fireEvent.click(remove());
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm remove dev'})); await act(async () => {});
+    expect(removeMember).toHaveBeenCalledTimes(1);
+    expect(removeMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev');
+    expect(screen.getByRole('alert').textContent).toContain('Stop the team before deleting it or removing members.');
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Confirm remove dev'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Confirm remove dev'})); await act(async () => {});
+    expect(removeMember).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('region', {name: 'dev'})).toBeNull();
   });
   it('member_detail_live_section_uses_runtime_assignment_ticket_and_unavailable_copy', async () => {
     const running = {state: 'running' as const, teamId: 't', status: 'running'};
@@ -1143,10 +1251,10 @@ describe('member detail focus and settings', () => {
   });
   it('restores edit and remove focus after cancelling', async () => {
     await renderScreen(); showMembers(); openMember('lead');
-    fireEvent.click(screen.getByRole('button', {name: 'Edit lead'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Edit saved configuration'}));
     expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'Edit lead'}));
-    fireEvent.click(within(screen.getByRole('form', {name: 'Edit lead'})).getByRole('button', {name: 'Cancel'}));
-    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit lead'}));
+    fireEvent.click(within(screen.getByRole('form', {name: 'Edit lead'})).getByRole('button', {name: 'Discard changes'}));
+    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit saved configuration'}));
     fireEvent.click(screen.getByRole('button', {name: 'Remove lead'}));
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Cancel removing lead'}));
     fireEvent.keyDown(screen.getByRole('alertdialog'), {key: 'Escape'});
@@ -1320,9 +1428,9 @@ describe('T-082 states', () => {
   it('member_validation_alert_does_not_duplicate_section_error_alert', async () => {
     await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unreadable')] });
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' })); await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: /^Remove OpenCode Sonnet/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await act(async () => {});
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(screen.getByRole('alert').textContent).not.toContain('ROLES_DOWN');
     expect(document.body.textContent).toContain('ROLES_DOWN: roles unreadable');
@@ -1336,11 +1444,11 @@ describe('T-082 states', () => {
       : { agents: [okR(catalogFixture()), failure, okR(catalogFixture())] };
     await renderMembers({ ...opts, calls: { updateMember } });
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
     if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
     else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
-    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.submit(save.closest('form')!);
     expect(updateMember).not.toHaveBeenCalled();
@@ -1360,11 +1468,11 @@ describe('T-082 states', () => {
       : { agents: [okR(catalogFixture()), agentGate.promise] };
     await renderMembers({ ...opts, calls: { updateMember } });
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
     if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
     else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
-    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.submit(save.closest('form')!);
     expect(updateMember).not.toHaveBeenCalled();
@@ -1381,9 +1489,9 @@ describe('T-082 states', () => {
     const updateMember = vi.fn(async () => okR({ team: {}, member: { name: 'Renamed' }, problems: [], appliesOnNextStart: false }));
     await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unavailable')], agents: [managementError('AGENTS_DOWN', 'agents unavailable')], calls: { updateMember } });
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
     fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Renamed' } });
-    const save = screen.getByRole('button', { name: 'Save member' }) as HTMLButtonElement;
+    const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
     expect(save.disabled).toBe(false);
     fireEvent.click(save); await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { name: 'Renamed' });
@@ -1458,11 +1566,11 @@ describe('T-082 states', () => {
     expect(result.getByRole('tab', { name: 'Routing' }).hasAttribute('disabled')).toBe(false);
     fireEvent.click(result.getByRole('tab', { name: 'Overview' }));
     expect(openMember('dev')).toBeTruthy();
-    expect(btn(result, 'Edit dev').disabled).toBe(true);
+    expect(btn(result, 'Edit saved configuration').disabled).toBe(true);
     expect(btn(result, 'Back to members').disabled).toBe(false);
     result.rerender(ui('connected')); await act(async () => {});
     expect(calls(fake)).toEqual([3, 3, 3, 3]);
-    expect(btn(result, 'Edit dev').disabled).toBe(false);
+    expect(btn(result, 'Edit saved configuration').disabled).toBe(false);
     expect(result.getByRole('region', { name: 'dev' })).toBeTruthy();
     for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled();
   });
@@ -1524,18 +1632,18 @@ describe('T-082 states', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' })); await act(async () => {});
     expect(document.activeElement).toBe(memberRow('dev'));
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' })); await act(async () => {});
     fireEvent.change(screen.getByLabelText('Member name'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await act(async () => {});
     expect(updateMember).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(screen.getByLabelText('Member name'));
     fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'dev2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save member' })); await act(async () => {});
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await act(async () => {});
     expect(updateMember).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole('alert')).toHaveLength(1);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save member' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); await act(async () => {});
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit dev' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save changes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' })); await act(async () => {});
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove dev' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel removing dev' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm remove dev' })); await act(async () => {});
@@ -1551,13 +1659,14 @@ describe('T-082 states', () => {
     const updateMember = vi.fn().mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'Updated developer', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
     await renderMembers({ overview: [okR(twoTeams()), okR(refreshed)], calls: { updateMember } });
     openMember('dev');
-    fireEvent.click(screen.getByRole('button', { name: 'Edit dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
     fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Updated developer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save member' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev', { name: 'Updated developer' });
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Updated developer', level: 2 }));
-    expect(screen.queryByRole('button', { name: 'Save member' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(screen.getByRole('heading', { name: 'Updated developer', level: 2 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
   });
 
   it('successful_removal_clears_detail_and_focuses_the_next_action_after_refresh', async () => {

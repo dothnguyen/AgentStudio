@@ -43,6 +43,7 @@ export function ticketPermissionText(p: TicketPermissionState): string {
   if (p.state === 'error') return `Ticket permission could not be loaded (${p.error.code}: ${p.error.message}).`;
   return p.canAddTickets === null ? 'Can add tickets: Not available for this member' : `Can add tickets: ${p.canAddTickets ? 'Yes' : 'No'}`;
 }
+export const NEXT_START_DEFAULT = 'Next-start default';
 export const MEMBER_TIMING_NOTE = 'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.';
 export const ROLE_SHARING_NOTE = 'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.';
 export const SAVED_OPTIONS_NOTE = 'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.';

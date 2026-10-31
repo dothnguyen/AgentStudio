@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type FormEvent, type JSX, type KeyboardEvent } from 'react';
 import type { AgentDef, ResolvedAgentOption, RoleCatalogItem } from '../api';
 import {
-  addAgentOption, removeAgentOption, moveAgentOption, TICKET_PERMISSION_HINT, TICKET_PERMISSION_UNKNOWN,
+  addAgentOption, removeAgentOption, moveAgentOption, TICKET_PERMISSION_HINT, TICKET_PERMISSION_UNKNOWN, NEXT_START_DEFAULT,
   memberChanges,
   memberRoleChoices,
   validateMemberForm,
@@ -108,6 +108,8 @@ export function MemberForm(props: {
   roleCatalogMessage: string | null;
   pending: boolean;
   readOnly?: boolean;
+  submitLabel?: string;
+  cancelLabel?: string;
   onSubmit(values: MemberFormValues): void;
   onCancel(): void;
 }): JSX.Element {
@@ -193,7 +195,7 @@ export function MemberForm(props: {
               return <li className="teams-option-row" key={`${id}-${index}`}>
                 <div className="teams-option-meta"><strong>{name}</strong> <span>{providerModelText(provider, model)}</span>
                   {reasoning && <span>Reasoning: {reasoning}</span>}
-                  {index === 0 && <span className="teams-option-default">Default</span>}
+                  {index === 0 && <span className="teams-option-default">{NEXT_START_DEFAULT}</span>}
                   {missing.has(id) && <span className="teams-option-missing">Missing from catalog</span>}
                 </div>
                 <div className="teams-option-actions">
@@ -249,10 +251,10 @@ export function MemberForm(props: {
       <p id={`${uid}-canAddTickets-hint`} className="panel-note">{mode === 'edit' && values.canAddTickets === undefined ? TICKET_PERMISSION_UNKNOWN : TICKET_PERMISSION_HINT}</p>
       {formError !== null && <p className="teams-field-error" role={errors.agents ? undefined : 'alert'}>{formError}</p>}
       <div className="teams-team-actions">
-        <button ref={submitRef} type="submit" disabled={pending || props.readOnly === true || catalogBlocked}>
-          {pending ? 'Saving…' : mode === 'add' ? 'Add member' : 'Save member'}
+        <button ref={submitRef} type="submit" disabled={pending || props.readOnly === true || catalogBlocked || (mode === 'edit' && changes === null)}>
+          {pending ? 'Saving…' : mode === 'add' ? (props.submitLabel ?? 'Add member') : (props.submitLabel ?? 'Save member')}
         </button>
-        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" onClick={onCancel}>{props.cancelLabel ?? 'Cancel'}</button>
       </div>
     </form>
   );

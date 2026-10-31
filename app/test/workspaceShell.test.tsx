@@ -374,6 +374,19 @@ describe('WorkspaceShell', () => {
     return { ui, view: render(ui(ws)) };
   }
 
+  it('saved_member_role_link_opens_exact_stable_role', async () => {
+    const { view } = deepLinkShell();
+    fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+    const members = await view.findByRole('tab', { name: 'Overview' });
+    fireEvent.click(members);
+    await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
+    fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
+    const saved = await view.findByRole('region', { name: 'Saved configuration' });
+    fireEvent.click(within(saved).getByRole('button', { name: 'View QA in Roles' }));
+    await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
+    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
+  });
+
   it.skip('direct_roles_navigation_clears_requested_role', async () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));

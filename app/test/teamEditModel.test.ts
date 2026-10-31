@@ -134,6 +134,15 @@ describe('teamEditModel', () => {
     expect(problemsSuffix([])).toBe('');
     expect(problemsSuffix([{ path: 'a', message: 'b' }])).toBe(' The team still has 1 problem; see the team details.');
   });
+  it('saved_configuration_changes_include_only_changed_fields_in_backend_shape', () => {
+    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}), false);
+    expect(memberChanges(initial, {...initial, name: 'renamed', role: 'QA', agents: ['b', 'a'], canAddTickets: true}))
+      .toEqual({name: 'renamed', role: 'QA', agents: ['b', 'a'], canAddTickets: true});
+  });
+  it('unchanged_saved_configuration_returns_null', () => {
+    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}), true);
+    expect(memberChanges(initial, {...initial, agents: [...initial.agents]})).toBeNull();
+  });
 });
 
 describe('ticket permission', () => {

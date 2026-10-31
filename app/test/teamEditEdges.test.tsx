@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
-import { catalogFixture, deferred, fakeManagement, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
+import { catalogFixture, deferred, fakeManagement, openMember, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -13,6 +13,15 @@ const click = async (name: string | RegExp) => {
   await flush();
 };
 const ok = <T,>(data: T) => ({ ok: true as const, data });
+const fail = (error: { code: string; message: string }) => ({ ok: false as const, error: { retryable: false, ...error } });
+const openTab = async (name: string) => { fireEvent.click(screen.getByRole('tab', { name })); await flush(); };
+const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
+  const fake = fakeManagement(opts);
+  render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
+  await flush();
+  return fake;
+}
 
 describe('team editing edge cases', () => {
   it('rename_to_same_name_is_not_sent', async () => {
@@ -239,5 +248,46 @@ describe('team editing edge cases', () => {
     expect(screen.getByRole('form', { name: 'Add member' })).toBeTruthy();
     expect(document.activeElement).toBe(submit);
     expect(addMember).toHaveBeenCalledTimes(1);
+  });
+  it('saved_configuration_loading_error_and_retry_states_are_truthful', async () => {
+    const gate = deferred<ReturnType<typeof ok>>();
+    const teamCall = vi.fn()
+      .mockImplementationOnce(() => gate.promise)
+      .mockResolvedValueOnce(fail({ code: 'INTERNAL', message: 'offline' }))
+      .mockResolvedValue(ok({ team: teamDefinition({ members: [{ id: 'dev', role: 'Developer', canAddTickets: false }] }), members: [], problems: [], active: null }));
+    await renderScreen({ calls: { team: teamCall }, roles: [fail({ code: 'INTERNAL', message: 'roles down' })], agents: [fail({ code: 'OFFLINE', message: 'offline' })] });
+    await openTab('Overview'); openMember('dev');
+    const saved = () => screen.getByRole('region', { name: 'Saved configuration' });
+    expect(saved().textContent).toContain('Checking ticket permission…');
+    await act(async () => { gate.resolve(fail({ code: 'INTERNAL', message: 'first' })); });
+    expect(saved().textContent).toContain('Ticket permission could not be loaded (INTERNAL: first).');
+    await click('Retry loading ticket permission');
+    expect(saved().textContent).toContain('Ticket permission could not be loaded (INTERNAL: offline).');
+    await click('Retry loading ticket permission');
+    expect(saved().textContent).toContain('Can add tickets: No');
+    expect(within(saved()).queryByRole('button', { name: 'Retry loading ticket permission' })).toBeNull();
+    expect(saved().textContent).toContain('Developer');
+  });
+
+  it('save_discard_remove_and_role_navigation_do_not_cross_call', async () => {
+    const updateMember = vi.fn(async () => ok({ team: teamDefinition(), member: { id: 'dev', name: 'dev2', role: 'Developer' }, problems: [], appliesOnNextStart: true }));
+    const removeMember = vi.fn(async () => ok({ removed: { id: 'dev', name: 'dev' }, problems: [] }));
+    const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn(), onViewRole = vi.fn();
+    const fake = fakeManagement({ calls: { updateMember, removeMember, switchMemberAgent, resumeMemberAgent } });
+    render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
+    await flush(); await openTab('Overview'); openMember('dev'); await flush();
+    const counts = () => [updateMember.mock.calls.length, removeMember.mock.calls.length, onViewRole.mock.calls.length];
+    await click('Edit saved configuration'); type('Member name', 'dirty'); await click('Discard changes');
+    expect(counts()).toEqual([0, 0, 0]);
+    await click('Edit saved configuration'); type('Member name', 'dev2'); await click('Save changes');
+    expect(counts()).toEqual([1, 0, 0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove dev' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel removing dev' }));
+    expect(counts()).toEqual([1, 0, 0]);
+    fireEvent.click(screen.getByRole('button', { name: /^View .* in Roles$/ }));
+    expect(counts()).toEqual([1, 0, 1]);
+    expect(onViewRole).toHaveBeenCalledWith('Developer');
+    expect(switchMemberAgent).not.toHaveBeenCalled();
+    expect(resumeMemberAgent).not.toHaveBeenCalled();
   });
 });
