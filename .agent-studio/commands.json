@@ -66,6 +66,59 @@
         "Developer",
         "SeniorDeveloper"
       ]
+    },
+    "test-all": {
+      "description": "Run the full test suite outside your sandbox: backend unit and integration tests, and app test, typecheck and build (scripts/validate.py --all). A pass verdict needs a successful run on your final code.",
+      "argv": [
+        "python3",
+        "scripts/validate.py",
+        "--all"
+      ],
+      "network": true,
+      "timeoutMs": 1500000,
+      "maxPerVisit": 8,
+      "maxPerRun": 20,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA",
+        "Reviewer"
+      ]
+    },
+    "test-touched": {
+      "description": "Quicker check while iterating: the unit suite plus the integration modules and app package your change touches (scripts/validate.py --touched). Does not count as the final test run.",
+      "argv": [
+        "python3",
+        "scripts/validate.py",
+        "--touched"
+      ],
+      "network": true,
+      "timeoutMs": 1200000,
+      "maxPerVisit": 8,
+      "maxPerRun": 20,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA",
+        "Reviewer"
+      ]
+    },
+    "test-unit": {
+      "description": "Fastest check: the backend unit suite only (scripts/validate.py --unit).",
+      "argv": [
+        "python3",
+        "scripts/validate.py",
+        "--unit"
+      ],
+      "timeoutMs": 600000,
+      "maxPerVisit": 8,
+      "maxPerRun": 20,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA",
+        "Reviewer"
+      ]
     }
   }
 }

@@ -19,6 +19,7 @@ pattern.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -198,9 +199,15 @@ def load_config(workspace: str) -> Optional[dict]:
 
 
 def check_definition(definition, config: Optional[dict]) -> None:
-    """Every `delegates` id a stage names must exist in the catalog (checked when a run starts)."""
+    """Every `delegates` and `passRequiresCommands` id a stage names must exist in the catalog (checked when a run
+    starts)."""
     known = set((config or {}).get("commands", {}))
     for st in definition.stages:
+        for cid in (getattr(st, "pass_requires_commands", None) or ()):
+            if cid not in known:
+                raise AsError(DELEGATION_CONFIG_INVALID, f"Stage {st.id!r} requires {cid!r} to pass, but it is not in "
+                                                         f"{CONFIG_REL}.", data={"stage": st.id, "command": cid},
+                              remediation=f"Add {cid!r} to {CONFIG_REL} or change the stage's passRequiresCommands.")
         for cid in (getattr(st, "delegates", None) or ()):
             if cid not in known:
                 raise AsError(DELEGATION_CONFIG_INVALID, f"Stage {st.id!r} delegates {cid!r}, which is not in "
@@ -602,6 +609,69 @@ def _changed(before: str, after: str) -> list:
     return sorted({line[3:] for line in (a ^ b) if len(line) > 3})
 
 
+def _git(root: str, *args) -> Optional[bytes]:
+    git = shutil.which("git")
+    if not git:
+        return None
+    try:
+        out = subprocess.run([git, "-C", root, "-c", "core.quotepath=off"] + list(args), stdin=subprocess.DEVNULL,
+                             capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+def workspace_fingerprint(root: str) -> Optional[str]:
+    """One hash of the code a command saw: HEAD, the tracked changes against it, and every untracked (not ignored)
+    file with its content. Equal fingerprints mean the same code; None when git cannot tell."""
+    head = _git(root, "rev-parse", "HEAD")
+    diff = _git(root, "diff", "HEAD", "--binary", "--no-ext-diff", "--no-textconv")
+    others = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    if head is None or diff is None or others is None:
+        return None
+    h = hashlib.sha256()
+    h.update(head.strip() + b"\0")
+    h.update(hashlib.sha256(diff).digest())
+    for rel in sorted(p for p in others.split(b"\0") if p):
+        h.update(rel + b"\0")
+        path = os.path.join(os.fsencode(root), rel)
+        try:
+            with open(path, "rb") as f:
+                fh = hashlib.sha256()
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    fh.update(chunk)
+            h.update(fh.digest())
+        except OSError:
+            h.update(b"?")
+    return h.hexdigest()
+
+
+def verify_pass(tx, wf: dict, ids, workspace: str) -> Optional[str]:
+    """None when one of the commands `ids` succeeded in this run on exactly the code in `workspace` now (its newest
+    run on this code passed); otherwise the BLOCKER finding that turns a pass verdict into a fail."""
+    names = " or ".join(ids)
+    marks = ",".join("?" * len(ids))
+    rows = [dict(r) for r in tx.conn.execute(
+        f"SELECT * FROM command_requests WHERE workflow_run_id = ? AND command_id IN ({marks}) "
+        f"AND status IN ('succeeded', 'failed') ORDER BY ordinal DESC", (wf["id"],) + tuple(ids)).fetchall()]
+    if not rows:
+        return (f"BLOCKER: {names} was not run in this stage's workflow run - a pass needs a successful {names} "
+                f"run on the final code (request it as a delegated command, then judge its result)")
+    current = workspace_fingerprint(workspace)
+    if current is None:
+        return "BLOCKER: Agent Studio could not fingerprint the workspace to check which code the tests ran on"
+    for r in rows:
+        res = _loads(r["result_json"], {}) or {}
+        if res.get("workspaceFingerprint") != current:
+            continue
+        if r["status"] == "succeeded":
+            return None
+        why = res.get("error") or ("timed out" if res.get("timedOut") else f"exit {res.get('exitCode')}")
+        return f"BLOCKER: the latest {r['command_id']} run on the final code failed ({why}); fix it and run it again"
+    return (f"BLOCKER: the code changed after the last {names} run, so the final code was never tested - run "
+            f"{names} again after your last change")
+
+
 def _tail(path: str, limit: int = 2000) -> str:
     try:
         with open(path, "rb") as f:
@@ -673,6 +743,7 @@ def run_delegated(run_dir: str) -> int:
             res["error"] = f"command could not start: {e.strerror}"
         finally:
             os.close(fd)
+    res["workspaceFingerprint"] = workspace_fingerprint(req["workspace"])
     if before is not None:
         after = _tracked_state(req["workspace"])
         if after is not None and after != before:

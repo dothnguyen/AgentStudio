@@ -1,14 +1,11 @@
 version: 1
-description: Resolve escalated tickets in an isolated worktree and return them to QA.
-maxSteps: 12
+description: Resolve escalated tickets in an isolated worktree, have the coordinator run the tests (delegated test-all), and return them to QA only when they pass on the final code.
+maxSteps: 4
 stages:
   - id: develop
     role: SeniorDeveloper
     permission: workspace_write
-    maxVisits: 4
+    maxVisits: 1
+    passRequiresCommands: [test-all]   # a pass counts only if test-all passed in this run on exactly this code
     promptFile: workflows/prompts/board-develop.md
-    next: { done: tests }
-  - id: tests
-    type: validation
-    maxVisits: 4
-    next: { pass: $succeed, fail: develop }
+    next: { pass: $succeed, fail: $fail }

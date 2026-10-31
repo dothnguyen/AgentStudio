@@ -1,22 +1,17 @@
 version: 1
-description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria, the configured validation suite runs, QA gives the verdict.
-maxSteps: 8
+description: Board stage qa-ready. QA adds tests for the ticket's acceptance criteria and has the coordinator run the suite (delegated test-all); QA gives the verdict, which passes only when test-all passed on the final code.
+maxSteps: 4
 stages:
   - id: qa_tests
     role: QA
     permission: workspace_write
     maxVisits: 1
     promptFile: workflows/prompts/board-qa-tests.md
-    next: { done: tests }
-  - id: tests
-    type: validation
-    maxVisits: 1
-    next: { pass: qa, fail: qa }
+    next: { done: qa }
   - id: qa
     role: QA
     permission: read_only
     maxVisits: 1
-    passRequires: [tests]
-    delegates: []   # the verdict stage reads VALIDATION; it never needs environment commands
+    passRequiresCommands: [test-all]   # QA's added tests included: test-all must pass in this run on this code
     promptFile: workflows/prompts/board-qa.md
     next: { pass: $succeed, fail: $fail }

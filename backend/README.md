@@ -380,6 +380,10 @@ sections holding each result.
 - `maxPerVisit` / `maxPerRun` count every request, rejected ones too, so an agent cannot loop.
 - `onDenialWithRequest: "delegate"` (default): an assignment that was denied a permission but also filed a request
   delegates instead of pausing; `"pause"` keeps the old behaviour.
+- `passRequiresCommands: [ids]` on a verdict stage: a `pass` counts only if one of those commands succeeded in the
+  same workflow run on exactly the code the stage hands over (HEAD, tracked changes and untracked files are
+  fingerprinted after each delegated run). Otherwise the pass becomes a `fail` with a BLOCKER finding and the event
+  `workflow_run.pass_rejected`. The board workflows use it with `test-all` instead of a validation stage.
 - The prompt of a stage that may delegate gets a `DELEGATED_COMMANDS` section listing what it may ask for (use
   `{{delegated_commands}}` in a template to place it).
 

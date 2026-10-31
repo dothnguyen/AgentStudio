@@ -568,6 +568,13 @@ def _advance_definition(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
                 if not got or not got.get("passed"):
                     outcome = "fail"
                     findings = [f"{ref} did not pass"] + findings
+        if outcome == "pass" and st.pass_requires_commands:   # P06: and the required tests passed on this code
+            blocker = delegation.verify_pass(tx, wf, st.pass_requires_commands, wf_workspace(tx, wf))
+            if blocker:
+                outcome = "fail"
+                findings = [blocker] + findings[:49]
+                tx.note("workflow_run", wf["id"], "workflow_run.pass_rejected",
+                        {"stage": sa["stage"], "assignmentId": a["id"], "reason": blocker})
     else:
         outcome = "done"
     values = {"outcome": outcome if verdict else "done", "phase": "done",

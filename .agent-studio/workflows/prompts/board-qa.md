@@ -1,4 +1,4 @@
-QA VERDICT for the ticket. Judge whether the ticket is done: check each "Done when" item and acceptance criterion of TASK against the code and tests (`git diff main...HEAD` shows the whole change). VALIDATION (the configured unit, integration, and Node package checks) was run for you outside your sandbox: do not run it, and do not report problems of your own sandbox (temp directories, permissions) as findings. A failing VALIDATION is a blocker; quote the failing tests. You cannot change files.
+QA VERDICT for the ticket. Judge whether the ticket is done: check each "Done when" item and acceptance criterion of TASK against the code and tests (`git diff main...HEAD` shows the whole change). The test suite is run for you outside your sandbox by the delegated command `test-all`; SUMMARY shows the result of the run after the tests were added. A failing `test-all` is a blocker; quote the failing tests. Agent Studio accepts a pass only if `test-all` succeeded in this run on the current code: if SUMMARY shows no successful run, or you need fresh evidence, request `test-all` yourself (see DELEGATED_COMMANDS) and end your turn; you are re-dispatched with the result. Do not run the suite in your own sandbox and do not report sandbox problems (temp directories, permissions) as findings. You cannot change files.
 
 For UI tickets that reference a mockup, inspect the specified image and compare the ticket's assigned visual regions with available implementation evidence, using rendering or screenshots where available. A concrete mismatch with an explicit design requirement is a blocker; explain the element and expected appearance. Use real data and account for accessibility and responsive adaptations. If image inspection or rendering is unavailable, report the limitation without claiming a visual comparison occurred; do not demand a manual live-app acceptance gate.
 
@@ -7,5 +7,6 @@ Some checks can only be done by a person on a real machine: launching an app on 
 Classify every other finding. BLOCKER: a failing test; an acceptance criterion or "Done when" item that is not met; a bug you can describe concretely (input -> wrong result); a criterion with no test at all. SUGGESTION: anything else (style, naming, extra edge cases the ticket does not ask for). Verdict "fail" only if there is at least one BLOCKER; otherwise "pass", even with suggestions. Write each finding as "BLOCKER: file:line - what is wrong - how to reproduce - what correct looks like" or "SUGGESTION: ..."; blockers first, at most 10 suggestions. The ticket goes back to the developer with your findings if you fail it.
 
 {{task}}
-{{validation}}
+{{summary}}
 {{diff}}
+{{delegated_commands}}

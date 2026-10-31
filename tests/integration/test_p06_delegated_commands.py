@@ -30,7 +30,12 @@ CATALOG = {"version": 1, "defaults": {"maxPerVisit": 1}, "commands": {
                       "argv": ["python3", "-c", "open('check.py', 'a').write('# touched\\n')"], "roles": ["Developer"]},
     "slow": {"description": "Takes a while", "argv": ["python3", "-c", "import time; time.sleep(30)"],
              "roles": ["Developer"]},
+    "check": {"description": "The test suite", "argv": ["python3", "-c", "print('all tests passed')"],
+              "roles": ["Developer"]},
 }}
+VERIFIED = {"version": 1, "stages": [
+    {"id": "develop", "role": "Developer", "permission": "workspace_write", "maxVisits": 1, "prompt": DEV,
+     "passRequiresCommands": ["check"], "next": {"pass": "$succeed", "fail": "$fail"}}]}
 
 
 def marker(command, **params):
@@ -49,7 +54,8 @@ class DelegationCase(StartCase):
         super().setUp()
         with open(os.path.join(self.ws, ".agent-studio", "commands.json"), "w") as f:
             json.dump(CATALOG, f)
-        for name, obj in (("dship", SHIP), ("only-setup", ONLY_SETUP), ("no-delegation", NO_DELEGATION)):
+        for name, obj in (("dship", SHIP), ("only-setup", ONLY_SETUP), ("no-delegation", NO_DELEGATION),
+                          ("verified", VERIFIED)):
             self.write_def(name, obj)
         self.commit("catalog")
 
@@ -222,7 +228,7 @@ class DirectRequests(DelegationCase):
         wait_until(lambda: self.show(wf)["assignments"][0]["status"] == "running", timeout=20)
         rc, lst, _ = self.sb.request(req("command.list", {"assignment": asg, "agentId": dev}))
         self.assertTrue(lst["ok"], lst)
-        self.assertEqual([c["id"] for c in lst["data"]["commands"]], ["deps-add", "deps-setup", "slow", "touch-tracked"])
+        self.assertEqual([c["id"] for c in lst["data"]["commands"]], ["check", "deps-add", "deps-setup", "slow", "touch-tracked"])
         rc, bad, _ = self.sb.request(req("command.request", {"assignment": asg, "agentId": self.agent("QA"),
                                                              "command": "deps-setup"}, idempotencyKey=key()))
         self.assertEqual(self.code(bad), "DELEGATION_NOT_ALLOWED")
@@ -242,3 +248,28 @@ class DirectRequests(DelegationCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PassNeedsVerifiedTests(DelegationCase):
+    """A verdict stage with passRequiresCommands: the agent's pass counts only if the command passed in this run on
+    exactly the code it hands over."""
+
+    def test_pass_after_a_successful_run_on_the_same_code(self):
+        wf, d = self.run_def({"develop": asks("check", scenario="verdict_pass")}, name="verified")
+        self.assertEqual(d["workflowRun"]["status"], "succeeded", d["workflowRun"])
+        self.assertEqual(self.attempts(d), [("develop", 1, "delegated"), ("develop", 1, "verdict_pass")])
+        self.assertEqual(self.events(d, "workflow_run.pass_rejected"), [])
+
+    def test_a_change_after_the_run_turns_the_pass_into_a_fail(self):
+        # the resumed attempt writes feature.txt again with different content (its prompt differs)
+        wf, d = self.run_def({"develop": asks("check", "feature.txt", scenario="verdict_pass")}, name="verified")
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        reasons = [e["data"]["reason"] for e in self.events(d, "workflow_run.pass_rejected")]
+        self.assertEqual(len(reasons), 1)
+        self.assertIn("code changed after the last check run", reasons[0])
+        self.assertEqual(d["stageAttempts"][-1]["outcome"], "verdict_fail")
+
+    def test_a_pass_without_any_run_is_a_fail(self):
+        wf, d = self.run_def({"develop": fake("verdict_pass")}, name="verified")
+        self.assertEqual(d["workflowRun"]["status"], "failed")
+        self.assertIn("check was not run", self.events(d, "workflow_run.pass_rejected")[0]["data"]["reason"])

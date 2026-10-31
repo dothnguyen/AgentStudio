@@ -299,3 +299,113 @@ class Migration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PassRequiresCommands(unittest.TestCase):
+    def parse(self, **extra):
+        st = dict({"id": "dev", "role": "Developer", "permission": "workspace_write", "prompt": "x",
+                   "next": {"pass": "$succeed", "fail": "$fail"}}, **extra)
+        return workflowdef.parse_obj({"version": 1, "stages": [st]}, "t.json")
+
+    def test_only_on_verdict_stages_and_round_trips(self):
+        d = self.parse(passRequiresCommands=["test-all", "test-all"])
+        self.assertEqual(d.stages[0].pass_requires_commands, ("test-all",))
+        again = workflowdef.from_json(json.loads(workflowdef.to_json(d)))
+        self.assertEqual(again.stages[0].pass_requires_commands, ("test-all",))
+        self.assertNotIn("passRequiresCommands", workflowdef.to_json(self.parse()))
+        for bad in ([], "test-all", ["Bad"]):
+            with self.assertRaises(AsError):
+                self.parse(passRequiresCommands=bad)
+        with self.assertRaises(AsError):
+            workflowdef.parse_obj({"version": 1, "stages": [
+                {"id": "dev", "role": "Developer", "permission": "workspace_write", "prompt": "x",
+                 "next": {"done": "$succeed"}, "passRequiresCommands": ["test-all"]}]}, "t.json")
+
+    def test_unknown_required_command_is_refused_at_start(self):
+        cfg = delegation.parse_config(cat(a=cmd()))
+        with self.assertRaises(AsError) as e:
+            delegation.check_definition(self.parse(passRequiresCommands=["test-all"]), cfg)
+        self.assertEqual(e.exception.data, {"stage": "dev", "command": "test-all"})
+
+
+class Fingerprint(unittest.TestCase):
+    def setUp(self):
+        self.ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.ws)
+        self.git = lambda *a: subprocess.run(["git", "-C", self.ws] + list(a), check=True, capture_output=True)
+        self.git("init", "-q")
+        self.git("config", "user.email", "t@example.invalid")
+        self.git("config", "user.name", "t")
+        with open(os.path.join(self.ws, ".gitignore"), "w") as f:
+            f.write("ignored/\n")
+        self.write("a.txt", "one\n")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "base")
+
+    def write(self, rel, text):
+        path = os.path.join(self.ws, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            f.write(text)
+
+    def test_tracks_tracked_edits_and_untracked_content_but_not_ignored_files(self):
+        fp = delegation.workspace_fingerprint
+        base = fp(self.ws)
+        self.assertEqual(fp(self.ws), base)
+        self.write("ignored/x.log", "noise")
+        self.assertEqual(fp(self.ws), base)
+        self.write("new_test.py", "x = 1\n")
+        with_new = fp(self.ws)
+        self.assertNotEqual(with_new, base)
+        self.write("new_test.py", "x = 2\n")
+        self.assertNotEqual(fp(self.ws), with_new)
+        os.remove(os.path.join(self.ws, "new_test.py"))
+        self.assertEqual(fp(self.ws), base)
+        self.write("a.txt", "two\n")
+        self.assertNotEqual(fp(self.ws), base)
+        self.assertIsNone(fp(tempfile.mkdtemp()))
+
+
+class VerifyPass(unittest.TestCase):
+    """verify_pass reads command_requests through tx.conn; an in-memory table is enough."""
+
+    def setUp(self):
+        import sqlite3
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("CREATE TABLE command_requests (id TEXT, workflow_run_id TEXT, command_id TEXT, status TEXT, "
+                          "ordinal INTEGER, result_json TEXT)")
+        self.tx = type("Tx", (), {"conn": self.conn})()
+        self.n = 0
+
+    def add(self, command, status, fingerprint, run="w1", **res):
+        self.n += 1
+        self.conn.execute("INSERT INTO command_requests VALUES (?, ?, ?, ?, ?, ?)",
+                          (f"r{self.n}", run, command, status, self.n,
+                           json.dumps(dict(res, workspaceFingerprint=fingerprint))))
+
+    def verify(self, now="F2"):
+        with mock.patch.object(delegation, "workspace_fingerprint", return_value=now):
+            return delegation.verify_pass(self.tx, {"id": "w1"}, ("test-all",), "/ws")
+
+    def test_needs_a_run_in_this_run(self):
+        self.add("test-all", "succeeded", "F2", run="other")
+        self.add("test-unit", "succeeded", "F2")
+        self.assertIn("was not run", self.verify())
+
+    def test_passes_only_on_the_current_code(self):
+        self.add("test-all", "succeeded", "F1")
+        self.assertIn("code changed after the last test-all run", self.verify())
+        self.add("test-all", "succeeded", "F2")
+        self.assertIsNone(self.verify())
+
+    def test_the_newest_run_on_this_code_decides(self):
+        self.add("test-all", "succeeded", "F2")
+        self.add("test-all", "failed", "F2", exitCode=1)
+        self.assertIn("latest test-all run on the final code failed (exit 1)", self.verify())
+        self.add("test-all", "succeeded", "F2")
+        self.assertIsNone(self.verify())
+
+    def test_cannot_fingerprint(self):
+        self.add("test-all", "succeeded", "F2")
+        self.assertIn("could not fingerprint", self.verify(now=None))
