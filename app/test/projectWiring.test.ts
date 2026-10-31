@@ -15,6 +15,7 @@ describe('Electron project wiring', () => {
       start: 'npm run build && electron .',
       test: 'vitest run',
       'live-check': 'npm run build && node dist/live/liveCheck.js',
+      'capture:teams': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureTeams.js',
     });
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(fs.existsSync(path.join(appDir, 'package-lock.json'))).toBe(true);
@@ -115,5 +116,33 @@ describe('Electron project wiring', () => {
     expect(readme).toContain('AGENT_STUDIO_DISTRO');
     expect(readme).toContain('config.json');
     expect(readme).toContain('wsl -l -v');
+  });
+
+  it('builds the Teams v4 capture page outside the app bundle', () => {
+    const captureConfig = read('vite.capture.config.ts');
+    expect(captureConfig).toContain("root: 'capture'");
+    expect(captureConfig).toContain("base: './'");
+    expect(captureConfig).toContain("outDir: '../dist/capture'");
+    expect(JSON.parse(read('tsconfig.renderer.json')).include).toEqual(['src/renderer', 'capture']);
+    expect(read('vite.config.ts')).toContain("root: 'src/renderer'");
+    const csp = /<meta http-equiv="Content-Security-Policy" content="[^"]+">/.exec(read('src/renderer/index.html'))![0];
+    const captureHtml = read('capture/index.html');
+    expect(captureHtml).toContain(csp);
+    expect(captureHtml).toContain('<script type="module" src="./teamsCapture.tsx"></script>');
+    expect(captureHtml).toContain('<title>Agent Studio — Teams v4 capture</title>');
+  });
+
+  it('captures at 1440x1000 and writes the documented outputs', () => {
+    const capture = read('src/live/captureTeams.ts');
+    expect(capture).toContain('force-device-scale-factor');
+    expect(capture).toContain('WIDTH = 1440');
+    expect(capture).toContain('HEIGHT = 1000');
+    expect(capture).toContain('capturePage(');
+    expect(capture).toContain('teams-overview-v4-actual.png');
+    expect(capture).toContain('teams-overview-v4-compare.png');
+    expect(capture).toContain("design', 'teams-overview-v4.png'");
+    const readme = read('README.md');
+    expect(readme).toContain('npm run capture:teams');
+    expect(readme).toContain('teams-overview-v4-compare.png');
   });
 });

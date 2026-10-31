@@ -1,6 +1,6 @@
 # P05-S60 — Teams overview screenshot check against v4
 
-Status: To Do
+Status: Done (2026-11-01)
 Depends on: P05-S56, P05-S57, P05-S58, P05-S59
 Architecture: [Teams overview v4 fidelity](../README.md#teams-overview-v4-fidelity)
 
@@ -23,4 +23,9 @@ Give the operator a one-command way to see how close the built Teams overview is
 - [ ] `npm --prefix app test`, `npm --prefix app run typecheck`, `npm --prefix app run build` pass.
 
 ## Evidence
-(filled in when the story is done)
+- Fixture: `app/capture/teamsOverviewV4Fixture.ts` mirrors the sample data of `design/teams-overview-v4.html` (Agent Studio Dev Team, `dev-team`, `b4597175…f9548168`, six members, lead switched to Codex 5.6 Sol medium, board running, 6/6 available) and exposes read-only management/dashboard APIs.
+- Capture page (outside the production bundle): `app/capture/TeamsCaptureApp.tsx`, `app/capture/teamsCapture.tsx`, `app/capture/index.html`, `app/vite.capture.config.ts`; `app/tsconfig.renderer.json` includes `capture` so it is typechecked.
+- Operator command: `app/src/live/captureTeams.ts` with the pure comparator `app/src/live/imageCompare.ts`; `capture:teams` in `app/package.json`; documented in `app/README.md` (Teams v4 visual check).
+- Tests: `app/test/teamsOverviewV4Capture.test.tsx` (fixture data, real `WorkspaceShell` render and readiness, six member rows with Switched/Available/Idle, header, cards and banner, style/font sync, read-only writes), `app/test/imageCompare.test.ts` (design | actual | difference composition, tolerance boundary, error messages), `app/test/projectWiring.test.ts` (capture script, separate capture build, 1440x1000 capture and documented outputs).
+- Checked by the delegated `test-ui` run (`python3 scripts/validate.py --ui`): npm test, typecheck and build for the app.
+- Operator check on Windows (`npm run capture:teams`) remains an operator check, not a condition for this story.

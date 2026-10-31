@@ -3,5 +3,5 @@
     "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"], "strict": true, "skipLibCheck": true, "noEmit": true, "types": []
   },
-  "include": ["src/renderer"]
+  "include": ["src/renderer", "capture"]
 }

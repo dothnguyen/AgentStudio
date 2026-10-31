@@ -109,6 +109,31 @@ Steps:
 It never starts the coordinator. The default evidence file is `scripts/windows/app-live-check-evidence.json`.
 If the repository path has a space or another character outside `SAFE_ARG`, pass `--repo-wsl`.
 
+## Teams v4 visual check (Windows)
+
+Renders the real Teams overview (`WorkspaceShell` + `TeamsScreen`) with the sample data of
+`design/teams-overview-v4.html` from `capture/teamsOverviewV4Fixture.ts`, and compares the capture with
+`design/teams-overview-v4.png`.
+
+Prerequisites: `npm ci` has been run on Windows (PowerShell) and the Electron binary is present. The
+command does not run in WSL when Electron was installed with `ELECTRON_SKIP_BINARY_DOWNLOAD=1`.
+
+```powershell
+cd C:\Works\Projects\AgentStudio\app
+npm run capture:teams
+```
+
+The capture page is read-only: it uses no backend or WSL connection. The command opens a hidden
+1440x1000 window at device scale factor 1 and writes:
+
+- `test-results/teams-overview-v4-actual.png` — the captured screen.
+- `test-results/teams-overview-v4-compare.png` — design | actual | difference. Red marks a channel
+  difference above 16; grey marks a matching pixel.
+
+It prints the number of differing pixels and exits 0 even when pixels differ. It exits 1 on errors
+(missing build, missing design image, capture page not ready within 15 s). The run is an operator check
+and is not part of `npm test`.
+
 The Teams Routing tab shows workspace-wide board transitions, role links, and expandable worktree, escalation, protected-route, action, and workflow summaries. Operators can edit existing routes, worktree base branch, and agent failure escalation policies. Routing saves apply workspace-wide to future claims and transitions; they do not change member roles or shared role instructions, cancel assignments, or reroute work already in flight. Saves check the configuration version and reload the latest settings. If a refresh reports invalid board or roles configuration, open drafts cannot be saved until the configuration is valid again. Configuration conflicts require an explicit reload before retrying. If the reload fails, the editor retains the draft and offers a retry; a successful write is reported only after fresh settings load.
 
 The typed management API accepts ordered catalog agent IDs when adding or updating a member.
