@@ -36,6 +36,15 @@ export const PRELOAD_CHANNELS = {
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
   managementResumeMemberAgent: 'management:resumeMemberAgent',
+  managementResetUsage: 'management:resetUsage',
+  managementRetryRun: 'management:retryRun',
+  managementCancelRun: 'management:cancelRun',
+  managementRetryTicket: 'management:retryTicket',
+  managementUnblockTicket: 'management:unblockTicket',
+  managementApproveCommand: 'management:approveCommand',
+  managementRejectCommand: 'management:rejectCommand',
+  managementCancelCommand: 'management:cancelCommand',
+  managementAttachInfo: 'management:attachInfo',
 } as const;
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'on' | 'removeListener'>;
@@ -95,6 +104,18 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       switchMemberAgent: (w, teamDefId, memberId, agent, confirmation) =>
         ipc.invoke(PRELOAD_CHANNELS.managementSwitchMemberAgent, w, confirmation === undefined ? { teamDefId, memberId, agent } : { teamDefId, memberId, agent, confirmation }),
       resumeMemberAgent: (w, teamDefId, memberId, agent) => ipc.invoke(PRELOAD_CHANNELS.managementResumeMemberAgent, w, { teamDefId, memberId, agent }),
+      resetUsage: (w, teamDefId, provider) => ipc.invoke(PRELOAD_CHANNELS.managementResetUsage, w, { teamDefId, provider }),
+      retryRun: (w, workflowRunId) => ipc.invoke(PRELOAD_CHANNELS.managementRetryRun, w, { workflowRunId }),
+      cancelRun: (w, workflowRunId) => ipc.invoke(PRELOAD_CHANNELS.managementCancelRun, w, { workflowRunId }),
+      retryTicket: (w, key) => ipc.invoke(PRELOAD_CHANNELS.managementRetryTicket, w, { key }),
+      unblockTicket: (w, key, to) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUnblockTicket, w, to === undefined ? { key } : { key, to }),
+      approveCommand: (w, requestId) => ipc.invoke(PRELOAD_CHANNELS.managementApproveCommand, w, { requestId }),
+      rejectCommand: (w, requestId, reason) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementRejectCommand, w, reason === undefined ? { requestId } : { requestId, reason }),
+      cancelCommand: (w, requestId, reason) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementCancelCommand, w, reason === undefined ? { requestId } : { requestId, reason }),
+      attachInfo: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementAttachInfo, w, { teamId }),
       stopBoard: (w) => ipc.invoke(PRELOAD_CHANNELS.managementStopBoard, w, {}),
     },
     connection: {

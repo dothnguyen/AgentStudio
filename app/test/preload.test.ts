@@ -22,6 +22,7 @@ const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
   'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
+  'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
 ];
 
 describe('preload', () => {
@@ -84,6 +85,18 @@ describe('preload', () => {
     m.switchMemberAgent('ws', 'core', 'm1', 'ada');
     m.switchMemberAgent('ws', 'core', 'm1', 'ada', { cancelActive: true, assignmentId: uuid }, x);
     m.resumeMemberAgent('ws', 'core', 'm1', 'ada', x);
+    m.resetUsage('ws', 'core', 'claude', x);
+    m.retryRun('ws', uuid, x);
+    m.cancelRun('ws', uuid, x);
+    m.retryTicket('ws', 'T-100', x);
+    m.unblockTicket('ws', 'T-100', undefined, x);
+    m.unblockTicket('ws', 'T-100', 'dev-ready', x);
+    m.approveCommand('ws', uuid, x);
+    m.rejectCommand('ws', uuid, undefined, x);
+    m.rejectCommand('ws', uuid, 'not needed', x);
+    m.cancelCommand('ws', uuid, undefined, x);
+    m.cancelCommand('ws', uuid, 'stale', x);
+    m.attachInfo('ws', uuid, x);
     const P = PRELOAD_CHANNELS;
     expect(f.invoke.mock.calls).toEqual([
       [P.managementOverview, 'ws', {}],
@@ -115,6 +128,18 @@ describe('preload', () => {
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: uuid } }],
       [P.managementResumeMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
+      [P.managementResetUsage, 'ws', { teamDefId: 'core', provider: 'claude' }],
+      [P.managementRetryRun, 'ws', { workflowRunId: uuid }],
+      [P.managementCancelRun, 'ws', { workflowRunId: uuid }],
+      [P.managementRetryTicket, 'ws', { key: 'T-100' }],
+      [P.managementUnblockTicket, 'ws', { key: 'T-100' }],
+      [P.managementUnblockTicket, 'ws', { key: 'T-100', to: 'dev-ready' }],
+      [P.managementApproveCommand, 'ws', { requestId: uuid }],
+      [P.managementRejectCommand, 'ws', { requestId: uuid }],
+      [P.managementRejectCommand, 'ws', { requestId: uuid, reason: 'not needed' }],
+      [P.managementCancelCommand, 'ws', { requestId: uuid }],
+      [P.managementCancelCommand, 'ws', { requestId: uuid, reason: 'stale' }],
+      [P.managementAttachInfo, 'ws', { teamId: uuid }],
     ]);
   });
 

@@ -189,6 +189,38 @@ export interface RuntimeSwitchState {
 }
 export type QuotaHoldMap = Record<string, string | null>;
 export type RuntimeAssignment = { id: string; status: string; taskId: string } | null;
+export interface AttentionRun {
+  workflowRunId: string;
+  status: 'queued' | 'running' | 'paused';
+  stage: string | null;
+  memberId: string | null;
+  ticketKey: string | null;
+  assignmentId: string | null;
+  assignmentStatus: string | null;
+  diagnosticCode: string | null;
+  delegating: boolean;
+}
+export interface AttentionCommandRequest {
+  id: string;
+  command: string;
+  status: 'requested' | 'approved' | 'running';
+  reason: string | null;
+  workflowRunId: string;
+  memberId: string | null;
+}
+export interface BlockedTicket {
+  key: string;
+  title: string;
+  reason: string | null;
+  returnStatus: string | null;
+  memberId: string | null;
+  updatedAt: string;
+}
+export interface TeamAttention {
+  runs: AttentionRun[];
+  commandRequests: AttentionCommandRequest[];
+  truncated: { runs: boolean; commandRequests: boolean };
+}
 export interface OverviewMember {
   memberId: string | null;
   name: string | null;
@@ -229,6 +261,7 @@ export interface OverviewTeam {
   runtime: { state: OverviewRuntimeState; teamId: string | null; status: string | null };
   members: OverviewMember[];
   membersTruncated: boolean;
+  attention: TeamAttention;
 }
 export interface ConfigState {
   state: 'ok' | 'missing' | 'invalid';
@@ -241,6 +274,8 @@ export interface TeamOverview {
   roles: ConfigState;
   catalog: ConfigState;
   teams: OverviewTeam[];
+  blockedTickets: BlockedTicket[];
+  blockedTicketsTruncated: boolean;
   truncated: boolean;
   partial: boolean;
 }
@@ -414,6 +449,32 @@ export type MemberSwitchResult =
   | { teamId: string; memberId: string; agentId: string; activeAgent: string; provider: string }
   | { teamId: string; memberId: string; agentId: string; pendingAgent: string; assignmentId: string; cancellation: CancellationResult };
 export type MemberResumeResult = { teamId: string; memberId: string; agentId: string; option: string; cleared: boolean; activeAgent: string | null };
+export interface UsageResetMember {
+  memberId: string | null;
+  cleared: string[];
+  activeAgent: string | null;
+  switched: boolean;
+  error?: string;
+}
+export interface UsageResetResult { teamId: string; provider: string; members: UsageResetMember[] }
+export interface RunRetryResult {
+  workflowRunId: string;
+  assignmentId: string;
+  action: 'retry';
+  status: 'retried';
+  newAssignmentId?: string;
+  stage?: string;
+}
+export type RunCancelResult = Extract<CancellationResult, { workflowRunId: string }>;
+export interface TicketActionResult { ticket: { key: string; status: string } }
+export interface CommandActionResult { requestId: string; status: string }
+export interface AttachInfo {
+  sessionName: string;
+  wsl: string;
+  windowsTerminal: string;
+  powershell: string;
+  keys: Record<string, string>;
+}
 
 type R<T> = Promise<ManagementResult<T>>;
 export interface ManagementApi {
@@ -441,4 +502,13 @@ export interface ManagementApi {
   switchMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string, confirmation?: { cancelActive: true; assignmentId: string }): R<MemberSwitchResult>;
   resumeMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string): R<MemberResumeResult>;
   stopBoard(workspaceId: string): R<BoardRunResult>;
+  resetUsage(workspaceId: string, teamDefId: string, provider: string): R<UsageResetResult>;
+  retryRun(workspaceId: string, workflowRunId: string): R<RunRetryResult>;
+  cancelRun(workspaceId: string, workflowRunId: string): R<RunCancelResult>;
+  retryTicket(workspaceId: string, key: string): R<TicketActionResult>;
+  unblockTicket(workspaceId: string, key: string, to?: string): R<TicketActionResult>;
+  approveCommand(workspaceId: string, requestId: string): R<CommandActionResult>;
+  rejectCommand(workspaceId: string, requestId: string, reason?: string): R<CommandActionResult>;
+  cancelCommand(workspaceId: string, requestId: string, reason?: string): R<CommandActionResult>;
+  attachInfo(workspaceId: string, teamId: string): R<AttachInfo>;
 }

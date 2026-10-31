@@ -6,9 +6,13 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(24);
+    expect(MANAGEMENT_SPECS).toHaveLength(33);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
-    expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual(['management.resumeMemberAgent', 'management.runBoard', 'management.stopBoard', 'management.switchMemberAgent']);
+    expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
+      'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
+      'management.resetUsage', 'management.resumeMemberAgent', 'management.retryRun', 'management.retryTicket',
+      'management.runBoard', 'management.stopBoard', 'management.switchMemberAgent', 'management.unblockTicket',
+    ]);
   });
 
   it('isPlainObject accepts plain and null-prototype objects only', () => {
@@ -178,6 +182,76 @@ describe('managementSpecs', () => {
     expect(parse('switchMemberAgent', { ...base, confirmation: { cancelActive: true, assignmentId: 'bad' } })).toBe('management.switchMemberAgent: confirmation.assignmentId must be a lowercase UUID v4.');
     expect(parse('switchMemberAgent', { ...base, confirmation: { extra: 1 } })).toBe('management.switchMemberAgent: unknown field(s): confirmation.extra.');
     expect(parse('switchMemberAgent', { ...base, extra: 1, confirmation: {} })).toBe('management.switchMemberAgent: unknown field(s): extra.');
+  });
+  it('exposes the team and member actions through fixed commands', () => {
+    const uuid = '123e4567-e89b-42d3-a456-426614174000';
+    const rows: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
+      ['resetUsage', { teamDefId: 'core', provider: 'claude' }, 'team.usage.reset', { teamDefId: 'core', provider: 'claude' }],
+      ['retryRun', { workflowRunId: uuid }, 'workflow.retry', { workflowRunId: uuid }],
+      ['cancelRun', { workflowRunId: uuid }, 'workflow.cancel', { workflowRunId: uuid }],
+      ['retryTicket', { key: 'T-100' }, 'ticket.retry', { key: 'T-100' }],
+      ['unblockTicket', { key: 'T-100' }, 'ticket.unblock', { key: 'T-100' }],
+      ['unblockTicket', { key: 'T-100', to: 'dev-ready' }, 'ticket.unblock', { key: 'T-100', to: 'dev-ready' }],
+      ['approveCommand', { requestId: uuid }, 'command.approve', { requestId: uuid }],
+      ['rejectCommand', { requestId: uuid }, 'command.reject', { requestId: uuid }],
+      ['rejectCommand', { requestId: uuid, reason: 'not needed' }, 'command.reject', { requestId: uuid, reason: 'not needed' }],
+      ['cancelCommand', { requestId: uuid }, 'command.cancel', { requestId: uuid }],
+      ['cancelCommand', { requestId: uuid, reason: 'stale' }, 'command.cancel', { requestId: uuid, reason: 'stale' }],
+      ['attachInfo', { teamId: uuid }, 'team.attach', { teamId: uuid }],
+    ];
+    for (const [method, request, command, args] of rows) {
+      expect(byLabel(method).command).toBe(command);
+      expect(parse(method, request)).toEqual(args);
+    }
+    expect(byLabel('attachInfo').mutating).toBe(false);
+  });
+
+  it('rejects malformed action identifiers, ticket keys and reasons', () => {
+    const uuid = '123e4567-e89b-42d3-a456-426614174000';
+    expect(parse('retryTicket', { key: 't-100' })).toContain('key must be a ticket key');
+    expect(parse('retryTicket', { key: 'T-12' })).toContain('key must be a ticket key');
+    expect(parse('retryTicket', {})).toBe('management.retryTicket: key is required.');
+    expect(parse('unblockTicket', { key: 'T-100', to: 'Bad Status' })).toContain('to must be a slug');
+    expect(parse('unblockTicket', { key: 'T-100', status: 'x' })).toBe('management.unblockTicket: unknown field(s): status.');
+    expect(parse('retryRun', { workflowRunId: 'abc' })).toBe('management.retryRun: workflowRunId must be a lowercase UUID v4.');
+    expect(parse('cancelRun', {})).toBe('management.cancelRun: workflowRunId is required.');
+    expect(parse('approveCommand', { requestId: 'ABC' })).toBe('management.approveCommand: requestId must be a lowercase UUID v4.');
+    expect(parse('attachInfo', {})).toBe('management.attachInfo: teamId is required.');
+    expect(parse('rejectCommand', { requestId: uuid, reason: 5 as never })).toBe('management.rejectCommand: reason must be a string.');
+    expect(parse('rejectCommand', { requestId: uuid, reason: 'x'.repeat(501) })).toBe('management.rejectCommand: reason must be at most 500 characters.');
+    expect(parse('rejectCommand', { requestId: uuid, reason: '\ud800' })).toContain('unpaired surrogates');
+    expect(parse('cancelCommand', { requestId: uuid, reason: 'x'.repeat(500) })).toEqual({ requestId: uuid, reason: 'x'.repeat(500) });
+    expect(parse('resetUsage', { teamDefId: 'core', provider: 'Bad Provider' })).toContain('provider must be a slug');
+  });
+
+  it('rejects missing and unknown fields for every new action', () => {
+    const uuid = '123e4567-e89b-42d3-a456-426614174000';
+    const cases: Array<[string, Record<string, unknown>, string]> = [
+      ['resetUsage', { provider: 'claude' }, 'teamDefId is required.'],
+      ['resetUsage', { teamDefId: 'core', provider: 'claude', extra: 1 }, 'unknown field(s): extra.'],
+      ['resetUsage', { teamDefId: 'core' }, 'provider is required.'],
+      ['retryRun', {}, 'workflowRunId is required.'],
+      ['retryRun', { workflowRunId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['cancelRun', {}, 'workflowRunId is required.'],
+      ['cancelRun', { workflowRunId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['cancelRun', { workflowRunId: 'abc' }, 'workflowRunId must be a lowercase UUID v4.'],
+      ['retryTicket', {}, 'key is required.'],
+      ['retryTicket', { key: 'T-100', extra: 1 }, 'unknown field(s): extra.'],
+      ['unblockTicket', {}, 'key is required.'],
+      ['approveCommand', {}, 'requestId is required.'],
+      ['approveCommand', { requestId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['rejectCommand', {}, 'requestId is required.'],
+      ['rejectCommand', { requestId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['cancelCommand', {}, 'requestId is required.'],
+      ['cancelCommand', { requestId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['cancelCommand', { requestId: uuid, reason: 'x'.repeat(501) }, 'reason must be at most 500 characters.'],
+      ['attachInfo', {}, 'teamId is required.'],
+      ['attachInfo', { teamId: uuid, extra: 1 }, 'unknown field(s): extra.'],
+      ['attachInfo', { teamId: 'abc' }, 'teamId must be a lowercase UUID v4.'],
+    ];
+    for (const [method, request, suffix] of cases) {
+      expect(parse(method, request)).toBe(`management.${method}: ${suffix}`);
+    }
   });
 
 });

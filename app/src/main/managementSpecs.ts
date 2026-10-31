@@ -26,6 +26,15 @@ export const MANAGEMENT_CHANNELS = {
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
   managementResumeMemberAgent: 'management:resumeMemberAgent',
+  managementResetUsage: 'management:resetUsage',
+  managementRetryRun: 'management:retryRun',
+  managementCancelRun: 'management:cancelRun',
+  managementRetryTicket: 'management:retryTicket',
+  managementUnblockTicket: 'management:unblockTicket',
+  managementApproveCommand: 'management:approveCommand',
+  managementRejectCommand: 'management:rejectCommand',
+  managementCancelCommand: 'management:cancelCommand',
+  managementAttachInfo: 'management:attachInfo',
 } as const;
 
 export interface ManagementSpec {
@@ -51,7 +60,8 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const MAX_INSTRUCTION_BYTES = 16384;
 
 type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
-  | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull';
+  | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull'
+  | 'ticketKey' | 'reason';
 
 interface Field {
   kind: Kind;
@@ -72,6 +82,14 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
         : `${label}: ${field} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
     case 'uuid':
       return typeof value === 'string' && UUID4.test(value) ? null : `${label}: ${field} must be a lowercase UUID v4.`;
+    case 'ticketKey':
+      return typeof value === 'string' && /^T-\d{3,}$/.test(value)
+        ? null
+        : `${label}: ${field} must be a ticket key (T- followed by at least three digits).`;
+    case 'reason':
+      if (typeof value !== 'string') return `${label}: ${field} must be a string.`;
+      if (LONE_SURROGATE.test(value)) return `${label}: ${field} must not contain unpaired surrogates.`;
+      return value.length <= 500 ? null : `${label}: ${field} must be at most 500 characters.`;
     case 'stringArrayOfSlugs':
       if (!Array.isArray(value) || value.length === 0) return `${label}: ${field} must be a non-empty array of slugs.`;
       for (let i = 0; i < value.length; i++) {
@@ -363,4 +381,34 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
     teamDefId, memberId, agent: { kind: 'slug', required: true },
   }, { mutating: true }),
   spec(C.managementStopBoard, 'stopBoard', 'board.stop', {}, { mutating: true }),
+  spec(C.managementResetUsage, 'resetUsage', 'team.usage.reset', {
+    teamDefId, provider: { kind: 'slug', required: true },
+  }, { mutating: true }),
+  spec(C.managementRetryRun, 'retryRun', 'workflow.retry', {
+    workflowRunId: { kind: 'uuid', required: true },
+  }, { mutating: true }),
+  spec(C.managementCancelRun, 'cancelRun', 'workflow.cancel', {
+    workflowRunId: { kind: 'uuid', required: true },
+  }, { mutating: true }),
+  spec(C.managementRetryTicket, 'retryTicket', 'ticket.retry', {
+    key: { kind: 'ticketKey', required: true },
+  }, { mutating: true }),
+  spec(C.managementUnblockTicket, 'unblockTicket', 'ticket.unblock', {
+    key: { kind: 'ticketKey', required: true },
+    to: { kind: 'slug' },
+  }, { mutating: true }),
+  spec(C.managementApproveCommand, 'approveCommand', 'command.approve', {
+    requestId: { kind: 'uuid', required: true },
+  }, { mutating: true }),
+  spec(C.managementRejectCommand, 'rejectCommand', 'command.reject', {
+    requestId: { kind: 'uuid', required: true },
+    reason: { kind: 'reason' },
+  }, { mutating: true }),
+  spec(C.managementCancelCommand, 'cancelCommand', 'command.cancel', {
+    requestId: { kind: 'uuid', required: true },
+    reason: { kind: 'reason' },
+  }, { mutating: true }),
+  spec(C.managementAttachInfo, 'attachInfo', 'team.attach', {
+    teamId: { kind: 'uuid', required: true },
+  }),
 ];

@@ -70,6 +70,7 @@ export function team(overrides: Partial<OverviewTeam> = {}): OverviewTeam {
     runtime: { state: 'not_started', teamId: null, status: null },
     members: [member()],
     membersTruncated: false,
+    attention: { runs: [], commandRequests: [], truncated: { runs: false, commandRequests: false } },
     ...overrides,
   };
 }
@@ -82,6 +83,8 @@ export function overviewFixture(teams: OverviewTeam[], overrides: Partial<TeamOv
     roles: { state: 'ok', message: null },
     catalog: { state: 'ok', message: null },
     teams,
+    blockedTickets: [],
+    blockedTicketsTruncated: false,
     truncated: false,
     partial: false,
     ...overrides,

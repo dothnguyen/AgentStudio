@@ -1,8 +1,23 @@
-import type { AgentDef, RoleCatalogItem, ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview } from '../api';
+import type { AgentDef, RoleCatalogItem, ResolvedAgentOption, MemberWork, OverviewMember, OverviewRuntimeState, OverviewTeam, TeamOverview, TeamAttention, BlockedTicket } from '../api';
 
 
 export function text(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+/** The attention block of one team; an older backend that does not send it is treated as empty. */
+export function teamAttention(team: OverviewTeam): TeamAttention {
+  return (team as OverviewTeam & { attention?: TeamAttention }).attention
+    ?? { runs: [], commandRequests: [], truncated: { runs: false, commandRequests: false } };
+}
+
+/** Workspace blocked tickets; an older backend that does not send them is treated as empty. */
+export function blockedTickets(overview: TeamOverview): BlockedTicket[] {
+  return (overview as TeamOverview & { blockedTickets?: BlockedTicket[] }).blockedTickets ?? [];
+}
+
+export function blockedTicketsTruncated(overview: TeamOverview): boolean {
+  return (overview as TeamOverview & { blockedTicketsTruncated?: boolean }).blockedTicketsTruncated === true;
 }
 
 export function plural(count: number, one: string, many: string): string {

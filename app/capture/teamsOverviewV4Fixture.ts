@@ -210,8 +210,11 @@ export function teamsOverviewV4Overview(): TeamOverview {
         runtime: { state: 'running', teamId: TEAMS_V4_RUNTIME_ID, status: 'running' },
         members: overviewMembers(),
         membersTruncated: false,
+        attention: { runs: [], commandRequests: [], truncated: { runs: false, commandRequests: false } },
       },
     ],
+    blockedTickets: [],
+    blockedTicketsTruncated: false,
     truncated: false,
     partial: false,
   };
@@ -327,6 +330,15 @@ export function createTeamsOverviewV4Apis(): { management: ManagementApi; dashbo
     switchMemberAgent: () => readOnly(),
     resumeMemberAgent: () => readOnly(),
     stopBoard: () => readOnly(),
+    resetUsage: () => readOnly(),
+    retryRun: () => readOnly(),
+    cancelRun: () => readOnly(),
+    retryTicket: () => readOnly(),
+    unblockTicket: () => readOnly(),
+    approveCommand: () => readOnly(),
+    rejectCommand: () => readOnly(),
+    cancelCommand: () => readOnly(),
+    attachInfo: () => readOnly(),
   };
 
   const dashboard: DashboardApi = {

@@ -4,6 +4,8 @@ import { roleItem } from './rolesFixtures';
 import {
   availabilityCounts,
   availabilitySummary,
+  blockedTickets,
+  blockedTicketsTruncated,
   runtimeDetailText,
   coordinatorText,
   definitionStateText,
@@ -14,6 +16,7 @@ import {
   presenceTone,
   providerModelText,
   runtimeTone,
+  teamAttention,
   teamKey,
   teamLabel,
   workText,
@@ -27,6 +30,18 @@ function withState(id: string, state: OverviewRuntimeState) {
 }
 
 describe('teamsModel', () => {
+  it('treats an older backend without attention fields as empty', () => {
+    const old = overviewFixture([team()]) as unknown as Record<string, unknown>;
+    delete (old.teams as Array<Record<string, unknown>>)[0]!.attention;
+    delete old.blockedTickets;
+    delete old.blockedTicketsTruncated;
+    expect(teamAttention((old.teams as never[])[0]!)).toEqual({
+      runs: [], commandRequests: [], truncated: { runs: false, commandRequests: false },
+    });
+    expect(blockedTickets(old as never)).toEqual([]);
+    expect(blockedTicketsTruncated(old as never)).toBe(false);
+  });
+
   it('orders_live_teams_first_and_keeps_backend_order', () => {
     const items = [withState('A', 'stopped'), withState('B', 'running'), withState('C', 'not_started'), withState('D', 'starting')];
     expect(orderTeams(items).map((i) => i.team.id)).toEqual(['B', 'D', 'A', 'C']);

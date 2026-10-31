@@ -75,6 +75,15 @@ const LABELS: Record<string, string> = {
   [C.managementStopBoard]: 'stopBoard',
   [C.managementSwitchMemberAgent]: 'switchMemberAgent',
   [C.managementResumeMemberAgent]: 'resumeMemberAgent',
+  [C.managementResetUsage]: 'resetUsage',
+  [C.managementRetryRun]: 'retryRun',
+  [C.managementCancelRun]: 'cancelRun',
+  [C.managementRetryTicket]: 'retryTicket',
+  [C.managementUnblockTicket]: 'unblockTicket',
+  [C.managementApproveCommand]: 'approveCommand',
+  [C.managementRejectCommand]: 'rejectCommand',
+  [C.managementCancelCommand]: 'cancelCommand',
+  [C.managementAttachInfo]: 'attachInfo',
 };
 
 const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
@@ -102,6 +111,18 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementStopBoard, {}, 'board.stop', {}],
   [C.managementSwitchMemberAgent, { teamDefId: 'core', memberId: 'm1', agent: 'ada' }, 'team.member.switch', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
   [C.managementResumeMemberAgent, { teamDefId: 'core', memberId: 'm1', agent: 'ada' }, 'team.member.resume', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
+  [C.managementResetUsage, { teamDefId: 'core', provider: 'claude' }, 'team.usage.reset', { teamDefId: 'core', provider: 'claude' }],
+  [C.managementRetryRun, { workflowRunId: UUID }, 'workflow.retry', { workflowRunId: UUID }],
+  [C.managementCancelRun, { workflowRunId: UUID }, 'workflow.cancel', { workflowRunId: UUID }],
+  [C.managementRetryTicket, { key: 'T-100' }, 'ticket.retry', { key: 'T-100' }],
+  [C.managementUnblockTicket, { key: 'T-100' }, 'ticket.unblock', { key: 'T-100' }],
+  [C.managementUnblockTicket, { key: 'T-100', to: 'dev-ready' }, 'ticket.unblock', { key: 'T-100', to: 'dev-ready' }],
+  [C.managementApproveCommand, { requestId: UUID }, 'command.approve', { requestId: UUID }],
+  [C.managementRejectCommand, { requestId: UUID }, 'command.reject', { requestId: UUID }],
+  [C.managementRejectCommand, { requestId: UUID, reason: 'not needed' }, 'command.reject', { requestId: UUID, reason: 'not needed' }],
+  [C.managementCancelCommand, { requestId: UUID }, 'command.cancel', { requestId: UUID }],
+  [C.managementCancelCommand, { requestId: UUID, reason: 'stale' }, 'command.cancel', { requestId: UUID, reason: 'stale' }],
+  [C.managementAttachInfo, { teamId: UUID }, 'team.attach', { teamId: UUID }],
 ];
 
 const SLUG_MSG = (f: string) => `${f} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
@@ -167,6 +188,10 @@ describe('management IPC', () => {
     await bad(C.managementRemoveMember, { teamDefId: 'core', memberId: '' }, `management.removeMember: ${SLUG_MSG('memberId')}`);
     await bad(C.managementAddMember, { teamDefId: 'core', member: { agent: 'Bad Id' } }, `management.addMember: ${SLUG_MSG('member.agent')}`);
     await bad(C.managementRunBoard, { teamId: 'abc' }, 'management.runBoard: teamId must be a lowercase UUID v4.');
+    await bad(C.managementRetryTicket, { key: 'T-1' }, 'management.retryTicket: key must be a ticket key (T- followed by at least three digits).');
+    await bad(C.managementRetryRun, { workflowRunId: 'abc' }, 'management.retryRun: workflowRunId must be a lowercase UUID v4.');
+    await bad(C.managementApproveCommand, { requestId: UUID, command: 'ticket.retry' }, 'management.approveCommand: unknown field(s): command.');
+    await bad(C.managementRejectCommand, { requestId: UUID, reason: 'x'.repeat(501) }, 'management.rejectCommand: reason must be at most 500 characters.');
   });
 
   it('rejects wrong types and empty changes', async () => {
@@ -309,13 +334,22 @@ describe('management IPC', () => {
 
   it('board run and stop send a fresh idempotency key; others none', async () => {
     let n = 0;
-    const { call, calls, optsSeen } = setup({ newIdempotencyKey: () => `k-0000000${++n}` });
+    const { call, calls, optsSeen } = setup({ newIdempotencyKey: () => `k-${String(++n).padStart(8, '0')}` });
     await call(C.managementRunBoard, 'workspace-a', { teamId: UUID });
     await call(C.managementRunBoard, 'workspace-a', { teamId: UUID });
     await call(C.managementStopBoard, 'workspace-a', {});
     await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
     await call(C.managementSwitchMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: UUID } });
     await call(C.managementResumeMemberAgent, 'workspace-a', { teamDefId: 'core', memberId: 'm1', agent: 'ada' });
+    await call(C.managementResetUsage, 'workspace-a', { teamDefId: 'core', provider: 'claude' });
+    await call(C.managementRetryRun, 'workspace-a', { workflowRunId: UUID });
+    await call(C.managementCancelRun, 'workspace-a', { workflowRunId: UUID });
+    await call(C.managementRetryTicket, 'workspace-a', { key: 'T-100' });
+    await call(C.managementUnblockTicket, 'workspace-a', { key: 'T-100' });
+    await call(C.managementApproveCommand, 'workspace-a', { requestId: UUID });
+    await call(C.managementRejectCommand, 'workspace-a', { requestId: UUID, reason: 'no' });
+    await call(C.managementCancelCommand, 'workspace-a', { requestId: UUID, reason: 'stale' });
+    await call(C.managementAttachInfo, 'workspace-a', { teamId: UUID });
     await call(C.managementOverview, 'workspace-a', {});
     await call(C.managementCreateAgent, 'workspace-a', { agent: { name: 'A', provider: 'claude' } });
     const targetOpts = calls.map(([c], i) => [c, optsSeen[i]] as const).filter(([c]) => c !== 'workspace.list').map(([, o]) => o);
@@ -326,6 +360,15 @@ describe('management IPC', () => {
       { idempotencyKey: 'k-00000004' },
       { idempotencyKey: 'k-00000005' },
       { idempotencyKey: 'k-00000006' },
+      { idempotencyKey: 'k-00000007' },
+      { idempotencyKey: 'k-00000008' },
+      { idempotencyKey: 'k-00000009' },
+      { idempotencyKey: 'k-00000010' },
+      { idempotencyKey: 'k-00000011' },
+      { idempotencyKey: 'k-00000012' },
+      { idempotencyKey: 'k-00000013' },
+      { idempotencyKey: 'k-00000014' },
+      undefined,
       undefined,
       undefined,
     ]);
@@ -367,10 +410,21 @@ describe('management IPC', () => {
     for (const [channel, request] of ROWS) await call(channel, 'workspace-a', request);
     expect([...new Set(calls.map(([c]) => c))].sort()).toEqual([
       'agentdef.create', 'agentdef.delete', 'agentdef.list', 'agentdef.update', 'board.run', 'board.settings',
-      'board.settings.update', 'board.stop', 'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update', 'team.member.resume', 'team.member.switch', 'team.overview', 'teamdef.create', 'teamdef.delete',
-      'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename', 'teamdef.show',
-      'teamdef.validate', 'workspace.list',
+      'board.settings.update', 'board.stop', 'command.approve', 'command.cancel', 'command.reject',
+      'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update', 'team.attach',
+      'team.member.resume', 'team.member.switch', 'team.overview', 'team.usage.reset', 'teamdef.create',
+      'teamdef.delete', 'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename',
+      'teamdef.show', 'teamdef.validate', 'ticket.retry', 'ticket.unblock', 'workflow.cancel', 'workflow.retry',
+      'workspace.list',
     ]);
+  });
+
+  it('new action errors keep code, message, remediation and data', async () => {
+    const error = { code: 'CONFLICT', message: 'Run is no longer paused.', retryable: false, remediation: 'Refresh.' };
+    const { call } = setup({ replies: { 'workflow.retry': { ok: false, error, data: { workflowRunId: UUID } } } });
+    expect(await call(C.managementRetryRun, 'workspace-a', { workflowRunId: UUID })).toEqual({
+      ok: false, error: { ...error, data: { workflowRunId: UUID } },
+    });
   });
 
   it('shared management types module has no imports', () => {
