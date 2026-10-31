@@ -57,6 +57,14 @@
       "model": "gemini-3.8-flash-medium",
       "reasoning": "medium",
       "description": "Write-capable roles only; workspace isolation is not guaranteed."
+    },
+    {
+      "id": "opencode-deepseek-flash",
+      "name": "Opencode Deepseek Flash",
+      "provider": "opencode",
+      "model": "deepseek/deepseek-flash",
+      "reasoning": "high",
+      "description": "Write-capable roles only; workspace isolation is not guaranteed."
     }
   ]
 }
