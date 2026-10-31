@@ -60,7 +60,7 @@
         }
       },
       "network": true,
-      "approval": "human",
+      "approval": "auto",
       "trackedChanges": "allow",
       "roles": [
         "Developer",

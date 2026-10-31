@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
 from ..protocol import AsError
@@ -22,11 +22,56 @@ AUTH_RE = re.compile(r"not logged in|/login|invalid api key|authentication_error
 LIMIT_RE = re.compile(
     r"(?:rate[ -]?limit|usage[ -]?limit|quota)\s*(?:has been |is )?(?:reached|exceeded)"
     r"|\b(?:you(?:'ve| have)\s+)?(?:hit|reached|exceeded)\s+(?:your\s+)?"
-    r"(?:current\s+)?(?:weekly|daily|monthly|usage|rate|quota)\s*(?:limit)?\b"
+    r"(?:current\s+)?(?:weekly|daily|monthly|session|usage|rate|quota)\s*(?:limit)?\b"
+    r"|\b\d+[- ]hour\s+limit\s+(?:reached|exceeded|hit)\b"
     r"|\binsufficient_quota\b"
     r"|too many requests|\b429\b", re.I)
 EPOCH_RE = re.compile(r"\b(1\d{9}(?:\.\d+)?)\b")
 CLOCK_RE = re.compile(r"\b(\d{1,2}:\d{2}(?::\d{2})?\s*(?:UTC|GMT|[+-]\d{2}:?\d{2}))\b", re.I)
+# Claude: "resets 5:40pm (Australia/Brisbane)", "resets Oct 29, 5am (Australia/Brisbane)"
+ZONED_RE = re.compile(
+    r"\bresets\s+(?:at\s+)?(?:(?P<mon>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?P<day>\d{1,2}),?\s+)?"
+    r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>am|pm)?\s*\((?P<tz>[A-Za-z_]+(?:/[A-Za-z0-9_+-]+)+|UTC)\)", re.I)
+MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _zoned_reset(text: str) -> Optional[str]:
+    """A local reset time with an IANA zone, as the next such moment (or the dated one) in UTC; None if unclear."""
+    m = ZONED_RE.search(text)
+    if not m:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(m.group("tz"))
+    except Exception:  # no tzdata, unknown zone, Python < 3.9: never guess
+        return None
+    hour, minute, ampm = int(m.group("h")), int(m.group("m") or 0), (m.group("ampm") or "").lower()
+    if ampm:
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if ampm == "pm" else 0)
+    elif m.group("m") is None or hour > 23:   # a bare number with no am/pm and no minutes is not a time
+        return None
+    if minute > 59:
+        return None
+    local_now = _now().astimezone(tz)
+    try:
+        if m.group("mon"):
+            month, day = MONTHS.index(m.group("mon")[:3].lower()) + 1, int(m.group("day"))
+            when = datetime(local_now.year, month, day, hour, minute, tzinfo=tz)
+            if when < local_now - timedelta(days=180):   # "Jan 2" seen in late December
+                when = when.replace(year=when.year + 1)
+        else:
+            when = local_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if when <= local_now:
+                when += timedelta(days=1)
+    except ValueError:
+        return None
+    return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def limit_reset_at(text: Optional[str]) -> Optional[str]:
@@ -49,7 +94,7 @@ def limit_reset_at(text: Optional[str]) -> Optional[str]:
                 ).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             except ValueError:
                 pass
-    return None
+    return _zoned_reset(text or "")
 
 
 def short(text, n: int = 300) -> str:

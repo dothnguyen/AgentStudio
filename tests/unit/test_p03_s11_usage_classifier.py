@@ -68,21 +68,32 @@ class UsageClassifierTests(unittest.TestCase):
                 self.assertEqual(report.get("limitResetAt"), expected)
 
     def test_claude_weekly_limit_result_triggers_usage_limit(self):
+        from datetime import datetime, timezone
+        from unittest import mock
+        from agent_studio.providers import cli_support
         adapter = providers.get("claude")
+        now = datetime(2026, 10, 31, 5, 23, tzinfo=timezone.utc)   # 15:23 in Brisbane (UTC+10, no DST)
         cases = (
-            ("You've hit your weekly limit · resets Oct 29, 5am (Australia/Brisbane)", "USAGE_LIMIT"),
-            ("You have reached your daily limit", "USAGE_LIMIT"),
-            ("Could not retrieve the weekly limit settings", "PROVIDER_ERROR"),
+            # a zoned clock hint is the next such local time (or the dated one), in UTC
+            ("You've hit your weekly limit · resets Oct 29, 5am (Australia/Brisbane)", "USAGE_LIMIT",
+             "2026-10-28T19:00:00Z"),
+            ("You've hit your session limit · resets 5:40pm (Australia/Brisbane)", "USAGE_LIMIT", "2026-10-31T07:40:00Z"),
+            ("5-hour limit reached ∙ resets 3pm (Australia/Brisbane)", "USAGE_LIMIT", "2026-11-01T05:00:00Z"),
+            ("You have reached your daily limit", "USAGE_LIMIT", None),
+            ("You've hit your session limit · resets soon", "USAGE_LIMIT", None),
+            ("You've hit your session limit · resets 5pm (Mars/Base)", "USAGE_LIMIT", None),
+            ("Could not retrieve the weekly limit settings", "PROVIDER_ERROR", None),
+            ("session limit settings could not be read", "PROVIDER_ERROR", None),
         )
-        for message, expected in cases:
-            with self.subTest(message=message):
+        for message, expected, reset in cases:
+            with self.subTest(message=message), mock.patch.object(cli_support, "_now", return_value=now):
                 state = ParseState()
                 event = {"type": "result", "subtype": "error", "is_error": True,
                          "terminal_reason": "api_error", "result": message}
                 adapter.parse_line(json.dumps(event).encode("utf-8"), state)
                 report = adapter.finalize(inp("claude"), state, oc())
                 self.assertEqual(report["diagnosticCode"], expected)
-                self.assertNotIn("limitResetAt", report)
+                self.assertEqual(report.get("limitResetAt"), reset)
 
     def test_codex_limit_result_triggers_usage_limit(self):
         adapter = providers.get("codex")
