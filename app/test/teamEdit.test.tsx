@@ -7,6 +7,7 @@ import { roleItem, rolesFixture } from './rolesFixtures';
 import {
   catalogFixture,
   openMember,
+  chooseDeleteTeam,
   deferred,
   fakeManagement,
   member,
@@ -114,7 +115,7 @@ describe('team editing', () => {
     await click('Create team');
     expect(createTeam).toHaveBeenCalledTimes(1);
     expect(cardPressed('QA Team')).toBe('page');
-    expect(screen.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'QA Team' })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(2);
   });
 
@@ -166,7 +167,7 @@ describe('team editing', () => {
     const renameTeam = vi.fn(async () =>
       ok({ team: teamDefinition({ name: 'Core Team' }), problems: [], appliesOnNextStart: true }));
     await renderScreen({ calls: { renameTeam } });
-    expect(within(overviewPanel()).getByRole('button', { name: 'Rename team' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Rename team' })).toBeTruthy();
     await click('Rename team');
     expect((screen.getByLabelText('Team name') as HTMLInputElement).value).toBe('Dev Team');
     type('Team name', 'Core Team');
@@ -181,8 +182,8 @@ describe('team editing', () => {
     const deleteTeam = vi.fn(async () => ok({ deleted: 'release' }));
     const { fake } = await renderScreen({ overview: [ok(twoTeams()), ok(overviewFixture([twoTeams().teams[1]!]))], calls: { deleteTeam } });
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
-    expect(within(overviewPanel()).getByRole('button', { name: 'Delete team' })).toBeTruthy();
-    await click('Delete team');
+    expect(screen.getByRole('button', { name: 'More team actions' })).toBeTruthy();
+    chooseDeleteTeam(); await flush();
     expect(deleteTeam).not.toHaveBeenCalled();
     expect(screen.getByText('Delete team "Release Team"? Its definition file is removed.')).toBeTruthy();
     await click('Confirm delete');
@@ -205,7 +206,7 @@ describe('team editing', () => {
     expect(renameTeam).toHaveBeenCalledWith('ws-a', 'dev-team', 'Core Team');
     expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start');
     expect(fake.overview).toHaveBeenCalledTimes(2);
-    expect(within(overviewPanel()).queryByRole('form', { name: 'Rename team' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Rename team' })).toBeNull();
     expect(screen.getByRole('button', { name: /^Open Core Team,/ }).getAttribute('aria-current')).toBe('page');
   });
 
@@ -213,12 +214,12 @@ describe('team editing', () => {
     const deleteTeam = vi.fn(async () => ok({ deleted: 'release' }));
     await renderScreen({ overview: [ok(twoTeams()), ok(overviewFixture([twoTeams().teams[1]!]))], calls: { deleteTeam } });
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
-    await click('Delete team');
+    chooseDeleteTeam(); await flush();
     expect(screen.getByText('Delete team "Release Team"? Its definition file is removed.')).toBeTruthy();
     await click('Cancel');
     expect(deleteTeam).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete team' }));
-    await click('Delete team');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'More team actions' }));
+    chooseDeleteTeam(); await flush();
     await click('Confirm delete');
     expect(deleteTeam).toHaveBeenCalledTimes(1);
     expect(deleteTeam).toHaveBeenCalledWith('ws-a', 'release');
@@ -229,17 +230,17 @@ describe('team editing', () => {
   it('rename_form_closes_when_another_team_is_selected', async () => {
     await renderScreen();
     await click('Rename team');
-    expect(within(overviewPanel()).getByRole('form', { name: 'Rename team' })).toBeTruthy();
+    expect(screen.getByRole('form', { name: 'Rename team' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
-    expect(within(overviewPanel()).queryByRole('form', { name: 'Rename team' })).toBeNull();
+    expect(screen.queryByRole('form', { name: 'Rename team' })).toBeNull();
   });
 
   it('delete_running_team_shows_backend_error', async () => {
     const deleteTeam = vi.fn(async () => fail({ code: 'TEAM_ALREADY_RUNNING', message: 'Team is running.' }));
     await renderScreen({ calls: { deleteTeam } });
     expect(overviewPanel().textContent).toContain('This team is running. Stop it before deleting the team or removing members; other edits apply the next time it starts.');
-    expect((within(overviewPanel()).getByRole('button', { name: 'Delete team' }) as HTMLButtonElement).disabled).toBe(false);
-    await click('Delete team');
+    expect((screen.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(false);
+    chooseDeleteTeam(); await flush();
     await click('Confirm delete');
     expect(deleteTeam).toHaveBeenCalledWith('ws-a', 'dev-team');
     const alert = screen.getByRole('alert').textContent;
@@ -664,7 +665,7 @@ describe('team editing', () => {
     }));
     const { fake } = await renderScreen({ calls: { deleteTeam, removeMember } });
     expect(screen.getByText(/^This team is running\./)).toBeTruthy();
-    await click('Delete team');
+    chooseDeleteTeam(); await flush();
     await click('Confirm delete');
     let alert = screen.getByRole('alert');
     expect(alert.textContent).toContain('Team was not deleted.');

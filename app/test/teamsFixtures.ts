@@ -1,4 +1,4 @@
-import { fireEvent, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { vi } from 'vitest';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import type {
@@ -405,4 +405,10 @@ export function switchStateOverview(state: 'pending' | 'failed'): TeamOverview {
     },
     work: { state: 'none' },
   })] })]);
+}
+
+/** Opens the "More team actions" menu and chooses Delete team. */
+export function chooseDeleteTeam(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'More team actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete team' }));
 }

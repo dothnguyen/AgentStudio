@@ -226,7 +226,9 @@ describe('DashboardHome', () => {
     await act(async () => {});
     fireEvent.click(result.getByRole('button', { name: 'View teams' }));
 
-    expect(result.getByRole('heading', { level: 1, name: 'Teams' })).toBeTruthy();
+    await act(async () => {});
+    expect(result.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(result.queryByRole('heading', { level: 1, name: 'Workspace overview' })).toBeNull();
     const nav = result.getByRole('navigation', { name: 'Workspace' });
     expect(within(nav).getByRole('button', { name: 'Teams' }).getAttribute('aria-current')).toBe('page');
     expect(within(nav).getAllByRole('button').filter((button) => button.getAttribute('aria-current') === 'page')).toHaveLength(1);

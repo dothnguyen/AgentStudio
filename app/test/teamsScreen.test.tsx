@@ -9,7 +9,7 @@ import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import {
   catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
-  boardSettingsFixture, boardRunnerFixture, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
+  boardSettingsFixture, boardRunnerFixture, chooseDeleteTeam, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
   teamDefinition, teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
 } from './teamsFixtures';
 afterEach(cleanup);
@@ -91,10 +91,10 @@ describe('compact team overview', () => {
       members: [member({ memberId: 'a', name: 'a', presence: 'busy' }), member({ memberId: 'b', name: 'b', presence: 'idle' })],
     })]);
     const { result } = await renderScreen({ overview: [{ ok: true, data }] });
-    for (const heading of ['Team status', 'Board', 'Member availability', 'Team actions']) {
+    for (const heading of ['Team status', 'Board', 'Member availability']) {
       expect(result.getByRole('heading', { name: heading })).toBeTruthy();
     }
-    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Team status', 'Board', 'Member availability', 'Team actions', 'Members']);
+    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Team status', 'Board', 'Member availability', 'Members']);
     const status = result.getByRole('heading', { name: 'Team status' }).closest('section')!;
     const availability = result.getByRole('heading', { name: 'Member availability' }).closest('section')!;
     expect(within(status).getByText('Dev Team')).toBeTruthy();
@@ -159,13 +159,13 @@ describe('compact team overview', () => {
     await act(async () => {});
     expect(result.getByText('Team data is stale — showing previously loaded data.')).toBeTruthy();
     expect((result.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((result.getByRole('button', { name: 'Delete team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((result.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { gate.resolve(okR(twoTeams())); });
     expect(result.queryByText('Team data is stale — showing previously loaded data.')).toBeNull();
     result.rerender(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} connection={connectionFixture('lost')} />);
     expect(result.getByText('Team data is stale — showing previously loaded data.')).toBeTruthy();
     expect((result.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((result.getByRole('button', { name: 'Delete team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((result.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('overview_tabs_are_only_overview_and_routing_and_keep_roving_keyboard_semantics', async () => {
@@ -265,7 +265,7 @@ describe('TeamsScreen', () => {
 
   it('renders_teams_and_members_from_overview', async () => {
     const { fake, result } = await renderScreen();
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
     const list = result.getByRole('navigation', { name: 'Harness sidebar' });
     expect(cardNames(list)).toEqual(['Dev Team', 'Release Team']);
     expect(card(list, 'Dev Team').getAttribute('aria-current')).toBe('page');
@@ -294,7 +294,7 @@ describe('TeamsScreen', () => {
     expect(card(list, 'Dev Team').getAttribute('aria-current')).toBeNull();
     await openTab(result, 'Overview');
     const detail = result.getByRole('region', { name: 'Release Team' });
-    expect(within(detail).getByRole('heading', { level: 2 }).textContent).toBe('Release Team');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Release Team');
     const row = openMember('qa');
     expect(row.textContent).toContain('qa');
     expect(row.textContent).toContain('Live state is unavailable because this member has no running runtime record.');
@@ -383,7 +383,7 @@ describe('TeamsScreen', () => {
       agents: [{ ok: true, data: catalog }],
     });
     const hits = result.getAllByText(long);
-    expect(hits).toHaveLength(3);
+    expect(hits).toHaveLength(4);
     for (const h of hits) expect(h.textContent).toBe(long);
     await openTab(result, 'Overview');
     expect(result.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
@@ -476,7 +476,7 @@ describe('TeamsScreen', () => {
     await act(async () => {});
     fireEvent.click(within(result.getByRole('region', { name: 'Team status' })).getByRole('button', { name: /View teams/ }));
     await act(async () => {});
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
     expect(result.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
     expect(result.getByRole('button', { name: 'Teams' }).getAttribute('aria-current')).toBe('page');
     expect(card(result.getByRole('navigation', { name: 'Workspace' }), 'Dev Team').getAttribute('aria-current')).toBeNull();
@@ -728,8 +728,8 @@ describe('team overview', () => {
     for (const t of ['No definition (runtime only)', 'rt-9', 'Coordinator: Not running', 'Unavailable — state db locked',
       'Some team details could not be read.',
       'This team has no definition file; it cannot be edited here.']) expect(text).toContain(t);
-    expect(within(panel()).queryByRole('button', { name: 'Rename team' })).toBeNull();
-    expect(within(panel()).queryByRole('button', { name: 'Delete team' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
     const notice = screen.getByText('Live team state unavailable — state db locked');
     expect(panel().contains(notice)).toBe(false);
   });
@@ -1401,7 +1401,7 @@ describe('T-082 states', () => {
     expect(btn(result, 'Cancel').disabled).toBe(false);
     result.unmount();
     const del = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'overview unreadable')] });
-    fireEvent.click(btn(del.result, 'Delete team'));
+    chooseDeleteTeam();
     expect(btn(del.result, 'Confirm delete').disabled).toBe(false);
     fireEvent.click(btn(del.result, 'Refresh')); await act(async () => {});
     expect(btn(del.result, 'Confirm delete').disabled).toBe(true);
@@ -1719,12 +1719,14 @@ describe('T-082 states', () => {
   });
   it('cancel_rename_and_delete_restore_focus_to_the_invoking_action', async () => {
     const { result } = await renderScreen();
-    for (const name of ['Rename team', 'Delete team']) {
-      fireEvent.click(btn(result, name));
-      fireEvent.click(btn(result, 'Cancel'));
-      await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
-      expect(document.activeElement).toBe(btn(result, name));
-    }
+    fireEvent.click(btn(result, 'Rename team'));
+    fireEvent.click(btn(result, 'Cancel'));
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    expect(document.activeElement).toBe(btn(result, 'Rename team'));
+    chooseDeleteTeam();
+    fireEvent.click(btn(result, 'Cancel'));
+    await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    expect(document.activeElement).toBe(btn(result, 'More team actions'));
   });
 
   it('catalog_retry_in_empty_workspace_focuses_an_existing_heading', async () => {
@@ -1945,7 +1947,7 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(document.getElementById('teams-member-detail-title')).toBeTruthy();
     act(() => controller().selectTeam('release'));
     expect(document.getElementById('teams-member-detail-title')).toBeNull();
-    expect(result.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(selectedTabs(result)).toEqual(['Overview']);
     expect(document.activeElement).toBe(document.getElementById('teams-detail-title'));
     act(() => controller().selectTeam('not-a-team'));
@@ -1977,7 +1979,7 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(cardNames(result.getByRole('navigation', { name: 'Harness sidebar' }))).toEqual(['Release Team', 'Dev Team']);
     expect(selectedTabs(result)).toEqual(['Overview']);
     expect(document.getElementById('teams-member-detail-title')).toBeTruthy();
-    expect(result.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
   });
 
   it('refresh_removal_clears_confirmation_and_uses_first_ordered_team', async () => {
@@ -1994,7 +1996,7 @@ describe('T-084 shared sidebar navigation controller', () => {
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(result.queryByRole('dialog')).toBeNull();
-    expect(result.getByRole('heading', { level: 2, name: 'Other Team' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Other Team' })).toBeTruthy();
     expect(selectedTabs(result)).toEqual(['Overview']);
   });
 
@@ -2027,7 +2029,7 @@ describe('T-084 shared sidebar navigation controller', () => {
     await settle();
     expect(document.activeElement).not.toBe(document.getElementById('teams-detail-title'));
     expect(fake.overview).toHaveBeenCalledTimes(2);
-    expect(result.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'QA Team' })).toBeTruthy();
     expect(teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'QA Team').getAttribute('aria-current')).toBe('page');
     expect(keys).toEqual([null, 'dev-team', 'qa-team']);
   });
@@ -2056,7 +2058,7 @@ describe('T-084 shared sidebar navigation controller', () => {
     fireEvent.change(result.getByLabelText('Team name'), { target: { value: 'QA Team' } });
     fireEvent.click(result.getByRole('button', { name: 'Create team' }));
     await settle();
-    expect(result.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'QA Team' })).toBeTruthy();
     expect(selectedTabs(result)).toEqual(['Overview']);
     expect(result.queryByRole('dialog')).toBeNull();
   });
@@ -2226,13 +2228,13 @@ describe('T-090 state and roster completion', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
     // team reorder + member reorder keep the same member open by id
     expect(screen.getByRole('region', { name: 'Bravo' })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 2, name: 'One' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'One' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
     expect(screen.getByRole('region', { name: 'Bravo' })).toBeTruthy();
     // removing the selected team falls back to the first returned team and clears member detail
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
     expect(screen.queryByRole('region', { name: 'Bravo' })).toBeNull();
-    expect(screen.getByRole('heading', { level: 2, name: 'Two' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Two' })).toBeTruthy();
     expect(names()).toEqual(['a']);
   });
 
@@ -2251,7 +2253,7 @@ describe('T-090 state and roster completion', () => {
     expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
     await act(async () => { slow.resolve(okR(twoTeams())); });
     expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
-    expect(screen.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(overview).toHaveBeenCalledTimes(2);
   });
 

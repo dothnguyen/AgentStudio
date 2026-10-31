@@ -24,7 +24,7 @@ import type {
 import { navigationItems } from './teamsNavigationModel';
 import type { TeamsNavigationController } from './useTeamsNavigationController';
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
-import { ShellIcon } from '../shell/ShellIcon';
+import { TeamPageHeader } from './TeamPageHeader';
 import { boardErrorFeedback, boardResultText, type BoardAction } from './boardControlModel';
 import { memberActionKey, assignmentConfirmation, lastSwitchSignature, matchingTerminalSwitch, SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT, type MemberActionInFlight } from './memberAgentActionsModel';
 import { FormAlertContext, WriteFeedbackView } from './TeamEditForms';
@@ -455,20 +455,17 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const announceChild = announceBase && (memberNotice || feedback?.kind !== 'success');
 
   return (
-    <div className="teams-screen" data-section="teams">
-      <header className="dashboard-header">
-        <div className="dashboard-title">
-          <nav className="breadcrumb" aria-label="Breadcrumb"><ol><li>Workspace</li><li aria-current="page">Teams</li></ol></nav>
-          <h1>Teams</h1>
-          <p className="teams-subtitle">Manage team membership, routing, and live operation in this workspace.</p>
-        </div>
-        <div className="dashboard-actions">
-          <button type="button" className="refresh-button" aria-busy={busy} ref={refreshRef} onClick={() => { void refreshAll(true); }}>
-            <ShellIcon name="refresh" />
-            Refresh
-          </button>
-        </div>
-      </header>
+    <div className="teams-screen teams-screen-v4" data-section="teams">
+      <TeamPageHeader
+        key={data !== null && selected !== null ? selected.key : 'none'}
+        team={data !== null && selected !== null ? selected.team : null}
+        busy={busy}
+        refreshRef={refreshRef}
+        onRefresh={() => { void refreshAll(true); }}
+        writes={writes}
+        pending={pending}
+        readOnly={!overviewFresh}
+      />
       {roleCatalog.error !== null && <SectionError section={roleCatalog} alert={alertSource === 'roles'} label="Role catalog" retryLabel="Retry loading roles" retryId="teams-retry-roles" stale={rolesData !== null} onRetry={() => { void retrySection(roleCatalog, 'teams-retry-roles', 'teams-detail-title'); }} />}
       {agents.error !== null && <SectionError section={agents} alert={alertSource === 'agents'} label="Agent catalog" retryLabel="Retry loading agents" retryId="teams-retry-agents" stale={lastAgents.current !== null} onRetry={() => { void retrySection(agents, 'teams-retry-agents', 'teams-detail-title'); }} />}
       <WriteFeedbackView feedback={feedback} alert={alertSource === 'feedback'} announce={announceFeedback} onDismiss={() => setFeedback(null)} />
@@ -609,13 +606,12 @@ function TeamDetailPanel(props: {
         agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
         writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
         onSwitch={props.onSwitch} onResume={props.onResume}
-        summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} writes={writes} pending={pending} readOnly={props.readOnly} board={board} />} />
+        summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} pending={pending} board={board} />} />
     );
     return null;
   };
   return (
-    <section className="dashboard-panel teams-detail" aria-labelledby="teams-detail-title">
-      <h2 id="teams-detail-title" tabIndex={-1}>{teamLabel(team)}</h2>
+    <section className="teams-detail" aria-labelledby="teams-detail-title">
       <TeamViewTabs teamName={teamLabel(team)} selected={props.view} onSelect={props.onSelectView} />
       {TEAMS_CHILD_VIEWS.map(({ id }) => (
         <div key={id} role="tabpanel" id={teamsPanelId(id)} aria-labelledby={teamsTabId(id)} className="teams-view-panel" hidden={id !== props.view} tabIndex={id === props.view ? 0 : undefined}>

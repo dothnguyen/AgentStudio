@@ -433,14 +433,14 @@ describe('WorkspaceShell', () => {
     expect(pressed(/^Open Release Team,/)).toBe('true');
     fireEvent.click(view.getByRole('button', { name: 'Agents' }));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    await waitFor(() => expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy());
     expect(pressed(/^Open Release Team,/)).toBe('false');
     expect(selected()).toEqual(['Overview']);
     fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));
     await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    await waitFor(() => expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy());
     expect(selected()).toEqual(['Overview']);
     expect(fake.overview).toHaveBeenLastCalledWith('b');
   });
@@ -470,11 +470,11 @@ describe('WorkspaceShell', () => {
       await view.findByRole('button', { name: /^Open Only B,/ });
       expect(overview).toHaveBeenLastCalledWith('b');
       structure(view);
-      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Only B');
       expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
       expect(view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent)).toEqual(['Overview']);
       expect(view.queryByRole('region', { name: 'dev' })).toBeNull();
-      const h2 = view.getAllByRole('heading', { level: 2 }).map(h => h.textContent);
+      const h2 = view.getAllByRole('heading', { level: 1 }).map(h => h.textContent);
       expect(h2).toContain('Only B');
       expect(view.queryByRole('region', { name: 'Workspace teams' })).toBeNull();
       expect(view.queryByRole('list', { name: 'Choose a team' })).toBeNull();
@@ -498,7 +498,7 @@ describe('WorkspaceShell', () => {
       await userEvent.keyboard(' ');
       await view.findByRole('tab', { name: 'Overview' });
       structure(view);
-      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
+      expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
     });
 
     it('teams_connection_recovery_does_not_duplicate_management_reads', async () => {
@@ -548,8 +548,8 @@ describe('T-084 sidebar team navigation', () => {
     expect(rows(view).every((r) => r.getAttribute('aria-current') === null)).toBe(true);
     fireEvent.click(row(view, 'Release Team'));
     await settle();
-    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
-    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Release Team');
+    expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(rows(view).filter((r) => r.getAttribute('aria-current') === 'page').map((r) => r.getAttribute('aria-label'))).toEqual(['Open Release Team, Stopped, 1 member']);
     expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
     expect(currentButtons(view.container)).toHaveLength(1);
@@ -568,7 +568,7 @@ describe('T-084 sidebar team navigation', () => {
     await userEvent.tab();
     expect(document.activeElement).toBe(row(view, 'Release Team'));
     await userEvent.keyboard('{Enter}');
-    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     await userEvent.tab();
     expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
     await userEvent.tab({ shift: true });
@@ -576,7 +576,7 @@ describe('T-084 sidebar team navigation', () => {
     await userEvent.tab({ shift: true });
     expect(document.activeElement).toBe(row(view, 'Dev Team'));
     await userEvent.keyboard(' ');
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
@@ -662,7 +662,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     fireEvent.click(teamsButton(view));
     await settle();
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
     expect(rows(view).every((button) => button.getAttribute('aria-current') === null)).toBe(true);
     fireEvent.click(row(view, 'Release Team'));
@@ -714,7 +714,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     fireEvent.click(teamsButton(view));
     await settle();
-    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
     fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     await settle();
@@ -749,7 +749,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Dev Team']);
     expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(tabs(view)).toEqual(['Overview']);
   });
 
@@ -767,7 +767,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Saved team', 'Live only']);
     expect(row(view, 'Live only').getAttribute('aria-current')).toBe('page');
-    expect(view.getByRole('heading', { level: 2, name: 'Live only' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Live only' })).toBeTruthy();
     expect(tabs(view)).toEqual(['Routing']);
   });
 
@@ -783,7 +783,7 @@ describe('T-084 sidebar team navigation', () => {
     expect(view.getByText('Some team navigation data is unavailable.')).toBeTruthy();
     fireEvent.click(button);
     await settle();
-    expect(view.getByRole('heading', { level: 2, name })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name })).toBeTruthy();
     expect(button.getAttribute('aria-current')).toBe('page');
   });
 
@@ -1214,7 +1214,7 @@ describe('T-085 sidebar team creation', () => {
     expect(dialog(view)).toBeNull();
     expect(document.activeElement).toBe(row(view, 'QA Team'));
     expect(row(view, 'QA Team').getAttribute('aria-current')).toBe('page');
-    expect(view.getByRole('heading', { level: 2, name: 'QA Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'QA Team' })).toBeTruthy();
     expect(view.getByRole('status').textContent).toContain('Created team "QA Team".');
   });
 
@@ -1230,7 +1230,7 @@ describe('T-085 sidebar team creation', () => {
     await create(view);
     expect(dialog(view)).toBeNull();
     expect(view.getByText('Created team "QA Team". Team list refresh failed (INTERNAL: offline). Refresh Teams to select it.')).toBeTruthy();
-    expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
     expect(document.activeElement).toBe(newTeam(view));
     const refresh = view.getByRole('button', { name: 'Refresh' }) as HTMLButtonElement;
@@ -1251,7 +1251,7 @@ describe('T-085 sidebar team creation', () => {
     await create(view);
     expect(dialog(view)).toBeNull();
     expect(view.getByText('Created team "QA Team". The refreshed team list did not include team "qa-team"; refresh Teams to select it.')).toBeTruthy();
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(row(view, 'QA Team').getAttribute('aria-current')).toBeNull();
     expect(document.activeElement).toBe(newTeam(view));
   });
@@ -1266,7 +1266,7 @@ describe('T-085 sidebar team creation', () => {
     await settle();
     await create(view);
     expect(view.getByText(/did not include team "runtime:foo"/)).toBeTruthy();
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(document.activeElement).toBe(newTeam(view));
   });
 
@@ -1283,7 +1283,7 @@ describe('T-085 sidebar team creation', () => {
     await create(view);
     expect(view.getByText(/did not include team "qa-team"/)).toBeTruthy();
     expect(row(view, 'QA Team').getAttribute('aria-current')).toBeNull();
-    expect(view.queryByRole('heading', { level: 2, name: 'QA Team' })).toBeNull();
+    expect(view.queryByRole('heading', { level: 1, name: 'QA Team' })).toBeNull();
     expect(document.activeElement).toBe(newTeam(view));
   });
 
@@ -1424,7 +1424,7 @@ describe('T-090 sidebar completion', () => {
     await settle();
     expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
     expect(buttons.filter((b) => b.getAttribute('aria-current') === 'page')).toEqual([buttons[2]]);
-    expect(view.getByRole('heading', { level: 2, name: longName })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: longName })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
@@ -1450,7 +1450,7 @@ describe('T-090 sidebar completion', () => {
     await settle();
     expect(labels(view)).toEqual(['Dev Team']);
     expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
-    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy();
     expect(view.queryByText('Release Team')).toBeNull();
   });
 

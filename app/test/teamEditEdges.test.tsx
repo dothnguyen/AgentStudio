@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
-import { catalogFixture, deferred, fakeManagement, openMember, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
+import { catalogFixture, chooseDeleteTeam, deferred, fakeManagement, openMember, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
 
 afterEach(cleanup);
 
@@ -42,7 +42,7 @@ describe('team editing edge cases', () => {
     await flush();
     await click('Refresh');
     expect((screen.getByRole('button', { name: 'Rename team' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Delete team' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(true);
     cleanup();
 
     const renameTeam = vi.fn(async () => ({ ok: false as const, error: { code: 'TEAM_EXISTS', message: 'Name taken.', retryable: false } }));
@@ -58,7 +58,7 @@ describe('team editing edge cases', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save name' }));
     expect(screen.getByRole('region', { name: 'Dev Team' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await click('Delete team');
+    chooseDeleteTeam(); await flush();
     await click('Confirm delete');
     expect(screen.getByRole('alert').textContent).toContain('TEAM_ALREADY_RUNNING: Team is running.');
     expect(deleteTeam).toHaveBeenCalledWith('ws-a', 'dev-team');
@@ -77,8 +77,8 @@ describe('team editing edge cases', () => {
       await flush();
       const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
       expect(panel.getByText(c.note)).toBeTruthy();
-      expect(panel.queryByRole('button', { name: 'Rename team' })).toBeNull();
-      expect(panel.queryByRole('button', { name: 'Delete team' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
       view.unmount();
     }
   });
@@ -92,7 +92,7 @@ describe('team editing edge cases', () => {
     const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
     expect(panel.getByText(/could not be read; fix the file/)).toBeTruthy();
     expect(panel.getByText('Definition: Unreadable')).toBeTruthy();
-    expect(panel.queryByRole('button', { name: 'Delete team' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add member' })).toBeNull();
   });
@@ -137,7 +137,7 @@ describe('team editing edge cases', () => {
     expect(disabled('Saving…')).toBe(true);
     expect(disabled('Cancel')).toBe(true);
     expect(disabled('New team')).toBe(true);
-    for (const name of ['Rename team', 'Delete team']) expect(disabled(name)).toBe(true);
+    for (const name of ['Rename team', 'More team actions']) expect(disabled(name)).toBe(true);
     expect(disabled('Run board')).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Run board' }));
     expect(runBoard).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe('T-090 mutation isolation', () => {
     expect(screen.queryByText(/Saved configuration applies on the next team start/)).toBeNull();
     expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
     // delete in flight, workspace changes: late success is not shown in the new workspace
-    await click('Delete team'); await click(/^Confirm delete/);
+    chooseDeleteTeam(); await flush(); await click(/^Confirm delete/);
     expect(deleteTeam).toHaveBeenCalledTimes(1);
     view.rerender(ui({ ...workspaceA, id: 'ws-b' })); await flush();
     const reads = fake.overview.mock.calls.length;

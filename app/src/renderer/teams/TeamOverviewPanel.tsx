@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import type { JSX } from 'react';
 import type { BoardSettings, OverviewTeam, TeamOverview } from '../api';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import { boardControlView, type BoardAction } from './boardControlModel';
-import { TeamNameForm } from './TeamEditForms';
-import { canEditTeam, liveNote, uneditableNote } from './teamEditModel';
+import { liveNote, uneditableNote } from './teamEditModel';
 import {
   RUNTIME_LABELS,
   availabilityCounts,
@@ -15,7 +14,6 @@ import {
   teamLabel,
 } from './teamsModel';
 import { SectionError } from './SectionError';
-import type { TeamWrites } from './TeamsScreen';
 
 export interface BoardControlProps {
   team: OverviewTeam;
@@ -39,7 +37,7 @@ export function BoardControl(props: BoardControlProps): JSX.Element {
   const view = settings === null ? null : boardControlView(team, settings.runner, connected && !stale);
   return (
     <section className="teams-board" aria-labelledby="teams-board-title">
-      <h3 id="teams-board-title" tabIndex={-1}>Board</h3>
+      <h2 id="teams-board-title" tabIndex={-1}>Board</h2>
       {section.state === 'loading' && <p className="panel-loading" role={props.announce === false ? undefined : 'status'}>{stale ? 'Refreshing board state… Showing previously loaded data.' : 'Loading board state…'}</p>}
       {section.state === 'error' && <SectionError section={section} alert={props.alert} label="Board" stale={stale} retryId="teams-retry-board" onRetry={props.onRetry} />}
       {view !== null && (
@@ -70,7 +68,7 @@ export function TeamStatusSummary(props: { team: OverviewTeam; overview: TeamOve
   const live = liveStateText(overview);
   return (
     <section className="teams-summary-card" aria-labelledby="teams-status-title">
-      <h3 id="teams-status-title">Team status</h3>
+      <h2 id="teams-status-title">Team status</h2>
       <p className="teams-summary-name">{teamLabel(team)}</p>
       <p className={`status-badge teams-runtime teams-tone-${runtimeTone(team.runtime.state)}`}>
         <span className="status-dot" aria-hidden="true" />
@@ -96,7 +94,7 @@ export function MemberAvailabilitySummary(props: { team: OverviewTeam }): JSX.El
   const { team } = props;
   return (
     <section className="teams-summary-card" aria-labelledby="teams-availability-title">
-      <h3 id="teams-availability-title">Member availability</h3>
+      <h2 id="teams-availability-title">Member availability</h2>
       <p>{memberCountText(team)}</p>
       {team.members.length === 0 ? <p>No members</p> : (
         <ul className="teams-overview-availability" aria-label="Member availability counts">
@@ -120,37 +118,13 @@ export function MemberAvailabilitySummary(props: { team: OverviewTeam }): JSX.El
 export interface TeamOverviewPanelProps {
   team: OverviewTeam;
   overview: TeamOverview;
-  writes: Pick<TeamWrites, 'rename' | 'deleteTeam'>;
   pending: boolean;
   stale: boolean;
-  readOnly?: boolean;
   board: Omit<BoardControlProps, 'team' | 'pending'>;
 }
 
 export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
-  const { team, overview, writes, pending, board } = props;
-  const writeBlocked = pending || props.readOnly === true;
-  const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
-  const renameRef = useRef<HTMLButtonElement>(null);
-  const deleteRef = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef<'rename' | 'delete' | null>(null);
-  const cancelForm = (invoker: 'rename' | 'delete'): void => {
-    restoreFocus.current = invoker;
-    setTeamForm(null);
-  };
-  useEffect(() => {
-    if (teamForm !== null || restoreFocus.current === null) return;
-    (restoreFocus.current === 'rename' ? renameRef : deleteRef).current?.focus();
-    restoreFocus.current = null;
-  }, [teamForm]);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  const confirmed = useRef(false);
-  const wasPending = useRef(pending);
-  // A failed delete leaves the confirmation open: return focus to the Confirm button that pending disabled.
-  useEffect(() => {
-    if (wasPending.current && !pending && confirmed.current && confirmRef.current?.isConnected) { confirmed.current = false; confirmRef.current.focus(); }
-    wasPending.current = pending;
-  }, [pending]);
+  const { team, overview, pending, board } = props;
   const unNote = uneditableNote(team);
   const runNote = liveNote(team);
   return (
@@ -160,42 +134,8 @@ export function TeamOverviewPanel(props: TeamOverviewPanelProps): JSX.Element {
         <BoardControl team={team} pending={pending} {...board} />
         <MemberAvailabilitySummary team={team} />
       </div>
-      <section className="teams-overview-actions" aria-labelledby="teams-overview-actions-title">
-        <h3 id="teams-overview-actions-title">Team actions</h3>
-        {unNote !== null && <p className="panel-note">{unNote}</p>}
-        {runNote !== null && <p className="panel-note">{runNote}</p>}
-        {canEditTeam(team) && (
-          <div className="teams-team-actions">
-            <button type="button" ref={renameRef} disabled={writeBlocked} onClick={() => setTeamForm('rename')}>Rename team</button>
-            <button type="button" ref={deleteRef} disabled={writeBlocked} onClick={() => setTeamForm('delete')}>Delete team</button>
-          </div>
-        )}
-        {teamForm === 'rename' && (
-          <TeamNameForm
-            heading="Rename team"
-            submitLabel="Save name"
-            initialName={team.name ?? ''}
-            pending={pending}
-            readOnly={props.readOnly === true}
-            onSubmit={(name) => { void writes.rename(team, name).then((ok) => { if (ok) setTeamForm(null); }); }}
-            onCancel={() => cancelForm('rename')}
-          />
-        )}
-        {teamForm === 'delete' && (
-          <div className="teams-confirm" role="group" aria-label="Confirm team deletion">
-            <p>{`Delete team "${teamLabel(team)}"? Its definition file is removed.`}</p>
-            <button
-              type="button"
-              ref={confirmRef}
-              disabled={writeBlocked}
-              onClick={() => { confirmed.current = true; void writes.deleteTeam(team).then((ok) => { if (ok) setTeamForm(null); }); }}
-            >
-              Confirm delete
-            </button>
-            <button type="button" onClick={() => cancelForm('delete')}>Cancel</button>
-          </div>
-        )}
-      </section>
+      {unNote !== null && <p className="panel-note">{unNote}</p>}
+      {runNote !== null && <p className="panel-note">{runNote}</p>}
     </div>
   );
 }

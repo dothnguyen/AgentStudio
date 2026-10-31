@@ -306,3 +306,16 @@ export function workSummary(work: MemberWork): string {
   if (work.assignment !== null) return work.assignment.goal !== '' ? work.assignment.goal : `Assignment ${work.assignment.id}`;
   return 'Working (no details returned)';
 }
+
+export function shortRuntimeId(id: string): string {
+  return id.length <= 20 ? id : `${id.slice(0, 8)}…${id.slice(-8)}`;
+}
+
+export function definitionMetaText(team: OverviewTeam): { text: string; tone: 'ok' | 'warning' } {
+  switch (team.definition.state) {
+    case 'valid': return { text: 'Definition valid', tone: 'ok' };
+    case 'problems': return { text: `Definition has ${plural(team.definition.problems.length, 'problem', 'problems')}`, tone: 'warning' };
+    case 'unreadable': return { text: 'Definition unreadable', tone: 'warning' };
+    default: return { text: 'No definition (runtime only)', tone: 'warning' };
+  }
+}

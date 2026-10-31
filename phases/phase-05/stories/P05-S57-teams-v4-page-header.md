@@ -1,6 +1,6 @@
 # P05-S57 — Team page header, actions and tabs identical to v4
 
-Status: To Do
+Status: In Progress
 Depends on: P05-S55
 Architecture: [Teams overview v4 fidelity](../README.md#teams-overview-v4-fidelity)
 
@@ -32,4 +32,6 @@ Architecture: [Teams overview v4 fidelity](../README.md#teams-overview-v4-fideli
 - [ ] `npm --prefix app test`, `npm --prefix app run typecheck`, `npm --prefix app run build` pass.
 
 ## Evidence
-(filled in when the story is done)
+Implemented in `TeamPageHeader.tsx` (new), `TeamsScreen.tsx`, `TeamOverviewPanel.tsx`, `MembersView.tsx`, `TeamEditForms.tsx`, `teamsModel.ts`, `styles.css`.
+Tests: `app/test/teamPageHeader.test.tsx`, `app/test/teamPageHeaderModel.test.ts`; updated `teamsScreen`, `teamEdit`, `teamEditEdges`, `workspaceShell`, `teamsA11y` (Delete moved into the More menu via `chooseDeleteTeam()`; team name is now the H1; Team actions heading removed; Rename/menu live in the header).
+Final `test-all` result: pending.

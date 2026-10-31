@@ -40,7 +40,7 @@ it('teams_has_one_main_one_h1_logical_landmarks_and_named_controls', async () =>
   const levels = view.getAllByRole('heading').map(h => Number(h.tagName[1]));
   expect(levels[0]).toBe(1);
   levels.forEach((level, i) => { if (i > 0) expect(level).toBeLessThanOrEqual(levels[i - 1]! + 1); });
-  expect(view.getAllByRole('heading', { level: 2 }).map(h => h.textContent)[0]).toBe('Dev Team');
+  expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
   expect(view.getByRole('tablist')).toBeTruthy();
   for (const control of view.getAllByRole('button').concat(view.getAllByRole('tab'))) {
     expect((control.getAttribute('aria-label') ?? control.textContent ?? '').trim().length).toBeGreaterThan(0);
@@ -181,8 +181,8 @@ async function mountSidebar(opts: Parameters<typeof fakeManagement>[0] = {}) {
 it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved_role_and_destructive_controls', async () => {
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
-  const overviewOrder = await tabNames(18);
-  inOrder(overviewOrder, ['New team', /^Open Dev Team,/, /^Open Second Team,/, 'Overview', 'Run board', 'Rename team', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
+  const overviewOrder = await tabNames(22);
+  inOrder(overviewOrder, ['New team', /^Open Dev Team,/, /^Open Second Team,/, 'Rename team', 'Overview', 'Run board', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
     // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
   const row = memberRow('dev');
   row.focus();

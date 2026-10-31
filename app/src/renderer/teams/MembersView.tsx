@@ -40,7 +40,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   return <div className="teams-members teams-members-view">
     {props.summary}
     <section className="teams-roster" aria-labelledby={headingId}>
-      <h3 id={headingId} tabIndex={-1}>Members</h3>
+      <h2 id={headingId} tabIndex={-1}>Members</h2>
       {lost !== null && <p className="panel-note" role={props.announce === false ? undefined : 'status'}>{missingMemberNotice(lost, team.membersTruncated)}</p>}
       {canEditTeam(team) && <div className="teams-members-actions"><button ref={addRef} type="button" disabled={props.pending || props.readOnly === true || adding} onClick={() => setAdding(true)}>Add member</button></div>}
       {adding && <MemberForm mode="add" heading="Add member" initial={emptyMemberForm()} originalOptions={[]} inlineContext={null} agents={props.agentsFresh === false ? null : props.agents} roles={props.rolesFresh === false ? null : props.roleItems} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} onSubmit={values => { void props.writes.addMember(team, values).then(ok => { if (ok) { setAdding(false); setReturnFocus('add'); } }); }} onCancel={() => { setAdding(false); setReturnFocus('add'); }} />}

@@ -30,6 +30,7 @@ function FieldError(props: { id: string; message: string | undefined }): JSX.Ele
 
 export function TeamNameForm(props: {
   heading: string;
+  headingLevel?: 2 | 3;
   submitLabel: string;
   initialName: string;
   pending: boolean;
@@ -41,6 +42,7 @@ export function TeamNameForm(props: {
 }): JSX.Element {
   const { heading, submitLabel, initialName, pending, onSubmit, onCancel } = props;
   const cancelDisabled = props.cancelDisabled ?? false;
+  const Heading = props.headingLevel === 2 ? 'h2' : 'h3';
   const uid = useId();
   const inputId = `${uid}-name`;
   const errorId = `${uid}-name-error`;
@@ -76,7 +78,7 @@ export function TeamNameForm(props: {
 
   return (
     <form aria-label={heading} className="teams-edit-form" onSubmit={submit} onKeyDown={escapeCancel(onCancel, cancelDisabled)}>
-      <h3>{heading}</h3>
+      <Heading>{heading}</Heading>
       <label htmlFor={inputId}>Team name</label>
       <input
         id={inputId}
