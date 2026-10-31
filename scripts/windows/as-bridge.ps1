@@ -64,6 +64,7 @@ $Allow = @{
     'command catalog' = 'read'; 'command requests' = 'read'
     'command approve' = 'write'; 'command reject' = 'write'; 'command cancel' = 'write'
     'ticket retry' = 'write'; 'ticket move' = 'write'; 'ticket unblock' = 'write'
+    'ticket add' = 'write'; 'ticket depend' = 'write'
     'workflow retry' = 'write'; 'workflow cancel' = 'write'
     'assignment resolve' = 'write'; 'assignment cancel' = 'write'
     'board resume' = 'write'; 'team run-board' = 'write'; 'team stop-board' = 'write'
@@ -180,7 +181,8 @@ function Resolve-Request($Req) {
     $list = @()
     foreach ($a in @($args_)) {
         if ($a -isnot [string]) { throw 'every arg must be a string' }
-        if ($a.Length -gt 4096 -or $a -match "[\x00\r\n]") { throw 'an arg is too long or holds a control character' }
+        # line breaks are allowed (ticket bodies); NUL and carriage returns are not
+        if ($a.Length -gt 32768 -or $a -match "[\x00\r]") { throw 'an arg is too long or holds a control character' }
         if ($a -match $BlockedArgs) { throw "argument $a is not allowed through the bridge" }
         $list += $a
     }

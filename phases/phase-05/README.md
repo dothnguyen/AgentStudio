@@ -270,3 +270,19 @@ These stories intentionally add no live acceptance gate or manual end-to-end req
 | Completion | [P05-S54](./stories/P05-S54-teams-v4-v6-states-accessibility.md) | Automated state, race, keyboard, focus, and responsive regression coverage |
 
 These stories add no live acceptance gate or manual end-to-end requirement. The operator owns running-app verification; implementation evidence is focused renderer/model tests, full app tests, typecheck, and production build automation.
+
+## Teams overview v4 fidelity
+
+**Goal.** Make the Teams overview look as identical as possible to [`design/teams-overview-v4.png`](../../design/teams-overview-v4.png). T-083's stories were written when the image was missing from the checkout, so the implementation followed the hierarchy only and kept the old visual system. The image and an exact reference markup, [`design/teams-overview-v4.html`](../../design/teams-overview-v4.html), are now in the repository and are authoritative for layout, sizes, colours, type and iconography. Sample names, members, agents and counts remain illustrative: the screen shows real data and keeps every existing behaviour, safety restriction and accessibility contract.
+
+| Area | Story | Outcome |
+|---|---|---|
+| Foundation | [P05-S55](./stories/P05-S55-teams-v4-visual-foundation.md) | v4 colour tokens, Inter/JetBrains Mono, radii and shared components |
+| Sidebar | [P05-S56](./stories/P05-S56-teams-v4-sidebar.md) | Brand tile, workspace card, nested team rows with dot and count, New team after the list |
+| Header | [P05-S57](./stories/P05-S57-teams-v4-page-header.md) | Team-name H1 with status pill, meta row, Refresh/Rename/⋯ actions, underline tabs; no Team actions card |
+| Summaries | [P05-S58](./stories/P05-S58-teams-v4-summary-cards.md) | Runtime, Availability (with bar) and Board cards; running info banner |
+| Members | [P05-S59](./stories/P05-S59-teams-v4-members-table.md) | Members card with filter, primary Add member, uppercase columns, avatar/role chip/live agent/Switched/status/Idle rows |
+| Check | [P05-S60](./stories/P05-S60-teams-v4-visual-check.md) | Fixture with the mockup data and an operator screenshot/compare command |
+
+The T-083 assumption that the v4 image is absent no longer applies.
+
