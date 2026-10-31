@@ -164,7 +164,7 @@ function Resolve-Request($Req) {
     if ($op -eq 'diagnose') {
         $key = [string](Get-Field $Req 'key')
         if ($key -notmatch '^[A-Za-z][A-Za-z0-9]{0,15}-[0-9]{1,6}$') { throw "diagnose needs a ticket key like T-089" }
-        return @{ argv = @('python3', 'scripts/diagnose_ticket.py', $key, '--out', '/dev/stdout'); kind = 'read' }
+        return @{ argv = @('python3', 'scripts/diagnose_ticket.py', $key, '--out', '-'); kind = 'read' }
     }
     if ($op -eq 'log') {
         $n = 200

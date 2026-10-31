@@ -3,7 +3,7 @@
 
 Usage (inside WSL):  python3 scripts/diagnose_ticket.py T-089 [--workspace PATH] [--out FILE]
 Opens ~/.local/state/agent-studio/state.db read-only and writes a plain-text report (default:
-diag-<KEY>.txt in the workspace). Nothing is changed.
+diag-<KEY>.txt in the workspace; --out - prints it). Nothing is changed.
 """
 import argparse
 import json
@@ -100,6 +100,9 @@ def main():
         if name.endswith(".json") and "pid" in name:
             with open(os.path.join(sd, name)) as f:
                 say(f"\n== {name}\n{f.read()[:500]}")
+    if a.out in ("-", "/dev/stdout"):
+        sys.stdout.write("\n".join(lines) + "\n")
+        return 0
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"wrote {out_path}")
