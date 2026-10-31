@@ -67,7 +67,7 @@ it('teams_native_controls_have_visible_focus_and_single_live_messages', async ()
   expect(css).toMatch(/\.teams-screen :is\(button, a, input, select, textarea, summary\):focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
 });
 
-it.skip('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
+it('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
   const data = overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ runtime: live })] })]);
   const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'job-1' } } });
@@ -91,7 +91,7 @@ it.skip('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
 });
 
-it.skip('teams_long_content_remains_present', async () => {
+it('teams_long_content_remains_present', async () => {
   const { view } = await mount({ overview: [{ ok: true, data: longContentOverview() }], roles: [managementError('ROLES_DOWN', `${LONG_UNBROKEN} message`, `${LONG_UNBROKEN} remediation`)] }, 'Overview');
   expect(view.container.textContent!.split(LONG_UNBROKEN).length - 1).toBeGreaterThan(3);
   expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
@@ -145,4 +145,151 @@ it('nested_team_buttons_have_unique_accessible_names_and_single_current_item', a
   expect(rows.filter(row => row.getAttribute('aria-current') === 'page')).toHaveLength(1);
   expect(view.container.querySelectorAll('[aria-current="page"]:not(.breadcrumb *)')).toHaveLength(1);
   expect(rows.every(row => row.tagName === 'BUTTON' && !row.hasAttribute('tabindex'))).toBe(true);
+});
+
+// --- T-090: v4/v6 hierarchy (nested sidebar, roster on Overview, live-first detail, separate Saved configuration) ---
+function labelOf(el: Element | null): string {
+  if (!el) return '';
+  const labels = (el as HTMLInputElement).labels;
+  if (labels && labels.length > 0) return (labels[0]!.textContent ?? '').trim();
+  return (el.getAttribute('aria-label') ?? el.textContent ?? '').trim();
+}
+async function tabNames(count: number): Promise<string[]> {
+  const seen: string[] = [];
+  for (let i = 0; i < count; i++) { await userEvent.tab(); seen.push(labelOf(document.activeElement)); }
+  return seen;
+}
+function inOrder(seen: string[], expected: Array<string | RegExp>): void {
+  let from = 0;
+  for (const want of expected) {
+    const at = seen.findIndex((n, i) => i >= from && (typeof want === 'string' ? n === want : want.test(n)));
+    expect(at, `${String(want)} in ${JSON.stringify(seen)}`).toBeGreaterThanOrEqual(from);
+    from = at + 1;
+  }
+}
+const runningLive = () => {
+  const runtime = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
+  return overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ runtime }), member({ memberId: 'lead', name: 'lead', role: 'TeamLead' })] }), team({ id: 'second', name: 'Second Team', members: [] })]);
+};
+async function mountSidebar(opts: Parameters<typeof fakeManagement>[0] = {}) {
+  const fake = fakeManagement(opts);
+  const view = render(<main><TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
+  await act(async () => {});
+  return { fake, view };
+}
+
+it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved_role_and_destructive_controls', async () => {
+  const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
+  view.getByRole('button', { name: 'Teams' }).focus();
+  const overviewOrder = await tabNames(18);
+  inOrder(overviewOrder, ['New team', /^Open Dev Team,/, /^Open Second Team,/, 'Overview', 'Run board', 'Rename team', 'Add member', /^Search members/, /^Availability/, /^devDeveloper/]);
+    // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
+  const row = memberRow('dev');
+  row.focus();
+  await userEvent.keyboard('{Enter}');
+  await act(async () => {});
+  expect(document.activeElement).toBe(document.getElementById('teams-member-detail-title'));
+  const detailOrder = await tabNames(24);
+  inOrder(detailOrder, ['Back to members', 'Switch', /^View .* in Roles$/, 'Edit saved configuration', 'Remove dev']);
+  // Back restores the invoking row
+  await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
+  expect(document.activeElement).toBe(memberRow('dev'));
+});
+
+it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantics', async () => {
+  const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'job-1' } } });
+  const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }], calls: { switchMemberAgent } });
+  // tabs: exactly Overview and Routing with selected state and panel association
+  const tabs = view.getAllByRole('tab');
+  expect(tabs.map(t => t.textContent)).toEqual(['Overview', 'Routing']);
+  expect(tabs.map(t => t.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+  expect(view.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(tabs[0]!.id);
+  // sidebar rows: named, exactly one aria-current
+  const rows = within(view.getByRole('list', { name: 'Workspace teams' })).getAllByRole('button');
+  expect(rows.every(r => (r.getAttribute('aria-label') ?? '').startsWith('Open '))).toBe(true);
+  expect(rows.filter(r => r.getAttribute('aria-current') === 'page')).toHaveLength(1);
+  // every status badge has visible text and a hidden decorative dot
+  for (const badge of Array.from(view.container.querySelectorAll('.status-badge'))) {
+    expect((badge.textContent ?? '').trim().length).toBeGreaterThan(0);
+    for (const dot of Array.from(badge.querySelectorAll('.status-dot'))) expect(dot.getAttribute('aria-hidden')).toBe('true');
+  }
+  // modal confirmation: named, described, aria-modal, closes on Escape and restores the opener
+  openMember('dev'); await act(async () => {});
+  const opener = view.getByRole('button', { name: 'Switch' });
+  fireEvent.click(opener); await act(async () => {});
+  const dialog = view.getByRole('dialog');
+  expect(dialog.getAttribute('aria-modal')).toBe('true');
+  expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+  expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+  await userEvent.keyboard('{Escape}');
+  expect(view.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  // one announcement per event: a failed create is an alert, never also a status
+  cleanup();
+  const create = vi.fn(async () => ({ ok: false as const, error: { code: 'BAD_REQUEST', message: 'duplicate-xyz', retryable: false } }));
+  const second = await mountSidebar({ calls: { createTeam: create } });
+  fireEvent.click(second.view.getByRole('button', { name: 'New team' }));
+  await userEvent.type(second.view.getByLabelText('Team name'), 'Dup');
+  await userEvent.keyboard('{Enter}');
+  await act(async () => {});
+  expect(second.view.getAllByRole('alert').filter(a => a.textContent?.includes('duplicate-xyz'))).toHaveLength(1);
+  expect(second.view.queryAllByRole('status').filter(s => s.textContent?.includes('duplicate-xyz'))).toHaveLength(0);
+  // disclosure semantics
+  cleanup();
+  const routing = await mount({}, 'Routing');
+  const toggle = routing.view.getByRole('button', { name: 'Action rules' });
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+});
+
+it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_contract', async () => {
+  const { view } = await mountSidebar({ overview: [{ ok: true, data: longContentOverview() }], roles: [managementError('ROLES_DOWN', `${LONG_UNBROKEN} message`, `${LONG_UNBROKEN} remediation`)] });
+  // all long data stays available as text (never truncated away)
+  expect(view.container.textContent!.split(LONG_UNBROKEN).length - 1).toBeGreaterThan(3);
+  const navRow = view.getByRole('list', { name: 'Workspace teams' }).querySelector('button')!;
+  expect(navRow.getAttribute('aria-label')).toContain(`Team ${LONG_UNBROKEN}`);
+  expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
+  // structural CSS contract per breakpoint
+  expect(flat).toMatch(/\.teams-overview-summaries \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(220px, 1fr\)\);/);
+  expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: minmax\(0, /);
+  expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview-summaries \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.teams-member-field\[data-label\]::before \{ content: attr\(data-label\);/);
+  expect(flat).toMatch(/\.team-nav :is\(\.team-nav-item, \.team-nav-label[^)]*\), [^{]*\{ overflow-wrap: anywhere; min-width: 0; max-width: 100%; \}/);
+  // only genuine routing tables may scroll horizontally
+  const scrollers = Array.from(css.matchAll(/([^{}]+)\{([^{}]*overflow-x: ?(?:auto|scroll)[^{}]*)\}/g)).map(m => m[1]!.trim()).filter(sel => /\.(teams-|team-nav)/.test(sel));
+  expect(scrollers.filter(sel => !/routing-table-wrap/.test(sel))).toEqual([]);
+  for (const { selector, body } of teamsRules()) {
+    expect(body, selector).not.toMatch(/white-space: ?nowrap/);
+    expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);
+    expect(body, selector).not.toMatch(/display: ?none/);
+  }
+  for (const m of css.matchAll(/([^{}]*\.team-nav[^{}]*)\{([^{}]*)\}/g)) {
+    expect(m[2], m[1]).not.toMatch(/white-space: ?nowrap|text-overflow: ?ellipsis|display: ?none/);
+  }
+});
+
+it('v4_v6_dialogs_are_viewport_bounded_and_reduced_motion_preserves_focus_visibility', async () => {
+  expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-live-modal \[role="dialog"\] \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
+  expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-create-dialog \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
+  expect(flat).toMatch(/\.teams-create-dialog \{ width: min\(480px, 100%\); max-height: 100%;/);
+  expect(flat).toMatch(/\.team-nav-new:focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
+  expect(flat).toMatch(/\.team-nav :is\(button\):focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
+  expect(flat).toMatch(/\.teams-member-row:focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
+  // reduced motion only suppresses motion globally: no outline, border, display or text changes
+  const reduced = /@media \(prefers-reduced-motion: reduce\) \{([^@]*?)\}\s*\}/.exec(flat) ?? /@media \(prefers-reduced-motion: reduce\) \{(.*?\})\s*\}/.exec(flat);
+  expect(reduced).toBeTruthy();
+  expect(reduced![1]).not.toMatch(/outline|display|visibility|content/);
+  for (const { selector, body } of teamsRules()) expect(body, selector).not.toMatch(/(^| )(transition|animation)(-[a-z]+)?:/);
+  // the real dialogs are bounded by these classes and expose role/name
+  const { view } = await mountSidebar();
+  fireEvent.click(view.getByRole('button', { name: 'New team' }));
+  await act(async () => {});
+  const dialog = view.getByRole('dialog', { name: 'New team' });
+  expect(dialog.className).toContain('teams-create-dialog');
+  await userEvent.tab(); await userEvent.tab(); await userEvent.tab(); await userEvent.tab();
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  await userEvent.tab({ shift: true });
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  await userEvent.keyboard('{Escape}');
+  expect(view.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
 });

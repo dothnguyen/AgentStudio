@@ -1344,6 +1344,7 @@ ul[aria-label="Workspaces"] {
 .teams-summary-list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; color: var(--text-bright); }
 .teams-overview-availability { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0; padding: 0; list-style: none; }
 .teams-overview-actions { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); }
+@media (max-width: 900px) { .teams-overview-summaries { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .teams-overview-summaries { grid-template-columns: minmax(0, 1fr); } .teams-team-actions, .teams-board-actions { display: grid; grid-template-columns: minmax(0, 1fr); } }
 
 /* Teams states, accessibility and responsive behavior (P05-S47) */
@@ -1356,6 +1357,8 @@ ul[aria-label="Workspaces"] {
 .teams-screen :is(.entity-id, .teams-subtitle, .panel-error, .panel-note, .panel-empty, .teams-feedback, .teams-notices li, .teams-field-error, .teams-cell-note, .teams-member-field, .teams-live-actions li, .teams-live-reason, .teams-summary-card, .teams-summary-list li, .teams-member-settings dd, .routing-problem, .routing-table :is(th, td), .status-badge, .teams-live-modal) { overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
 .teams-live-modal [role="dialog"] { box-sizing: border-box; max-width: min(32rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; }
 .routing-table-wrap:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.team-nav :is(.team-nav-item, .team-nav-label, .team-nav-state, .team-nav-warning, .team-nav-status, .team-nav-new), .teams-screen :is(.teams-roster, .teams-member-row, .teams-member-name, .teams-role-name, .teams-member-agent, .teams-member-detail, .teams-saved-configuration, .teams-member-remove, .teams-confirm, .teams-live-actions, .teams-edit-form, .teams-create-dialog), .teams-create-dialog { overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+.teams-member-remove, .teams-confirm[role="alertdialog"] { box-sizing: border-box; }
 @media (max-width: 900px) {
   .teams-overview, .teams-member-detail, .routing-rule-grid, .routing-escalation-fields { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1368,6 +1371,7 @@ ul[aria-label="Workspaces"] {
 @media (max-width: 560px) {
   .teams-team-actions, .teams-board-actions, .teams-member-actions, .teams-confirm, .teams-live-modal .dialog-actions, .teams-screen .dashboard-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
   .teams-live-modal [role="dialog"] { width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; }
+  .teams-create-dialog { width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; }
   .teams-screen :is(button, input, select, textarea) { max-width: 100%; }
   .teams-member-settings, .teams-live-summary, .teams-live-options li { grid-template-columns: minmax(0, 1fr); }
   .teams-live-option-actions button { min-height: 44px; }

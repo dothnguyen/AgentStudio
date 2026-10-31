@@ -9,7 +9,7 @@ import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import {
   catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
-  boardSettingsFixture, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
+  boardSettingsFixture, boardRunnerFixture, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, deferred, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
   teamDefinition, teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
 } from './teamsFixtures';
 afterEach(cleanup);
@@ -2062,3 +2062,224 @@ describe('T-084 shared sidebar navigation controller', () => {
   });
 });
 
+
+describe('T-090 state and roster completion', () => {
+  const okR = <T,>(data: T) => ({ ok: true as const, data });
+  const names = () => Array.from(document.querySelectorAll('[data-member-row]')).map(el => el.getAttribute('data-member-row'));
+  const search = () => screen.getByLabelText('Search members') as HTMLInputElement;
+  const avail = () => screen.getByLabelText('Availability') as HTMLSelectElement;
+  const settle = () => act(async () => {});
+
+  it('overview_state_matrix_renders_zero_one_many_partial_truncated_invalid_and_runtime_states_truthfully', async () => {
+    // zero teams
+    let out = await renderScreen({ overview: [okR(emptyWorkspace())] });
+    expect(screen.getByText('No teams defined in this workspace.')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    out.result.unmount();
+    // zero members
+    out = await renderScreen({ overview: [okR(emptyRoster())] });
+    expect(screen.getByText('This team has no members.')).toBeTruthy();
+    out.result.unmount();
+    // one / many members, each definition state and runtime state
+    const definitions = [
+      { state: 'valid', problems: [] },
+      { state: 'problems', problems: [{ path: 'members[0].role', message: 'unknown role GhostRole' }] },
+      { state: 'unreadable', problems: [{ path: 'members', message: 'cannot read team file' }] },
+      { state: 'missing', problems: [] },
+    ] as const;
+    for (const definition of definitions) {
+      const data = overviewFixture([team({ id: `def-${definition.state}`, name: `Def ${definition.state}`, definition: definition as never, members: [member(), member({ memberId: 'qa', name: 'qa' })] })]);
+      out = await renderScreen({ overview: [okR(data)] });
+      const region = screen.getByRole('heading', { name: 'Team status' }).closest('section')!;
+      expect(region.textContent).toMatch(new RegExp(`Definition: ${({ valid: 'Valid', problems: 'Has 1 problem', unreadable: 'Unreadable', missing: 'No definition \\(runtime only\\)' })[definition.state]}`));
+      for (const problem of definition.problems) expect(screen.getAllByText(`${problem.path}: ${problem.message}`).length).toBeGreaterThan(0);
+      out.result.unmount();
+    }
+    const runtimes = ['not_started', 'starting', 'running', 'stopped', 'error', 'disconnected', 'unavailable'] as const;
+    for (const state of runtimes) {
+      const data = overviewFixture([team({ runtime: { state, teamId: state === 'not_started' ? null : `rt-${state}`, status: state } as never })]);
+      out = await renderScreen({ overview: [okR(data)] });
+      const region = screen.getByRole('heading', { name: 'Team status' }).closest('section')!;
+      expect(region.querySelector('.status-badge')!.textContent!.trim().length, state).toBeGreaterThan(0);
+      for (const dot of Array.from(region.querySelectorAll('.status-dot'))) expect(dot.getAttribute('aria-hidden')).toBe('true');
+      out.result.unmount();
+    }
+    // partial / truncated / runtime unavailable keep the exact established copy
+    out = await renderScreen({ overview: [okR(runtimeUnavailable('RUNTIME_DOWN', 'tmux is not reachable'))] });
+    expect(screen.getAllByText(/Live team state unavailable — tmux is not reachable/).length).toBeGreaterThan(0);
+    out.result.unmount();
+    out = await renderScreen({ overview: [okR(partialOverview())] });
+    expect(screen.getAllByText('Some team definitions could not be read.').length).toBeGreaterThan(0);
+    out.result.unmount();
+    out = await renderScreen({ overview: [okR(truncatedOverview())] });
+    expect(screen.getAllByText('Showing the first 1 team. More teams exist in this workspace.').length).toBeGreaterThan(0);
+    out.result.unmount();
+    out = await renderScreen({ overview: [okR(memberTruncatedOverview())] });
+    expect(screen.getAllByText(/more members exist|More members may exist/).length).toBeGreaterThan(0);
+    out.result.unmount();
+    // invalid roles/catalog read states
+    out = await renderScreen({ overview: [okR(overviewFixture([team()], { roles: { state: 'invalid', message: 'roles.json is invalid' }, catalog: { state: 'invalid', message: 'agents.json is invalid' } }))] });
+    expect(screen.getAllByText('Role descriptions unavailable — roles.json is invalid').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Agent catalog could not be read — agents.json is invalid').length).toBeGreaterThan(0);
+    out.result.unmount();
+    // loading, retained-stale, error and disconnected reads
+    const gate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+    out = await renderScreen({ calls: { overview: () => gate.promise } });
+    expect(screen.getAllByRole('status').some(s => /Loading/.test(s.textContent ?? ''))).toBe(true);
+    await act(async () => { gate.resolve(okR(twoTeams())); });
+    out.result.unmount();
+    out = await renderScreen({ overview: [okR(twoTeams()), managementError('READ_FAILED', 'read exploded', 'Restart the coordinator')] });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(screen.getByText('Team data is stale — showing previously loaded data.')).toBeTruthy();
+    expect(screen.getAllByText(/read exploded/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Restart the coordinator/).length).toBeGreaterThan(0);
+    expect(memberRow('dev')).toBeTruthy();
+    out.result.unmount();
+    const lost = render(<TeamsHarness sidebar workspace={workspaceA} management={fakeManagement().api} connection={connectionFixture('lost')} />);
+    await settle();
+    expect(screen.getByRole('button', { name: 'Add member' }).hasAttribute('disabled') || screen.getByRole('button', { name: 'Add member' }).getAttribute('aria-disabled') === 'true').toBe(true);
+    lost.unmount();
+    // no illustrative fallback content anywhere
+    out = await renderScreen({ overview: [okR(emptyWorkspace())] });
+    expect(document.body.textContent).not.toMatch(/Alice|Bob|sample|lorem|example/i);
+  });
+
+  it('board_summary_distinguishes_stopped_running_this_running_other_and_unavailable', async () => {
+    const expected = {
+      stopped: 'Board: Stopped',
+      running_this: 'Board: Running with this team',
+      running_other: 'Board: Running with another team',
+      unavailable: 'Board: State unavailable',
+    } as const;
+    const seen = new Set<string>();
+    for (const state of Object.keys(expected) as Array<keyof typeof expected>) {
+      const data = overviewFixture([team({ runtime: { state: 'running', teamId: RUN_TEAM_ID, status: 'running' } })]);
+      const out = await renderScreen({ overview: [okR(data)], boardSettings: [okR(boardSettingsFixture(boardRunnerFixture(state)))] });
+      const board = screen.getByRole('heading', { name: 'Board' }).closest('section')!;
+      expect(board.textContent, state).toContain(expected[state]);
+      seen.add(board.textContent!);
+      for (const dot of Array.from(board.querySelectorAll('.status-dot'))) expect(dot.getAttribute('aria-hidden')).toBe('true');
+      out.result.unmount();
+    }
+    expect(seen.size).toBe(4);
+  });
+
+  it('integrated_roster_filters_name_id_role_live_agent_work_and_availability_in_backend_order', async () => {
+    const members = [
+      member({ memberId: 'zed-id', name: 'Zed', role: 'Developer', presence: 'busy', work: { state: 'working', assignment: null, ticket: { key: 'T-900', title: 'Unique ticket', status: 'dev-ready', workflowRunId: null } },
+        runtime: { ...runtimeMemberState('busy').runtime!, activeAgent: 'live-agent-x', configuredAgents: ['live-agent-x'] } }),
+      member({ memberId: 'amy-id', name: 'Amy', role: 'Reviewer', presence: 'idle' }),
+      member({ memberId: 'mid-id', name: 'Mid', role: 'Developer', presence: 'idle' }),
+    ];
+    await renderScreen({ overview: [okR(overviewFixture([team({ members })]))] });
+    expect(names()).toEqual(['zed-id', 'amy-id', 'mid-id']);
+    for (const [query, expectIds] of [['zed-id', ['zed-id']], ['reviewer', ['amy-id']], ['live-agent-x', ['zed-id']], ['T-900', ['zed-id']], ['developer', ['zed-id', 'mid-id']]] as const) {
+      fireEvent.change(search(), { target: { value: query } });
+      expect(names(), query).toEqual(expectIds);
+    }
+    fireEvent.change(search(), { target: { value: '' } });
+    fireEvent.change(avail(), { target: { value: 'idle' } });
+    expect(names()).toEqual(['amy-id', 'mid-id']);
+  });
+
+  it('integrated_roster_explains_zero_matches_and_truncated_filter_scope', async () => {
+    await renderScreen({ overview: [okR(overviewFixture([team({ membersTruncated: true, members: [member({ memberId: 'a', name: 'Alpha' })] })]))] });
+    fireEvent.change(search(), { target: { value: 'nothing-matches' } });
+    expect(screen.getByText('No returned members match the current filters.')).toBeTruthy();
+    expect(screen.getByText('Showing 0 of 1 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeTruthy();
+    expect(names()).toEqual([]);
+  });
+
+  it('member_rows_cover_every_presence_work_and_missing_reference_state_without_saved_as_live_copy', async () => {
+    const states = ['starting', 'idle', 'busy', 'waiting_input', 'limit_reached', 'offline', 'error'] as const;
+    const labels = { starting: 'Starting', idle: 'Available', busy: 'Working', waiting_input: 'Waiting for input', limit_reached: 'Limit reached', offline: 'Offline', error: 'Error' };
+    const missingRole = catalogReferenceOverview('missing-role').teams[0]!.members[0]!;
+    const missingAgent = catalogReferenceOverview('missing-agent').teams[0]!.members[0]!;
+    await renderScreen({ overview: [okR(overviewFixture([team({ members: [...states.map(s => runtimeMemberState(s)), missingRole, missingAgent] })]))] });
+    for (const s of states) {
+      const row = memberRow(`${s}-member`);
+      expect(field(row, 'availability')).toBe(labels[s]);
+      expect(row.querySelector('.status-dot')!.getAttribute('aria-hidden')).toBe('true');
+      expect(field(row, 'agent')).toContain('Active: opencode-sonnet');
+    }
+    expect(field(memberRow('busy-member'), 'work')).toContain('T-busy');
+    expect(field(memberRow('ghost-role'), 'role')).toContain('Role not defined in roles.json');
+    const ghostAgent = memberRow('ghost-agent');
+    expect(field(ghostAgent, 'agent')).toContain('Not running · saved default: ghost-agent-def');
+    expect(field(ghostAgent, 'agent')).not.toContain('Active');
+    expect(ghostAgent.textContent).toContain('Saved default is missing from the catalog');
+  });
+
+  it('team_and_member_refresh_reorder_or_removal_preserves_or_clears_stable_identity', async () => {
+    const a = member({ memberId: 'a', name: 'Alpha' }), b = member({ memberId: 'b', name: 'Bravo' });
+    const mk = (teams: ReturnType<typeof team>[]) => okR(overviewFixture(teams));
+    const t1 = team({ id: 'one', name: 'One', members: [a, b] }), t2 = team({ id: 'two', name: 'Two', members: [a] });
+    await renderScreen({ overview: [
+      mk([t1, t2]),
+      mk([t2, { ...t1, members: [b, a] }]),
+      mk([{ ...t1, members: [b] }, t2]),
+      mk([t2]),
+    ] });
+    openMember('Bravo');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
+    // team reorder + member reorder keep the same member open by id
+    expect(screen.getByRole('region', { name: 'Bravo' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'One' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
+    expect(screen.getByRole('region', { name: 'Bravo' })).toBeTruthy();
+    // removing the selected team falls back to the first returned team and clears member detail
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
+    expect(screen.queryByRole('region', { name: 'Bravo' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Two' })).toBeTruthy();
+    expect(names()).toEqual(['a']);
+  });
+
+  it('late_team_or_member_reads_cannot_replace_current_detail_or_saved_form', async () => {
+    const slow = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+    let reads = 0;
+    const overview = vi.fn(() => reads++ === 0 ? Promise.resolve(okR(twoTeams())) : slow.promise);
+    await renderScreen({ calls: { overview } });
+    openMember('dev');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await settle();
+    // While the refresh is pending the retained read stays and the saved form cannot be written.
+    expect(screen.getByRole('region', { name: 'dev' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Edit saved configuration' })?.hasAttribute('disabled') ?? true).toBe(true);
+    // A different team is chosen before the late read resolves: its result must not leak the old member or draft.
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ })); await settle();
+    expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
+    await act(async () => { slow.resolve(okR(twoTeams())); });
+    expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    expect(overview).toHaveBeenCalledTimes(2);
+  });
+
+  it('overview_routing_back_and_role_link_keyboard_flow_has_correct_tab_current_and_focus_state', async () => {
+    const onViewRole = vi.fn();
+    const fake = fakeManagement({ roles: [okR(teamRolesFixture())] });
+    render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
+    await settle();
+    const overviewTab = screen.getByRole('tab', { name: 'Overview' }), routingTab = screen.getByRole('tab', { name: 'Routing' });
+    expect(overviewTab.getAttribute('aria-selected')).toBe('true');
+    expect(routingTab.getAttribute('aria-selected')).toBe('false');
+    overviewTab.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(routingTab.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(routingTab);
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(overviewTab.getAttribute('aria-selected')).toBe('true');
+    const row = memberRow('dev');
+    row.focus();
+    await userEvent.keyboard('{Enter}');
+    const back = screen.getByRole('button', { name: 'Back to members' });
+    expect(screen.queryByRole('list', { name: /^Members of / })).toBeNull();
+    await userEvent.click(back);
+    expect(document.activeElement).toBe(memberRow('dev'));
+    expect(memberRow('dev').getAttribute('aria-current')).toBe('true');
+    openMember('dev');
+    const link = screen.queryByRole('button', { name: /Developer.*Roles|View .*role|in Roles/i });
+    if (link) { link.focus(); await userEvent.keyboard('{Enter}'); expect(onViewRole).toHaveBeenCalledWith('Developer'); }
+  });
+});

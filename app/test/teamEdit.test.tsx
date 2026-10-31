@@ -15,6 +15,7 @@ import {
   teamDefinition,
   twoTeams,
 } from './teamsFixtures';
+import { MEMBER_TIMING_NOTE, ROLE_SHARING_NOTE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
 
 afterEach(cleanup);
 
@@ -856,5 +857,85 @@ describe('member creation and removal focus', () => {
     const removeMember = vi.fn(async () => ok({removed: {id: 'lead', name: 'lead'}, problems: []}));
     await renderScreen({calls: {removeMember}}); await click('Remove lead'); await click('Confirm remove lead');
     expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Add member'}));
+  });
+});
+
+describe('T-090 saved configuration completion', () => {
+  const upd = (id = 'dev', name = 'dev', role = 'Developer') => ok({ team: teamDefinition(), member: { id, name, role }, problems: [], appliesOnNextStart: true });
+
+  it('saved_edit_save_discard_noop_and_failure_restore_deterministic_focus', async () => {
+    const updateMember = vi.fn()
+      .mockResolvedValueOnce(fail({ code: 'INTERNAL', message: 'write failed' }))
+      .mockResolvedValue(upd('dev', 'renamed'));
+    await renderScreen({ calls: { updateMember } });
+    await click('Edit dev');
+    expect(screen.getByText(MEMBER_TIMING_NOTE)).toBeTruthy();
+    // no-op: Save is disabled and a forced submit never reaches the backend
+    expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(screen.getByRole('form', { name: 'Edit dev' })); await flush();
+    expect(updateMember).not.toHaveBeenCalled();
+    // failure keeps the draft and focuses Save
+    type('Member name', 'renamed'); await click('Save changes');
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('alert').textContent).toContain('write failed');
+    expect((screen.getByLabelText('Member name') as HTMLInputElement).value).toBe('renamed');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save changes' }));
+    // discard restores the last returned values, no mutation, focus on Edit
+    await click('Discard changes');
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('form', { name: 'Edit dev' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Saved configuration' }).textContent).not.toContain('renamed');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(screen.getByText(SAVED_OPTIONS_NOTE)).toBeTruthy();
+    expect(screen.getByText(ROLE_SHARING_NOTE)).toBeTruthy();
+    // success returns focus to Edit
+    await click('Edit dev'); type('Member name', 'renamed'); await click('Save changes');
+    expect(updateMember).toHaveBeenCalledTimes(2);
+    expect(updateMember).toHaveBeenLastCalledWith('ws-a', 'dev-team', 'dev', { name: 'renamed' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+  });
+
+  it('saved_edit_preserves_inline_missing_role_and_missing_agent_repair_values', async () => {
+    const missingAgent = member({ memberId: 'dev', name: 'dev', role: 'GhostRole', roleState: 'undefined', agentMode: 'ordered_catalog',
+      agentOptions: [{ id: 'ghost-agent-def', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' }, ...member().agentOptions] });
+    const updateMember = vi.fn(async () => upd());
+    await renderScreen({ overview: [ok(overviewFixture([team({ members: [missingAgent] })]))], calls: { updateMember } });
+    await click('Edit dev');
+    expect((screen.getByLabelText('Role') as HTMLInputElement).value).toBe('GhostRole');
+    expect(screen.getByRole('button', { name: 'Remove ghost-agent-def' })).toBeTruthy();
+    expect(screen.getAllByText('Missing from catalog')).toHaveLength(1);
+    // the missing agent blocks Save until the user repairs it; the exact stale values stay in the form meanwhile
+    type('Role', 'Developer'); await click('Save changes');
+    expect(updateMember).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
+    await click('Remove ghost-agent-def');
+    await click('Save changes');
+    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { role: 'Developer', agents: ['opencode-sonnet'] });
+  });
+
+  it('saved_edit_never_calls_switch_resume_or_changes_live_content_optimistically', async () => {
+    const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
+    const running = overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ runtime: live })] })]);
+    const gate = deferred<ReturnType<typeof ok<typeof running>>>();
+    let reads = 0;
+    const overview = vi.fn(() => reads++ === 0 ? Promise.resolve(ok(running)) : gate.promise);
+    const updateMember = vi.fn(async () => upd('dev', 'renamed'));
+    const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn();
+    await renderScreen({ calls: { overview, updateMember, switchMemberAgent, resumeMemberAgent } });
+    openMember('dev');
+    const liveText = () => screen.getByRole('region', { name: 'dev' }).textContent!.split('Saved configuration')[0]!;
+    const liveFacts = ['Active agent', 'opencode-sonnet · opencode · claude-sonnet', 'No active assignment'];
+    for (const fact of liveFacts) expect(liveText()).toContain(fact);
+    await click('Edit saved configuration');
+    type('Member name', 'renamed'); await click('Save changes');
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    // live part is unchanged until the backend overview evidence changes (refresh still pending)
+    for (const fact of liveFacts) expect(liveText()).toContain(fact);
+    expect(liveText()).not.toContain('renamed');
+    expect(switchMemberAgent).not.toHaveBeenCalled();
+    expect(resumeMemberAgent).not.toHaveBeenCalled();
+    await act(async () => { gate.resolve(ok(running)); });
+    expect(switchMemberAgent).not.toHaveBeenCalled();
+    expect(resumeMemberAgent).not.toHaveBeenCalled();
   });
 });

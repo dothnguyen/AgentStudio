@@ -102,6 +102,8 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     previousSelectionIdentity.current = selectionIdentity;
     confirmationGeneration.current++;
   }
+  const selectionIdentityRef = useRef(selectionIdentity);
+  selectionIdentityRef.current = selectionIdentity;
   const selectedMemberRef = useRef(selectedMember);
   selectedMemberRef.current = selectedMember;
   const confirmRef = useRef<HTMLButtonElement>(null);
@@ -150,6 +152,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     writeLock.current = true;
     setPending(true);
     setFeedback(null);
+    const startedAt = selectionIdentityRef.current;
     let result: ManagementResult<T>;
     try {
       result = await call();
@@ -160,6 +163,11 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       if (mounted.current) setPending(false);
     }
     if (!mounted.current) return false;
+    if (selectionIdentityRef.current !== startedAt) {
+      // The user left the team/member this write was started from: never announce or select in the new context.
+      if (result.ok) { setSavedRevision(r => r + 1); void overview.reload(); }
+      return result.ok;
+    }
     if (!result.ok) {
       setFeedback(errorFeedback(failTitle, result.error));
       return false;

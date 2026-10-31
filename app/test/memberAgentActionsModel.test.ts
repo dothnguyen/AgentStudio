@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentConfirmation, formatResetAt, lastSwitchSignature, matchingTerminalSwitch, memberAgentActions } from '../src/renderer/teams/memberAgentActionsModel';
-import { member, team, twoTeams } from './teamsFixtures';
+import { member, switchStateOverview, team, twoTeams } from './teamsFixtures';
 
 const runtime = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['primary', 'backup'], activeAgent: 'primary', paneState: 'alive', availability: 'idle' };
 const catalog = [{ id: 'primary', name: 'Primary', provider: 'p' }, { id: 'backup', name: 'Backup', provider: 'p' }];
@@ -208,5 +208,28 @@ describe('member agent actions', () => {
     const m = memberAgentActions(running, member({runtime: {...runtime, configuredAgents: null}, agentMode: 'inline'}), catalog, true, null);
     expect(m.notice).toBe('Live switching is unavailable for inline members.');
     expect(m.options.every(o => !o.canSwitch)).toBe(true);
+  });
+});
+
+describe('T-090 option state coverage', () => {
+  it('pending_and_failed_switch_evidence_project_exact_text_and_lock_other_options', () => {
+    const pending = switchStateOverview('pending').teams[0]!;
+    const v = memberAgentActions(pending, pending.members[0]!, null, true, null);
+    expect(v.pendingText).toBe('Switch to codex-pending pending.');
+    expect(v.options.find(o => o.id === 'codex-pending')!.state).toBe('pending');
+    expect(v.options.every(o => o.canSwitch === false)).toBe(true);
+    expect(v.options[0]!.disabledReason).toBe('A switch is already pending for this member.');
+    const failed = switchStateOverview('failed').teams[0]!;
+    const f = memberAgentActions(failed, failed.members[0]!, [{ id: 'opencode-sonnet', name: 'S', provider: 'p' }, { id: 'codex-failed', name: 'F', provider: 'p' }] as never, true, null);
+    expect(f.lastResultText).toBe('Switch to F failed — SWITCH_FAILED: Switch failed');
+    expect(f.pendingText).toBeNull();
+    expect(f.options.find(o => o.id === 'codex-failed')!.canSwitch).toBe(true);
+  });
+  it('disabled_messages_name_exact_agent_ids_for_missing_and_held_options', () => {
+    const rt = { ...runtime, configuredAgents: ['primary', 'ghost-agent-id', 'held-agent-id'], quotaHolds: { 'held-agent-id': null } };
+    const v = view(rt, [...catalog, { id: 'held-agent-id', name: 'Held', provider: 'p' }]);
+    expect(v.options.find(o => o.id === 'ghost-agent-id')!.disabledReason).toBe("Agent 'ghost-agent-id' is missing from the catalog.");
+    expect(v.options.find(o => o.id === 'held-agent-id')!.disabledReason).toBe("Agent 'held-agent-id' is on quota hold.");
+    expect(view({ ...rt, stale: true }).options.every(o => o.disabledReason === 'Live member state is stale; refresh before switching or resuming.')).toBe(true);
   });
 });

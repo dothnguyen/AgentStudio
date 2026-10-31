@@ -343,3 +343,66 @@ export function onFailureLimitRouting(count: number | null = 3, status = 'need-e
 export function switchEvidence(state: 'pending' | 'completed' | 'failed', requestedAgent = 'codex-gpt'): RuntimeSwitchState {
   return { state, requestedAgent, assignmentId: null, code: state === 'failed' ? 'SWITCH_FAILED' : null, message: state === 'failed' ? 'Switch failed' : null, at: '2026-01-01T00:00:00Z' };
 }
+
+// --- T-090 completion fixtures: real-shaped, each value visibly unique so stale responses are provable. ---
+export type RuntimeMemberState = 'starting' | 'idle' | 'busy' | 'waiting_input' | 'limit_reached' | 'offline' | 'error';
+export function runtimeMemberState(state: RuntimeMemberState, overrides: Partial<OverviewMember> = {}): OverviewMember {
+  const paneState: Record<RuntimeMemberState, string | null> = {
+    starting: null, idle: 'alive', busy: 'alive', waiting_input: 'alive', limit_reached: 'alive', offline: 'dead', error: 'alive',
+  };
+  return member({
+    memberId: `member-${state}`, name: `${state}-member`,
+    presence: state,
+    runtime: {
+      agentId: `agent-${state}`, availability: state, paneState: paneState[state], provider: 'opencode', model: 'claude-sonnet',
+      reasoning: null, stale: false, configuredAgents: ['opencode-sonnet'], activeAgent: 'opencode-sonnet',
+      quotaHolds: state === 'limit_reached' ? { 'opencode-sonnet': '2026-01-01T01:00:00Z' } : {},
+      pendingAgent: null, lastSwitch: null, assignment: null,
+    },
+    work: state === 'busy'
+      ? { state: 'working', assignment: null, ticket: { key: `T-${state}`, title: `Ticket ${state}`, status: 'dev-ready', workflowRunId: null } }
+      : { state: 'none' },
+    ...overrides,
+  });
+}
+
+export function boardRunnerFixture(state: 'stopped' | 'running_this' | 'running_other' | 'unavailable'): BoardRunner {
+  switch (state) {
+    case 'stopped': return runner({ status: 'stopped', runStatus: 'stopped', coordinatorRunning: true });
+    case 'running_this': return runner({ status: 'running', runStatus: 'running', teamId: RUN_TEAM_ID, teamStatus: 'running', teamDefId: 'dev-team' });
+    case 'running_other': return runner({ status: 'running', runStatus: 'running', teamId: '223e4567-e89b-42d3-a456-426614174999', teamStatus: 'running', teamDefId: 'other-team' });
+    case 'unavailable': return runner({ status: 'unavailable', coordinatorRunning: false, error: { code: 'RUNNER_DOWN', message: 'runner is unreachable' } });
+  }
+}
+
+export function catalogReferenceOverview(kind: 'missing-role' | 'missing-agent' | 'catalog-unavailable'): TeamOverview {
+  if (kind === 'missing-role') {
+    return overviewFixture([team({ id: 'ref-team', name: 'Reference Team', members: [member({ memberId: 'ghost-role', name: 'ghost-role', role: 'GhostRole', roleState: 'undefined', roleDescription: null })] })]);
+  }
+  if (kind === 'missing-agent') {
+    return overviewFixture([team({ id: 'ref-team', name: 'Reference Team', members: [member({
+      memberId: 'ghost-agent', name: 'ghost-agent', agentDefId: 'ghost-agent-def', agentDefState: 'missing', defaultAgent: 'ghost-agent-def',
+      agentOptions: [{ id: 'ghost-agent-def', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' }],
+    })] })]);
+  }
+  return overviewFixture([team({ id: 'ref-team', name: 'Reference Team', members: [member({ memberId: 'no-catalog', name: 'no-catalog', agentDefState: 'unavailable' })] })],
+    { catalog: { state: 'invalid', message: 'agents.json is invalid' } });
+}
+
+export function switchStateOverview(state: 'pending' | 'failed'): TeamOverview {
+  const requested = state === 'pending' ? 'codex-pending' : 'codex-failed';
+  return overviewFixture([team({ id: 'switch-team', name: 'Switch Team', runtime: { state: 'running', teamId: 't-switch', status: 'running' }, members: [member({
+    memberId: 'switcher', name: 'switcher', presence: 'idle',
+    agentMode: 'ordered_catalog',
+    agentOptions: [
+      { id: 'opencode-sonnet', name: 'OpenCode Sonnet', provider: 'opencode', model: 'sonnet', reasoning: null, description: null, state: 'ok' },
+      { id: requested, name: null, provider: 'codex', model: 'gpt', reasoning: null, description: null, state: 'ok' },
+    ],
+    runtime: {
+      agentId: 'agent-switcher', availability: 'idle', paneState: 'alive', provider: 'opencode', model: 'claude-sonnet', reasoning: null, stale: false,
+      configuredAgents: ['opencode-sonnet', requested], activeAgent: 'opencode-sonnet', quotaHolds: {},
+      pendingAgent: state === 'pending' ? requested : null, lastSwitch: switchEvidence(state, requested), assignment: null,
+    },
+    work: { state: 'none' },
+  })] })]);
+}

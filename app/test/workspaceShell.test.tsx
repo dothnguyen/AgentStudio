@@ -387,7 +387,7 @@ describe('WorkspaceShell', () => {
     await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
   });
 
-  it.skip('direct_roles_navigation_clears_requested_role', async () => {
+  it('direct_roles_navigation_clears_requested_role', async () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
@@ -401,7 +401,7 @@ describe('WorkspaceShell', () => {
     expect(view.queryByText(/is unavailable in this workspace/)).toBeNull();
   });
 
-  it.skip('workspace_change_clears_section_and_role_request', async () => {
+  it('workspace_change_clears_section_and_role_request', async () => {
     const { view, ui } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
@@ -414,7 +414,7 @@ describe('WorkspaceShell', () => {
     fireEvent.click(view.getByRole('button', { name: 'Roles' }));
     await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-a'));
   });
-  it.skip('teams_view_state_resets_when_section_or_workspace_changes', async () => {
+  it('teams_view_state_resets_when_section_or_workspace_changes', async () => {
     const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
     const ui = (w: Workspace) => <WorkspaceShellComponent workspace={w} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />;
     const view = render(ui(workspace));
@@ -446,7 +446,7 @@ describe('WorkspaceShell', () => {
       expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     };
 
-    it.skip('teams_focus_and_selection_reset_on_workspace_switch', async () => {
+    it('teams_focus_and_selection_reset_on_workspace_switch', async () => {
       const other = overviewFixture([team({ id: 'b-team', name: 'Only B', members: [member({ memberId: 'bee', name: 'bee' })] })]);
       const overview = vi.fn(async (id: string) => ({ ok: true as const, data: id === 'b' ? other : twoTeams() }));
       const fake = fakeManagement({ calls: { overview } });
@@ -494,7 +494,7 @@ describe('WorkspaceShell', () => {
       expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
     });
 
-    it.skip('teams_connection_recovery_does_not_duplicate_management_reads', async () => {
+    it('teams_connection_recovery_does_not_duplicate_management_reads', async () => {
       const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
       const reads = () => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map(f => f.mock.calls.length);
       const view = render(shell(fake, workspace));
@@ -616,7 +616,7 @@ describe('T-084 sidebar team navigation', () => {
     expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
   });
 
-  it.skip('teams_parent_preserves_valid_selection_and_same_child_reopens_overview', async () => {
+  it('teams_parent_preserves_valid_selection_and_same_child_reopens_overview', async () => {
     const fake = fakeManagement();
     const view = render(ui(fake));
     await settle();
@@ -643,7 +643,7 @@ describe('T-084 sidebar team navigation', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it.skip('sidebar_selection_survives_reorder_and_falls_back_after_removal', async () => {
+  it('sidebar_selection_survives_reorder_and_falls_back_after_removal', async () => {
     const [releaseTeam, devTeam] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
     const fake = fakeManagement({ overview: [
       ok(twoTeams()),
@@ -1290,5 +1290,179 @@ describe('T-085 sidebar team creation', () => {
     await create(view);
     expect(view.getByText('Created team "QA Team". The team still has 1 problem; see the team details. Team list refresh failed (INTERNAL: offline). Refresh Teams to select it.')).toBeTruthy();
     expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
+  });
+});
+
+describe('T-090 sidebar completion', () => {
+  const other: Workspace = { id: 'ws-other', name: 'Other', path: '/work/other', missing: false, exists: true };
+  const ui = (fake: ReturnType<typeof fakeManagement>, ws: Workspace = workspace, conn: ConnectionStatus = connection) => (
+    <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />
+  );
+  const settle = () => act(async () => {});
+  const ok = <T,>(data: T) => ({ ok: true as const, data });
+  const labels = (view: ReturnType<typeof render>) => view.queryAllByRole('listitem').flatMap((li) => Array.from(li.querySelectorAll<HTMLButtonElement>('.team-nav-item'))).map((r) => r.querySelector('.team-nav-label')!.textContent);
+  const row = (view: ReturnType<typeof render>, name: string) => view.getByRole('button', { name: new RegExp(`^Open ${name},`) });
+  const teamsButton = (view: ReturnType<typeof render>) => view.getByRole('button', { name: 'Teams' });
+  const newTeam = (view: ReturnType<typeof render>) => view.getByRole('button', { name: 'New team' }) as HTMLButtonElement;
+  const dialog = (view: ReturnType<typeof render>) => view.queryByRole('dialog', { name: 'New team' });
+  const submit = async (view: ReturnType<typeof render>, name: string) => {
+    fireEvent.click(newTeam(view));
+    await settle();
+    fireEvent.change(view.getByLabelText('Team name'), { target: { value: name } });
+    fireEvent.click(view.getByRole('button', { name: 'Create team' }));
+    await settle();
+  };
+
+  it('sidebar_teams_parent_and_nested_rows_are_keyboard_reachable_and_expose_current_page', async () => {
+    const longName = `Team ${'long-name '.repeat(12)}${'y'.repeat(120)}`;
+    const data = overviewFixture([...twoTeams().teams, team({ id: 'long-team', name: longName, members: [] })]);
+    const fake = fakeManagement({ overview: [ok(data)] });
+    const view = render(ui(fake));
+    await settle();
+    teamsButton(view).focus();
+    await userEvent.keyboard('{Enter}');
+    await settle();
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    const list = view.getByRole('list', { name: 'Workspace teams' });
+    const buttons = within(list).getAllByRole('button');
+    expect(buttons.every((b) => b.getAttribute('aria-current') === null)).toBe(true);
+    // The complete long name stays in the accessible name even when visually wrapped.
+    expect(buttons.some((b) => (b.getAttribute('aria-label') ?? '').includes(longName))).toBe(true);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(newTeam(view));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(buttons[0]);
+    await userEvent.tab(); await userEvent.tab();
+    expect(document.activeElement).toBe(buttons[2]);
+    await userEvent.keyboard(' ');
+    await settle();
+    expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
+    expect(buttons.filter((b) => b.getAttribute('aria-current') === 'page')).toEqual([buttons[2]]);
+    expect(view.getByRole('heading', { level: 2, name: longName })).toBeTruthy();
+    expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('sidebar_team_selection_survives_reorder_by_stable_id_and_focuses_fallback_after_removal', async () => {
+    const [releaseTeam, devTeam] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
+    const fake = fakeManagement({ overview: [
+      ok(twoTeams()),
+      ok(overviewFixture([devTeam, releaseTeam].reverse().map((t, i) => i === 0 ? { ...t, runtime: { state: 'running' as const, teamId: 'live', status: 'running' } } : t))),
+      ok(overviewFixture([devTeam])),
+    ] });
+    const view = render(ui(fake));
+    await settle();
+    expect(labels(view)).toEqual(['Dev Team', 'Release Team']);
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    row(view, 'Release Team').focus();
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(labels(view)).toEqual(['Release Team', 'Dev Team']);
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
+    await settle();
+    expect(labels(view)).toEqual(['Dev Team']);
+    expect(row(view, 'Dev Team').getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
+    expect(view.queryByText('Release Team')).toBeNull();
+  });
+
+  it('new_team_dialog_restores_focus_on_escape_error_success_and_workspace_change', async () => {
+    const createTeam = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error: { code: 'TEAM_EXISTS', message: 'duplicate name', retryable: false } })
+      .mockResolvedValueOnce(ok({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
+    const withQa = overviewFixture([...twoTeams().teams, team({ id: 'qa-team', name: 'QA Team', members: [] })]);
+    const fake = fakeManagement({ overview: [ok(twoTeams()), ok(withQa)], calls: { createTeam } });
+    const view = render(ui(fake));
+    await settle();
+    // Escape
+    newTeam(view).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(dialog(view)?.getAttribute('aria-modal')).toBe('true');
+    await userEvent.keyboard('{Escape}');
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+    // Error: dialog stays open with exact message, Cancel restores the trigger.
+    await submit(view, 'Dup');
+    expect(view.getByRole('alert').textContent).toContain('duplicate name');
+    expect(dialog(view)).not.toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(newTeam(view));
+    // Success: the new row receives focus.
+    await submit(view, 'QA Team');
+    expect(createTeam).toHaveBeenCalledTimes(2);
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).toBe(row(view, 'QA Team'));
+    // Workspace change closes an open dialog and never restores the previous workspace's trigger.
+    fireEvent.click(newTeam(view));
+    await settle();
+    const oldTrigger = newTeam(view);
+    view.rerender(ui(fake, other));
+    await settle();
+    expect(dialog(view)).toBeNull();
+    expect(document.activeElement).not.toBe(oldTrigger);
+    expect(createTeam).toHaveBeenCalledTimes(2);
+  });
+
+  it('previous_workspace_overview_and_create_results_cannot_update_the_new_workspace', async () => {
+    const oldRead = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
+    const create = deferred<ReturnType<typeof ok<{ team: ReturnType<typeof teamDefinition>; problems: never[] }>>>();
+    const onlyOther = overviewFixture([team({ id: 'other-team', name: 'Other Only', members: [] })]);
+    const overview = vi.fn((id: string) => id === workspace.id ? oldRead.promise : Promise.resolve(ok(onlyOther)));
+    const fake = fakeManagement({ calls: { overview, createTeam: () => create.promise } });
+    const view = render(ui(fake));
+    await settle();
+    view.rerender(ui(fake, other));
+    await settle();
+    expect(labels(view)).toEqual(['Other Only']);
+    fireEvent.click(row(view, 'Other Only'));
+    await settle();
+    const calls = overview.mock.calls.length;
+    await act(async () => { oldRead.resolve(ok(twoTeams())); });
+    expect(labels(view)).toEqual(['Other Only']);
+    expect(row(view, 'Other Only').getAttribute('aria-current')).toBe('page');
+    // A create started in the other workspace and resolved late is ignored too.
+    await submit(view, 'Late Team');
+    view.rerender(ui(fake, workspace));
+    await settle();
+    view.rerender(ui(fake, other));
+    await settle();
+    const before = overview.mock.calls.length;
+    await act(async () => { create.resolve(ok({ team: teamDefinition({ id: 'late-team', name: 'Late Team' }), problems: [] })); });
+    expect(overview.mock.calls.length).toBe(before);
+    expect(view.queryByText(/Created team "Late Team"/)).toBeNull();
+    expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
+    expect(calls).toBeGreaterThan(0);
+  });
+
+  it('connection_recovery_refreshes_once_without_replacing_the_current_team_with_stale_data', async () => {
+    const recovered = overviewFixture([{ ...twoTeams().teams[1]!, name: 'Dev Team Recovered' }, twoTeams().teams[0]!]);
+    const gate = deferred<ReturnType<typeof ok<typeof recovered>>>();
+    let reads = 0;
+    const overview = vi.fn(() => reads++ === 0 ? Promise.resolve(ok(twoTeams())) : gate.promise);
+    const fake = fakeManagement({ calls: { overview } });
+    const view = render(ui(fake));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    view.rerender(ui(fake, workspace, connectionFixture('lost')));
+    await settle();
+    expect(overview).toHaveBeenCalledTimes(1);
+    expect(newTeam(view).disabled || newTeam(view).getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(labels(view)).toEqual(['Dev Team', 'Release Team']);
+    view.rerender(ui(fake, workspace, connectionFixture('connected')));
+    await settle();
+    expect(overview).toHaveBeenCalledTimes(2);
+    // Retained rows stay visible and selected while the fresh read is pending, but writes stay locked.
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(newTeam(view).disabled || newTeam(view).getAttribute('aria-disabled') === 'true').toBe(true);
+    await act(async () => { gate.resolve(ok(recovered)); });
+    expect(overview).toHaveBeenCalledTimes(2);
+    expect(labels(view)).toEqual(['Dev Team Recovered', 'Release Team']);
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(newTeam(view).disabled || newTeam(view).getAttribute('aria-disabled') === 'true').toBe(false);
   });
 });

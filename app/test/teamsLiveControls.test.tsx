@@ -15,7 +15,7 @@ import {
   runner,
   team,
   teamDefinition,
-  twoTeams, catalogFixture, connectionFixture, managementError, switchEvidence,
+  twoTeams, catalogFixture, connectionFixture, managementError, switchEvidence, switchStateOverview,
 } from './teamsFixtures';
 import { SWITCH_REFRESH_INTERVAL_MS, SWITCH_REFRESH_LIMIT } from '../src/renderer/teams/memberAgentActionsModel';
 import userEvent from '@testing-library/user-event';
@@ -1439,5 +1439,160 @@ describe('T-082 live controls', () => {
     expect(screen.getByRole('status').textContent).toContain('Board is running');
     expect(screen.queryByRole('alert')).toBeNull();
     expect(stopBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-090 live detail completion', () => {
+  const live = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' };
+  const data = (runtime = live, id = 'dev') => overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ memberId: id, name: id, runtime })] })]);
+  const confirmation = (id: string) => ({ ok: false as const, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: id } } });
+  const renderLive = async (opts: Parameters<typeof fakeManagement>[0] = {}, id = 'dev') => { const out = await renderMembers(opts); openMember(id); return out; };
+  const switchOk = { ok: true as const, data: { teamId: 't', memberId: 'dev', agentId: 'a', activeAgent: 'codex-gpt', provider: 'p' } };
+
+  it('live_detail_covers_frozen_missing_held_pending_failed_stale_and_unavailable_options', async () => {
+    // frozen + held + missing: held hold-only option (not frozen) is resumable and shows its exact id.
+    const held = { ...live, configuredAgents: ['opencode-sonnet', 'codex-gpt'], quotaHolds: { 'codex-gpt': null, 'hold-only-agent': null } };
+    let out = await renderLive({ overview: [ok(data(held))], agents: [ok(catalogFixture())] });
+    const detail = () => screen.getByRole('region', { name: 'dev' });
+    expect(detail().textContent).toContain('Live agent options — frozen at team start');
+    expect(detail().textContent).toContain("Agent 'codex-gpt' is on quota hold.");
+    expect(detail().textContent).toContain('hold-only-agent');
+    expect(within(detail()).getAllByRole('button', { name: 'Resume' }).length).toBeGreaterThan(0);
+    out.result.unmount();
+    // missing catalog agent
+    out = await renderLive({ overview: [ok(data({ ...live, configuredAgents: ['opencode-sonnet', 'ghost-agent'] }))] });
+    expect(detail().textContent).toContain("Agent 'ghost-agent' is missing from the catalog.");
+    out.result.unmount();
+    // pending and failed switch evidence
+    for (const state of ['pending', 'failed'] as const) {
+      const sw = switchStateOverview(state);
+      out = await renderLive({ overview: [ok(sw)] }, 'switcher');
+      const text = screen.getByRole('region', { name: 'switcher' }).textContent!;
+      expect(text).toContain(state === 'pending' ? 'Switch to codex-pending pending.' : 'Switch to codex-failed failed — SWITCH_FAILED: Switch failed');
+      if (state === 'pending') expect(text).toContain('A switch is already pending for this member.');
+      out.result.unmount();
+    }
+    // stale + unavailable catalog
+    out = await renderLive({ overview: [ok(data({ ...live, stale: true }))] });
+    expect(detail().textContent).toContain('Live state is stale.');
+    expect(detail().textContent).toContain('Live member state is stale; refresh before switching or resuming.');
+    expect((within(detail()).getByRole('button', { name: 'Switch' }) as HTMLButtonElement).disabled).toBe(true);
+    out.result.unmount();
+    out = await renderLive({ overview: [ok(data())], agents: [managementError('AGENTS_DOWN', 'catalog down')] });
+    expect(detail().textContent).toContain('Agent catalog unavailable; switching is disabled.');
+  });
+
+  it('switch_polling_ignores_old_member_workspace_and_unmounted_results', async () => {
+    const overview = vi.fn()
+      .mockResolvedValueOnce(ok(data()))
+      .mockResolvedValue(ok(overviewFixture([team({ runtime: { state: 'running', teamId: 't', status: 'running' }, members: [member({ runtime: { ...live, lastSwitch: switchEvidence('pending', 'codex-gpt'), pendingAgent: 'codex-gpt' } })] })])));
+    const switchMemberAgent = vi.fn().mockResolvedValue(switchOk);
+    const { result, fake } = await renderLive({ calls: { overview, switchMemberAgent } });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(result.getByRole('button', { name: 'Switch' }));
+      await act(async () => {});
+      expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+      // workspace change: timers and results of the previous workspace are discarded
+      result.rerender(<TeamsHarness workspace={{ ...workspaceA, id: 'ws-b' }} management={fake.api} />);
+      await act(async () => {});
+      const afterSwitch = overview.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 2)); });
+      expect(overview.mock.calls.length).toBe(afterSwitch);
+      expect(overview.mock.calls.every(([id]: [string]) => id === 'ws-a' || id === 'ws-b')).toBe(true);
+      expect(screen.queryByText('Switch to Codex GPT pending.')).toBeNull();
+      result.unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * 3); });
+      expect(overview.mock.calls.length).toBe(afterSwitch);
+      expect(switchMemberAgent).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('changed_assignment_requires_a_new_exact_assignment_confirmation', async () => {
+    const call = vi.fn().mockResolvedValueOnce(confirmation('assignment-A')).mockResolvedValueOnce(confirmation('assignment-B')).mockResolvedValueOnce(switchOk);
+    const { result } = await renderLive({ overview: [ok(data())], calls: { switchMemberAgent: call } });
+    fireEvent.click(result.getByRole('button', { name: 'Switch' })); await flush();
+    expect(result.getByRole('dialog').textContent).toContain('assignment-A');
+    fireEvent.click(result.getByRole('button', { name: 'Confirm cancellation' })); await flush();
+    expect(call).toHaveBeenLastCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt', { cancelActive: true, assignmentId: 'assignment-A' });
+    // backend now reports a different assignment: the old consent must not be reused
+    const dialog = result.getByRole('dialog');
+    expect(dialog.textContent).toContain('assignment-B');
+    expect(dialog.textContent).toContain('fresh confirmation');
+    expect(call).toHaveBeenCalledTimes(2);
+    fireEvent.click(result.getByRole('button', { name: 'Confirm cancellation' })); await flush();
+    expect(call).toHaveBeenCalledTimes(3);
+    expect(call).toHaveBeenLastCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt', { cancelActive: true, assignmentId: 'assignment-B' });
+    expect(result.queryByRole('dialog')).toBeNull();
+  });
+
+  it('switch_dialog_traps_focus_escapes_and_restores_the_trigger', async () => {
+    const call = vi.fn().mockResolvedValue(confirmation('assignment-A'));
+    const { result } = await renderLive({ overview: [ok(data())], calls: { switchMemberAgent: call } });
+    const trigger = result.getByRole('button', { name: 'Switch' });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}'); await flush();
+    const dialog = result.getByRole('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' }), confirm = within(dialog).getByRole('button', { name: 'Confirm cancellation' });
+    expect(document.activeElement).toBe(cancel);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(confirm);
+    await userEvent.tab();
+    expect(document.activeElement).toBe(cancel);
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(confirm);
+    await userEvent.keyboard('{Escape}');
+    expect(result.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('resume_clears_only_the_named_hold_and_never_switches_or_cancels', async () => {
+    const held = { ...live, quotaHolds: { 'codex-gpt': null, 'other-held': null }, configuredAgents: ['opencode-sonnet', 'codex-gpt', 'other-held'] };
+    const after = { ...held, quotaHolds: { 'other-held': null } };
+    const resume = vi.fn().mockResolvedValue({ ok: true, data: { teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet' } });
+    const switchCall = vi.fn();
+    const { result } = await renderLive({ overview: [ok(data(held)), ok(data(after))], calls: { resumeMemberAgent: resume, switchMemberAgent: switchCall } });
+    const resumes = within(screen.getByRole('region', { name: 'dev' })).getAllByRole('button', { name: 'Resume' });
+    expect(resumes).toHaveLength(2);
+    fireEvent.click(resumes[0]!); await flush();
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(resume).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');
+    expect(switchCall).not.toHaveBeenCalled();
+    expect(result.queryByRole('dialog')).toBeNull();
+    const text = screen.getByRole('region', { name: 'dev' }).textContent!;
+    expect(text).toContain('other-held');
+    expect(within(screen.getByRole('region', { name: 'dev' })).getAllByRole('button', { name: 'Resume' })).toHaveLength(1);
+  });
+
+  it('disconnect_during_switch_stops_polling_and_recovery_uses_fresh_evidence', async () => {
+    const call = vi.fn().mockResolvedValue(switchOk);
+    const completed = data({ ...live, activeAgent: 'codex-gpt', lastSwitch: switchEvidence('completed', 'codex-gpt') });
+    const overview = vi.fn().mockResolvedValueOnce(ok(data())).mockResolvedValue(ok(completed));
+    const fake = fakeManagement({ calls: { overview, switchMemberAgent: call } });
+    const ui = (c: ConnectionStatus) => <TeamsHarness workspace={workspaceA} management={fake.api} connection={c} />;
+    const result = render(ui(connected));
+    await flush();
+    fireEvent.click(result.getByRole('tab', { name: 'Overview' }));
+    openMember('dev');
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(result.getByRole('button', { name: 'Switch' }));
+      await act(async () => {});
+      result.rerender(ui({ state: 'lost', error: 'serve exited', distro: null, command: null }));
+      await act(async () => {});
+      const during = overview.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(SWITCH_REFRESH_INTERVAL_MS * (SWITCH_REFRESH_LIMIT + 2)); });
+      expect(overview.mock.calls.length).toBe(during);
+      expect(screen.getByRole('region', { name: 'dev' }).textContent).toContain('Backend disconnected; live actions are disabled.');
+      result.rerender(ui(connected));
+      await act(async () => {});
+      expect(overview.mock.calls.length).toBe(during + 1);
+      expect(screen.getByRole('region', { name: 'dev' }).textContent).toContain('Codex GPT');
+      expect(call).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
 });

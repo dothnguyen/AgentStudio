@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import { catalogFixture, deferred, fakeManagement, openMember, overviewFixture, team, teamDefinition, teamRolesFixture } from './teamsFixtures';
@@ -289,5 +290,63 @@ describe('team editing edge cases', () => {
     expect(onViewRole).toHaveBeenCalledWith('Developer');
     expect(switchMemberAgent).not.toHaveBeenCalled();
     expect(resumeMemberAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe('T-090 mutation isolation', () => {
+  const upd = ok({ team: teamDefinition(), member: { id: 'dev', name: 'dev', role: 'Developer' }, problems: [], appliesOnNextStart: true });
+
+  it('inflight_create_update_delete_results_are_ignored_after_workspace_team_or_member_change', async () => {
+    // update in flight, then the member is left: the late result must not announce itself
+    const updateGate = deferred<typeof upd>();
+    const deleteGate = deferred<ReturnType<typeof ok>>();
+    const createGate = deferred<ReturnType<typeof ok>>();
+    const updateMember = vi.fn(() => updateGate.promise);
+    const deleteTeam = vi.fn(() => deleteGate.promise);
+    const createTeam = vi.fn(() => createGate.promise);
+    const fake = fakeManagement({ calls: { updateMember, deleteTeam, createTeam } });
+    const ui = (ws = workspaceA) => <TeamsHarness sidebar workspace={ws} management={fake.api} />;
+    const view = render(ui());
+    await flush(); await openTab('Overview'); openMember('dev');
+    await click('Edit saved configuration'); type('Member name', 'renamed'); await click('Save changes');
+    expect(updateMember).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ })); await flush();
+    await act(async () => { updateGate.resolve(upd); });
+    expect(screen.queryByText(/Saved configuration applies on the next team start/)).toBeNull();
+    expect(screen.queryByRole('region', { name: 'dev' })).toBeNull();
+    // delete in flight, workspace changes: late success is not shown in the new workspace
+    await click('Delete team'); await click(/^Confirm delete/);
+    expect(deleteTeam).toHaveBeenCalledTimes(1);
+    view.rerender(ui({ ...workspaceA, id: 'ws-b' })); await flush();
+    const reads = fake.overview.mock.calls.length;
+    await act(async () => { deleteGate.resolve(ok({ deleted: { id: 'release', name: 'Release Team' }, problems: [] })); });
+    expect(fake.overview.mock.calls.length).toBe(reads);
+    expect(screen.queryByText(/Deleted/)).toBeNull();
+    // create in flight, workspace changes again
+    await click('New team');
+    fireEvent.change(screen.getByLabelText('Team name'), { target: { value: 'Late' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'New team' })); await flush();
+    view.rerender(ui({ ...workspaceA, id: 'ws-c' })); await flush();
+    await act(async () => { createGate.resolve(ok({ team: teamDefinition({ id: 'late', name: 'Late' }), problems: [] })); });
+    expect(screen.queryByText(/Created team "Late"/)).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'New team' })).toBeNull();
+  });
+
+  it('remove_confirmation_names_exact_team_and_member_and_escape_restores_remove_button', async () => {
+    const removeMember = vi.fn();
+    await renderScreen({ calls: { removeMember } });
+    await openTab('Overview'); openMember('lead');
+    const trigger = screen.getByRole('button', { name: 'Remove lead' });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('Remove lead (lead) from Dev Team?');
+    expect(dialog.getAttribute('aria-labelledby') ?? dialog.getAttribute('aria-label')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confirm remove lead' })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel removing lead' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove lead' }));
+    expect(removeMember).not.toHaveBeenCalled();
   });
 });
