@@ -3,6 +3,7 @@ injection safety, coordinator-down operation, and the full tmux worker path."""
 import hashlib
 import json
 import os
+import shutil
 import signal
 import stat
 import tempfile
@@ -169,6 +170,21 @@ class ThroughTheTeam(unittest.TestCase):
     def assignment(self, asg):
         return next(a for a in self.sb.snapshot(self.team["teamId"])["assignments"] if a["id"] == asg)
 
+    def _hide_opencode(self):
+        """Make the installed opencode CLI invisible to a child process (all four providers are real now)."""
+        saved = dict(self.sb.env)
+        home = tempfile.mkdtemp(prefix="as-nohome-")
+        self.sb.env["HOME"] = home
+        self.sb.env["PATH"] = os.pathsep.join(
+            p for p in saved.get("PATH", "").split(os.pathsep)
+            if p and not os.path.exists(os.path.join(p, "opencode")))
+
+        def restore():
+            self.sb.env.clear()
+            self.sb.env.update(saved)
+            shutil.rmtree(home, ignore_errors=True)
+        return restore
+
     def test_authoritative_results_through_tmux(self):
         dev, rev = (a["agentId"] for a in self.team["agents"])
         ok = self.assign(dev, goal=HOSTILE_GOAL, policy="workspace_write",
@@ -212,12 +228,24 @@ class ThroughTheTeam(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "POLICY_UNSUPPORTED")
         rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "fake", "--policy", "read_only")
         self.assertTrue(r["ok"], r)
-        rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "opencode")  # still a placeholder
+        restore = self._hide_opencode()
+        try:
+            rc, r, _ = self.sb.run("preflight", "--workspace", self.ws, "--provider", "opencode")
+        finally:
+            restore()
         self.assertEqual(r["error"]["code"], "PROVIDER_UNAVAILABLE")
 
     def test_team_start_refuses_unavailable_provider_without_substitution(self):
-        rc, r, _ = self.sb.request(req("team.start", {"workspace": self.ws, "roster": [
-            {"providerId": "fake", "role": "dev"}, {"providerId": "opencode", "role": "rev"}]}, idempotencyKey=key()))
+        self.sb.run("coordinator", "stop")
+        restore = self._hide_opencode()
+        try:
+            rc, r, p = self.sb.run("coordinator", "start", "--enable-debug")
+            self.assertTrue(r["ok"], p.stderr)
+            rc, r, _ = self.sb.request(req("team.start", {"workspace": self.ws, "roster": [
+                {"providerId": "fake", "role": "dev"}, {"providerId": "opencode", "role": "rev"}]},
+                idempotencyKey=key()))
+        finally:
+            restore()
         self.assertEqual(r["error"]["code"], "PROVIDER_UNAVAILABLE")
         self.assertIn("opencode", r["error"]["message"])
         self.assertEqual(len(self.sb.snapshot()["teams"]), 1)  # only the setUp team

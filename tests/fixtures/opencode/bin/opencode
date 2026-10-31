@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Test stand-in for opencode v2.1.4 in `run --format json` mode. Emits the event shapes captured from the
-real CLI (see ../*.jsonl for the captured error events) plus the documented success shapes; honours
---log-level/--format/--model. Controlled by fake-opencode.json next to this file; appends each run to
-calls.jsonl next to this file."""
+"""Test stand-in for opencode v2.2.5 in `run --format json` mode. Emits the event shapes captured from the
+real CLI (see ../captured-2.2.5-*.jsonl) plus the older v2.1.4 shapes. Honours --log-level/--format/--model
+and OPENCODE_CONFIG_CONTENT (via `debug --standalone agents`, the adapter's injection canary). Controlled by
+fake-opencode.json next to this file; appends each run to calls.jsonl next to this file."""
 import json
 import os
 import sys
@@ -20,7 +20,8 @@ HELP = ("DESCRIPTION\n  Run OpenCode with a message\n\nUSAGE\n  opencode run [fl
         + "\n".join(f"  {f} string" for f in FLAGS
                     if f not in CTL.get("dropFlags", []) and f not in ("--continue", "--auto"))
         + "\n  --continue, -c          Continue the last session\n"
-        + "\n  --auto                  Auto-approve permissions that are not explicitly denied\n")
+        + "\n  --auto                  Auto-approve permissions that are not explicitly denied\n"
+        + "\n  --format choice         Output format (choices: default, json)\n")
 SID = "ses_" + uuid.uuid4().hex[:20]
 
 
@@ -29,25 +30,50 @@ def out(obj):
     sys.stdout.flush()
 
 
+def emit(kind, part):
+    out({"type": kind, "timestamp": 1793451566652, "sessionID": SID, "part": part})
+
+
+def start():
+    emit("step_start", {"id": "prt_1", "sessionID": SID, "messageID": "msg_1", "type": "step-start"})
+
+
+def text(value):
+    emit("text", {"id": "prt_text", "sessionID": SID, "messageID": "msg_1", "type": "text", "text": value})
+
+
+def finish(reason="stop", cost=0.0001, tokens=None):
+    emit("step_finish", {"id": "prt_finish", "sessionID": SID, "messageID": "msg_1", "type": "step-finish",
+                         "reason": reason, "cost": cost,
+                         "tokens": tokens or {"input": 10, "output": 5, "reasoning": 0,
+                                              "cache": {"read": 0, "write": 0}}})
+
+
 def main():
     prompt = sys.stdin.buffer.read()
-    if "--version" in sys.argv[1:]:
-        sys.stdout.write(CTL.get("versionText", "opencode v2.1.4") + "\n")
+    args = sys.argv[1:]
+    if "--version" in args:
+        sys.stdout.write(CTL.get("versionText", "opencode v2.2.5") + "\n")
         return 0
-    if "--help" in sys.argv[1:] or "run" not in sys.argv[1:]:
+    if "debug" in args:
+        if CTL.get("noConfigInjection"):
+            sys.stdout.write(json.dumps([{"id": "build", "permissions": []}]))
+            return 0
+        config = json.loads(os.environ.get("OPENCODE_CONFIG_CONTENT") or "{}")
+        rules = [{"action": "*", "resource": "*", "effect": "allow"}] + list(config.get("permissions") or [])
+        sys.stdout.write(json.dumps([{"id": "build", "permissions": rules}]))
+        return 0
+    if "--help" in args or "run" not in args:
         sys.stdout.write(HELP)
         return 0
-    if "--format" not in sys.argv[1:]:
+    if "--format" not in args:
         sys.stderr.write("format required by the adapter\n")
         return 2
     with open(os.path.join(HERE, "calls.jsonl"), "a") as f:
-        f.write(json.dumps({"argv": sys.argv[1:], "promptBytes": len(prompt)}) + "\n")
-    if CTL.get("authList") is not None and "--help" not in sys.argv[1:]:
-        pass  # auth list is a separate subcommand, handled below
+        f.write(json.dumps({"argv": args, "promptBytes": len(prompt),
+                            "config": os.environ.get("OPENCODE_CONFIG_CONTENT")}) + "\n")
     scenario = CTL.get("scenario", "provider_auth")
-    out({"type": "step_start", "timestamp": 1792931707301, "sessionID": SID,
-         "part": {"id": "prt_1", "sessionID": SID, "messageID": "msg_1", "type": "step-start",
-                  "snapshot": "4b825dc642cb6eb9a060e54bf8d69288fbee4904"}})
+    start()
     if scenario == "provider_auth":
         out({"type": "error", "timestamp": 1792931707318, "sessionID": SID,
              "error": {"type": "provider.auth", "status": 403,
@@ -61,24 +87,43 @@ def main():
                        "message": "Upstream request failed: privacy settings.",
                        "response": {"body": "{}"}}})
         return 0
+    if scenario == "limit":
+        out({"type": "error", "timestamp": 1793451236762, "sessionID": SID,
+             "error": {"type": "provider.free-limit", "status": 429,
+                       "message": "Free usage limit reached. Connect a provider or subscribe to OpenCode Go "
+                                  "to keep going, or switch models.",
+                       "response": {"body": "{}"}}, "retryAfterMs": 39964000})
+        return 0
     if scenario == "success":
-        out({"type": "part", "sessionID": SID,
-             "part": {"id": "prt_2", "sessionID": SID, "messageID": "msg_2", "type": "text",
-                      "text": CTL.get("finalText", "AGENT_STUDIO_OK")}})
-        out({"type": "part", "sessionID": SID,
-             "part": {"id": "prt_3", "sessionID": SID, "messageID": "msg_2", "type": "step-finish",
-                      "tokens": {"input": 10, "output": 5}}})
+        text(CTL.get("finalText", "AGENT_STUDIO_OK"))
+        finish()
+        return 0
+    if scenario == "tool_success":
+        emit("tool_use", {"partID": "prt_tool", "sessionID": SID, "messageID": "msg_1", "type": "tool",
+                          "id": "call_1", "tool": "write",
+                          "state": {"status": "completed", "input": {"path": "made.txt", "content": "hi\n"},
+                                    "output": "Wrote made.txt", "title": "write",
+                                    "time": {"start": 1, "end": 2}}})
+        finish("tool-calls")
+        start()
+        text("DONE")
+        finish()
         return 0
     if scenario == "tool_denied":
-        out({"type": "part", "sessionID": SID,
-             "part": {"id": "prt_4", "sessionID": SID, "messageID": "msg_3", "type": "tool",
-                      "tool": "bash", "state": "error", "error": "permission denied by policy"}})
-        out({"type": "part", "sessionID": SID,
-             "part": {"id": "prt_5", "sessionID": SID, "messageID": "msg_3", "type": "text",
-                      "text": "I could not run the command."}})
-        out({"type": "part", "sessionID": SID,
-             "part": {"id": "prt_6", "sessionID": SID, "messageID": "msg_3", "type": "step-finish",
-                      "tokens": {"input": 12, "output": 8}}})
+        emit("tool_use", {"partID": "prt_tool", "sessionID": SID, "messageID": "msg_1", "type": "tool",
+                          "id": "call_1", "tool": "write",
+                          "state": {"status": "error", "input": {"path": "made.txt"},
+                                    "error": "Permission denied: edit", "time": {"start": 1, "end": 2}}})
+        finish("tool-calls")
+        start()
+        text("I could not create the file.")
+        finish()
+        return 0
+    if scenario == "legacy_tool_denied":
+        emit("tool_use", {"id": "prt_tool", "sessionID": SID, "messageID": "msg_1", "type": "tool",
+                          "tool": "bash", "state": "error", "error": "permission denied by policy"})
+        text("I could not run the command.")
+        finish()
         return 0
     if scenario == "no_final":
         return 0  # stream ends with no terminal event -> inconclusive
@@ -94,7 +139,7 @@ def main():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "auth":
-        # opencode auth list: one "<name>  <name>  stored" line per credential
+        # opencode auth list: one "<provider>  <name>  stored" line per credential
         stored = CTL.get("authStored", True)
         if stored:
             print("OpenCode Go  OpenCode Go                 stored")

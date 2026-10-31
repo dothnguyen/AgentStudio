@@ -1,5 +1,6 @@
 {
   "version": 1,
   "claude": { "commands": true },
-  "agy": { "commands": true }
+  "agy": { "commands": true },
+  "opencode": { "commands": true }
 }

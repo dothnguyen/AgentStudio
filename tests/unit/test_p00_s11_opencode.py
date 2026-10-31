@@ -1,7 +1,9 @@
-"""P00-S11: OpenCode adapter - settings, argv, probe states and parsing. Error-event fixtures are real
-opencode v2.1.4 output (captured-2.1.4-*.jsonl); success/tool shapes are documented but not captured (see
-CONTRACT.md - every model the stored credential can list fails upstream), so the stand-in emits them and the
-tests pin them as the shapes to re-verify against a runnable model."""
+"""P00-S11: OpenCode adapter - settings, permissions mapping, argv, probe states and parsing.
+
+Fixtures `captured-2.1.4-*.jsonl` are the old provider-error events; `captured-2.2.5-*.jsonl` are real,
+verbatim `opencode run --standalone --format json --log-level none` streams from the installed v2.2.5
+(success, write success, permission denied, usage limit). The stand-in emits the same shapes for the probe
+and argv tests and implements `debug --standalone agents`, the adapter's config-injection canary."""
 import json
 import os
 import shutil
@@ -19,10 +21,10 @@ FIX = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 OPENCODE = providers.get("opencode")
 
 
-def inp(policy="read_only", model=None, reasoning=None, ws="/tmp", prompt="/tmp/p.txt"):
+def inp(policy="read_only", model=None, reasoning=None, ws="/tmp", prompt="/tmp/p.txt", **kw):
     return AssignmentInput(assignment_id="a" * 8, agent_id="b" * 8, provider_id="opencode", attempt=1,
                            workspace=ws, prompt_path=prompt, role_instructions="dev", policy=policy,
-                           deadline_s=60, output_budget_bytes=1 << 20, model=model, reasoning=reasoning)
+                           deadline_s=60, output_budget_bytes=1 << 20, model=model, reasoning=reasoning, **kw)
 
 
 def oc(**kw):
@@ -41,136 +43,157 @@ def replay(name, **kw):
     return OPENCODE.finalize(inp(**kw), st, oc()), st, shown
 
 
+def parse(lines):
+    st = ParseState()
+    for line in lines:
+        OPENCODE.parse_line(line, st)
+    return st
+
+
 class Settings(unittest.TestCase):
     def test_model_selectable_reasoning_refused(self):
         self.assertTrue(OPENCODE.model_selectable())
-        OPENCODE.validate_settings("opencode-go/glm-5.3", None)
-        OPENCODE.validate_settings("glm-5.3", None)
+        OPENCODE.validate_settings("deepseek/deepseek-flash", None)
         for bad in ((None, "high"), ("a b", None), ("--auto", None)):
             with self.assertRaises(AsError, msg=bad):
                 OPENCODE.validate_settings(*bad)
 
-    def test_policies_are_unsupported(self):
+    def test_policies_are_supported(self):
         mapping = OPENCODE.policy_mapping()
-        self.assertEqual(mapping, {"read_only": None, "workspace_write": None})
-        self.assertEqual(OPENCODE.describe({"PATH": ""})["policies"],
-                         {"read_only": "unsupported", "workspace_write": "unsupported"})
+        self.assertEqual(set(mapping), {"read_only", "workspace_write"})
+        for policy, flags in mapping.items():
+            self.assertIsNotNone(flags)
+            self.assertEqual(flags[0], "OPENCODE_CONFIG_CONTENT")
+            rules = json.loads(flags[1])["permissions"]
+            self.assertIn({"action": "edit", "resource": "*", "effect": "deny"
+                           if policy == "read_only" else "allow"}, rules)
+        self.assertEqual(OPENCODE.describe({"PATH": ""})["policies"]["read_only"][0], "OPENCODE_CONFIG_CONTENT")
 
     def test_capabilities(self):
         caps = OPENCODE.capabilities()
         self.assertEqual((caps["headless"], caps["structuredProgress"], caps["structuredFinal"]), (True, True, True))
         self.assertEqual((caps["resume"], caps["interactiveInput"]), ("unsupported", "unsupported"))
-        self.assertFalse(OPENCODE.supports_deep_probe())
+        self.assertTrue(OPENCODE.supports_deep_probe())
+
+    def test_policy_rules_keep_shell_opt_in(self):
+        ro = oc_mod.policy_rules("read_only", False)
+        self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, ro)
+        ro_cmd = oc_mod.policy_rules("read_only", True)
+        self.assertIn({"action": "shell", "resource": "git status *", "effect": "allow"}, ro_cmd)
+        self.assertIn({"action": "shell", "resource": "python3 -m unittest *", "effect": "allow"}, ro_cmd)
+        ww = oc_mod.policy_rules("workspace_write", False)
+        self.assertIn({"action": "edit", "resource": "*", "effect": "allow"}, ww)
+        self.assertIn({"action": "external_directory", "resource": "*", "effect": "deny"}, ww)
+        self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, ww)
+        ww_cmd = oc_mod.policy_rules("workspace_write", True)
+        self.assertEqual(ww_cmd[-1], {"action": "shell", "resource": "*", "effect": "allow"})
 
 
-class Executable(unittest.TestCase):
-    def test_path_then_installer_fallback(self):
-        with mock.patch.object(oc_mod, "_install_fallback",
-                               return_value=os.path.join(tempfile.mkdtemp(), "opencode")):
-            self.addCleanup(shutil.rmtree, os.path.dirname(oc_mod._install_fallback()), True)
-            self.assertIsNone(OPENCODE.executable({"PATH": "/nonexistent"}))
-            bin_dir = tempfile.mkdtemp()
-            self.addCleanup(shutil.rmtree, bin_dir, True)
-            self.assertIsNone(OPENCODE.executable({"PATH": bin_dir}))
-            fake = os.path.join(bin_dir, "opencode")
-            shutil.copy(os.path.join(FIX, "bin", "opencode"), fake)
-            os.chmod(fake, 0o755)
-            self.assertEqual(OPENCODE.executable({"PATH": bin_dir}), fake)
-
-    def test_installer_fallback_finds_the_real_binary(self):
-        real = os.path.expanduser("~/.opencode/bin/opencode")
-        if not os.path.isfile(real):
-            self.skipTest("opencode is not installed in this environment")
-        self.assertEqual(os.path.realpath(OPENCODE.executable({"PATH": "/nonexistent"})),
-                         os.path.realpath(real))
-
-    def test_prepare_refuses_unsupported_policy(self):
-        with mock.patch.object(oc_mod, "_install_fallback",
-                               return_value=os.path.join(tempfile.mkdtemp(), "opencode")):
-            with self.assertRaises(AsError) as caught:
-                OPENCODE.prepare(inp(), {"PATH": "/nonexistent"})
-        self.assertEqual(caught.exception.code, "POLICY_UNSUPPORTED")
-
-
-class Argv(unittest.TestCase):
-    """The argv shape is fully specified (verified flags) even though policies keep it unused today."""
-
+class Fixture(unittest.TestCase):
     def setUp(self):
-        fallback = os.path.join(tempfile.mkdtemp(), "opencode")  # isolate from a real ~/.opencode install
-        patcher = mock.patch.object(oc_mod, "_install_fallback", return_value=fallback)
+        self.fallback = os.path.join(tempfile.mkdtemp(), "opencode")
+        patcher = mock.patch.object(oc_mod, "_install_fallback", return_value=self.fallback)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.addCleanup(shutil.rmtree, os.path.dirname(fallback), True)
+        self.addCleanup(shutil.rmtree, os.path.dirname(self.fallback), True)
         self.bin = tempfile.mkdtemp()
-        shutil.copy(os.path.join(FIX, "bin", "opencode"), os.path.join(self.bin, "opencode"))
-        os.chmod(os.path.join(self.bin, "opencode"), 0o755)
-        self.env = {"PATH": self.bin + ":/usr/bin:/bin"}
-
-    def tearDown(self):
-        shutil.rmtree(self.bin)
-
-    def argv(self, **kw):
-        return OPENCODE.prepare(inp(**kw), self.env).argv
-
-    def test_shape_once_policies_exist(self):
-        # pin the shape against the adapter's own construction, bypassing the policy refusal
-        import unittest.mock as mock
-        with mock.patch.object(oc_mod.OpenCodeAdapter, "policy_mapping",
-                               return_value={"read_only": ["--flag-ro"], "workspace_write": ["--flag-ww"]}):
-            a = OPENCODE.prepare(inp(), self.env).argv
-            self.assertEqual(a[0], os.path.join(self.bin, "opencode"))
-            self.assertEqual(a[1:4], ["run", "--standalone", "--format"])
-            self.assertEqual(a[a.index("--format") + 1], "json")
-            self.assertEqual(a[a.index("--log-level") + 1], "none")
-            self.assertNotIn("/tmp", a)  # the workspace is the working directory, never an argument
-            p = OPENCODE.prepare(inp(ws="/work/space"), self.env)
-            self.assertEqual((p.cwd, p.stdin_path), ("/work/space", "/tmp/p.txt"))
-
-    def test_model_selection(self):
-        import unittest.mock as mock
-        with mock.patch.object(oc_mod.OpenCodeAdapter, "policy_mapping",
-                               return_value={"read_only": [], "workspace_write": []}):
-            a = OPENCODE.prepare(inp(model="opencode-go/glm-5.3"), self.env).argv
-            self.assertEqual(a[a.index("--model") + 1], "opencode-go/glm-5.3")
-            self.assertNotIn("--model", OPENCODE.prepare(inp(), self.env).argv)
-
-    def test_never_flags(self):
-        import unittest.mock as mock
-        with mock.patch.object(oc_mod.OpenCodeAdapter, "policy_mapping",
-                               return_value={"read_only": ["--auto", "-c"], "workspace_write": []}), \
-                self.assertRaises(AsError) as caught:
-            OPENCODE.prepare(inp(), self.env)
-        self.assertEqual(caught.exception.code, "BAD_ADAPTER")
-
-
-class Probe(unittest.TestCase):
-    def setUp(self):
-        fallback = os.path.join(tempfile.mkdtemp(), "opencode")
-        patcher = mock.patch.object(oc_mod, "_install_fallback", return_value=fallback)
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.addCleanup(shutil.rmtree, os.path.dirname(fallback), True)
-        self.bin = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bin, True)
         shutil.copy(os.path.join(FIX, "bin", "opencode"), os.path.join(self.bin, "opencode"))
         os.chmod(os.path.join(self.bin, "opencode"), 0o755)
         self.env = {"PATH": self.bin + ":/usr/bin:/bin", "HOME": tempfile.mkdtemp()}
-
-    def tearDown(self):
-        shutil.rmtree(self.bin)
+        self.addCleanup(shutil.rmtree, self.env["HOME"], True)
 
     def ctl(self, **kw):
         with open(os.path.join(self.bin, "fake-opencode.json"), "w") as f:
             json.dump(kw, f)
         oc_mod._inspect_cache.clear()
 
-    def test_gap_is_reported_with_version_and_auth(self):
+
+class Executable(Fixture):
+    def test_path_then_installer_fallback(self):
+        self.assertIsNone(OPENCODE.executable({"PATH": "/nonexistent"}))
+        self.assertEqual(OPENCODE.executable({"PATH": self.bin}), os.path.join(self.bin, "opencode"))
+
+    def test_installer_fallback_finds_the_real_binary(self):
+        real = os.path.expanduser("~/.opencode/bin/opencode")
+        if not os.path.isfile(real):
+            self.skipTest("opencode is not installed in this environment")
+        with mock.patch.object(oc_mod, "_install_fallback", return_value=real):
+            self.assertEqual(os.path.realpath(OPENCODE.executable({"PATH": "/nonexistent"})), os.path.realpath(real))
+
+    def test_prepare_refuses_an_unknown_policy(self):
+        with self.assertRaises(AsError) as caught:
+            OPENCODE.prepare(inp(policy="unrestricted"), self.env)
+        self.assertEqual(caught.exception.code, "POLICY_UNSUPPORTED")
+
+
+class Argv(Fixture):
+    def argv(self, **kw):
+        return OPENCODE.prepare(inp(**kw), self.env)
+
+    def rules(self, prep):
+        return json.loads(prep.extra_env["OPENCODE_CONFIG_CONTENT"])["permissions"]
+
+    def test_shape_and_permission_injection(self):
+        p = self.argv()
+        self.assertEqual(p.argv[0], os.path.join(self.bin, "opencode"))
+        self.assertEqual(p.argv[1:4], ["run", "--standalone", "--format"])
+        self.assertEqual(p.argv[p.argv.index("--format") + 1], "json")
+        self.assertEqual(p.argv[p.argv.index("--log-level") + 1], "none")
+        self.assertNotIn("/tmp", p.argv)  # the workspace is the working directory, never an argument
+        for flag in oc_mod.NEVER:
+            self.assertNotIn(flag, p.argv)
+        self.assertEqual((p.cwd, p.stdin_path), ("/tmp", "/tmp/p.txt"))
+        self.assertEqual(p.extra_env[oc_mod.PROJECT_CONFIG_ENV], "1")
+        self.assertIn({"action": "edit", "resource": "*", "effect": "deny"}, self.rules(p))
+        self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, self.rules(p))
+
+    def test_workspace_write_allows_edits(self):
+        p = self.argv(policy="workspace_write", ws="/work/space")
+        self.assertEqual(p.cwd, "/work/space")
+        rules = self.rules(p)
+        self.assertIn({"action": "edit", "resource": "*", "effect": "allow"}, rules)
+        self.assertIn({"action": "external_directory", "resource": "*", "effect": "deny"}, rules)
+        self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, rules)
+
+    def test_commands_opt_in(self):
+        ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, True)
+        os.makedirs(os.path.join(ws, ".agent-studio"))
+        with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
+            json.dump({"version": 1, "opencode": {"commands": True}}, f)
+        p = self.argv(policy="workspace_write", ws=ws)
+        self.assertEqual(self.rules(p)[-1], {"action": "shell", "resource": "*", "effect": "allow"})
+        ro = self.argv(policy="read_only", ws=ws)
+        self.assertIn({"action": "shell", "resource": "git status *", "effect": "allow"}, self.rules(ro))
+        self.assertNotIn({"action": "shell", "resource": "*", "effect": "allow"}, self.rules(ro))
+
+    def test_model_selection(self):
+        p = self.argv(model="deepseek/deepseek-flash")
+        self.assertEqual(p.argv[p.argv.index("--model") + 1], "deepseek/deepseek-flash")
+        self.assertNotIn("--model", self.argv().argv)
+
+    def test_mcp_config_is_per_assignment(self):
+        p = self.argv(mcp_tickets=True)
+        config = json.loads(p.extra_env["OPENCODE_CONFIG_CONTENT"])
+        server = config["mcp"]["servers"]["agent-studio"]
+        self.assertEqual(server["type"], "local")
+        self.assertEqual(server["command"][1:3], ["-s", os.path.join(os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", "launch.py")])
+        self.assertEqual(server["environment"]["AGENT_STUDIO_ASSIGNMENT"], "a" * 8)
+        self.assertEqual(server["environment"]["AGENT_STUDIO_AGENT"], "b" * 8)
+        self.assertFalse(server["codemode"])
+        self.assertNotIn("mcp", json.loads(self.argv().extra_env["OPENCODE_CONFIG_CONTENT"]))
+
+
+class Probe(Fixture):
+    def test_available_with_policies_and_auth(self):
         p = OPENCODE.probe(self.env)
-        self.assertEqual((p["code"], p["version"], p["executable"]),
-                         ("CAPABILITY_GAP", "2.1.4", os.path.join(self.bin, "opencode")))
-        self.assertIn("no run-scoped permission configuration", p["reason"])
-        self.assertIn("providers/opencode/CONTRACT.md", p["reason"])
-        self.assertTrue(p["login"]["loggedIn"])  # auth is checked before the gap is reported
-        self.assertEqual(p["login"]["method"], "OpenCode")  # the stand-in's stored credential
+        self.assertTrue(p["available"], p)
+        self.assertEqual((p["version"], p["executable"]), ("2.2.5", os.path.join(self.bin, "opencode")))
+        self.assertEqual(p["login"], {"loggedIn": True, "method": "OpenCode"})
+        self.assertNotIn("unsupported", p["policies"].values())
+        self.assertFalse(p["authVerified"])  # a shallow probe never claims a deep proof
 
     def test_not_found_and_auth_required(self):
         empty = tempfile.mkdtemp()
@@ -181,31 +204,40 @@ class Probe(unittest.TestCase):
         self.assertEqual(p["code"], "AUTH_REQUIRED")
         self.assertIn("auth login", p["reason"])
 
-    def test_missing_flags_are_a_gap_too(self):
+    def test_missing_flags_are_a_gap(self):
         self.ctl(dropFlags=["--standalone"])
         p = OPENCODE.probe(self.env)
         self.assertEqual(p["code"], "CAPABILITY_GAP")
         self.assertIn("--standalone", p["reason"])
 
-
+    def test_missing_config_injection_is_a_gap(self):
+        self.ctl(noConfigInjection=True)
+        p = OPENCODE.probe(self.env)
+        self.assertEqual(p["code"], "CAPABILITY_GAP")
+        self.assertIn("OPENCODE_CONFIG_CONTENT", p["reason"])
+        self.assertTrue(p["login"]["loggedIn"])  # auth is checked before the gap is reported
 
 
 class RealCli(unittest.TestCase):
-    """Against the real installed CLI: version parsed, auth checked, gap reported."""
+    """Against the real installed CLI: version, flag and config-injection checks."""
 
-    def test_probe_reports_the_recorded_gap(self):
+    def test_probe_reports_injection_and_policies(self):
         real = os.path.expanduser("~/.opencode/bin/opencode")
         if not os.path.isfile(real):
             self.skipTest("opencode is not installed in this environment")
+        oc_mod._inspect_cache.clear()
+        info = OPENCODE.inspect({"PATH": "/nonexistent", "HOME": os.path.expanduser("~")})
+        self.assertEqual(info["path"], real)
+        self.assertRegex(info["version"], r"^\d+\.\d+\.\d+")
+        self.assertTrue(info["configInjection"])
+        self.assertEqual(info["missingFlags"], [])
         p = OPENCODE.probe({"PATH": "/nonexistent", "HOME": os.path.expanduser("~")})
-        self.assertEqual(p["executable"], real)
-        self.assertEqual(p["version"], "2.1.4")
-        self.assertEqual(p["code"], "CAPABILITY_GAP")  # the recorded gap, not a resolution failure
-        self.assertTrue(p["login"]["loggedIn"])  # the stored credential is seen
+        self.assertTrue(p["login"]["loggedIn"] or p["code"] == "AUTH_REQUIRED")
+        self.assertEqual(p["policies"], OPENCODE.describe({})["policies"])
 
 
-class CapturedEvents(unittest.TestCase):
-    """Real v2.1.4 output: a provider error is terminal even though the CLI exits 0."""
+class CapturedErrors(unittest.TestCase):
+    """Old v2.1.4 output: a provider error is terminal even though the CLI exits 0."""
 
     def test_provider_auth_403(self):
         r, st, shown = replay("captured-2.1.4-provider-auth-403.jsonl")
@@ -220,7 +252,7 @@ class CapturedEvents(unittest.TestCase):
         self.assertIn("Privacy settings", r["summary"])
 
     def test_exit_zero_is_never_success_without_a_terminal_event(self):
-        r, _, _ = replay("captured-2.1.4-provider-auth-403.jsonl", )  # exitCode stays 0
+        r, _, _ = replay("captured-2.1.4-provider-auth-403.jsonl")
         self.assertEqual(r["status"], "failed")
 
     def test_malformed_lines(self):
@@ -232,41 +264,75 @@ class CapturedEvents(unittest.TestCase):
         self.assertIsNone(st.terminal)
 
 
-class DocumentedShapes(unittest.TestCase):
-    """Success/tool shapes follow opencode's part model but were never captured (CONTRACT.md). The stand-in
-    emits them; these tests pin the parsing so a runnable model can re-verify them."""
+class CapturedSuccess(unittest.TestCase):
+    """Real v2.2.5 streams (see CONTRACT.md and tests/fixtures/opencode/)."""
 
-    def test_success_needs_the_step_finish_part(self):
-        st = ParseState()
-        for line in (b'{"type":"part","part":{"type":"text","text":"AGENT_STUDIO_OK"}}',
-                     b'{"type":"part","part":{"type":"step-finish","tokens":{"input":10,"output":5}}}'):
-            OPENCODE.parse_line(line, st)
-        r = OPENCODE.finalize(inp(), st, oc())
+    def test_success(self):
+        r, st, shown = replay("captured-2.2.5-success.jsonl")
         self.assertEqual((r["status"], r["summary"]), ("succeeded", "AGENT_STUDIO_OK"))
-        self.assertEqual(r["usage"], {"input": 10, "output": 5})
+        self.assertTrue(st.session_id.startswith("ses_"))
+        self.assertEqual(r["usage"]["input"], 2792)
+        self.assertEqual(r["usage"]["cache_read"], 3968)
+        self.assertIn("total_cost_micro_usd", r["usage"])
+        self.assertTrue(any("message: AGENT_STUDIO_OK" in m for _, m in shown))
 
+    def test_write_then_stop(self):
+        r, st, shown = replay("captured-2.2.5-write-success.jsonl", policy="workspace_write")
+        self.assertEqual((r["status"], r["summary"]), ("succeeded", "DONE"))
+        self.assertTrue(any("tool write completed" in m and "made.txt" in m for _, m in shown))
+        self.assertEqual(st.denials, [])
+
+    def test_intermediate_step_finish_is_not_terminal(self):
+        with open(os.path.join(FIX, "captured-2.2.5-write-success.jsonl"), "rb") as f:
+            lines = [l.rstrip(b"\n") for l in f if l.strip()]
+        first = next(i for i, l in enumerate(lines) if b'"reason":"tool-calls"' in l)
+        st = parse(lines[:first + 1])
+        self.assertIsNone(st.terminal)
+        st = parse(lines)
+        self.assertEqual(st.terminal, {"ok": True, "summary": "DONE"})
+
+    def test_permission_denied_is_waiting_input(self):
+        r, st, shown = replay("captured-2.2.5-permission-denied.jsonl", policy="workspace_write")
+        self.assertEqual((r["status"], r["diagnosticCode"]), ("waiting_input", "PERMISSION_DENIED"))
+        self.assertTrue(st.denials)
+        self.assertIn("write: Permission denied: edit", st.denials[0])
+        self.assertTrue(any(k == "attention" and "permission denied" in m for k, m in shown))
+        self.assertEqual(r["attention"]["kind"], "permission_denied")
+
+    def test_usage_limit(self):
+        r, st, _ = replay("captured-2.2.5-free-limit.jsonl")
+        self.assertEqual((r["status"], r["diagnosticCode"]), ("failed", "USAGE_LIMIT"))
+        self.assertIn("Free usage limit reached", r["summary"])
+        self.assertIn("limitResetAt", r)
+        self.assertTrue(r["limitResetAt"].endswith("Z"))
+
+    def test_default_model_success_is_not_scenario_specific(self):
+        r, _, _ = replay("captured-2.2.5-default-model-success.jsonl")
+        self.assertEqual((r["status"], r["summary"]), ("succeeded", "OK"))
+
+
+class StreamShapes(unittest.TestCase):
     def test_text_without_step_finish_is_inconclusive(self):
-        st = ParseState()
-        OPENCODE.parse_line(b'{"type":"part","part":{"type":"text","text":"half a reply"}}', st)
+        st = parse([b'{"type":"text","part":{"type":"text","text":"half a reply"}}'])
         r = OPENCODE.finalize(inp(), st, oc())
         self.assertEqual(r["status"], "inconclusive")
 
-    def test_tool_error_is_attention_not_denial(self):
+    def test_legacy_part_and_tool_shapes_still_parse(self):
         st, shown = ParseState(), []
         for line in (b'{"type":"part","part":{"type":"tool","tool":"bash","state":"error",'
                      b'"error":"permission denied by policy"}}',
                      b'{"type":"part","part":{"type":"text","text":"I could not run the command."}}',
-                     b'{"type":"part","part":{"type":"step-finish","tokens":{}}}'):
+                     b'{"type":"part","part":{"type":"step-finish","tokens":{"input":10,"output":5}}}'):
             shown += OPENCODE.parse_line(line, st)
-        r = OPENCODE.finalize(inp(), st, oc())
-        self.assertEqual(r["status"], "succeeded")
-        self.assertTrue(any(k == "attention" and "permission denied" in m for k, m in shown))
-        self.assertEqual(st.denials, [])  # a policy-blocked tool result is not a runner-level denial
+        r = OPENCODE.finalize(inp(policy="workspace_write"), st, oc())
+        self.assertEqual(r["status"], "waiting_input")
+        self.assertEqual(st.denials, ["bash: permission denied by policy"])
+        self.assertEqual(r["usage"], {"input": 10, "output": 5})
 
     def test_unknown_events_are_ignored(self):
-        st = ParseState()
-        self.assertEqual(OPENCODE.parse_line(b'{"type":"something.new","x":1}', st), [])
+        st = parse([b'{"type":"something.new","x":1}'])
         self.assertIsNone(st.terminal)
+        self.assertEqual(st.events, 1)
 
 
 if __name__ == "__main__":

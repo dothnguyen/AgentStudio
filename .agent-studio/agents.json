@@ -63,7 +63,7 @@
       "name": "Opencode Deepseek Flash",
       "provider": "opencode",
       "model": "deepseek/deepseek-flash",
-      "description": "Write-capable roles only; workspace isolation is not guaranteed."
+      "description": "Read-only and workspace-write roles; file tools stay inside the workspace."
     }
   ]
 }
