@@ -250,7 +250,8 @@ it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_co
   expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
   // structural CSS contract per breakpoint
   expect(flat).toMatch(/\.teams-overview-summaries \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(220px, 1fr\)\);/);
-  expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1\.2fr\)/);
+  expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: var\(--teams-members-cols\); gap: 16px;/);
+  expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px;');
   expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview-summaries \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
   expect(flat).toMatch(/\.teams-members-scroll \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/\.team-nav :is\(\.team-nav-item, \.team-nav-label[^)]*\), [^{]*\{ overflow-wrap: anywhere; min-width: 0; max-width: 100%; \}/);

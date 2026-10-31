@@ -1022,6 +1022,18 @@ describe('v4 members card', () => {
   const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
   const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'Charlie', presence: 'busy' })];
   const card = (r: { getByRole: (role: string, o: { name: string }) => HTMLElement }) => r.getByRole('region', { name: 'Members' });
+  const EXPECTED_CELLS = ['name', 'role', 'agent', 'availability', 'work', 'chevron-right'];
+  function expectMatchingCells(region: HTMLElement): HTMLElement[] {
+    const head = region.querySelector('.teams-member-list-head')!;
+    expect(head.children).toHaveLength(6);
+    expect(Array.from(head.children).map(el => el.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '']);
+    const rows = Array.from(region.querySelectorAll<HTMLElement>('.teams-member-row'));
+    for (const row of rows) {
+      expect(row.children).toHaveLength(6);
+      expect(Array.from(row.children).map(el => el.getAttribute('data-field') ?? el.getAttribute('data-icon'))).toEqual(EXPECTED_CELLS);
+    }
+    return rows;
+  }
 
   it('members_card_header_has_count_filter_and_primary_add', async () => {
     const { result } = await renderScreen({ overview: [roster(trio())] });
@@ -1045,6 +1057,73 @@ describe('v4 members card', () => {
     const head = card(result).querySelector('.teams-member-list-head')!;
     expect(head.getAttribute('aria-hidden')).toBe('true');
     expect(Array.from(head.querySelectorAll('span')).map(s => s.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '']);
+  });
+
+  it('member_list_header_and_rows_have_matching_cells', async () => {
+    const { result } = await renderScreen({ overview: [roster([
+      member({ memberId: 'dev-1', name: 'dev-1' }),
+      member({ memberId: null, name: 'Anonymous', source: 'runtime' }),
+    ])] });
+    const rows = expectMatchingCells(card(result));
+    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+  });
+
+  it('member_header_and_rows_share_one_table_so_the_grid_template_is_inherited', async () => {
+    const { result } = await renderScreen({ overview: [roster([
+      member({ memberId: 'dev-1', name: 'dev-1' }),
+      member({ memberId: null, name: 'Anonymous', source: 'runtime' }),
+    ])] });
+    const region = card(result);
+    const scroll = region.querySelector('.teams-members-scroll') as HTMLElement;
+    expect(scroll).toBeTruthy();
+    const tables = Array.from(scroll.querySelectorAll<HTMLElement>('.teams-members-table'));
+    expect(tables).toHaveLength(1);
+    const table = tables[0]!;
+    const head = region.querySelector('.teams-member-list-head') as HTMLElement;
+    const list = region.querySelector('.teams-member-list') as HTMLElement;
+    // --teams-members-cols is declared on .teams-members-table, so the header and
+    // every row must live inside it to resolve the shared grid template.
+    expect(head.parentElement).toBe(table);
+    expect(list.parentElement).toBe(table);
+    expect(table.contains(head)).toBe(true);
+    const rows = Array.from(table.querySelectorAll<HTMLElement>('.teams-member-row'));
+    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+    for (const row of rows) {
+      expect(table.contains(row)).toBe(true);
+      expect(row.classList.contains('teams-member-row')).toBe(true);
+      // .teams-member-list > li { display: block; } must be the row's direct parent
+      const li = row.parentElement as HTMLElement;
+      expect(li.tagName).toBe('LI');
+      expect(li.parentElement).toBe(list);
+    }
+  });
+
+  it('member_rows_keep_six_aligned_cells_with_long_text_and_switched_agent', async () => {
+    const LONG = 'verylongunbrokenvalue'.repeat(8);
+    const roleId = `role-${LONG}`;
+    const live = twoTeams().teams[1]!.members[0]!.runtime!;
+    const longMember = member({
+      memberId: 'long-1', name: `Ünï ${LONG}`, role: roleId,
+      runtime: { ...live, activeAgent: 'long-agent', provider: 'codex', model: LONG, reasoning: 'medium' },
+      agentOptions: [
+        member().agentOptions[0]!,
+        { id: 'long-agent', name: `Codex ${LONG}`, provider: 'codex', model: LONG, reasoning: 'medium', description: null, state: 'ok' },
+      ],
+      defaultAgent: 'opencode-sonnet',
+    });
+    const { result } = await renderScreen({
+      overview: [roster([longMember, member({ memberId: null, name: `Static ${LONG}`, source: 'runtime' })])],
+      roles: [{ ok: true, data: rolesFixture({ items: [roleItem(roleId, { name: `Role ${LONG}` })] }) }],
+    });
+    const rows = expectMatchingCells(card(result));
+    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+    const [longRow, staticRow] = rows as [HTMLElement, HTMLElement];
+    expect(longRow.querySelector('[data-field="name"]')!.textContent).toContain(LONG);
+    expect(longRow.querySelector('[data-field="role"]')!.textContent).toContain(`Role ${LONG}`);
+    const agentCell = longRow.querySelector('[data-field="agent"]')!;
+    expect(agentCell.querySelector('[data-part="agent-name"]')!.textContent).toBe(`Codex ${LONG}`);
+    expect(agentCell.querySelector('[data-part="agent-switched"]')!.textContent).toBe('Switched');
+    expect(staticRow.querySelector('[data-field="name"]')!.textContent).toContain(LONG);
   });
 
   it('rows_render_avatar_role_chip_status_dot_and_chevron', async () => {

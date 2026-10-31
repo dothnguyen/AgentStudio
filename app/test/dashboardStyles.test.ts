@@ -28,25 +28,120 @@ function contrastRatio(foreground: string, background: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+interface MediaBlock { width: number; body: string }
+
+// Returns every @media (max-width: Npx) block with its body, brace-balanced so a
+// nested rule cannot cut the block short the way a lazy regex would.
+function readMaxWidthBlocks(text: string): MediaBlock[] {
+  const blocks: MediaBlock[] = [];
+  const opener = /@media \(max-width: (\d+)px\) \{/g;
+  let match: RegExpExecArray | null;
+  while ((match = opener.exec(text)) !== null) {
+    let depth = 1;
+    let index = opener.lastIndex;
+    while (index < text.length && depth > 0) {
+      if (text[index] === '{') depth += 1;
+      else if (text[index] === '}') depth -= 1;
+      index += 1;
+    }
+    blocks.push({ width: Number(match[1]), body: text.slice(opener.lastIndex, index - 1) });
+  }
+  return blocks;
+}
+
 describe('dashboard styles', () => {
   it('member_roster_styles_have_focus_and_selection', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
     expect(flat).toContain('.teams-screen .teams-member-row[aria-current="true"] {');
     expect(flat).toContain('.teams-members-scroll { overflow-x: auto; max-width: 100%; }');
-    expect(flat).toContain('.teams-members-table { min-width: 820px; }');
+    expect(flat).toMatch(/\.teams-members-table \{[^}]*min-width: 820px;/);
     expect(flat).not.toMatch(/\.teams-member-list-head \{[^}]*display: none/);
   });
   it('members_card_uses_v4_values', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-roster { display: flex; flex-direction: column; min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden; }');
-    expect(flat).toContain('grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px; gap: 16px;');
+    expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px;');
+    expect(flat).toContain('grid-template-columns: var(--teams-members-cols); gap: 16px;');
     expect(flat).toContain('text-transform: uppercase; letter-spacing: 0.04em;');
     expect(flat).toContain('background: #5b9cff; color: #0b1220;');
     expect(flat).toContain('color: #f0b453; background: rgba(240, 180, 83, 0.12);');
     expect(flat).toContain('background: #1f2630; color: #9ec3ff;');
     expect(flat).toContain('.teams-screen button.teams-member-row:hover:not(:disabled) { background: #1b1f25;');
   });
+  it('member_rows_fill_the_table_and_share_the_header_columns', () => {
+    const flat = squash(css);
+    const template = 'minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px';
+    expect(flat.split(template)).toHaveLength(2);
+    expect(template.match(/minmax\(0, [\d.]+fr\)|\d+px/g)).toEqual([
+      'minmax(0, 2fr)', 'minmax(0, 1.2fr)', 'minmax(0, 2.2fr)', 'minmax(0, 1fr)', 'minmax(0, 1.1fr)', '28px',
+    ]);
+    const table = /\.teams-members-table \{([^}]*)\}/.exec(flat);
+    expect(table).toBeTruthy();
+    expect(table![1]).toContain(`--teams-members-cols: ${template};`);
+    expect(table![1]).toContain('min-width: 820px;');
+    const shared = /\.teams-member-list-head, \.teams-member-row \{([^}]*)\}/.exec(flat);
+    expect(shared).toBeTruthy();
+    expect(shared![1]).toContain('display: grid;');
+    expect(shared![1]).toContain('grid-template-columns: var(--teams-members-cols);');
+    expect(shared![1]).toContain('gap: 16px;');
+    expect(flat.match(/\.teams-member-list-head, \.teams-member-row \{/g)).toHaveLength(1);
+    expect(flat).toContain('.teams-member-list > li { display: block; min-width: 0; margin: 0; padding: 0; }');
+    const row = /\.teams-screen \.teams-member-row \{([^}]*)\}/.exec(flat);
+    expect(row).toBeTruthy();
+    expect(row![1]).toContain('width: 100%;');
+    expect(row![1]).toContain('box-sizing: border-box;');
+    expect(row![1]).toContain('overflow-wrap: anywhere;');
+    // header text and row cells share the same 16px left padding, so their columns line up
+    expect(flat).toContain('.teams-member-list-head { padding: 10px 16px;');
+    expect(row![1]).toContain('padding: 12px 16px;');
+    expect(flat).toContain('.teams-members-scroll { overflow-x: auto; max-width: 100%; }');
+    // T-095 (6747ad3) deliberately removed the old <=700px one-column member-row
+    // override; P05-S59 step 6 replaced it with horizontal scrolling. Nothing below
+    // 820px may collapse the shared template, so every row stays as wide as the
+    // table (width: 100%) and scrolls with it inside .teams-members-scroll.
+    expect(flat).toContain('@media (max-width: 700px) { .routing-table-wrap { overflow-x: auto; max-width: 100%; } }');
+    expect(flat).not.toMatch(/@media \(max-width: 700px\) \{[^}]*\.teams-member-(row|list-head)/);
+    const scroll = /\.teams-members-scroll \{([^}]*)\}/.exec(flat);
+    expect(scroll).toBeTruthy();
+    expect(scroll![1]).toContain('overflow-x: auto;');
+    expect(scroll![1]).toContain('max-width: 100%;');
+  });
+  it('member_selection_and_hover_paint_the_full_row_without_changing_other_values', () => {
+    const flat = squash(css);
+    const selected = /\.teams-screen \.teams-member-row\[aria-current="true"\] \{([^}]*)\}/.exec(flat);
+    expect(selected).toBeTruthy();
+    expect(selected![1]).toContain('background: #1b1f25;');
+    expect(selected![1]).toContain('box-shadow: inset 2px 0 0 #5b9cff;');
+    expect(selected![1]).not.toMatch(/(^| )(width|max-width|margin|padding):/);
+    const hover = /\.teams-screen button\.teams-member-row:hover:not\(:disabled\) \{([^}]*)\}/.exec(flat);
+    expect(hover).toBeTruthy();
+    expect(hover![1]).toContain('background: #1b1f25;');
+    expect(hover![1]).not.toMatch(/(^| )(width|max-width|margin|padding):/);
+    // long text wraps inside its own grid cell instead of pushing the next column across
+    expect(flat).toContain('.teams-member-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }');
+    expect(flat).toMatch(/\.teams-member-name \{[^}]*overflow-wrap: anywhere;/);
+    expect(flat).toMatch(/\.teams-role-chip \{[^}]*overflow-wrap: anywhere;/);
+    expect(flat).toMatch(/\.teams-member-agent-line \{[^}]*flex-wrap: wrap;/);
+  });
+
+  it('member_columns_are_never_restacked_below_the_scrolling_breakpoint', () => {
+    // T-095 (6747ad3) removed the old <=700px one-column override; P05-S59 step 6
+    // made the card scroll horizontally instead. No narrow-width media block may
+    // reintroduce a per-breakpoint column definition or hide the header, otherwise
+    // rows would stop matching the header the fix just aligned them with.
+    const narrow = readMaxWidthBlocks(css).filter(block => block.width <= 820);
+    expect(narrow.length).toBeGreaterThan(0);
+    for (const block of narrow) {
+      expect(block.body).not.toMatch(/[^{}]*\.teams-member-(row|list-head)[^{}]*\{[^}]*grid-template-columns/);
+      expect(block.body).not.toMatch(/[^{}]*\.teams-member-list-head[^{}]*\{[^}]*display:\s*none/);
+    }
+    // The responsive contract is the scroll container plus the table's min-width.
+    const flat = squash(css);
+    expect(flat).toContain('.teams-members-scroll { overflow-x: auto; max-width: 100%; }');
+    expect(flat).toMatch(/\.teams-members-table \{[^}]*min-width: 820px;/);
+  });
+
   it('removes_the_in_content_team_chooser_styles', () => {
     const flat = squash(css);
     for (const selector of ['.teams-layout', '.teams-list-panel', '.teams-card-list', '.teams-card', '.teams-card-name', '.teams-card-facts']) {
