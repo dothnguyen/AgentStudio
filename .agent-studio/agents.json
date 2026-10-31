@@ -63,7 +63,6 @@
       "name": "Opencode Deepseek Flash",
       "provider": "opencode",
       "model": "deepseek/deepseek-flash",
-      "reasoning": "high",
       "description": "Write-capable roles only; workspace isolation is not guaranteed."
     }
   ]

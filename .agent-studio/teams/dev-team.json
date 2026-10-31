@@ -19,14 +19,18 @@
       "agents": [
         "claude-sonnet-5-5-medium",
         "codex-6-1-terra-medium",
-        "agy-gemini-3-8-flash-medium"
+        "agy-gemini-3-8-flash-medium",
+        "opencode-deepseek-flash"
       ]
     },
     {
       "id": "senior-dev",
       "name": "senior-dev",
       "role": "SeniorDeveloper",
-      "agents": ["claude-opus-5-5-high", "codex-6-1-terra-high"]
+      "agents": [
+        "claude-opus-5-5-high",
+        "codex-6-1-terra-high"
+      ]
     },
     {
       "id": "qa",
@@ -34,7 +38,8 @@
       "role": "QA",
       "agents": [
         "claude-haiku-4-5",
-        "codex-6-1-terra-medium"
+        "codex-6-1-terra-medium",
+        "opencode-deepseek-flash"
       ]
     },
     {
@@ -43,7 +48,8 @@
       "role": "Reviewer",
       "agents": [
         "claude-sonnet-5-5-medium",
-        "codex-6-1-terra-medium"
+        "codex-6-1-terra-medium",
+        "opencode-deepseek-flash"
       ]
     },
     {
