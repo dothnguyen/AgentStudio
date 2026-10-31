@@ -7,9 +7,8 @@ import { RolesScreen } from '../roles/RolesScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
 import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
-import { StudioMark } from '../WorkspacesScreen';
 import { ShellIcon } from './ShellIcon';
-import { DEFAULT_SECTION, NAV_ITEMS, type NavItem } from './navModel';
+import { DEFAULT_SECTION, NAV_ITEMS, workspaceInitials, type NavItem } from './navModel';
 
 export interface WorkspaceShellProps {
   workspace: Workspace;
@@ -114,31 +113,29 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   return (
     <div className="workspace-shell">
       <aside className="workspace-sidebar" aria-label="Workspace sidebar">
-        <header className="workspace-identity">
-          <div className="sidebar-brand">
-            <StudioMark />
-            <span className="sidebar-product">Agent Studio</span>
-          </div>
-          <div className="workspace-label">Workspace</div>
-          <button
-            type="button"
-            className="workspace-selector"
-            aria-label={`Current workspace: ${props.workspace.name} (${props.workspace.path}). Choose another workspace`}
-            onClick={props.onSwitchWorkspace}
-          >
-            <span className="workspace-selector-text">
-              <span className="workspace-name" title={props.workspace.name}>{props.workspace.name}</span>
-              <span className="workspace-path" title={props.workspace.path}>{props.workspace.path}</span>
-            </span>
-            <ShellIcon name="chevron" />
-          </button>
-        </header>
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-tile" aria-hidden="true"><ShellIcon name="terminal" size={15} strokeWidth={2.4} /></span>
+          <span className="sidebar-product">Agent Studio</span>
+        </div>
+        <button
+          type="button"
+          className="workspace-selector"
+          aria-label={`Current workspace: ${props.workspace.name} (${props.workspace.path}). Choose another workspace`}
+          onClick={props.onSwitchWorkspace}
+        >
+          <span className="workspace-avatar" aria-hidden="true">{workspaceInitials(props.workspace.name)}</span>
+          <span className="workspace-selector-text">
+            <span className="workspace-name" title={props.workspace.name}>{props.workspace.name}</span>
+            <span className="workspace-path" title={props.workspace.path}>{props.workspace.path}</span>
+          </span>
+          <ShellIcon name="chevrons-up-down" size={14} strokeWidth={2} className="workspace-selector-chevron" />
+        </button>
         <nav aria-label="Workspace" className="workspace-nav">
           {items.map((item) => (
             <Fragment key={item.id}>
               <button
                 type="button"
-                className="nav-item"
+                className={`nav-item${item.id === 'teams' && sectionId === 'teams' ? ' nav-item-open' : ''}`}
                 ref={item.id === 'teams' ? teamsParentRef : undefined}
                 disabled={item.disabled === true}
                 aria-current={item.id === sectionId && !(item.id === 'teams' && teamChildCurrent && teamsNavigation.selectedKey !== null) ? 'page' : undefined}
@@ -152,11 +149,15 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
               >
                 <ShellIcon name={item.icon ?? 'item'} />
                 <span className="nav-label">{item.label}</span>
+                {item.id === 'teams' && item.disabled !== true && (
+                  <ShellIcon name="chevron" size={14} strokeWidth={2} className="nav-expand-icon" />
+                )}
               </button>
               {item.id === 'teams' && item.disabled !== true && (
                 <WorkspaceTeamNavigation
                   controller={teamsNavigation}
                   active={sectionId === 'teams' && teamChildCurrent}
+                  teamsOpen={sectionId === 'teams'}
                   parentButtonRef={teamsParentRef}
                   newTeam={{
                     disabled: !connected || teamsWritePending || createTeamRequested,
@@ -182,10 +183,12 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
             </Fragment>
           ))}
         </nav>
-        <button type="button" className="switch-workspace" onClick={props.onSwitchWorkspace}>
-          <ShellIcon name="switch" />
-          <span>Switch workspace</span>
-        </button>
+        <div className="sidebar-footer">
+          <button type="button" className="switch-workspace" onClick={props.onSwitchWorkspace}>
+            <ShellIcon name="switch" />
+            <span>Switch workspace</span>
+          </button>
+        </div>
       </aside>
       <main className="workspace-content">
         {section === undefined ? defaultSection : section}

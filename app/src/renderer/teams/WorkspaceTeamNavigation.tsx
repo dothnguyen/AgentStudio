@@ -1,11 +1,14 @@
 import { useEffect, useRef, type JSX, type RefObject } from 'react';
-import { compactTeamState, teamNavigationNotices } from './teamsNavigationModel';
-import { teamLabel } from './teamsModel';
+import { ShellIcon } from '../shell/ShellIcon';
+import { compactTeamState, teamMemberCount, teamNavigationNotices } from './teamsNavigationModel';
+import { runtimeTone, teamLabel } from './teamsModel';
 import type { TeamsNavigationController } from './useTeamsNavigationController';
 
 export interface WorkspaceTeamNavigationProps {
   controller: TeamsNavigationController;
   active: boolean;
+  /** Teams content is open; highlights the selected team row visually. Defaults to `active`. */
+  teamsOpen?: boolean;
   onOpenTeam(teamKey: string): void;
   parentButtonRef: RefObject<HTMLButtonElement | null>;
   /** The single creation trigger; omitted where creation is not offered. */
@@ -21,6 +24,7 @@ export interface WorkspaceTeamNavigationProps {
 
 export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JSX.Element {
   const { controller, active } = props;
+  const teamsOpen = props.teamsOpen ?? active;
   const { overview, data, items, selectedKey } = controller;
   const rows = useRef(new Map<string, HTMLButtonElement>());
   const focusedKey = useRef<string | null>(null);
@@ -67,23 +71,21 @@ export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JS
 
   return (
     <div className="team-nav">
-      {props.newTeam !== undefined && (
-        <button type="button" className="team-nav-new" ref={props.newTeam.buttonRef} disabled={props.newTeam.disabled} aria-disabled={props.newTeam.softDisabled === true ? true : undefined} onClick={props.newTeam.softDisabled === true ? undefined : props.newTeam.onClick}>
-          New team
-        </button>
-      )}
       {items.length > 0 && (
         <ul className="team-nav-list" aria-label="Workspace teams">
           {items.map((item) => {
             const label = teamLabel(item.team);
             const state = compactTeamState(item.team);
-            const name = `Open ${label}, ${state.runtime}${state.definition === null ? '' : `, ${state.definition}`}`;
+            const count = teamMemberCount(item.team);
+            const tone = runtimeTone(item.team.runtime.state);
+            const name = `Open ${label}, ${state.runtime}${state.definition === null ? '' : `, ${state.definition}`}, ${count.label}`;
             const current = active && item.key === selectedKey;
+            const selected = teamsOpen && item.key === selectedKey;
             return (
               <li key={item.key}>
                 <button
                   type="button"
-                  className={`team-nav-item${current ? ' team-nav-item-current' : ''}`}
+                  className={`team-nav-item${selected ? ' team-nav-item-selected' : ''}${current ? ' team-nav-item-current' : ''}`}
                   aria-label={name}
                   aria-current={current ? 'page' : undefined}
                   title={label}
@@ -96,14 +98,22 @@ export function WorkspaceTeamNavigation(props: WorkspaceTeamNavigationProps): JS
                   onBlur={(event) => { if (event.relatedTarget !== null && focusedKey.current === item.key) focusedKey.current = null; }}
                   onClick={() => props.onOpenTeam(item.key)}
                 >
+                  <span className={`team-nav-dot team-nav-dot-${tone}`} aria-hidden="true" />
                   <span className="team-nav-label">{label}</span>
-                  <span className="team-nav-state">{state.runtime}</span>
+                  <span className="team-nav-state visually-hidden">{state.runtime}</span>
+                  <span className="team-nav-count" aria-hidden="true">{count.text}</span>
                   {state.definition !== null && <span className="team-nav-warning">{state.definition}</span>}
                 </button>
               </li>
             );
           })}
         </ul>
+      )}
+      {props.newTeam !== undefined && (
+        <button type="button" className="team-nav-new" ref={props.newTeam.buttonRef} disabled={props.newTeam.disabled} aria-disabled={props.newTeam.softDisabled === true ? true : undefined} onClick={props.newTeam.softDisabled === true ? undefined : props.newTeam.onClick}>
+          <ShellIcon name="plus" size={13} strokeWidth={2} />
+          <span>New team</span>
+        </button>
       )}
       {status}
       {overview.state === 'error' && (

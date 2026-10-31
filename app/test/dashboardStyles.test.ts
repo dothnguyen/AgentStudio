@@ -43,19 +43,29 @@ describe('dashboard styles', () => {
     }
   });
 
-  it('sidebar_team_navigation_is_compact_wraps_and_has_visible_focus', () => {
+  it('sidebar_team_navigation_matches_v4', () => {
     const flat = squash(css);
-    expect(flat).toMatch(/\.team-nav \{[^}]*margin: 0 0 4px 18px;[^}]*border-left: 1px solid var\(--border\);/);
-    expect(flat).toMatch(/\.team-nav-item \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/);
-    expect(flat).toMatch(/\.team-nav-label \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/);
-    expect(flat).toMatch(/\.team-nav-state, \.team-nav-warning, \.team-nav-status[^{]*\{[^}]*overflow-wrap: anywhere;/);
-    expect(flat).toMatch(/\.team-nav-item-current \{[^}]*box-shadow: inset 3px 0 var\(--focus\);/);
+    expect(flat).toMatch(/\.team-nav \{[^}]*margin: 2px 0 6px 18px;[^}]*padding-left: 10px;[^}]*border-left: 1px solid #23262c;/);
+    expect(flat).toMatch(/\.team-nav-dot \{[^}]*width: 7px;[^}]*height: 7px;[^}]*border-radius: 50%;/);
+    expect(flat).toContain('.team-nav-dot-ok { background: #4ac26b; }');
+    expect(flat).toMatch(/\.team-nav-label \{[^}]*min-width: 0;[^}]*text-overflow: ellipsis;/);
+    expect(flat).toMatch(/\.team-nav-count \{[^}]*color: #a3a9b2;[^}]*font-size: 11px;/);
+    expect(flat).toMatch(/button\.team-nav-item-selected[^{]*\{[^}]*background: rgba\(91, 156, 255, 0\.14\);/);
+    expect(flat).toMatch(/\.team-nav-warning \{[^}]*overflow-wrap: anywhere;/);
     expect(flat).toContain('.team-nav :is(button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
-    const rules = flat.match(/\.team-nav[^{]*\{[^}]*\}/g) ?? [];
-    expect(rules.length).toBeGreaterThan(5);
-    for (const rule of rules) {
-      expect(rule).not.toMatch(/overflow-x: ?scroll|white-space: ?nowrap|display: ?none|(?<![\w-])width: ?\d+px/);
-    }
+    expect(flat).toMatch(/\.visually-hidden \{[^}]*position: absolute;[^}]*clip-path: inset\(50%\);/);
+  });
+
+  it('sidebar_matches_v4_shell_values', () => {
+    const flat = squash(css);
+    expect(flat).toMatch(/\.workspace-sidebar \{[^}]*gap: 18px;[^}]*border-right: 1px solid #23262c;[^}]*background: #0d0f12;/);
+    expect(flat).toMatch(/\.sidebar-brand-tile \{[^}]*width: 26px;[^}]*height: 26px;[^}]*border-radius: 7px;[^}]*background: #5b9cff;/);
+    expect(flat).toMatch(/\.workspace-selector \{[^}]*padding: 10px;[^}]*border: 1px solid #23262c;[^}]*border-radius: 8px;[^}]*background: #14171b;/);
+    expect(flat).toMatch(/\.workspace-avatar \{[^}]*width: 28px;[^}]*height: 28px;[^}]*background: #1f2630;/);
+    expect(flat).toMatch(/\.workspace-sidebar nav button \{[^}]*padding: 8px 10px;[^}]*color: #b9bec6;[^}]*border-radius: 6px;/);
+    expect(flat).toMatch(/\.sidebar-footer \{[^}]*margin-top: auto;[^}]*padding-top: 12px;[^}]*border-top: 1px solid #23262c;/);
+    expect(flat).toMatch(/\.workspace-shell \{[^}]*grid-template-columns: 240px minmax\(0, 1fr\);/);
+    expect(flat).toMatch(/@media \(max-width: 700px\) \{ \.workspace-shell \{ grid-template-columns: 220px minmax\(0, 1fr\); \} \}/);
   });
 
   it('home_grid_puts_wide_board_beside_team_and_stacks_at_1080px', () => {
@@ -81,12 +91,12 @@ describe('dashboard styles', () => {
     expect(flat).toMatch(/\.workspace-sidebar \{[^}]*overflow-y: auto/);
     const sidebarRule = /\.workspace-sidebar \{[^}]*\}/.exec(flat)![0];
     expect(sidebarRule).not.toContain('overflow: hidden');
-    expect(flat).toMatch(/\.switch-workspace \{[^}]*margin-top: auto/);
+    expect(flat).toMatch(/\.sidebar-footer \{[^}]*margin-top: auto/);
     expect(flat).toMatch(/\.dashboard-header \{[^}]*flex-wrap: wrap/);
     expect(flat).toMatch(/\.breadcrumb ol \{[^}]*flex-wrap: wrap/);
     expect(flat).toMatch(/\.dashboard-workspace-name \{[^}]*overflow-wrap: anywhere/);
     expect(flat).toMatch(/\.workspace-name, \.workspace-path \{[^}]*text-overflow: ellipsis/);
-    expect(flat).toMatch(/\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*box-shadow: inset 3px 0/);
+    expect(flat).toMatch(/\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*background: #181b20;[^}]*font-weight: 500;/);
     expect(flat).toMatch(/button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\)/);
   });
 
@@ -112,7 +122,11 @@ describe('dashboard styles', () => {
       ['--success-text on --surface', readToken('--success-text'), readToken('--surface')],
       ['--link on --surface', readToken('--link'), readToken('--surface')],
       ['--info-text on --info-bg', readToken('--info-text'), readToken('--info-bg')],
-      ['active nav text', readToken('--text-bright'), readToken('--nav-active-bg')],
+      ['active nav text', '#e7e9ec', '#181b20'],
+      ['sidebar nav text', '#b9bec6', '#0d0f12'],
+      ['team count', '#a3a9b2', '#0d0f12'],
+      ['workspace path', '#8d949e', '#14171b'],
+      ['selected team text', '#e7e9ec', '#182333'],
     ];
     for (const [label, foreground, background] of pairs) {
       expect(contrastRatio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
@@ -219,7 +233,7 @@ describe('dashboard styles', () => {
       for (const match of body.matchAll(/(?<![\w-])(?:min-)?width:\s*(\d+)px/g)) {
         expect(Number(match[1]), rule.selector).toBeLessThanOrEqual(360);
       }
-      if (!rule.selector.includes('activity-')) expect(rule.body, rule.selector).not.toMatch(/white-space:\s*nowrap/);
+      if (!rule.selector.includes('activity-') && !rule.selector.endsWith('.team-nav-label')) expect(rule.body, rule.selector).not.toMatch(/white-space:\s*nowrap/);
     }
   });
 

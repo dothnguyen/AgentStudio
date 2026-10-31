@@ -26,3 +26,10 @@ export function teamNavigationNotices(data: TeamOverview): string[] {
   if (data.partial) notices.push('Some team navigation data is unavailable.');
   return notices;
 }
+
+/** Visible count text and its accessible label for a team row. */
+export function teamMemberCount(team: OverviewTeam): { text: string; label: string } {
+  const n = team.members.length;
+  if (team.membersTruncated === true) return { text: `${n}+`, label: `${n}+ members` };
+  return { text: String(n), label: plural(n, 'member', 'members') };
+}

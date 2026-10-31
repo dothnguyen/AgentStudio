@@ -144,7 +144,7 @@ describe('v4 visual foundation', () => {
     expect(flat).toMatch(/button \{[^}]*border-radius: var\(--radius-control\);[^}]*background: var\(--surface\);/);
     expect(/button\.primary \{[^}]*\}/.exec(flat)![0]).toContain('color: var(--accent-text);');
     expect(flat).toMatch(
-      /\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*background: var\(--nav-active-bg\);[^}]*box-shadow: inset 3px 0 var\(--accent\);/,
+      /\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*background: #181b20;[^}]*font-weight: 500;/,
     );
     for (const value of ['#0e639c', '#1177bb', '#007fd4', '#4daafc', '#89d185', '#04395e', '#095a8d', '#2584c6', '#181818', '#1f1f1f']) {
       expect(css).not.toContain(value);

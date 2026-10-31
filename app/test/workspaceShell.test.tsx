@@ -304,14 +304,20 @@ describe('WorkspaceShell', () => {
     expect(currentButtons(result.container)).toEqual([result.getByRole('button', { name: 'Home' })]);
   });
 
-  it('renders brand, workspace label and selector with full accessible text', () => {
+  it('renders_v4_brand_tile_and_workspace_card', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const sidebar = result.getByRole('complementary', { name: 'Workspace sidebar' });
     expect(within(sidebar).getByText('Agent Studio')).toBeTruthy();
-    expect(within(sidebar).getByText('Workspace')).toBeTruthy();
-    expect(result.getByRole('button', {
+    expect(sidebar.querySelector('.sidebar-brand-tile svg[data-icon="terminal"]')).toBeTruthy();
+    expect(sidebar.querySelector('.sidebar-brand-tile')?.getAttribute('aria-hidden')).toBe('true');
+    expect(sidebar.querySelector('.workspace-label')).toBeNull();
+    const avatar = sidebar.querySelector('.workspace-avatar');
+    expect(avatar?.textContent).toBe('AV');
+    expect(avatar?.getAttribute('aria-hidden')).toBe('true');
+    const selector = result.getByRole('button', {
       name: 'Current workspace: A very long workspace name (/home/me/a/very/long/path). Choose another workspace',
-    })).toBeTruthy();
+    });
+    expect(selector.querySelector('svg[data-icon="chevrons-up-down"]')).toBeTruthy();
     expect(result.container.querySelector('.workspace-name')?.getAttribute('title')).toBe(workspace.name);
     expect(result.container.querySelector('.workspace-path')?.getAttribute('title')).toBe(workspace.path);
   });
@@ -356,6 +362,7 @@ describe('WorkspaceShell', () => {
     const last = buttons[buttons.length - 1];
     expect(result.getByRole('button', { name: 'Switch workspace' })).toBe(last);
     expect(last.querySelector('svg[aria-hidden="true"]')).toBeTruthy();
+    expect(last.parentElement?.classList.contains('sidebar-footer')).toBe(true);
   });
 
   it('keeps one main, the Workspace nav and the sidebar landmark', () => {
@@ -543,7 +550,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Teams');
     expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
-    expect(rows(view).filter((r) => r.getAttribute('aria-current') === 'page').map((r) => r.getAttribute('aria-label'))).toEqual(['Open Release Team, Stopped']);
+    expect(rows(view).filter((r) => r.getAttribute('aria-current') === 'page').map((r) => r.getAttribute('aria-label'))).toEqual(['Open Release Team, Stopped, 1 member']);
     expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
     expect(currentButtons(view.container)).toHaveLength(1);
     expect(view.queryByRole('list', { name: 'Choose a team' })).toBeNull();
@@ -557,18 +564,97 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     teamsButton(view).focus();
     await userEvent.tab();
-    expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
-    await userEvent.tab();
     expect(document.activeElement).toBe(row(view, 'Dev Team'));
     await userEvent.tab();
     expect(document.activeElement).toBe(row(view, 'Release Team'));
     await userEvent.keyboard('{Enter}');
     expect(view.getByRole('heading', { level: 2, name: 'Release Team' })).toBeTruthy();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(row(view, 'Release Team'));
     await userEvent.tab({ shift: true });
     expect(document.activeElement).toBe(row(view, 'Dev Team'));
     await userEvent.keyboard(' ');
     expect(view.getByRole('heading', { level: 2, name: 'Dev Team' })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(1);
+  });
+
+  it('new_team_follows_the_team_rows', async () => {
+    const view = render(ui(fakeManagement()));
+    await settle();
+    const labels = Array.from(view.container.querySelectorAll('.team-nav button')).map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(labels).toEqual(['Open Dev Team, Running, 2 members', 'Open Release Team, Stopped, 1 member', 'New team']);
+    const newTeam = view.getByRole('button', { name: 'New team' });
+    expect(newTeam.querySelector('svg[data-icon="plus"]')?.getAttribute('aria-hidden')).toBe('true');
+    const list = view.container.querySelector('.team-nav-list')!;
+    expect(list.compareDocumentPosition(newTeam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('team_rows_show_tone_dot_hidden_state_and_member_count', async () => {
+    const overview = overviewFixture([
+      running(team({ id: 'a', name: 'Alpha', members: [member(), member({ memberId: 'b', name: 'b' })] })),
+      team({ id: 's', name: 'Stopped team', runtime: { state: 'stopped', teamId: 't-s', status: 'stopped' } }),
+      team({ id: 'e', name: 'Broken', runtime: { state: 'error', teamId: 't-e', status: 'error' }, definition: { state: 'problems', problems: [] } as never }),
+      team({ id: 'm', name: 'Many', membersTruncated: true }),
+    ]);
+    const view = render(ui(fakeManagement({ overview: [ok(overview)] })));
+    await settle();
+    const all = rows(view);
+    expect(all.map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Open Alpha, Running, 2 members',
+      'Open Stopped team, Stopped, 1 member',
+      'Open Broken, Error, Definition has problems, 1 member',
+      'Open Many, Not started, 1+ members',
+    ]);
+    const dots = all.map((r) => r.querySelector('.team-nav-dot')!);
+    expect(dots.map((d) => d.className)).toEqual([
+      'team-nav-dot team-nav-dot-ok', 'team-nav-dot team-nav-dot-muted', 'team-nav-dot team-nav-dot-danger', 'team-nav-dot team-nav-dot-muted',
+    ]);
+    expect(dots.every((d) => d.getAttribute('aria-hidden') === 'true')).toBe(true);
+    const states = all.map((r) => r.querySelector('.team-nav-state')!);
+    expect(states.map((e) => e.textContent)).toEqual(['Running', 'Stopped', 'Error', 'Not started']);
+    expect(states.every((e) => e.classList.contains('visually-hidden'))).toBe(true);
+    const counts = all.map((r) => r.querySelector('.team-nav-count')!);
+    expect(counts.map((e) => e.textContent)).toEqual(['2', '1', '1', '1+']);
+    expect(counts.every((e) => e.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(all[2].querySelector('.team-nav-warning')?.textContent).toBe('Definition has problems');
+    for (const r of all) expect(r.getAttribute('title')).toBe(r.querySelector('.team-nav-label')!.textContent);
+  });
+
+  it('selected_team_row_and_open_teams_parent_use_v4_classes', async () => {
+    const view = render(ui(fakeManagement()));
+    await settle();
+    fireEvent.click(row(view, 'Release Team'));
+    await settle();
+    expect(row(view, 'Release Team').classList.contains('team-nav-item-selected')).toBe(true);
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(teamsButton(view).classList.contains('nav-item-open')).toBe(true);
+    expect(teamsButton(view).getAttribute('aria-current')).toBeNull();
+    fireEvent.click(teamsButton(view));
+    await settle();
+    expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
+    expect(teamsButton(view).classList.contains('nav-item-open')).toBe(true);
+    expect(row(view, 'Release Team').classList.contains('team-nav-item-selected')).toBe(true);
+    expect(row(view, 'Release Team').getAttribute('aria-current')).toBeNull();
+    expect(view.container.querySelectorAll('button[aria-current="page"]')).toHaveLength(1);
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    await settle();
+    expect(view.container.querySelector('.nav-item-open')).toBeNull();
+    expect(view.container.querySelector('.team-nav-item-selected')).toBeNull();
+  });
+
+  it('teams_parent_shows_expanded_chevron_only_on_teams', async () => {
+    const view = render(ui(fakeManagement()));
+    await settle();
+    const teams = teamsButton(view);
+    expect(teams.querySelectorAll('svg')).toHaveLength(2);
+    expect(teams.querySelector('svg')?.getAttribute('data-icon')).toBe('teams');
+    expect(teams.querySelector('svg[data-icon="chevron"]')).toBeTruthy();
+    expect(teams.textContent).toBe('Teams');
+    for (const name of ['Home', 'Agents', 'Roles', 'Boards', 'Configuration']) {
+      expect(view.getByRole('button', { name }).querySelectorAll('svg')).toHaveLength(1);
+    }
   });
 
   it('teams_parent_is_current_until_a_sidebar_child_is_opened', async () => {
@@ -690,7 +776,7 @@ describe('T-084 sidebar team navigation', () => {
     const data = overviewFixture([team({ id: 'untrusted', name })], { partial: true, truncated: true });
     const view = render(ui(fakeManagement({ overview: [ok(data)] })));
     await settle();
-    const button = view.getByRole('button', { name: `Open ${name}, Not started` });
+    const button = view.getByRole('button', { name: `Open ${name}, Not started, 1 member` });
     expect(button.querySelector('img')).toBeNull();
     expect(button.textContent).toContain(name);
     expect(view.getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
@@ -809,7 +895,7 @@ describe('T-084 sidebar team navigation', () => {
     ], { partial: true, truncated: true }))] })));
     await settle();
     const longRow = rows(incomplete)[0]!;
-    expect(longRow.getAttribute('aria-label')).toBe(`Open ${longName}, Runtime unavailable, Definition unreadable`);
+    expect(longRow.getAttribute('aria-label')).toBe(`Open ${longName}, Runtime unavailable, Definition unreadable, 1 member`);
     expect(longRow.querySelector('.team-nav-label')!.textContent).toBe(longName);
     expect(longRow.getAttribute('title')).toBe(longName);
     expect(incomplete.getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();

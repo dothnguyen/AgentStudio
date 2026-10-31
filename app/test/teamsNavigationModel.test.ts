@@ -3,6 +3,7 @@ import {
   compactTeamState,
   navigationItems,
   reconcileSelectedTeam,
+  teamMemberCount,
   teamNavigationNotices,
 } from '../src/renderer/teams/teamsNavigationModel';
 import { overviewFixture, team } from './teamsFixtures';
@@ -49,5 +50,13 @@ describe('teams navigation model', () => {
       .toEqual(['Some team navigation data is unavailable.']);
     expect(teamNavigationNotices(overviewFixture([stopped, runtimeOnly], { partial: true, truncated: true })))
       .toEqual(['Showing the first 2 teams. More teams exist in this workspace.', 'Some team navigation data is unavailable.']);
+  });
+
+  it('team_member_count_reports_text_and_label', () => {
+    expect(teamMemberCount(team())).toEqual({ text: '1', label: '1 member' });
+    expect(teamMemberCount(team({ members: [] }))).toEqual({ text: '0', label: '0 members' });
+    const three = team().members[0];
+    expect(teamMemberCount(team({ members: [three, three, three] }))).toEqual({ text: '3', label: '3 members' });
+    expect(teamMemberCount(team({ membersTruncated: true }))).toEqual({ text: '1+', label: '1+ members' });
   });
 });
