@@ -94,7 +94,7 @@ def _work(conn, workspace, agent_id):
                       "ORDER BY updated_at DESC LIMIT 1", (workspace, agent_id)).fetchone()
     if a is None and tk is None:
         return {"state": "none"}
-    return {"state": "working",
+    out = {"state": "working",
             "assignment": None if a is None else {
                 "id": a["id"], "status": a["status"], "taskId": a["task_id"],
                 "goal": textsafe.one_line(a["goal"] or "", MAX_TEXT),
@@ -102,6 +102,16 @@ def _work(conn, workspace, agent_id):
             "ticket": None if tk is None else {
                 "key": tk["key"], "title": textsafe.one_line(tk["title"] or "", MAX_TEXT),
                 "status": tk["status"], "workflowRunId": tk["active_run_id"]}}
+    run_id = (tk["active_run_id"] if tk is not None else None) or (run["id"] if run else None)
+    if run_id:   # P06: the member's run is parked while the coordinator runs delegated commands for it
+        reqs = conn.execute("SELECT command_id, status FROM command_requests WHERE workflow_run_id = ? "
+                            "AND status IN ('requested', 'approved', 'running') ORDER BY ordinal", (run_id,)).fetchall()
+        if reqs:
+            out["delegation"] = {"commands": [r["command_id"] for r in reqs],
+                                 "state": ("running" if any(r["status"] == "running" for r in reqs) else
+                                           "awaiting_approval" if all(r["status"] == "requested" for r in reqs)
+                                           else "queued")}
+    return out
 
 
 def _str(value):

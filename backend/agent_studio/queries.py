@@ -266,6 +266,9 @@ def workflow_detail(conn, wf_id: str) -> dict:
                "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
         out["visits"] = visits_per_stage(out["stageAttempts"])
         out["route"] = route_text(out["events"], out["workflowRun"].get("currentStage"))
+        from . import delegation
+        out["commandRequests"] = [delegation.public(dict(r)) for r in conn.execute(
+            "SELECT * FROM command_requests WHERE workflow_run_id = ? ORDER BY ordinal", (wf_id,)).fetchall()]
         return out
     return _read(conn, run)
 

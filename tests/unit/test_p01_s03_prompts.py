@@ -28,7 +28,8 @@ class Placeholders(unittest.TestCase):
 
     def test_allowed_names(self):
         self.assertEqual(prompts.ALLOWED,
-                         {"task", "diff", "validation", "findings", "summary", "stage", "visit"})
+                         {"task", "diff", "validation", "findings", "summary", "stage", "visit",
+                          "delegated_commands"})
 
 
 class Expansion(unittest.TestCase):
@@ -59,7 +60,8 @@ class Expansion(unittest.TestCase):
 
     def test_limits(self):
         self.assertEqual(prompts.PROMPT_LIMITS, {"task": 32 * 1024, "diff": 256 * 1024, "validation": 32 * 1024,
-                                                 "findings": 16 * 1024, "summary": 16 * 1024})
+                                                 "findings": 16 * 1024, "summary": 16 * 1024,
+                                                 "delegated_commands": 16 * 1024, "delegated": 32 * 1024})
 
     def test_each_section_is_cut_at_its_own_limit_with_the_p00_note(self):
         cases = {"diff": "DIFF", "validation": "VALIDATION", "summary": "SUMMARY", "task": "TASK"}

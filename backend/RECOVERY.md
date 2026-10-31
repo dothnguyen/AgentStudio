@@ -21,6 +21,8 @@ every decision below is also an event in `agent-studio events`.
 | You see | Meaning | Command |
 |---|---|---|
 | assignment `waiting_input` (`PERMISSION_DENIED`, `INPUT_REQUIRED`) | the provider was blocked by policy or asked a question headless mode cannot answer | `agent-studio assignment resolve --assignment <id> --action retry` (same policy), or `--action retry --policy workspace_write` to allow writes explicitly (recorded as `policyChange`), or `--action fail` / `--action cancel` |
+| workflow `running`, stage attempt `delegating`, a command request `requested` | an agent asked for a delegated command that needs human approval (P06) | `agent-studio command requests --workflow <id>`, then `agent-studio command approve --request <id>` or `command reject --request <id> --reason TEXT` (the agent resumes with the reason) |
+| a delegated command runs too long or hangs | it stops at its `timeoutMs`; the agent resumes with `TIMED OUT` | `agent-studio command cancel --request <id>` stops it now; the agent resumes with `NOT RUN - cancelled`. A request whose process vanished (coordinator restart, kill) ends `failed` with `PROCESS_LOST` and the agent resumes |
 | assignment `reconciling` (`RUNNER_GONE`, `RUNNER_NO_START`, `RUNNER_NEVER_STARTED`, contradictory evidence) | the attempt's outcome cannot be proven | inspect `~/.local/state/agent-studio/runs/<id>/` (stdout, stderr, meta), then `assignment resolve --action retry`, `fail`, or `cancel` |
 | `PROCESS_STILL_RUNNING` from resolve | the old attempt may still be running | `agent-studio assignment cancel --assignment <id>`, then resolve |
 | `AGENT_UNAVAILABLE` from resolve retry | the agent's pane is gone | `--action fail` or `--action cancel`; start a new team for new work |

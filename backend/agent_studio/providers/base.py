@@ -53,6 +53,7 @@ class AssignmentInput:
     expects_verdict: bool = False                # reviewer stages: read a verdict from the final message
     mcp_tickets: bool = False                    # start the board MCP server for this assignment (P04-S12)
     mcp_workspace: Optional[str] = None           # canonical board workspace when execution uses a worktree
+    mcp_delegation: bool = False                 # the stage may delegate commands: start the MCP server too (P06)
 
 
 @dataclass

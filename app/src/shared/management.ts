@@ -156,11 +156,17 @@ export type OverviewRuntimeState =
   | 'error'
   | 'disconnected'
   | 'unavailable';
+export interface DelegationWork {
+  commands: string[];
+  state: 'running' | 'awaiting_approval' | 'queued';
+}
 export type MemberWork =
   | {
       state: 'working';
       assignment: { id: string; status: string; taskId: string; goal: string; workflowRunId: string | null } | null;
       ticket: { key: string; title: string; status: string; workflowRunId: string | null } | null;
+      /** P06: the member's run is parked while the coordinator runs delegated commands for it. */
+      delegation?: DelegationWork;
     }
   | { state: 'none' }
   | { state: 'unavailable'; reason: string };

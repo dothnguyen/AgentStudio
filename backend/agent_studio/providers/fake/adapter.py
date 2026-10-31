@@ -69,6 +69,17 @@ class FakeAdapter(Adapter):
                 raise AsError("BAD_REQUEST", "fake finalText must be a string of 1..1500 characters.")
             argv += ["--final-text", final_text]
         extra_env = {}
+        delegate = o.get("mcpDelegate")
+        if delegate is not None:
+            if not isinstance(delegate, dict) or not isinstance(delegate.get("command"), str):
+                raise AsError("BAD_REQUEST", "fake mcpDelegate must be an object with a command id.")
+            if inp.mcp_delegation and not inp.mcp_tickets:
+                from ..base import mcp_env, mcp_launch
+                launch = mcp_launch()
+                argv += ["--mcp-delegate", json.dumps(delegate)]
+                extra_env["AGENT_STUDIO_MCP_COMMAND"] = json.dumps([launch["command"]] + launch["args"])
+                extra_env.update(launch["env"])
+                extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.mcp_workspace or inp.workspace))
         if inp.mcp_tickets:
             # the fake CLI drives the real MCP server as a subprocess, the way a real CLI would, on
             # every scenario of an MCP-enabled assignment

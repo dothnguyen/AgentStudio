@@ -17,5 +17,6 @@ stages:
     permission: read_only
     maxVisits: 1
     passRequires: [tests]
+    delegates: []   # the verdict stage reads VALIDATION; it never needs environment commands
     promptFile: workflows/prompts/board-qa.md
     next: { pass: $succeed, fail: $fail }

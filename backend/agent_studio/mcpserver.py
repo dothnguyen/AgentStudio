@@ -2,7 +2,7 @@
 
 An MCP client (Claude Code, Codex, the fake provider's test path) launches `agent-studio mcp` with
 AGENT_STUDIO_ASSIGNMENT and AGENT_STUDIO_AGENT in the environment. Every tool call becomes a normal
-`ticket.add` / `ticket.list` / `ticket.show` / `phase.list` / `board.show` request through the same
+`ticket.add` / `ticket.list` / `ticket.show` / `phase.list` / `board.show` / `command.list` / `command.request` request through the same
 validated command path the CLI uses — the server never opens the database, and the coordinator stays
 the only writer. Command errors come back as JSON-RPC errors with the command's code in `data.code`.
 """
@@ -50,6 +50,20 @@ TOOLS = [
     {"name": "board_show",
      "description": "The whole board: phases with status columns and tickets.",
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "delegated_commands_list",
+     "description": "The delegated commands this assignment may ask the Agent Studio coordinator to run for you "
+                    "(commands your sandbox does not allow, such as reinstalling dependencies), with their params "
+                    "and how many requests remain.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "delegated_command_request",
+     "description": "Ask the coordinator to run one delegated command (an id from delegated_commands_list). After "
+                    "requesting, finish your turn with a short summary of your progress: you will be re-dispatched "
+                    "with the command's result. Never run the command yourself.",
+     "inputSchema": {"type": "object", "properties": {
+         "command": {"type": "string", "description": "the command id"},
+         "params": {"type": "object", "description": "the command's declared params, each a string"},
+         "reason": {"type": "string", "maxLength": 500, "description": "why you need it"}},
+         "required": ["command"]}},
 ]
 
 
@@ -150,6 +164,29 @@ def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: st
             lines.append(f"{phase['slug']}{' (current)' if phase['current'] else ''}: " + ", ".join(
                 f"{c['status']}({c['count']})" for c in phase["columns"]))
         return {"content": [{"type": "text", "text": "\n".join(lines)}], **data}
+    if name == "delegated_commands_list":
+        data = _call("command.list", {"assignment": assignment, "agentId": agent}, write=False,
+                     assignment=assignment, agent=agent)
+        lines = [f"stage {data['stage']}: " + (f"{len(data['commands'])} delegated command(s)" if data["commands"]
+                                               else "no delegated commands are available")]
+        for c in data["commands"]:
+            params = ", ".join(f"{k} ~ {v['pattern']}" for k, v in c["params"].items())
+            lines.append(f"- {c['id']}: {c['description']} (runs `{' '.join(c['argv'])}` in {c['cwd']}"
+                         + (f"; params: {params}" if params else "")
+                         + ("; needs human approval" if c["approval"] == "human" else "")
+                         + f"; {c['remainingThisVisit']} left this visit)")
+        return {"content": [{"type": "text", "text": "\n".join(lines)}], **data}
+    if name == "delegated_command_request":
+        if not isinstance(args.get("command"), str) or not args["command"].strip():
+            raise AsError(BAD_REQUEST, "delegated_command_request needs a command id.")
+        call = {"assignment": assignment, "agentId": agent, "command": args["command"].strip()}
+        if args.get("params") is not None:
+            call["params"] = args["params"]
+        if args.get("reason") is not None:
+            call["reason"] = args["reason"]
+        data = _call("command.request", call, write=True, assignment=assignment, agent=agent, request_id=request_id)
+        text = (f"queued {data['command']} as request {data['requestId']} ({data['status']}). {data['next']}")
+        return {"content": [{"type": "text", "text": text}], **data}
     raise JsonRpcError(METHOD_NOT_FOUND, f"Unknown tool {name!r}.")
     # unreachable; kept for clarity
 

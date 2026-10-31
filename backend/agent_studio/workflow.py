@@ -11,6 +11,8 @@ panes, and it has no role names, stage ids, or provider-specific branches. Outco
   agent stage failed / inconclusive / waiting / reconciling -> paused with its diagnostic code
   validation exit 0 / nonzero or timeout -> pass / fail; could not run -> paused; process lost -> paused
   any cancelled stage, or an operator cancel -> cancelled
+  agent stage that requested delegated commands (P06) -> delegating: the coordinator runs the approved commands,
+                         then re-dispatches the same stage (same visit) with their results; never routed meanwhile
   a run with no frozen definition (started by P00 before the upgrade) -> paused LEGACY_WORKFLOW_RUN, cancel only
 """
 from __future__ import annotations
@@ -20,7 +22,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import crashpoints, gitws, procid, prompts, tasks, validation, workflowdef
+from . import crashpoints, delegation, gitws, procid, prompts, tasks, validation, workflowdef
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -185,6 +187,10 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
                                              "needs a clean starting commit.", data={"entries": dirty[:20]},
                       remediation="Commit or stash your changes first (definition files and prompts included).")
     config = validation.load_config(ws)
+    commands = delegation.load_config(ws)
+    if commands:
+        delegation.check_definition(definition, commands)
+        config["delegatedCommands"] = commands
     holder = tasks._mutating_in_workspace(tx, ws)
     if holder:
         raise AsError(tasks.WORKSPACE_BUSY, f"The workspace already has active mutating work ({holder}).")
@@ -206,7 +212,8 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
                                     "step_count": 1},
                    payload={"baseCommit": base, "validationArgv": config["validation"]["argv"],
                             "definition": definition.name, "definitionSha256": definition.source_sha256,
-                            "bindings": bindings})
+                            "bindings": bindings,
+                            "delegatedCommands": sorted(commands["commands"]) if commands else []})
     tx.transition("workflow_run", wf, "running", set_values={"transition_reason": "started"})
     if first.kind == "verdict":
         tx.transition("task", task, "review")
@@ -283,9 +290,12 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
     policy = st.permission
     agent = tx.get("agent", agent_id)
     attempt, visit, n = _visit(tx, wf_id, stage, new_visit)
+    commands = config.get("delegatedCommands")
+    allowed = delegation.allowed_for(commands, st)
     if prompt is None:
         prompt = prompts.render(st.prompt, kind=st.kind, task=tx.get("task", wf["task_id"])["goal"],
-                                stage=stage, visit=visit, **(data or {}))
+                                stage=stage, visit=visit, delegated_commands=delegation.catalog_text(commands, allowed),
+                                **(data or {}))
     sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{stage}")
     prompt_path = os.path.join(sdir, "prompt.txt")
     _write_private(prompt_path, prompt)
@@ -297,7 +307,8 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
                                   {"promptFile": prompt_path, "deadlineMs": config.get("stageDeadlineMs"),
                                    "workflowRunId": wf_id, "stage": stage,
                                    "expectsVerdict": st.kind == "verdict",
-                                   "mcpWorkspace": tx.get("team", wf["team_id"])["workspace"]})
+                                   "mcpWorkspace": tx.get("team", wf["team_id"])["workspace"],
+                                   **({"mcpDelegation": True} if allowed else {})})
     stage_opts = provider_options or (config.get("debugStageOptions") or {}).get(stage)
     if isinstance(stage_opts, list):   # debug only: one option set per visit, the last one repeats
         stage_opts = stage_opts[min(visit, len(stage_opts)) - 1] if stage_opts else None
@@ -333,6 +344,8 @@ def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
         return False
     if sa["phase"] == "validating":
         return _advance_validation(tx, wf, sa, ctx, cancel)
+    if sa["phase"] == "delegating":
+        return _advance_delegation(tx, wf, sa, ctx, cancel)
     return _advance_definition(tx, wf, sa, ctx, cancel)
 
 
@@ -411,6 +424,114 @@ def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
     return True
 
 
+# ---- delegated commands (P06) ------------------------------------------------------------------------
+
+def _maybe_delegate(tx: Tx, wf: dict, sa: dict, a: dict, result: dict) -> bool:
+    """A finished agent stage that asked for delegated commands parks in `delegating` instead of being routed.
+    Requests come from the MCP tool (already recorded) and from AGENT_STUDIO_DELEGATE lines of the final message.
+    An assignment that was also denied a permission delegates too (onDenialWithRequest, default "delegate"): it
+    tried, was blocked, and asked the right way. Any other outcome keeps today's handling and drops the requests."""
+    cfg = delegation.run_config(wf)
+    if not cfg:
+        return False
+    text = result.get("finalText") or result.get("summary") or ""
+    if a["status"] in ("succeeded", "waiting_input"):
+        delegation.file_markers(tx, a, text)
+    reqs = [r for r in delegation.requests_for(tx, assignment_id=a["id"]) if r["status"] in delegation.OPEN]
+    if not reqs:
+        return False
+    denied = (a["status"] == "waiting_input" and result.get("diagnosticCode") == "PERMISSION_DENIED"
+              and cfg.get("onDenialWithRequest", "delegate") == "delegate")
+    if a["status"] != "succeeded" and not denied:
+        for r in reqs:
+            delegation.cancel_request(tx, r, f"the stage ended {a['status']}")
+        return False
+    if denied:
+        from . import resolve
+        resolve._close(tx, a, "failed", "DELEGATED", "permission denied; the coordinator runs the requested commands")
+    summary = str(result.get("finalText") or result.get("summary") or "")[:16 * 1024]
+    tx.update("stage_attempt", sa["id"], {"phase": "delegating", "outcome": "delegating",
+                                          "artifacts_json": {"summary": summary}},
+              "stage_attempt.delegating",
+              {"stage": sa["stage"], "sourceAssignmentId": a["id"], "afterDenial": denied,
+               "requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]} for r in reqs]})
+    tx.update("workflow_run", wf["id"], {"current_agent_id": None}, "workflow_run.delegating",
+              {"stage": sa["stage"], "commands": [r["command_id"] for r in reqs]})
+    delegation.ticket_note(tx, wf["id"], "ticket.delegating", {"stage": sa["stage"],
+                                                               "commands": [r["command_id"] for r in reqs]})
+    return True
+
+
+def _advance_delegation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:
+    """Run the stage's approved requests one at a time; when none is open, resume the stage."""
+    reqs = delegation.requests_for(tx, assignment_id=sa["assignment_id"])
+    stopped = tx.get("task", wf["task_id"])["status"] in ("succeeded", "failed", "cancelled")  # e.g. team stop
+    if cancel or stopped:
+        why = "cancelled by the operator" if cancel else "the run's task ended (team stopped)"
+        for r in reqs:
+            delegation.cancel_request(tx, r, why)
+        _end(tx, wf, "cancelled", why)
+        return True
+    cfg = delegation.run_config(wf) or {"commands": {}}
+    for r in reqs:
+        if r["status"] != "running":
+            continue
+        proc = _loads(r["process_json"], {}) or {}
+        res = delegation.result(proc.get("dir", ""))
+        if res is None:
+            if delegation.alive(proc):
+                return False
+            res = delegation.result(proc.get("dir", ""))
+            if res is None:
+                res = {"error": "the command's process ended without a result (PROCESS_LOST)", "passed": False}
+        status = "succeeded" if res.get("passed") else "failed"
+        tx.transition("command_request", r["id"], status, set_values={"result_json": res},
+                      payload={"command": r["command_id"], "exitCode": res.get("exitCode"),
+                               "timedOut": res.get("timedOut"), "error": res.get("error"),
+                               "trackedChanges": (res.get("trackedChanges") or [])[:10],
+                               "durationMs": res.get("durationMs")})
+        delegation.ticket_note(tx, wf["id"], "ticket.command_finished",
+                               {"requestId": r["id"], "command": r["command_id"], "status": status,
+                                "exitCode": res.get("exitCode"), "durationMs": res.get("durationMs")})
+        return True
+    nxt = next((r for r in reqs if r["status"] == "approved"), None)
+    if nxt is not None:
+        c = cfg["commands"].get(nxt["command_id"])
+        if c is None:  # cannot happen with a frozen catalog; never run something it does not describe
+            tx.transition("command_request", nxt["id"], "cancelled", payload={"reason": "not in the frozen catalog"})
+            return True
+        run_dir = os.path.join(os.path.dirname(sa["prompt_path"]), f"delegate-{nxt['ordinal']:02d}")
+        proc = delegation.spawn(run_dir, wf_workspace(tx, wf), nxt, c)
+        crashpoints.hit("after_delegate_spawn")
+        tx.transition("command_request", nxt["id"], "running", set_values={"process_json": proc},
+                      payload={"command": nxt["command_id"], "argv": _loads(nxt["argv_json"], [])})
+        delegation.ticket_note(tx, wf["id"], "ticket.command_started",
+                               {"requestId": nxt["id"], "command": nxt["command_id"]})
+        return True
+    if any(r["status"] == "requested" for r in reqs):
+        return False   # waiting for an operator to approve or reject
+    return _resume_after_delegation(tx, wf, sa, reqs, ctx)
+
+
+def _resume_after_delegation(tx: Tx, wf: dict, sa: dict, reqs: list, ctx: dict) -> bool:
+    st = _stage_of(wf, sa["stage"])
+    tx.transition("stage_attempt", sa["id"], "completed", set_values={"outcome": "delegated"},
+                  payload={"requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]}
+                                        for r in reqs]})
+    summary = (_loads(sa["artifacts_json"], {}) or {}).get("summary") or ""
+    with open(sa["prompt_path"], encoding="utf-8") as f:
+        original = f.read()
+    prompt = prompts.resume_prompt(original, delegation.result_text(reqs), summary)
+    if st.kind == "verdict":
+        prompt += "\n" + prompts.VERDICT_FOOTER
+    new = _dispatch(tx, wf["id"], sa["stage"], prompt, ctx, from_assignment=sa["assignment_id"])
+    tx.note("workflow_run", wf["id"], "workflow_run.delegation_resumed",
+            {"stage": sa["stage"], "fromAssignmentId": sa["assignment_id"], "toAssignmentId": new,
+             "requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]} for r in reqs]})
+    delegation.ticket_note(tx, wf["id"], "ticket.delegation_resumed", {"stage": sa["stage"], "assignmentId": new})
+    return True
+
+
 # ---- routing ----------------------------------------------------------------------------------------
 
 def _advance_definition(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:
@@ -420,7 +541,11 @@ def _advance_definition(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
         return False
     result = _loads(a["result_json"], {}) or {}
     if a["status"] == "cancelled" or cancel:
+        for r in delegation.requests_for(tx, assignment_id=a["id"]):
+            delegation.cancel_request(tx, r, "the stage was cancelled")
         _end(tx, wf, "cancelled", "cancelled by the operator" if cancel else f"{sa['stage']} assignment cancelled")
+        return True
+    if _maybe_delegate(tx, wf, sa, a, result):
         return True
     st = _stage_of(wf, sa["stage"])
     verdict = None
@@ -582,6 +707,9 @@ def _stop_active(tx: Tx, wf: dict, sa: Optional[dict], ctx: dict) -> None:
         return
     if sa["phase"] == "validating":
         _kill((_loads(sa["validation_json"], {}) or {}).get("process"))
+    elif sa["phase"] == "delegating":
+        for r in delegation.requests_for(tx, assignment_id=sa["assignment_id"]):
+            delegation.cancel_request(tx, r, "the workflow stopped")
     elif sa["assignment_id"]:
         a = tx.get("assignment", sa["assignment_id"])
         if a["status"] in tasks.ACTIVE:
@@ -625,6 +753,9 @@ def cancel(tx: Tx, args: dict, ctx: dict) -> dict:
             return dict(out, outcome="cancel_requested", status="running")
     elif wf["status"] == "running" and sa and sa["phase"] == "validating":
         _kill((_loads(sa["validation_json"], {}) or {}).get("process"))
+    elif sa and sa["phase"] == "delegating":
+        for r in delegation.requests_for(tx, assignment_id=sa["assignment_id"]):
+            delegation.cancel_request(tx, r, "cancelled by the operator")
     elif sa and sa["assignment_id"]:  # paused: free an agent left waiting for input
         a = tx.get("assignment", sa["assignment_id"])
         if a["status"] in tasks.ACTIVE:

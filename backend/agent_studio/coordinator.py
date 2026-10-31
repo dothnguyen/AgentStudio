@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Optional
 
-from . import PROTOCOL, VERSION, boardmodel, boardsched, crashpoints, envresolve, fixtures, inbox, paths, \
+from . import PROTOCOL, VERSION, boardmodel, boardsched, crashpoints, delegation, envresolve, fixtures, inbox, paths, \
     procid, reconcile, report_rules, reports, resolve, state, tasks, teams, tmuxctl, workflow
 from .store import Store
 from .protocol import AsError, BACKEND_UNAVAILABLE, DEBUG_DISABLED, INTERNAL, UNKNOWN_COMMAND
@@ -211,6 +211,10 @@ HANDLERS = {
     "team.member.switch": lambda args, tx, ctx: teams.switch_member_agent(tx, args, ctx),
     "team.member.resume": lambda args, tx, ctx: teams.resume_member_agent(tx, args),
     "team.usage.reset": lambda args, tx, ctx: teams.reset_provider_usage(tx, args, ctx),
+    "command.request": lambda args, tx, ctx: delegation.request_from_agent(tx, args, ctx),
+    "command.approve": lambda args, tx, ctx: delegation.approve(tx, args, ctx),
+    "command.reject": lambda args, tx, ctx: delegation.reject(tx, args, ctx),
+    "command.cancel": lambda args, tx, ctx: delegation.cancel(tx, args, ctx),
 }
 MONITOR_INTERVAL_S = 2.0
 

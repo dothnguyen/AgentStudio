@@ -140,7 +140,7 @@ class CodexAdapter(Adapter):
         if inp.reasoning:
             argv += ["-c", f'model_reasoning_effort="{inp.reasoning}"']
         extra_env = {}
-        if inp.mcp_tickets:  # the Agent Studio board server, as config overrides (P04-S12)
+        if inp.mcp_tickets or inp.mcp_delegation:  # the Agent Studio board server, as config overrides (P04-S12)
             launch = mcp_launch()
             mcp_workspace = inp.mcp_workspace or inp.workspace
             server = dict(launch["env"], **mcp_env(inp.assignment_id, inp.agent_id, mcp_workspace))

@@ -43,6 +43,8 @@ def main():
     p.add_argument("--reasoning", choices=("low", "medium", "high"))
     p.add_argument("--mcp", action="store_true",
                    help="launch the agent-studio board MCP server per AGENT_STUDIO_MCP_COMMAND (test-only)")
+    p.add_argument("--mcp-delegate",
+                   help="call delegated_command_request with this JSON through the MCP server (test-only, P06)")
     a = p.parse_args()
     prompt = sys.stdin.buffer.read()
     sha = hashlib.sha256(prompt).hexdigest()
@@ -67,6 +69,24 @@ def main():
             emit({"type": "progress", "message": f"working {i + 1}/{a.lines}"})
         if a.lines == 0:
             time.sleep(duration)
+    if a.mcp_delegate and os.environ.get("AGENT_STUDIO_MCP_COMMAND"):  # P06: ask the coordinator via MCP
+        ask = json.loads(a.mcp_delegate)
+        dsession = subprocess.Popen(json.loads(os.environ["AGENT_STUDIO_MCP_COMMAND"]), stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, env=dict(os.environ))
+        try:
+            mcp(dsession, "initialize", {"protocolVersion": "2024-11-05", "capabilities": {},
+                                         "clientInfo": {"name": "fake", "version": "1"}}, 1)
+            listed = mcp(dsession, "tools/call", {"name": "delegated_commands_list", "arguments": {}}, 2)
+            got = mcp(dsession, "tools/call", {"name": "delegated_command_request", "arguments": ask}, 3)
+            text = ((got.get("result") or {}).get("content") or [{}])[0].get("text", "")
+            emit({"type": "progress", "message": "mcp delegate: " + text[:300]})
+            emit({"type": "progress", "message": "mcp listed: " + str(
+                [c.get("id") for c in (listed.get("result") or {}).get("commands", [])])})
+            dsession.stdin.close()
+            dsession.wait(timeout=30)
+        finally:
+            if dsession.poll() is None:
+                dsession.kill()
     if a.write:
         if a.sandbox == "read-only":
             emit({"type": "tool_denied", "tool": "write_file", "path": a.write})

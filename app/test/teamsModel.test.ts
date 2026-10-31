@@ -255,3 +255,23 @@ describe('filterMembers', () => {
     expect(find('UNCATALOGUED-ROLE')).toEqual(['fallback']);
   });
 });
+
+describe('delegated commands in member work (P06)', () => {
+  const ticket = { key: 'T-090', title: 'Fix the list', status: 'dev-ready', workflowRunId: 'run-1' };
+  it('says the member waits on the coordinator while its commands run or queue', () => {
+    const work = { state: 'working' as const, ticket, assignment: null,
+      delegation: { commands: ['app-deps-install'], state: 'running' as const } };
+    expect(workSummary(work)).toBe('T-090 · Waiting on coordinator: app-deps-install');
+    expect(workText(work)).toBe('T-090 · Waiting on coordinator: app-deps-install');
+    expect(workSummary({ ...work, ticket: null, delegation: { commands: ['a', 'b'], state: 'queued' as const } }))
+      .toBe('Waiting on coordinator: a, b');
+  });
+  it('says when a person must approve first, and keeps the old text without delegation', () => {
+    const work = { state: 'working' as const, ticket, assignment: null,
+      delegation: { commands: ['app-dev-dependency-add'], state: 'awaiting_approval' as const } };
+    expect(workSummary(work)).toBe('T-090 · Waiting for approval: app-dev-dependency-add');
+    expect(workSummary({ state: 'working', ticket, assignment: null })).toBe('T-090 Fix the list');
+    expect(workSummary({ state: 'working', ticket, assignment: null, delegation: { commands: [], state: 'queued' } }))
+      .toBe('T-090 Fix the list');
+  });
+});

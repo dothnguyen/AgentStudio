@@ -25,7 +25,8 @@ NEVER = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions
          "Bash", "--add-dir")
 REASONING = ("low", "medium", "high", "xhigh", "max")
 READ_TOOLS = "Read,Grep,Glob"
-MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list", "board_show")]
+MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list", "board_show",
+                                                    "delegated_commands_list", "delegated_command_request")]
 COMMON = ["--print", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
           "--strict-mcp-config",             # only MCP servers we pass (none)
           "--permission-prompts", "none",    # nothing can wait on a prompt: anything that would ask is denied
@@ -178,7 +179,7 @@ class ClaudeAdapter(Adapter):
             raise AsError("PROVIDER_UNAVAILABLE", "claude was not found on the login PATH.")
         self.validate_settings(inp.model, inp.reasoning)
         extra_env, mcp_path = {}, None
-        if inp.mcp_tickets:
+        if inp.mcp_tickets or inp.mcp_delegation:
             mcp_path = self._mcp_config(inp)
             extra_env.update(mcp_env(inp.assignment_id, inp.agent_id, inp.mcp_workspace or inp.workspace))
         if commands_enabled(inp.workspace):

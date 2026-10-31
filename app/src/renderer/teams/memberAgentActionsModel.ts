@@ -1,4 +1,5 @@
 import type { AgentDef, ManagementError, OverviewMember, OverviewTeam, RuntimeSwitchState } from '../../shared/management';
+import { delegationText } from './teamsModel';
 
 export const SWITCH_REFRESH_LIMIT = 5;
 export const SWITCH_REFRESH_INTERVAL_MS = 250;
@@ -34,6 +35,8 @@ export function assignmentConfirmation(error: ManagementError): { assignmentId: 
 function liveWorkText(work: OverviewMember['work']): string | null {
   if (work.state === 'none') return null;
   if (work.state === 'unavailable') return `Current work unavailable — ${work.reason}`;
+  const waiting = delegationText(work);
+  if (waiting !== null) return work.ticket !== null ? `${work.ticket.key} · ${work.ticket.title} · ${waiting}` : waiting;
   if (work.ticket !== null) return `${work.ticket.key} · ${work.ticket.title} · ${work.ticket.status}`;
   if (work.assignment !== null && work.assignment.goal.trim() !== '') return work.assignment.goal;
   return 'Working';

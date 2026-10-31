@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, rolecatalog, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, delegation, rolecatalog, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -281,6 +281,12 @@ def _validate_fake_options(opts):
     final_text = req_text(opts, "finalText", 1500, required=False)
     if final_text:
         out["finalText"] = final_text
+    delegate = opts.get("mcpDelegate")   # P06 test path: the fake asks for a delegated command through MCP
+    if delegate is not None:
+        if not isinstance(delegate, dict) or not isinstance(delegate.get("command"), str) or len(
+                json.dumps(delegate)) > 2000:
+            raise AsError(BAD_REQUEST, "fake.mcpDelegate must be a small object with a command id.")
+        out["mcpDelegate"] = delegate
     return out
 
 
@@ -935,6 +941,83 @@ def _teamdef_member_remove(args, req):
     return teamdefs.member_remove(ws, tid, mid, _teamdef_active(ws, tid))
 
 
+# ---- delegated commands (P06) ---------------------------------------------------------------------------
+
+_COMMAND_ID = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
+
+
+def _validate_command_request(args):
+    # only the MCP server sends this: the caller presents its live assignment and agent identity
+    _only("command.request", args, {"assignment", "agentId", "command", "params", "reason"})
+    command = args.get("command")
+    if not isinstance(command, str) or not _COMMAND_ID.match(command):
+        raise AsError(BAD_REQUEST, "command must be a delegated command id ([a-z][a-z0-9-]{0,63}).")
+    params = args.get("params")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict) or len(params) > 16 or not all(
+            isinstance(k, str) and 0 < len(k) <= 32 and isinstance(v, str) and len(v) <= 1000
+            for k, v in params.items()):
+        raise AsError(BAD_REQUEST, "params must be an object of at most 16 string values.")
+    out = {"assignment": validate_uuid(args.get("assignment"), "assignment"),
+           "agentId": validate_uuid(args.get("agentId"), "agentId"), "command": command, "params": params}
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
+def _validate_command_ref(args):
+    _only("command", args, {"requestId", "reason"})
+    out = {"requestId": validate_uuid(args.get("requestId"), "requestId")}
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
+def _command_list(args, req):
+    """command.list: what one live assignment may delegate (the MCP tool delegated_commands_list)."""
+    _only("command.list", args, {"assignment", "agentId"})
+    assignment = validate_uuid(args.get("assignment"), "assignment")
+    agent = validate_uuid(args.get("agentId"), "agentId")
+    conn = _reader()
+    try:
+        return delegation.list_for_assignment(conn, assignment, agent)
+    finally:
+        conn.close()
+
+
+def _command_requests(args, req):
+    """command.requests: the delegated command requests of one workflow run, or the open ones of a team."""
+    _only("command.requests", args, {"workflowRunId", "teamId"})
+    run = _opt_uuid(args, "workflowRunId")
+    team = _opt_uuid(args, "teamId")
+    if (run is None) == (team is None):
+        raise AsError(BAD_REQUEST, "give exactly one of workflowRunId or teamId.")
+    conn = _reader()
+    try:
+        if run:
+            rows = delegation.requests_for(conn, workflow_run_id=run)
+        else:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT * FROM command_requests WHERE team_id = ? AND status IN ('requested', 'approved', 'running') "
+                "ORDER BY created_at", (team,)).fetchall()]
+        return {"requests": [delegation.public(r) for r in rows]}
+    finally:
+        conn.close()
+
+
+def _command_catalog(args, req):
+    """command.catalog: the workspace's delegated command catalog as the next run will freeze it."""
+    _only("command.catalog", args, {"workspace"})
+    ws = _workspace_arg(args)
+    cfg = delegation.load_config(ws)
+    return {"path": delegation.CONFIG_REL, "enabled": cfg is not None,
+            "onDenialWithRequest": (cfg or {}).get("onDenialWithRequest"),
+            "commands": [delegation.describe(c) for c in (cfg or {"commands": {}})["commands"].values()]}
+
+
 COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
@@ -1011,6 +1094,13 @@ COMMANDS = {
     "phase.clear-current": _inbox("phase.clear-current", _validate_board_show),
     "phase.show": _phase_show,
     "phase.list": _phase_list,
+    "command.list": _command_list,
+    "command.request": _inbox("command.request", _validate_command_request),
+    "command.requests": _command_requests,
+    "command.catalog": _command_catalog,
+    "command.approve": _inbox("command.approve", _validate_command_ref),
+    "command.reject": _inbox("command.reject", _validate_command_ref),
+    "command.cancel": _inbox("command.cancel", _validate_command_ref),
 }
 
 

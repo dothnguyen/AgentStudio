@@ -96,9 +96,19 @@ export function roleNote(m: OverviewMember): string | null {
   return null;
 }
 
+/** "Waiting on coordinator: app-deps-install" while delegated commands run for the member's ticket (P06). */
+export function delegationText(work: MemberWork): string | null {
+  if (work.state !== 'working' || !work.delegation || work.delegation.commands.length === 0) return null;
+  const commands = work.delegation.commands.join(', ');
+  if (work.delegation.state === 'awaiting_approval') return `Waiting for approval: ${commands}`;
+  return `Waiting on coordinator: ${commands}`;
+}
+
 export function workText(work: MemberWork): string {
   if (work.state === 'none') return 'No current work';
   if (work.state === 'unavailable') return 'Not available';
+  const waiting = delegationText(work);
+  if (waiting !== null) return work.ticket !== null ? `${work.ticket.key} · ${waiting}` : waiting;
   if (work.ticket !== null) return `${work.ticket.key} ${work.ticket.title}`;
   if (work.assignment !== null && work.assignment.goal !== '') return work.assignment.goal;
   return 'Working';
@@ -290,6 +300,8 @@ export function workSummary(work: MemberWork): string {
     const label = Object.prototype.hasOwnProperty.call(WORK_UNAVAILABLE_REASONS, reason) ? WORK_UNAVAILABLE_REASONS[reason]! : reason;
     return `Not available — ${label}`;
   }
+  const waiting = delegationText(work);
+  if (waiting !== null) return work.ticket !== null ? `${work.ticket.key} · ${waiting}` : waiting;
   if (work.ticket !== null) return work.ticket.title === '' ? work.ticket.key : `${work.ticket.key} ${work.ticket.title}`;
   if (work.assignment !== null) return work.assignment.goal !== '' ? work.assignment.goal : `Assignment ${work.assignment.id}`;
   return 'Working (no details returned)';

@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "defaults": {
+    "timeoutMs": 900000,
+    "network": false,
+    "approval": "auto",
+    "maxPerVisit": 2,
+    "maxPerRun": 6,
+    "trackedChanges": "forbid"
+  },
+  "onDenialWithRequest": "delegate",
+  "commands": {
+    "app-deps-install": {
+      "description": "Install the app's npm dependencies for this platform from package-lock.json (deletes and rebuilds app/node_modules).",
+      "argv": [
+        "npm",
+        "ci"
+      ],
+      "cwd": "app",
+      "env": {
+        "ELECTRON_SKIP_BINARY_DOWNLOAD": "1"
+      },
+      "network": true,
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA"
+      ]
+    },
+    "app-deps-rebuild": {
+      "description": "Rebuild native modules in app/node_modules for this platform.",
+      "argv": [
+        "npm",
+        "rebuild"
+      ],
+      "cwd": "app",
+      "roles": [
+        "Developer",
+        "SeniorDeveloper",
+        "QA"
+      ]
+    },
+    "app-dev-dependency-add": {
+      "description": "Add one dev dependency to app/package.json and package-lock.json.",
+      "argv": [
+        "npm",
+        "install",
+        "--save-dev",
+        "{package}"
+      ],
+      "cwd": "app",
+      "env": {
+        "ELECTRON_SKIP_BINARY_DOWNLOAD": "1"
+      },
+      "params": {
+        "package": {
+          "pattern": "(@[a-z0-9-]+/)?[a-z0-9._-]+(@[0-9A-Za-z.^~-]+)?",
+          "maxLength": 100,
+          "description": "npm package name, optionally @version"
+        }
+      },
+      "network": true,
+      "approval": "human",
+      "trackedChanges": "allow",
+      "roles": [
+        "Developer",
+        "SeniorDeveloper"
+      ]
+    }
+  }
+}

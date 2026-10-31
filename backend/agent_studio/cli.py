@@ -107,6 +107,11 @@ USAGE = """agent-studio <command>
   board phase show|edit|close|reopen|set-current (--workspace PATH | cwd) ID [options]
                                            one phase / rename it / close it / reopen it / make it current
   board phase remove (--workspace PATH | cwd) ID [--move-to ID]   remove a phase (empty, or move its tickets)
+  command catalog (--workspace PATH | cwd)   the delegated command catalog (.agent-studio/commands.json)
+  command requests (--workflow ID | --team UUID)   delegated command requests of a run / a team's open ones
+  command approve --request ID             run a delegated command that waits for human approval
+  command reject --request ID [--reason TEXT]   turn it down; the agent resumes with the reason
+  command cancel --request ID [--reason TEXT]   stop a waiting or running delegated command
   board resume --workspace PATH (--agent ID | --member NAME | --all)
                                            clear an agent's USAGE_LIMIT hold (limit_reached -> idle)
   init [--name NAME] [--path PATH] [--json]  create and register a workspace (.agent-studio/workspace.json)
@@ -118,7 +123,8 @@ USAGE = """agent-studio <command>
   request                                  read one JSON request from stdin, print one response
   serve                                    line-delimited JSON requests/responses over stdio
   mcp                                      board MCP server (stdio JSON-RPC; started per assignment by the
-                                           runner for members with canAddTickets; never by hand)
+                                           runner for members with canAddTickets and for stages with
+                                           delegated commands; never by hand)
   keepalive                                hold the WSL keep-alive lock until terminated
 
 Options: --pretty (indent JSON for humans)
@@ -454,6 +460,15 @@ def _human_request(argv) -> dict:
     board_p.add_argument("--all", action="store_true")
     board_p.add_argument("--key")
     board_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
+    cmd_p = sub.add_parser("command", add_help=False)
+    cmd_p.add_argument("action", choices=["catalog", "requests", "approve", "reject", "cancel"])
+    cmd_p.add_argument("--workspace")
+    cmd_p.add_argument("--workflow")
+    cmd_p.add_argument("--team")
+    cmd_p.add_argument("--request")
+    cmd_p.add_argument("--reason")
+    cmd_p.add_argument("--key")
+    cmd_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     asg_p = sub.add_parser("assignment", add_help=False)
     asg_p.add_argument("action", choices=["cancel", "resolve"])
     asg_p.add_argument("--action", dest="resolve_action", choices=["retry", "fail", "cancel"])
@@ -586,6 +601,22 @@ def _human_request(argv) -> dict:
             args["member"] = ns.member
         req.update(command="board.resume", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
                    timeoutMs=ns.timeout_ms)
+    elif ns.cmd == "command":
+        if ns.action == "catalog":
+            req.update(command="command.catalog", args={"workspace": os.path.realpath(ns.workspace or os.getcwd())})
+        elif ns.action == "requests":
+            if bool(ns.workflow) == bool(ns.team):
+                raise AsError(BAD_REQUEST, "command requests needs exactly one of --workflow or --team")
+            req.update(command="command.requests",
+                       args={"workflowRunId": ns.workflow} if ns.workflow else {"teamId": ns.team})
+        else:
+            if not ns.request:
+                raise AsError(BAD_REQUEST, f"command {ns.action} needs --request ID")
+            args = {"requestId": ns.request}
+            if ns.reason and ns.action != "approve":
+                args["reason"] = ns.reason
+            req.update(command=f"command.{ns.action}", args=args,
+                       idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
     elif ns.cmd == "assignment":
         if ns.action == "resolve":
             if not ns.resolve_action:
@@ -718,6 +749,12 @@ def main(argv=None) -> int:
             sys.stderr.write("usage: agent-studio validate --dir DIR (internal)\n")
             return 2
         return validation.run_validator(argv[2])
+    if cmd == "delegate-run":
+        from . import delegation
+        if argv[1:2] != ["--dir"] or len(argv) != 3:
+            sys.stderr.write("usage: agent-studio delegate-run --dir DIR (internal)\n")
+            return 2
+        return delegation.run_delegated(argv[2])
     if cmd == "request":
         raw = sys.stdin.buffer.read(MAX_LINE_BYTES + 1)
         if len(raw) > MAX_LINE_BYTES:

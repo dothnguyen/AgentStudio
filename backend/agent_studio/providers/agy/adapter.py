@@ -89,7 +89,7 @@ class AgyAdapter(Adapter):
         if info.get("error") or info.get("missing"):
             raise AsError("PROVIDER_UNAVAILABLE", "agy does not support the required headless options.")
         self.validate_settings(inp.model, inp.reasoning)
-        if inp.mcp_tickets:
+        if inp.mcp_tickets:   # delegated commands still work here: agy asks with an AGENT_STUDIO_DELEGATE line
             raise AsError("POLICY_UNSUPPORTED", "agy does not support assignment-scoped Agent Studio MCP configuration.")
         with open(inp.prompt_path, encoding="utf-8") as source:
             prompt = source.read()

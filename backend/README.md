@@ -343,6 +343,52 @@ an open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.
 
+## Delegated commands (P06)
+
+Agents run inside their provider's sandbox, so environment work such as `npm ci` is declined and would pause the
+run with `PERMISSION_DENIED`. A workspace can instead offer a catalog of vetted commands in
+`.agent-studio/commands.json` (committed; read once at workflow start and frozen into the run, like `workflow.json`;
+no file = feature off). An agent requests one with the MCP tool `delegated_command_request` (or, without MCP, an
+`AGENT_STUDIO_DELEGATE {"command": ..., "params": {...}, "reason": ...}` line in its final message) and ends its
+turn. The stage attempt parks as `delegating`, the ticket keeps its status and claim, the coordinator runs the
+command in the run's workspace (argv only, no shell, detached, with a timeout and capped output), and then
+re-dispatches the same stage on the same visit with its original prompt plus `PREVIOUS_SUMMARY` and `DELEGATED`
+sections holding each result.
+
+```json
+{"version": 1,
+ "defaults": {"timeoutMs": 900000, "network": false, "approval": "auto", "maxPerVisit": 2, "maxPerRun": 6,
+              "trackedChanges": "forbid"},
+ "onDenialWithRequest": "delegate",
+ "commands": {
+   "app-deps-install": {"description": "Install the app's npm dependencies", "argv": ["npm", "ci"], "cwd": "app",
+                        "env": {"ELECTRON_SKIP_BINARY_DOWNLOAD": "1"}, "network": true,
+                        "roles": ["Developer", "SeniorDeveloper", "QA"]},
+   "app-dev-dependency-add": {"description": "Add one dev dependency", "argv": ["npm", "install", "--save-dev", "{package}"],
+                              "cwd": "app", "params": {"package": {"pattern": "[a-z0-9._-]+", "maxLength": 100}},
+                              "approval": "human", "trackedChanges": "allow", "roles": ["Developer"]}}}
+```
+
+- `roles` lists who may ask (none = nobody); a workflow stage may narrow it with `delegates: [ids]` (`[]` = off).
+  A `read_only` stage only gets commands with `trackedChanges: "forbid"`.
+- `{param}` tokens fill whole argv elements only; each value must match its `pattern`, may not start with `-`, and
+  every declared param is required. `cwd` must resolve inside the workspace.
+- `network: false` only withholds the proxy variables; the coordinator itself has no network sandbox.
+- `trackedChanges: "forbid"` (default) fails the request when tracked files change (untracked files such as
+  `node_modules` are fine); `"allow"` lets the change into the stage's diff.
+- `approval: "human"` waits for `agent-studio command approve|reject --request ID`.
+- `maxPerVisit` / `maxPerRun` count every request, rejected ones too, so an agent cannot loop.
+- `onDenialWithRequest: "delegate"` (default): an assignment that was denied a permission but also filed a request
+  delegates instead of pausing; `"pause"` keeps the old behaviour.
+- The prompt of a stage that may delegate gets a `DELEGATED_COMMANDS` section listing what it may ask for (use
+  `{{delegated_commands}}` in a template to place it).
+
+```bash
+agent-studio command catalog --workspace PATH           # the catalog the next run will freeze
+agent-studio command requests --workflow RUN_ID          # what a run asked for, and the results
+agent-studio command approve --request ID                # or: reject --request ID --reason TEXT, cancel --request ID
+```
+
 ## Windows boundary checks (PowerShell, from `scripts\windows`)
 
 ```powershell

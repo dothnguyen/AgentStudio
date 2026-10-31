@@ -42,9 +42,11 @@ DIFF_PLACEHOLDER = "{{diff}}"
 
 _TOP_KEYS = ("version", "description", "maxSteps", "stages")
 _FROZEN_TOP_KEYS = _TOP_KEYS + ("name", "sourceSha256", "warnings")
-_STAGE_KEYS = ("id", "type", "role", "permission", "prompt", "promptFile", "maxVisits", "passRequires", "next")
+_STAGE_KEYS = ("id", "type", "role", "permission", "prompt", "promptFile", "maxVisits", "passRequires", "next",
+               "delegates")
 _FROZEN_STAGE_KEYS = tuple(k for k in _STAGE_KEYS if k != "promptFile") + ("promptSource",)
-_AGENT_ONLY = ("role", "permission", "prompt", "promptFile", "promptSource", "passRequires")
+_AGENT_ONLY = ("role", "permission", "prompt", "promptFile", "promptSource", "passRequires", "delegates")
+DELEGATE_ID_RE = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,7 @@ class Stage:
     pass_requires: tuple
     next: Mapping[str, str]         # work: {done}; verdict / validation: {pass, fail}
     kind: str                       # work | verdict | validation
+    delegates: Optional[tuple] = None  # delegated command ids this stage may request; None = all its role may use
 
 
 @dataclass(frozen=True)
@@ -169,7 +172,7 @@ def _stage(c: _Collector, i: int, st: Any, ctx: dict) -> Optional[dict]:
     is_validation = typ == "validation"
     info = {"i": i, "id": None, "type": "validation" if is_validation else "agent", "role": None,
             "permission": None, "prompt": None, "prompt_source": None, "max_visits": 1, "pass_requires": (),
-            "next": {}, "kind": None}
+            "next": {}, "kind": None, "delegates": None}
 
     for key, val in st.items():
         kp = f"{p}.{key}"
@@ -193,6 +196,14 @@ def _stage(c: _Collector, i: int, st: Any, ctx: dict) -> Optional[dict]:
                 info["max_visits"] = val
         elif key in _AGENT_ONLY and is_validation:
             c.err(kp, f"{key} is not allowed on validation stages")
+        elif key == "delegates":
+            if (not isinstance(val, list) or len(val) > 50
+                    or not all(isinstance(x, str) and DELEGATE_ID_RE.match(x) for x in val)):
+                c.err(kp, "delegates must be a list of delegated command ids ([a-z][a-z0-9-]{0,63})")
+            elif len(set(val)) != len(val):
+                c.err(kp, "delegates must not repeat a command id")
+            else:
+                info["delegates"] = tuple(val)
     if "id" not in st:
         c.err(f"{p}.id", "id is required")
 
@@ -429,7 +440,8 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
 
     stages = tuple(Stage(id=s["id"], type=s["type"], role=s["role"], permission=s["permission"],
                          prompt=s["prompt"], prompt_source=s["prompt_source"], max_visits=s["max_visits"],
-                         pass_requires=s["pass_requires"], next=MappingProxyType(dict(s["next"])), kind=s["kind"])
+                         pass_requires=s["pass_requires"], next=MappingProxyType(dict(s["next"])), kind=s["kind"],
+                         delegates=s["delegates"])
                    for s in infos)
     return Definition(name=name, version=1, description=description, max_steps=max_steps, stages=stages,
                       source_sha256=sha, warnings=warnings)
@@ -501,6 +513,8 @@ def to_json(d: Definition) -> str:
             item.update(role=s.role, permission=s.permission, prompt=s.prompt, promptSource=s.prompt_source)
             if s.kind == "verdict":
                 item["passRequires"] = list(s.pass_requires)
+            if s.delegates is not None:
+                item["delegates"] = list(s.delegates)
         stages.append(item)
     obj = {"name": d.name, "version": d.version, "description": d.description, "maxSteps": d.max_steps,
            "sourceSha256": d.source_sha256, "warnings": [dict(w) for w in d.warnings], "stages": stages}

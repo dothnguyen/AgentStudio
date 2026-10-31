@@ -48,6 +48,8 @@ TICKET_STATES = ("backlog", "ready_unpack", "unpacking", "unpacked", "done", "re
                  "ready_dev", "in_dev", "ready_test", "in_test", "fail_test", "ready_review", "in_review",
                  "ready_merge", "merged", "changes_requested", "triage", "triaging", "blocked", "cancelled")
 PHASE_STATES = ("open", "closed")
+# Delegated commands (P06): an agent asks the coordinator to run a vetted catalog command for it.
+COMMAND_REQUEST_STATES = ("requested", "approved", "running", "succeeded", "failed", "rejected", "cancelled")
 
 ENTITIES: Dict[str, Entity] = {
     "phase": Entity("phase", "phases", "status", PHASE_STATES, frozenset({"open"}),
@@ -116,6 +118,15 @@ ENTITIES: Dict[str, Entity] = {
         ("team_id", "task_id", "agent_id", "stage_attempt_id", "attempt", "policy", "provider_id", "process_pid",
          "process_start_time", "process_boot_id", "deadline_at", "result_json", "diagnostic_code", "request_json"),
         "assignment_id", ("team_id", "task_id", "agent_id")),
+    "command_request": Entity(
+        "command_request", "command_requests", "status", COMMAND_REQUEST_STATES, frozenset({"requested", "approved"}),
+        _t({"requested": ("approved", "rejected", "cancelled"),
+            "approved": ("running", "cancelled"),
+            "running": ("succeeded", "failed", "cancelled"),
+            "succeeded": (), "failed": (), "rejected": (), "cancelled": ()}),
+        ("team_id", "workflow_run_id", "stage_attempt_id", "assignment_id", "stage", "visit", "ordinal",
+         "command_id", "params_json", "argv_json", "reason", "source", "process_json", "result_json"),
+        None, ("team_id", "workflow_run_id", "assignment_id")),
 }
 
 EVENT_REF_COLS = ("team_id", "agent_id", "task_id", "assignment_id", "workflow_run_id")
@@ -528,3 +539,29 @@ MIGRATION_16 = ["ALTER TABLE agents ADD COLUMN quota_holds_json TEXT",
 
 MIGRATION_17 = ["ALTER TABLE agents ADD COLUMN configured_agents_json TEXT",
                 "CREATE INDEX events_by_entity ON events (entity, entity_id, team_id, seq)"]
+
+
+# v18 (P06): delegated commands. One row per request an agent made for a catalog command; the coordinator
+# runs approved requests outside the agent sandbox and resumes the stage with their results.
+MIGRATION_18 = [
+    f"""CREATE TABLE command_requests (
+        id {ID},
+        team_id TEXT NOT NULL REFERENCES teams(id),
+        workflow_run_id TEXT NOT NULL REFERENCES workflow_runs(id),
+        stage_attempt_id TEXT REFERENCES stage_attempts(id),
+        assignment_id TEXT REFERENCES assignments(id),
+        stage TEXT NOT NULL,
+        visit INTEGER NOT NULL CHECK (visit >= 1),
+        ordinal INTEGER NOT NULL CHECK (ordinal >= 1),
+        command_id TEXT NOT NULL,
+        params_json TEXT,
+        argv_json TEXT NOT NULL,
+        reason TEXT,
+        source TEXT NOT NULL CHECK (source IN ('mcp', 'marker')),
+        status TEXT NOT NULL CHECK (status IN {_in(COMMAND_REQUEST_STATES)}),
+        process_json TEXT,
+        result_json TEXT,
+        {TS})""",
+    "CREATE INDEX command_requests_by_run ON command_requests (workflow_run_id, status)",
+    "CREATE INDEX command_requests_by_assignment ON command_requests (assignment_id)",
+]

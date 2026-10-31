@@ -12,14 +12,14 @@ import re
 from typing import Iterable, Optional, Union
 
 PROMPT_LIMITS = {"task": 32 * 1024, "diff": 256 * 1024, "validation": 32 * 1024, "findings": 16 * 1024,
-                 "summary": 16 * 1024}
+                 "summary": 16 * 1024, "delegated_commands": 16 * 1024, "delegated": 32 * 1024}
 
-DATA_PLACEHOLDERS = ("task", "diff", "validation", "findings", "summary")
+DATA_PLACEHOLDERS = ("task", "diff", "validation", "findings", "summary", "delegated_commands")
 INLINE_PLACEHOLDERS = ("stage", "visit")
 ALLOWED = frozenset(DATA_PLACEHOLDERS + INLINE_PLACEHOLDERS)
 
 EMPTY = {"task": "(none)", "diff": "(no changes)", "validation": "(not run yet)", "findings": "(none)",
-         "summary": "(none)"}
+         "summary": "(none)", "delegated_commands": "(no delegated commands are available to this stage)"}
 
 # The fixed footer of every verdict stage: the contract P00 already parses (providers.base.extract_verdict).
 VERDICT_FOOTER = (
@@ -56,9 +56,10 @@ def _lines(findings: Union[None, str, Iterable[str]]) -> str:
 
 def render(template: str, *, kind: str, task: str, diff: Optional[str] = None, validation: Optional[str] = None,
            findings: Union[None, str, Iterable[str]] = None, summary: Optional[str] = None, stage: str,
-           visit: int) -> str:
+           visit: int, delegated_commands: Optional[str] = None) -> str:
     """Template with its placeholders filled, the TASK section when the template has none, and the verdict footer
-    on verdict stages. Raises ValueError for an unknown kind or placeholder (the loader rejects those earlier)."""
+    on verdict stages. A stage that may delegate commands (P06) gets the DELEGATED_COMMANDS section even when its
+    template has no {{delegated_commands}}, so an agent always learns what it may ask for. Raises ValueError for an unknown kind or placeholder (the loader rejects those earlier)."""
     if kind not in KINDS:
         raise ValueError(f"unknown prompt kind {kind!r}")
     names = placeholders(template)
@@ -71,6 +72,7 @@ def render(template: str, *, kind: str, task: str, diff: Optional[str] = None, v
         "validation": validation or EMPTY["validation"],
         "findings": _lines(findings) or EMPTY["findings"],
         "summary": summary or EMPTY["summary"],
+        "delegated_commands": delegated_commands or EMPTY["delegated_commands"],
     }
 
     def fill(m: "re.Match") -> str:
@@ -86,6 +88,20 @@ def render(template: str, *, kind: str, task: str, diff: Optional[str] = None, v
         if out and not out.endswith("\n"):
             out += "\n"
         out += section("TASK", values["task"], PROMPT_LIMITS["task"])
+    if delegated_commands and "delegated_commands" not in names:
+        out += section("DELEGATED_COMMANDS", delegated_commands, PROMPT_LIMITS["delegated_commands"])
     if kind == "verdict":
         out += "\n" + VERDICT_FOOTER
+    return out
+
+
+def resume_prompt(original: str, delegated: str, summary: Optional[str]) -> str:
+    """The prompt of a stage re-dispatched after delegated commands ran (P06): the attempt's original prompt, the
+    summary the agent left, and the commands' results. Appended as data sections, never expanded."""
+    out = original if original.endswith("\n") else original + "\n"
+    out += ("\nThis is a continuation. Your previous attempt at this stage asked the Agent Studio coordinator to run "
+            "delegated commands and ended its turn. The workspace is as you left it. Continue the task from where you "
+            "stopped, using the results below; do not repeat finished work.\n")
+    out += section("PREVIOUS_SUMMARY", summary or EMPTY["summary"], PROMPT_LIMITS["summary"])
+    out += section("DELEGATED", delegated, PROMPT_LIMITS["delegated"])
     return out
