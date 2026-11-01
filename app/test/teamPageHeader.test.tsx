@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import { chooseDeleteTeam, fakeManagement, overviewFixture, team } from './teamsFixtures';
+import { TeamPageHeader } from '../src/renderer/teams/TeamPageHeader';
+import type { TeamActions } from '../src/renderer/teams/teamEditModel';
 
 afterEach(cleanup);
 
@@ -82,7 +85,7 @@ describe('team page header', () => {
     await flush();
     expect(more.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('menu')).toBeTruthy();
-    const item = screen.getByRole('menuitem', { name: 'Delete team' });
+    const item = screen.getByRole('menuitem', { name: 'Reset usage limits' });
     expect(document.activeElement).toBe(item);
     fireEvent.keyDown(item, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -111,13 +114,50 @@ describe('team page header', () => {
     await renderTeam({ ...withTeam(team({ definition: { state: 'unreadable', problems: [] } })), calls: { deleteTeam } });
     expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
     fireEvent.click(btn('More team actions'));
-    const item = screen.getByRole('menuitem', { name: 'Delete team' });
+    const item = screen.getByRole('menuitem', { name: 'Delete team…' });
     expect(item.getAttribute('aria-disabled')).toBe('true');
     expect(document.getElementById(item.getAttribute('aria-describedby')!)!.textContent).toMatch(/could not be read; fix the file/);
     fireEvent.click(item); await flush();
     expect(deleteTeam).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Confirm delete' })).toBeNull();
     expect(screen.getByRole('menu')).toBeTruthy();
+  });
+
+  it('menu_items_are_disabled_with_a_reason_when_disconnected', () => {
+    const actions: TeamActions = {
+      resetUsage: vi.fn(async () => true),
+      unblockTicket: vi.fn(async () => true),
+      retryPausedRuns: vi.fn(async () => true),
+      approveCommand: vi.fn(async () => true),
+      rejectCommand: vi.fn(async () => true),
+      cancelCommand: vi.fn(async () => true),
+      attachCommand: vi.fn(async () => true),
+      copy: vi.fn(),
+    };
+    render(
+      <TeamPageHeader
+        team={running()}
+        busy={false}
+        refreshRef={createRef<HTMLButtonElement>()}
+        onRefresh={() => undefined}
+        writes={{ rename: vi.fn(async () => true), deleteTeam: vi.fn(async () => true) }}
+        teamActions={actions}
+        blockedTickets={[]}
+        blockedTicketsTruncated={false}
+        boardStatuses={null}
+        connected={false}
+        pending={false}
+        readOnly={false}
+      />,
+    );
+    fireEvent.click(btn('More team actions'));
+    const items = screen.getAllByRole('menuitem');
+    expect(items.length).toBeGreaterThan(0);
+    for (const entry of items) {
+      expect(entry.getAttribute('aria-disabled')).toBe('true');
+      const ids = (entry.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);
+      expect(ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' ')).toContain('The app is disconnected.');
+    }
   });
 
   describe('copy runtime id', () => {
@@ -133,12 +173,12 @@ describe('team page header', () => {
       await renderTeam(withTeam(running()));
       fireEvent.click(btn('Copy runtime id')); await flush();
       expect(writeText).toHaveBeenCalledWith(RUNTIME_ID);
-      expect(screen.getByRole('status').textContent).toBe('Runtime id copied');
+      expect(screen.getByRole('status').textContent).toBe('Copied Runtime id');
       cleanup();
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
       await renderTeam(withTeam(running()));
       fireEvent.click(btn('Copy runtime id')); await flush();
-      expect(screen.getByRole('status').textContent).toBe('Runtime id could not be copied.');
+      expect(screen.getByRole('status').textContent).toBe('Could not copy Runtime id');
     });
   });
 

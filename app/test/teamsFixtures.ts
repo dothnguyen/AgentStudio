@@ -413,5 +413,5 @@ export function switchStateOverview(state: 'pending' | 'failed'): TeamOverview {
 /** Opens the "More team actions" menu and chooses Delete team. */
 export function chooseDeleteTeam(): void {
   fireEvent.click(screen.getByRole('button', { name: 'More team actions' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete team' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete team…' }));
 }

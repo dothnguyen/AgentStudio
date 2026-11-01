@@ -1,4 +1,5 @@
 import type {
+  AttentionRun,
   ManagementError,
   MemberChanges,
   MemberInput,
@@ -36,6 +37,18 @@ export interface TeamWrites {
   addMember(team: OverviewTeam, values: MemberFormValues): Promise<boolean>;
   updateMember(team: OverviewTeam, memberId: string, changes: MemberChanges): Promise<boolean>;
   removeMember(team: OverviewTeam, memberId: string): Promise<boolean>;
+}
+
+/** Team-level actions offered by the header menu, wired to the management IPC. */
+export interface TeamActions {
+  resetUsage(team: OverviewTeam, provider: string): Promise<boolean>;
+  unblockTicket(key: string, to?: string): Promise<boolean>;
+  retryPausedRuns(runs: AttentionRun[]): Promise<boolean>;
+  approveCommand(id: string): Promise<boolean>;
+  rejectCommand(id: string, reason?: string): Promise<boolean>;
+  cancelCommand(id: string, reason?: string): Promise<boolean>;
+  attachCommand(team: OverviewTeam, kind: 'wsl' | 'windowsTerminal'): Promise<boolean>;
+  copy(text: string, label: string): void;
 }
 export type TicketPermissionState = { state: 'loading' } | { state: 'ready'; canAddTickets: boolean | null } | { state: 'error'; error: ManagementError };
 export function ticketPermissionText(p: TicketPermissionState): string {

@@ -1356,14 +1356,47 @@ ul[aria-label="Workspaces"] {
 .teams-page-actions .teams-page-icon-button { padding: 0; aspect-ratio: 1 / 1; color: #b9bec6; }
 .teams-page-actions .teams-page-button { padding: 0 14px; color: #e7e9ec; font-weight: 500; }
 .teams-page-actions :is(.teams-page-icon-button, .teams-page-button):hover:not(:disabled) { background: #1b1f25; border-color: #2a2e35; color: #e7e9ec; }
-.teams-page-menu { position: relative; }
-.teams-page-menu-popover { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: max-content; max-width: 280px; padding: 4px; background: #16191d; border: 1px solid #262a30; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-.teams-page-menu-popover ul { margin: 0; padding: 0; list-style: none; }
-.teams-page-menu-popover [role="menuitem"] { display: flex; align-items: center; width: 100%; min-height: 32px; padding: 0 10px; border: 0; border-radius: 5px; background: none; color: #f48771; text-align: left; }
-.teams-page-menu-popover [role="menuitem"]:hover:not([aria-disabled="true"]) { background: #1b1f25; color: #f48771; }
-.teams-page-menu-popover [role="menuitem"][aria-disabled="true"] { color: #8d949e; cursor: default; }
-.teams-page-menu-reason { margin: 4px 10px 6px; color: #a3a9b2; font-size: 12px; overflow-wrap: anywhere; }
+.teams-copy-status { margin: 0; color: #8d949e; font-size: 12px; overflow-wrap: anywhere; }
 .teams-detail { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+
+/* Reusable action menu (T-099): fixed portal, never clipped by table/card overflow. */
+.ui-menu-layer { position: static; }
+.ui-menu-level { display: contents; }
+.ui-menu-trigger { box-sizing: border-box; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: #b9bec6; background: none; border: 1px solid transparent; border-radius: 6px; }
+.ui-menu-trigger:hover:not(:disabled) { background: #1b1f25; color: #e7e9ec; }
+.ui-menu-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ui-menu-trigger:disabled { color: #8d949e; }
+.ui-menu { position: fixed; z-index: 1000; box-sizing: border-box; min-width: 200px; max-width: 320px; max-height: calc(100vh - 16px); padding: 4px; overflow-x: hidden; overflow-y: auto; background: #16191d; border: 1px solid #262a30; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.ui-menu-item { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 5px; background: none; color: #e7e9ec; font: inherit; font-size: 13px; line-height: 1.35; text-align: left; cursor: default; overflow-wrap: anywhere; }
+.ui-menu-item:hover:not([aria-disabled="true"]), .ui-menu-item:focus-visible { background: #1b1f25; color: #e7e9ec; outline: 2px solid var(--focus); outline-offset: -2px; }
+.ui-menu-item[aria-disabled="true"] { color: #8d949e; cursor: default; }
+.ui-menu-item-danger, .ui-menu-item-danger:hover:not([aria-disabled="true"]), .ui-menu-item-danger:focus-visible { color: #f48771; }
+.ui-menu-item-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.ui-menu-label { display: block; min-width: 0; overflow-wrap: anywhere; }
+.ui-menu-description { display: block; color: #8d949e; font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.ui-menu-reason { display: block; color: #8d949e; font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.ui-menu-check { flex: none; display: inline-flex; width: 14px; height: 18px; align-items: center; color: #5b9cff; }
+.ui-menu-icon { flex: none; margin-top: 2px; color: #a3a9b2; }
+.ui-menu-chevron { flex: none; display: inline-flex; align-items: center; height: 18px; margin-left: auto; color: #8d949e; }
+.ui-menu-separator { height: 1px; margin: 4px 6px; background: #23262c; }
+.ui-menu-heading { padding: 6px 10px 4px; color: #8d949e; font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; overflow-wrap: anywhere; }
+
+/* Confirmation dialog shared by team and member menus. */
+.ui-confirm { box-sizing: border-box; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-x: hidden; overflow-y: auto; padding: 20px; background: #16191d; color: #e7e9ec; border: 1px solid #262a30; border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); overflow-wrap: anywhere; }
+.ui-confirm h2 { margin: 0 0 8px; color: #e7e9ec; font-size: 16px; font-weight: 600; }
+.ui-confirm p { margin: 0 0 12px; color: #c4cad2; font-size: 13px; }
+.ui-confirm-details { max-height: 168px; margin: 0 0 12px; padding-left: 18px; overflow-y: auto; color: #c4cad2; font-size: 13px; }
+.ui-confirm-details li { overflow-wrap: anywhere; }
+.ui-confirm-reason { display: flex; flex-direction: column; gap: 4px; margin: 0 0 12px; color: #a3a9b2; font-size: 12px; }
+.ui-confirm-reason input { width: 100%; box-sizing: border-box; padding: 8px; background: #121418; color: #e7e9ec; border: 1px solid #2a2e35; border-radius: 6px; font: inherit; font-size: 13px; }
+.ui-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.ui-confirm-actions button { min-height: 34px; padding: 0 14px; border: 1px solid #2a2e35; border-radius: 7px; background: #16191d; color: #e7e9ec; font: inherit; }
+.ui-confirm-actions button:hover:not(:disabled) { background: #1b1f25; }
+.ui-confirm-actions button:disabled { color: #8d949e; cursor: default; }
+.ui-confirm-actions .ui-confirm-confirm { background: #1b1f25; }
+.ui-confirm-actions .ui-confirm-confirm-danger { color: #f48771; border-color: #5a2d28; }
+.ui-confirm-actions button:focus-visible, .ui-confirm-reason input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .ui-menu, .ui-confirm { transition: none; animation: none; } }
 
 /* Roles browser (P05-S35) */
 .roles-screen, .roles-layout > *, .roles-detail-pane, .roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-list, .roles-list li, .roles-row, .roles-details, .roles-search, .roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }

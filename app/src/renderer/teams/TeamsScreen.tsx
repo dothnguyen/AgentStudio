@@ -8,15 +8,19 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
   AgentDef,
+  AttentionRun,
+  AttachInfo,
   BoardRunResult,
   BoardSettings,
   ConnectionStatus,
   ManagementApi,
+  ManagementError,
   ManagementResult,
   OverviewTeam,
   OverviewMember,
   RoleCatalogItem,
   RoleCatalogList,
+  RunRetryResult,
   TeamEditResult,
   TeamOverview,
   Workspace,
@@ -35,13 +39,16 @@ import {
   nextStartSuffix,
   problemsSuffix,
   thrownError,
+  type TeamActions,
   type TeamWrites,
   type WriteFeedback,
 } from './teamEditModel';
+import { useCopyStatus } from '../ui/useCopyStatus';
 import {
 
   memberName,
   overviewNotices,
+  plural,
   teamLabel,
   type MemberSelection,
 } from './teamsModel';
@@ -84,6 +91,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const busy = refreshing || overview.loading || agents.loading || board.loading || roleCatalog.loading;
   const [feedback, setFeedback] = useState<WriteFeedback | null>(null);
+  const { status: copyStatus, copy } = useCopyStatus();
   const [routingError, setRoutingError] = useState(false);
   const [formAlert, setFormAlert] = useState(false);
   const [memberNotice, setMemberNotice] = useState(false);
@@ -223,6 +231,78 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     removeMember: (team, memberId) => runWrite('Member was not removed.', () => mgmt.removeMember(ws, team.id!, memberId), (d) => ({
       text: `Removed ${d.removed.name} from ${teamLabel(team)}.${problemsSuffix(d.problems)}`,
     })),
+  };
+
+  function commandText(id: string): string {
+    for (const item of navigation.data?.teams ?? []) {
+      const request = item.attention.commandRequests.find((entry) => entry.id === id);
+      if (request !== undefined) return request.command;
+    }
+    return id;
+  }
+
+  async function retryRuns(runs: AttentionRun[]): Promise<ManagementResult<{ retried: number }>> {
+    let retried = 0;
+    let firstFailure: ManagementError | null = null;
+    for (const run of runs) {
+      let result: ManagementResult<RunRetryResult>;
+      try { result = await mgmt.retryRun(ws, run.workflowRunId); }
+      catch (reason) { result = { ok: false, error: thrownError(reason) }; }
+      if (!result.ok) {
+        // Keep going: one paused run failing must not leave the later ones retried.
+        if (firstFailure === null) firstFailure = result.error;
+        continue;
+      }
+      retried += 1;
+    }
+    if (firstFailure !== null) {
+      return { ok: false, error: { ...firstFailure, message: `${firstFailure.message} Retried ${retried} of ${runs.length} paused runs.` } };
+    }
+    return { ok: true, data: { retried } };
+  }
+
+  const teamActions: TeamActions = {
+    resetUsage: (team, provider) => runWrite('Usage limits were not reset.', () => mgmt.resetUsage(ws, team.id!, provider), (d) => {
+      const cleared = d.members.filter((member) => member.cleared.length > 0).length;
+      const switched = d.members.filter((member) => member.switched);
+      const switchedText = switched.length === 0
+        ? ''
+        : `, ${switched.length} switched to ${[...new Set(switched.map((member) => member.activeAgent ?? 'another agent'))].join(', ')}`;
+      return { text: `Reset ${d.provider} usage limits: ${plural(cleared, 'member cleared', 'members cleared')}${switchedText}.` };
+    }),
+    unblockTicket: (key, to) => runWrite('Ticket was not unblocked.', () => mgmt.unblockTicket(ws, key, to), (d) => ({
+      text: `Unblocked ${d.ticket.key} to ${d.ticket.status}.`,
+    })),
+    retryPausedRuns: (runs) => runWrite('Paused runs were not retried.', () => retryRuns(runs), (d) => ({
+      text: `Retried ${plural(d.retried, 'paused run', 'paused runs')}.`,
+    })),
+    approveCommand: (id) => runWrite('Command was not approved.', () => mgmt.approveCommand(ws, id), () => ({
+      text: `Approved ${commandText(id)}.`,
+    })),
+    rejectCommand: (id, reason) => runWrite('Command was not rejected.', () => mgmt.rejectCommand(ws, id, reason), () => ({
+      text: `Rejected ${commandText(id)}.`,
+    })),
+    cancelCommand: (id, reason) => runWrite('Command was not cancelled.', () => mgmt.cancelCommand(ws, id, reason), () => ({
+      text: `Cancelled ${commandText(id)}.`,
+    })),
+    attachCommand: async (team, kind) => {
+      const runtimeId = team.runtime.teamId;
+      if (runtimeId === null) {
+        setFeedback(errorFeedback('Attach command could not be copied.', { code: 'NOT_RUNNING', message: 'The team is not running.', retryable: false }));
+        return false;
+      }
+      let result: ManagementResult<AttachInfo>;
+      try { result = await mgmt.attachInfo(ws, runtimeId); }
+      catch (reason) { result = { ok: false, error: thrownError(reason) }; }
+      if (!mounted.current) return false;
+      if (!result.ok) {
+        setFeedback(errorFeedback('Attach command could not be copied.', result.error));
+        return false;
+      }
+      copy(result.data[kind], kind === 'wsl' ? 'Attach command (WSL)' : 'Attach command (Windows Terminal)');
+      return true;
+    },
+    copy,
   };
 
   function lock(teamDefId: string, memberId: string, agentId: string, kind: 'switch' | 'resume'): boolean {
@@ -464,12 +544,18 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         refreshRef={refreshRef}
         onRefresh={() => { void refreshAll(true); }}
         writes={writes}
+        teamActions={teamActions}
+        blockedTickets={data?.blockedTickets ?? []}
+        blockedTicketsTruncated={data?.blockedTicketsTruncated ?? false}
+        boardStatuses={(board.data ?? lastBoard.current)?.statuses ?? null}
+        connected={connected}
         pending={pending}
         readOnly={!overviewFresh}
       />
       {roleCatalog.error !== null && <SectionError section={roleCatalog} alert={alertSource === 'roles'} label="Role catalog" retryLabel="Retry loading roles" retryId="teams-retry-roles" stale={rolesData !== null} onRetry={() => { void retrySection(roleCatalog, 'teams-retry-roles', 'teams-detail-title'); }} />}
       {agents.error !== null && <SectionError section={agents} alert={alertSource === 'agents'} label="Agent catalog" retryLabel="Retry loading agents" retryId="teams-retry-agents" stale={lastAgents.current !== null} onRetry={() => { void retrySection(agents, 'teams-retry-agents', 'teams-detail-title'); }} />}
       <WriteFeedbackView feedback={feedback} alert={alertSource === 'feedback'} announce={announceFeedback} onDismiss={() => setFeedback(null)} />
+      {copyStatus !== null && <p className="teams-copy-status" role="status">{copyStatus}</p>}
       {!connected && (
         <p className="panel-note teams-connection-note" role="status">
           {connectionState === 'lost' ? 'Connection lost. Showing previously loaded data.' : 'Connecting to Agent Studio…'}

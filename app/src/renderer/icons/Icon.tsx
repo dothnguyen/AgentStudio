@@ -3,7 +3,7 @@ import type { JSX } from 'react';
 export type IconName =
   | 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration' | 'switch' | 'chevron' | 'refresh' | 'item'
   | 'document' | 'ticket' | 'check-circle' | 'check' | 'clock' | 'arrow-right' | 'lock'
-  | 'box' | 'git-branch' | 'code' | 'search' | 'gear' | 'warning' | 'plus' | 'chevron-right';
+  | 'box' | 'git-branch' | 'code' | 'search' | 'gear' | 'warning' | 'plus' | 'chevron-right' | 'more';
 export type IconTone = 'success' | 'info' | 'warning' | 'danger';
 export interface IconSpec { name: IconName; tone: IconTone | null }
 
@@ -33,6 +33,7 @@ const PATHS: Record<IconName, string> = {
   warning: 'M8 2.5 14 13H2zM8 6.5v3M8 11.25v.01',
   plus: 'M8 3v10M3 8h10',
   'chevron-right': 'm6 4 4 4-4 4',
+  more: 'M3 8h.01M8 8h.01M13 8h.01',
 };
 
 export function Icon(props: { name: IconName; size?: number; tone?: IconTone | null; className?: string }): JSX.Element {

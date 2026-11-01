@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent, type RefObject } from 'react';
-import type { OverviewTeam } from '../api';
+import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import type { AttentionCommandRequest, AttentionRun, BlockedTicket, BoardSettings, OverviewTeam } from '../api';
 import { Icon } from '../icons/Icon';
+import { ActionMenu } from '../ui/ActionMenu';
+import type { MenuItem } from '../ui/actionMenuModel';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useCopyStatus } from '../ui/useCopyStatus';
 import { TeamNameForm } from './TeamEditForms';
-import { canEditTeam, uneditableNote, type TeamWrites } from './teamEditModel';
+import { canEditTeam, type TeamActions, type TeamWrites } from './teamEditModel';
+import { buildTeamMenu } from './teamActionsModel';
 import { RUNTIME_LABELS, definitionMetaText, runtimeTone, shortRuntimeId, teamLabel } from './teamsModel';
 
 export interface TeamPageHeaderProps {
@@ -11,32 +16,45 @@ export interface TeamPageHeaderProps {
   refreshRef: RefObject<HTMLButtonElement | null>;
   onRefresh(): void;
   writes: Pick<TeamWrites, 'rename' | 'deleteTeam'>;
+  teamActions: TeamActions;
+  blockedTickets: readonly BlockedTicket[];
+  blockedTicketsTruncated: boolean;
+  boardStatuses: BoardSettings['statuses'] | null;
+  connected: boolean;
   pending: boolean;
   readOnly: boolean;
 }
 
-const COPY_STATUS_MS = 3000;
+type HeaderConfirm =
+  | { kind: 'retry'; runs: AttentionRun[] }
+  | { kind: 'reject'; request: AttentionCommandRequest }
+  | { kind: 'cancel'; request: AttentionCommandRequest };
 
 function svgProps(size: number): Record<string, string | number> {
   return { width: size, height: size, viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false' };
 }
 
+function runLine(run: AttentionRun): string {
+  return `${run.ticketKey ?? run.workflowRunId} · ${run.stage === null ? 'unknown stage' : `stage ${run.stage}`} · ${run.diagnosticCode ?? run.status}`;
+}
+
+function commandLine(request: AttentionCommandRequest): string {
+  return request.command;
+}
+
 export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
-  const { team, writes, pending } = props;
+  const { team, writes, pending, teamActions } = props;
   const writeBlocked = pending || props.readOnly;
   const [teamForm, setTeamForm] = useState<'rename' | 'delete' | null>(null);
-  const [open, setOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<HeaderConfirm | null>(null);
+  const { status: copyStatus, copy } = useCopyStatus();
   const renameRef = useRef<HTMLButtonElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const menuWrapRef = useRef<HTMLDivElement>(null);
-  const itemRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const confirmed = useRef(false);
   const wasPending = useRef(pending);
   const restoreFocus = useRef<'rename' | 'menu' | null>(null);
-  const focusItem = useRef(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreMenuFocus = useRef(false);
 
   const cancelForm = (invoker: 'rename' | 'menu'): void => {
     restoreFocus.current = invoker;
@@ -49,63 +67,69 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
   }, [teamForm]);
   // A failed delete leaves the confirmation open: return focus to the Confirm button that pending disabled.
   useEffect(() => {
-    if (wasPending.current && !pending && confirmed.current && confirmRef.current?.isConnected) { confirmed.current = false; confirmRef.current.focus(); }
+    if (wasPending.current && !pending && confirmed.current && confirmRef.current?.isConnected) {
+      confirmed.current = false;
+      confirmRef.current.focus();
+    }
     wasPending.current = pending;
   }, [pending]);
-  useEffect(() => { if (writeBlocked) setOpen(false); }, [writeBlocked]);
+  // A confirmed menu action focuses the trigger once the write lock is released.
   useEffect(() => {
-    if (open && focusItem.current) { focusItem.current = false; itemRef.current?.focus(); }
-  }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: Event): void => {
-      if (!menuWrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
-  useEffect(() => () => { if (copyTimer.current !== null) clearTimeout(copyTimer.current); }, []);
+    if (confirm !== null || pending || !restoreMenuFocus.current) return;
+    restoreMenuFocus.current = false;
+    menuButtonRef.current?.focus();
+  }, [confirm, pending]);
 
-  function openMenu(): void {
-    focusItem.current = true;
-    if (open) { focusItem.current = false; itemRef.current?.focus(); return; }
-    setOpen(true);
-  }
-  function onMenuButtonKey(e: KeyboardEvent<HTMLButtonElement>): void {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openMenu();
-    }
-  }
-  function onItemKey(e: KeyboardEvent<HTMLButtonElement>): void {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') e.preventDefault();
-    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); menuButtonRef.current?.focus(); }
-    else if (e.key === 'Tab') setOpen(false);
-  }
   function chooseDelete(): void {
     if (team === null || !canEditTeam(team)) return;
-    setOpen(false);
     setTeamForm('delete');
   }
-  function announceCopy(text: string): void {
-    setCopyStatus(text);
-    if (copyTimer.current !== null) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => { copyTimer.current = null; setCopyStatus(null); }, COPY_STATUS_MS);
+
+  async function resetAllProviders(target: OverviewTeam, providers: string[]): Promise<void> {
+    // One reset per provider with holds, one after another. A failure for one
+    // provider must not stop the remaining providers from being reset/reported.
+    for (const provider of providers) {
+      await teamActions.resetUsage(target, provider);
+    }
   }
-  function copyRuntimeId(id: string): void {
-    if (copyTimer.current !== null) { clearTimeout(copyTimer.current); copyTimer.current = null; }
-    setCopyStatus(null);
-    const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
-    if (!clipboard) { announceCopy('Runtime id could not be copied.'); return; }
-    let written: Promise<void>;
-    try { written = Promise.resolve(clipboard.writeText(id)); } catch { announceCopy('Runtime id could not be copied.'); return; }
-    written.then(() => announceCopy('Runtime id copied'), () => announceCopy('Runtime id could not be copied.'));
-  }
+
+  const globalReason = writeBlocked
+    ? (pending ? 'Another change is in progress.' : 'Team data is not current.')
+    : !props.connected ? 'The app is disconnected.' : null;
+
+  const menuItems: MenuItem[] = team === null ? [] : buildTeamMenu({
+    team,
+    blockedTickets: props.blockedTickets,
+    blockedTicketsTruncated: props.blockedTicketsTruncated,
+    statuses: props.boardStatuses,
+    disabledReason: globalReason,
+    actions: {
+      resetUsage: (provider) => { void teamActions.resetUsage(team, provider); },
+      resetUsageAll: (providers) => { void resetAllProviders(team, providers); },
+      unblockTicket: (key, to) => { void teamActions.unblockTicket(key, to); },
+      retryPausedRuns: (runs) => setConfirm({ kind: 'retry', runs }),
+      approveCommand: (id) => { void teamActions.approveCommand(id); },
+      rejectCommand: (id) => {
+        const request = team.attention.commandRequests.find((entry) => entry.id === id);
+        if (request === undefined) { void teamActions.rejectCommand(id); return; }
+        setConfirm({ kind: 'reject', request });
+      },
+      cancelCommand: (id) => {
+        const request = team.attention.commandRequests.find((entry) => entry.id === id);
+        if (request === undefined) { void teamActions.cancelCommand(id); return; }
+        setConfirm({ kind: 'cancel', request });
+      },
+      // Route menu copies through the screen so the status is announced even
+      // when the header's runtime meta row (and its local status) is absent.
+      copy: (text, label) => teamActions.copy(text, label),
+      attach: (kind) => { void teamActions.attachCommand(team, kind); },
+      deleteTeam: chooseDelete,
+    },
+  });
 
   const runtimeId = team?.runtime.teamId ?? null;
   const definition = team === null ? null : definitionMetaText(team);
   const editable = team !== null && canEditTeam(team);
-  const reason = team === null ? null : uneditableNote(team);
   const metaItems: JSX.Element[] = [];
   if (team !== null && definition !== null) {
     if (team.id !== null) {
@@ -121,7 +145,7 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
         <span key="runtime" className="teams-page-meta-item">
           <span className="teams-page-meta-label">Runtime</span>
           <code className="teams-page-mono" title={runtimeId}>{shortRuntimeId(runtimeId)}</code>
-          <button type="button" className="teams-page-copy" aria-label="Copy runtime id" onClick={() => copyRuntimeId(runtimeId)}>
+          <button type="button" className="teams-page-copy" aria-label="Copy runtime id" onClick={() => copy(runtimeId, 'Runtime id')}>
             <svg {...svgProps(13)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="9" y="9" width="11" height="11" rx="2" />
               <path d="M5 15V5a1 1 0 0 1 1-1h10" />
@@ -184,47 +208,14 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
             <button type="button" className="teams-page-button" aria-label="Rename team" ref={renameRef} disabled={writeBlocked} onClick={() => setTeamForm('rename')}>Rename</button>
           )}
           {team !== null && (
-            <div className="teams-page-menu" ref={menuWrapRef}>
-              <button
-                type="button"
-                id="teams-page-menu-button"
-                className="teams-page-icon-button"
-                aria-label="More team actions"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-controls={open ? 'teams-page-menu' : undefined}
-                ref={menuButtonRef}
-                disabled={writeBlocked}
-                onClick={() => { if (open) setOpen(false); else { focusItem.current = true; setOpen(true); } }}
-                onKeyDown={onMenuButtonKey}
-              >
-                <svg {...svgProps(16)} fill="currentColor">
-                  <circle cx="5" cy="12" r="1.6" />
-                  <circle cx="12" cy="12" r="1.6" />
-                  <circle cx="19" cy="12" r="1.6" />
-                </svg>
-              </button>
-              {open && (
-                <div className="teams-page-menu-popover">
-                  <ul role="menu" id="teams-page-menu" aria-labelledby="teams-page-menu-button">
-                    <li role="none">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        ref={itemRef}
-                        aria-disabled={editable ? undefined : 'true'}
-                        aria-describedby={editable ? undefined : 'teams-page-menu-reason'}
-                        onKeyDown={onItemKey}
-                        onClick={chooseDelete}
-                      >
-                        Delete team
-                      </button>
-                    </li>
-                  </ul>
-                  {!editable && reason !== null && <p id="teams-page-menu-reason" className="teams-page-menu-reason">{reason}</p>}
-                </div>
-              )}
-            </div>
+            <ActionMenu
+              label="Team actions"
+              trigger={{ icon: 'more', ariaLabel: 'More team actions' }}
+              triggerClassName="teams-page-icon-button"
+              triggerRef={menuButtonRef}
+              items={menuItems}
+              disabled={writeBlocked}
+            />
           )}
         </div>
       </div>
@@ -253,6 +244,45 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
           </button>
           <button type="button" onClick={() => cancelForm('menu')}>Cancel</button>
         </div>
+      )}
+      {confirm?.kind === 'retry' && (
+        <ConfirmDialog
+          title="Retry paused runs?"
+          body={`Retry ${confirm.runs.length === 1 ? 'this paused run' : `these ${confirm.runs.length} paused runs`}? Each run is retried in order and reports through the Teams feedback line.`}
+          details={confirm.runs.map(runLine)}
+          confirmLabel="Retry runs"
+          busy={pending}
+          returnFocusRef={menuButtonRef}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => { const runs = confirm.runs; restoreMenuFocus.current = true; setConfirm(null); void teamActions.retryPausedRuns(runs); }}
+        />
+      )}
+      {confirm?.kind === 'reject' && (
+        <ConfirmDialog
+          title="Reject command?"
+          body={`Reject "${commandLine(confirm.request)}"? The requesting member is told why.`}
+          details={confirm.request.reason === null ? undefined : [confirm.request.reason]}
+          confirmLabel="Reject command"
+          danger
+          reasonLabel="Reason (optional)"
+          busy={pending}
+          returnFocusRef={menuButtonRef}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(reason) => { const request = confirm.request; restoreMenuFocus.current = true; setConfirm(null); void teamActions.rejectCommand(request.id, reason); }}
+        />
+      )}
+      {confirm?.kind === 'cancel' && (
+        <ConfirmDialog
+          title="Cancel running command?"
+          body={`Cancel "${commandLine(confirm.request)}"? The command stops and the run keeps going without its result.`}
+          confirmLabel="Cancel command"
+          danger
+          reasonLabel="Reason (optional)"
+          busy={pending}
+          returnFocusRef={menuButtonRef}
+          onCancel={() => setConfirm(null)}
+          onConfirm={(reason) => { const request = confirm.request; restoreMenuFocus.current = true; setConfirm(null); void teamActions.cancelCommand(request.id, reason); }}
+        />
       )}
     </header>
   );
