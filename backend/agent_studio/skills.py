@@ -7,6 +7,7 @@ follows a skill symlink, and reports one bad skill in ``problems`` instead of fa
 from __future__ import annotations
 
 import codecs
+import copy
 import hashlib
 import json
 import os
@@ -14,7 +15,8 @@ import re
 import stat
 
 from . import rolecatalog, roles
-from .protocol import BAD_REQUEST, CONFIG_CHANGED, SKILL_EXISTS, SKILL_IN_USE, SKILL_NOT_FOUND, AsError
+from .protocol import (BAD_REQUEST, CONFIG_CHANGED, ROLE_NOT_FOUND, SKILL_EXISTS, SKILL_IN_USE,
+                       SKILL_NOT_FOUND, AsError)
 
 SKILL_FILE = "SKILL.md"
 TITLE_CHARS = 120
@@ -511,3 +513,91 @@ def delete_skill(workspace: str, skill, expected_roles_sha256, expected_sha256) 
             folder_state = "kept"
     return {"workspace": workspace, "deleted": {"id": skill, "folder": folder_state},
             "rolesSha256": roles_sha}
+
+
+# ---- the roles that use a skill (P07-S04) -----------------------------------------------------
+#
+# One atomic write of roles.json for every role that should (or should no longer) list a skill.
+# The complete wanted set is applied or nothing is written; SKILL.md files and role instructions
+# are never touched.
+
+def _roles_conflict(roles_data) -> AsError:
+    return AsError(CONFIG_CHANGED, f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.",
+                   data={"rolesSha256": roles._sha(roles_data)})
+
+
+def _role_id_list(value) -> list[str]:
+    if not isinstance(value, list):
+        raise AsError(BAD_REQUEST, "Argument 'roles' must be an array of role ids.")
+    seen = set()
+    for index, role_id in enumerate(value):
+        if not isinstance(role_id, str):
+            raise AsError(BAD_REQUEST, f"Argument 'roles[{index}]' must be a role id.")
+        if role_id in seen:
+            raise AsError(BAD_REQUEST, f"Argument 'roles' contains role '{role_id}' more than once.")
+        seen.add(role_id)
+    return list(value)
+
+
+def update_skill_roles(workspace: str, skill: str, role_ids, expected_roles_sha256) -> dict:
+    """Set exactly which roles list ``skill`` in roles.json with one write.
+
+    ``role_ids`` is the complete wanted set (unique, may be empty). Adding a skill whose SKILL.md is
+    missing is refused; removing one is allowed so a dangling reference can be cleaned up.
+    """
+    _valid_skill_id(skill)
+    wanted = _role_id_list(role_ids)
+    base = _base(workspace)
+    roles_path = os.path.join(base, "roles.json")
+    roles_data = roles._read_raw(roles_path)
+    if roles._sha(roles_data) != expected_roles_sha256:
+        raise _roles_conflict(roles_data)
+    if roles_data is None:
+        raw = {"version": 1, "roles": {}}
+    else:
+        raw = roles._validated_catalog(workspace, roles_data)
+        roles._catalog_problems(workspace, raw, False)
+    for role_id in wanted:
+        if role_id not in raw["roles"]:
+            raise AsError(ROLE_NOT_FOUND, f"Role '{role_id}' is not defined in .agent-studio/roles.json.")
+    wanted_set = set(wanted)
+    current = [role_id for role_id, spec in raw["roles"].items() if skill in spec.get("skills", [])]
+    current_set = set(current)
+    added = [role_id for role_id in raw["roles"] if role_id in wanted_set and role_id not in current_set]
+    removed = [role_id for role_id in raw["roles"] if role_id in current_set and role_id not in wanted_set]
+    # A semantic no-op must retain the original bytes and inode.
+    if not added and not removed:
+        return {"workspace": workspace, "skill": skill, "roles": current,
+                "added": [], "removed": [], "rolesSha256": roles._sha(roles_data)}
+    # Only a new reference needs a readable SKILL.md; removing a dangling one stays possible.
+    if added and not rolecatalog._skill_exists(base, skill):
+        raise AsError(SKILL_NOT_FOUND,
+                      f"Skill '{skill}' has no {roles.CONFIG_DIR}/skills/{skill}/{SKILL_FILE}; "
+                      "create it before adding it to a role.")
+    candidate = copy.deepcopy(raw)
+    for role_id in added:
+        spec = candidate["roles"][role_id]
+        spec["skills"] = list(spec.get("skills", [])) + [skill]
+    for role_id in removed:
+        spec = candidate["roles"][role_id]
+        # Keep the key (possibly empty) rather than deleting it.
+        spec["skills"] = [entry for entry in spec.get("skills", []) if entry != skill]
+    roles._catalog_problems(workspace, candidate, False)
+    data = (json.dumps(candidate, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    tmp = None
+    try:
+        tmp = roles._stage(os.path.dirname(roles_path), data, roles._mode_of(roles_path))
+        # Recheck immediately before the replace so a concurrent edit is never overwritten.
+        now = roles._read_raw(roles_path)
+        if now != roles_data:
+            raise _roles_conflict(now)
+        roles._replace(tmp, roles_path)
+        tmp = None
+    except BaseException:
+        roles._discard(tmp)
+        raise
+    return {"workspace": workspace, "skill": skill,
+            "roles": [role_id for role_id, spec in candidate["roles"].items()
+                      if skill in spec.get("skills", [])],
+            "added": added, "removed": removed,
+            "rolesSha256": hashlib.sha256(data).hexdigest()}

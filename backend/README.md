@@ -185,6 +185,17 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   or a change found on the recheck immediately before removal, is `CONFIG_CHANGED` with
   `data.rolesSha256|skillSha256` and deletes nothing. A missing file is `SKILL_NOT_FOUND` (nothing to delete); a
   symlinked skills folder, skill folder or `SKILL.md` is `BAD_REQUEST`. The command never edits `roles.json`.
+- `skill.roles.update {workspace, skill, roles, expectedRolesSha256}` sets exactly which roles list a skill in
+  one atomic `roles.json` write and returns `{workspace, skill, roles, added, removed, rolesSha256}`. `roles` is
+  the complete, unique wanted set (possibly empty); every id must exist (`ROLE_NOT_FOUND` names the first
+  unknown one, duplicates are `BAD_REQUEST`). New ids are appended to a role's `skills` list (creating it when
+  absent), unwanted ids are removed while keeping the other entries and an empty array, and roles already in
+  the wanted state are unchanged. Adding a skill whose `SKILL.md` is missing is `SKILL_NOT_FOUND` (no new
+  dangling references); removing a missing skill is allowed. `expectedRolesSha256` is the `roles.json` SHA from
+  `skill.list` (null only when the file is absent); a stale token, or a change found immediately before the
+  replace, is `CONFIG_CHANGED` with `data.rolesSha256` and writes nothing. A no-op leaves the file untouched;
+  the same formatting and atomic replace as `role.update` are used, and `SKILL.md`/instruction files are never
+  touched.
 
 Protected routes: when a board has the `merge-conflict` or `plan-merge-conflict` status, it must keep it, with a
 rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the existing `board.run` and
