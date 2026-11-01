@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, delegation, rolecatalog, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -239,6 +239,19 @@ def _role_list(args, req):
     finally:
         if conn is not None:
             conn.close()
+
+
+def _skill_list(args, req):
+    ws = _catalog_workspace(args, {"workspace"}, "skill.list")
+    return skills.list_skills(ws)
+
+
+def _skill_show(args, req):
+    ws = _catalog_workspace(args, {"workspace", "skill"}, "skill.show")
+    skill = args.get("skill")
+    if not isinstance(skill, str) or not roles.SKILL_RE.fullmatch(skill):
+        raise AsError(BAD_REQUEST, "skill must be a skill folder name (lowercase letters, digits, '.', '_', '-').")
+    return skills.show_skill(ws, skill)
 
 
 def _agentdef_list(args, req):
@@ -1083,6 +1096,8 @@ COMMANDS = {
     "role.instructions.update": _role_instructions_update,
     "role.list": _role_list,
     "role.delete": _role_delete,
+    "skill.list": _skill_list,
+    "skill.show": _skill_show,
     "board.run": _inbox("board.run", _validate_board_run),
     "board.stop": _inbox("board.stop", _validate_board_show),
     "phase.add": _inbox("phase.add", _validate_phase_add),

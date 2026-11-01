@@ -155,6 +155,17 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
 - `role.create {workspace, role, expectedSha256?}` creates a role with an immutable slug id and optional description and skills. `role.update {workspace, roleId, changes, expectedSha256?}` edits its display name, description, and ordered skills; null removes a name or description. Both return a SHA token and missing-skill warnings.
 - `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
   (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
+- `skill.list {workspace}` returns the read-only skill catalog: `rolesSha256`, the skill/role context limits,
+  sorted `skills`, and `problems`. Each skill has its id, `skills/<id>/SKILL.md` path, state
+  (`ok|missing|unreadable|truncated`), title, full-file bytes and SHA-256, and the roles that list it with their
+  `contextBytes` (instruction bytes plus their `ok` skills). A listed skill without a file is a `missing` item; a
+  folder without `SKILL.md` that no role lists is omitted. Symlinks are never followed; a bad skill is reported in
+  `problems` and never fails the request. A missing or invalid `roles.json` still lists the folders, with empty
+  roles, a null `rolesSha256` and one problem.
+- `skill.show {workspace, skill}` returns `{workspace, skill, text}` for one skill id; `text` is null unless the
+  state is `ok` or `truncated` (the first 32 KiB). A bad id is `BAD_REQUEST`; an id with no folder that no role
+  lists is `SKILL_NOT_FOUND`. Both skill commands are direct, read-only requests: they take no write lock and do
+  not require a running coordinator.
 
 Protected routes: when a board has the `merge-conflict` or `plan-merge-conflict` status, it must keep it, with a
 rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the existing `board.run` and
