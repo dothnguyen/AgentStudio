@@ -9,6 +9,7 @@ import type {
   Workspace,
 } from '../api';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
+import { BoardLanes } from './BoardLanes';
 
 /** The board has no pushed change event today; a poll keeps the header and lanes current. */
 export const BOARD_CHANGED_EVENT = 'board-changed';
@@ -143,6 +144,10 @@ export interface CurrentPhaseScreenProps {
   management: ManagementApi;
   /** Opens the Phases screen from the "no current phase" state. */
   onOpenPhases?(): void;
+  /** Empty columns are hidden by default; the toolbar will expose this as a switch. */
+  hideEmpty?: boolean;
+  /** Opens the ticket page; omitted until the ticket-page story wires it in. */
+  onOpenTicket?(key: string): void;
   /** Test seam for the refresh interval; the app uses 5 seconds. */
   refreshMs?: number;
 }
@@ -197,6 +202,10 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
   const progress = phaseProgress(tickets);
+  const settingsStatuses = board.data?.settings.statuses ?? [];
+  const statuses = settingsStatuses.length > 0
+    ? settingsStatuses
+    : (board.data?.tickets?.statuses ?? []).map((id) => ({ id, name: null, kind: null }));
 
   if (board.state === 'loading') {
     return (
@@ -271,6 +280,15 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
         </div>
       </header>
       <Notice />
+      {tickets.length > 0 && (
+        <BoardLanes
+          statuses={statuses}
+          rules={board.data?.settings.rules ?? []}
+          tickets={tickets}
+          hideEmpty={props.hideEmpty}
+          onOpenTicket={props.onOpenTicket}
+        />
+      )}
       {tickets.length === 0 && (
         <section className="boards-state-card boards-empty-phase" aria-labelledby="boards-empty-title">
           <h2 id="boards-empty-title">No tickets in this phase yet</h2>

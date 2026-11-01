@@ -23,3 +23,23 @@ describe('Current Phase header styles', () => {
     expect(flat).toContain('@media (prefers-reduced-motion: reduce) { .boards-skeleton-line { animation: none; opacity: 0.8; } }');
   });
 });
+
+describe('Current Phase lane styles', () => {
+  it('lets the board scroll horizontally while the page itself does not', () => {
+    expect(flat).toContain('.boards-current-screen { display: flex; flex-direction: column; gap: 20px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-x: clip;');
+    expect(flat).toContain('.boards-board { max-width: 100%; min-width: 0; overflow-x: auto; padding-bottom: 12px; margin: 0 -4px; padding-left: 4px; }');
+  });
+
+  it('uses the design lane header and 276px column card', () => {
+    expect(flat).toContain('.boards-lane-name { display: inline-flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }');
+    expect(flat).toContain('.boards-lane-count { color: #8d949e; font-weight: 500; letter-spacing: 0; text-transform: none; }');
+    expect(flat).toContain('.boards-column { display: flex; flex-direction: column; gap: 10px; flex: none; width: 276px; padding: 10px; border: 1px solid #23262c; border-radius: 12px; background: #14171a; }');
+  });
+
+  it('uses dashed empty and show-more placeholders and a three-line card title', () => {
+    expect(flat).toContain('.boards-column-empty { padding: 14px 8px; border: 1px dashed #262a30;');
+    expect(flat).toContain('.boards-lane-hidden { align-self: flex-start; max-width: 150px; padding: 8px 12px; border: 1px dashed #2f343c;');
+    expect(flat).toContain('.boards-column-more { width: 100%; min-height: 0; padding: 7px 10px; border: 1px dashed #343a43;');
+    expect(flat).toContain('.boards-ticket-title { display: -webkit-box; overflow: hidden; font-weight: 500; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }');
+  });
+});
