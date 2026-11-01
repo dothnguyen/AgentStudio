@@ -343,6 +343,20 @@ an open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.
 
+## Using Agent Studio from your own MCP clients (operator mode)
+
+`agent-studio mcp --operator` serves the board to Claude Code, Codex, OpenCode or any MCP client you run yourself
+(no assignment needed). It is read-only by default; add `--allow-writes` to also offer `ticket_add`, `ticket_move`,
+`ticket_depend`, `ticket_unblock`, `ticket_retry`, `command_approve` and `command_reject`. There is no free-form
+command tool: every call is one of these fixed tools and goes through the same validated command path as the CLI.
+`--workspace PATH` pins the workspace (default: `AGENT_STUDIO_WORKSPACE`, else the workspace at or above the
+directory the client starts the server in; each tool also takes a `workspace` argument).
+Read tools: `workspace_list`, `board_show`, `phase_list`, `ticket_list`, `ticket_show`, `team_overview`,
+`workflow_show`, `command_requests`, `command_catalog`.
+
+`agent-studio mcp --print-config` prints the setup lines for each client (with the `wsl.exe -d <distro> -e ...`
+form for clients running on Windows).
+
 ## Delegated commands (P06)
 
 Agents run inside their provider's sandbox, so environment work such as `npm ci` is declined and would pause the

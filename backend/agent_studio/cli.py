@@ -714,7 +714,7 @@ def main(argv=None) -> int:
         return serve.run()
     if cmd == "mcp":
         from . import mcpserver
-        return mcpserver.serve()
+        return mcpserver.main(argv[1:])
     if cmd == "keepalive":
         return keepalive.run()
     if cmd == "coordinator" and argv[1:2] == ["run"]:
