@@ -122,6 +122,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       workspace={props.workspace}
       management={props.management}
       connection={props.connection}
+      onViewRole={(roleId) => navigate('roles', { roleId })}
     />
   ) : sectionId === 'routing' ? (
     <RoutingScreen

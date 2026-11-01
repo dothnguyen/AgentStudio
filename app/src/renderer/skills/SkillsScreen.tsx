@@ -2,12 +2,15 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import type { ConnectionStatus, ManagementApi, SkillCatalogList, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
+import { SkillPage } from './SkillPage';
 import { filterSkills, skillRoleNames, skillSize, skillSummary } from './skillsModel';
 
 export interface SkillsScreenProps {
   workspace: Workspace;
   management: ManagementApi;
   connection?: ConnectionStatus;
+  /** Opens the role page in the Roles screen; the member pages use the same navigation. */
+  onViewRole?(roleId: string): void;
 }
 
 type SkillsView = { kind: 'list' } | { kind: 'skill'; skillId: string };
@@ -70,10 +73,13 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     target.focus();
   }, [focusSkillPage, view, data]);
 
-  useEffect(() => {
-    if (view.kind !== 'skill' || catalog.state !== 'ready' || data === null) return;
-    if (!data.skills.some(skill => skill.id === view.skillId)) setView({ kind: 'list' });
-  }, [view, catalog.state, data]);
+  const skillPage = view.kind === 'skill' ? shown?.skills.find(skill => skill.id === view.skillId) ?? null : null;
+  const skillRemoved = view.kind === 'skill' && skillPage === null && catalog.state === 'ready'
+    && shown !== null && !shown.skills.some(skill => skill.id === view.skillId);
+  const backFromRemoved = () => {
+    setView({ kind: 'list' });
+    setFocusRowId(null);
+  };
 
   return <div className="skills-screen" data-section="skills">
     {view.kind === 'list' && <header className="skills-header">
@@ -146,14 +152,24 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
           </section>}
       </>}
     </>}
-    {view.kind === 'skill' && <div className="skills-page" role="region" aria-label="Skill details">
+    {view.kind === 'skill' && skillPage !== null && shown !== null && <SkillPage
+      skill={skillPage}
+      limits={shown.limits}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      onBack={backToList}
+      onViewRole={props.onViewRole}
+      headingRef={skillHeading}
+    />}
+    {view.kind === 'skill' && skillRemoved && <div className="skills-page skills-removed" role="region" aria-label="Skill details">
       <nav className="skills-breadcrumb" aria-label="Breadcrumb">
         <ol>
-          <li><button type="button" className="skills-back" onClick={backToList}>Skills</button></li>
+          <li><button type="button" className="skills-back" onClick={backFromRemoved}>Skills</button></li>
           <li aria-current="page">{view.skillId}</li>
         </ol>
       </nav>
-      <h1 tabIndex={-1} ref={skillHeading} className="skills-page-title">{view.skillId}</h1>
+      <p className="skills-removed-text">This skill no longer exists.</p>
+      <button type="button" className="skills-removed-back" onClick={backFromRemoved}>Back to skills</button>
     </div>}
   </div>;
 }

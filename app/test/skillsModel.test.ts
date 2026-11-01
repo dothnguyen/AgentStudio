@@ -2,11 +2,20 @@ import { describe, expect, it } from 'vitest';
 import type { SkillItem } from '../src/renderer/api';
 import {
   filterSkills,
+  formatRoleContext,
   formatSkillBytes,
   formatSkillLimit,
+  formatSkillStats,
+  roleInitial,
+  skillDetailsSize,
+  skillDetailsTitle,
+  skillHeaderNote,
+  skillMissingNote,
   skillRoleNames,
   skillSize,
   skillSummary,
+  skillTruncatedNote,
+  skillUsage,
 } from '../src/renderer/skills/skillsModel';
 import { skillItem } from './skillFixtures';
 
@@ -123,6 +132,55 @@ describe('skillSize', () => {
       warning: true,
       noteWarning: false,
     });
+  });
+});
+
+describe('skill page model', () => {
+  it('labels the usage pill for used, unused and missing skills', () => {
+    expect(skillUsage(item({ roles: [{ id: 'a', name: 'A', contextBytes: 1 }] }))).toEqual({ text: 'Used by 1 role', tone: 'used' });
+    expect(skillUsage(item({ roles: [{ id: 'a', name: 'A', contextBytes: 1 }, { id: 'b', name: 'B', contextBytes: 2 }] })))
+      .toEqual({ text: 'Used by 2 roles', tone: 'used' });
+    expect(skillUsage(item({ roles: [] }))).toEqual({ text: 'Not used', tone: 'muted' });
+    expect(skillUsage(item({ state: 'missing', title: null, bytes: null, roles: [] }))).toEqual({ text: 'Missing', tone: 'missing' });
+  });
+
+  it('describes the header line and details values for each readable state', () => {
+    expect(skillHeaderNote(item({ title: ' Alpha title ' }))).toBe('Alpha title');
+    expect(skillHeaderNote(item({ title: '  ' }))).toBe('No title');
+    expect(skillHeaderNote(item({ state: 'missing', title: null, bytes: null, roles: [{ id: 'a', name: 'A', contextBytes: 1 }] })))
+      .toBe('Referenced by 1 role, but there is no file.');
+    expect(skillHeaderNote(item({ state: 'missing', title: null, bytes: null, roles: [
+      { id: 'a', name: 'A', contextBytes: 1 },
+      { id: 'b', name: 'B', contextBytes: 2 },
+    ] }))).toBe('Referenced by 2 roles, but there is no file.');
+    expect(skillHeaderNote(item({ state: 'missing', title: null, bytes: null, roles: [] })))
+      .toBe('Referenced by 0 roles, but there is no file.');
+    expect(skillDetailsTitle(item({ title: 'Alpha' }))).toBe('Alpha');
+    expect(skillDetailsTitle(item({ state: 'missing', title: null, bytes: null }))).toBe('No SKILL.md found');
+    expect(skillDetailsTitle(item({ state: 'unreadable', title: null, bytes: null }))).toBe('The file cannot be read.');
+    expect(skillDetailsSize(item({ bytes: 839 }), 32768)).toBe('839 B of 32 KiB');
+    expect(skillDetailsSize(item({ state: 'missing', bytes: null }), 32768)).toBe('File not found');
+    expect(skillDetailsSize(item({ state: 'unreadable', bytes: null }), 32768)).toBe('File cannot be read');
+  });
+
+  it('formats preview stats and role context sizes', () => {
+    expect(formatSkillStats('one\ntwo', 839, 32768)).toBe('2 lines · 839 / 32,768 bytes');
+    expect(formatSkillStats('', 0, 32768)).toBe('0 lines · 0 / 32,768 bytes');
+    expect(formatRoleContext(2048, 98304)).toEqual({ text: 'Context 2.0 KB of 96 KiB', warning: false });
+    expect(formatRoleContext(0, 98304)).toEqual({ text: 'Context 0.0 KB of 96 KiB', warning: false });
+    expect(formatRoleContext(78644, 98304).warning).toBe(true);
+    expect(formatRoleContext(78643, 98304).warning).toBe(false);
+    expect(formatRoleContext(90000, 98304)).toEqual({ text: 'Context 87.9 KB of 96 KiB', warning: true });
+  });
+
+  it('builds the missing and truncation notes and the avatar initial', () => {
+    expect(skillMissingNote('skills/legacy-notes/SKILL.md'))
+      .toBe('Roles refer to this skill but skills/legacy-notes/SKILL.md does not exist, so it is skipped when assignments start. Create it, or remove it from the roles that list it.');
+    expect(skillTruncatedNote(32768))
+      .toBe('This file is larger than 32 KiB, so only the start is shown and it cannot be edited here. Shorten it outside the app.');
+    expect(roleInitial('TeamLead')).toBe('T');
+    expect(roleInitial('  developer')).toBe('D');
+    expect(roleInitial('')).toBe('?');
   });
 });
 
