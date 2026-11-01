@@ -5,9 +5,15 @@ import { Icon } from '../icons/Icon';
 export interface DialogAction {
   label: string;
   onClick(): void;
-  /** "primary" is the blue save action; "secondary" is the outlined cancel action. */
-  variant?: 'primary' | 'secondary';
+  /** "primary" is the blue save action; "secondary" is the outlined cancel action; "danger" is the red destructive action. */
+  variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
+  /** Marks a destructive action that is currently running. */
+  busy?: boolean;
+  /** Optional explanation associated with the action (for example a blocked reason). */
+  descriptionId?: string;
+  /** Optional handle so the owner can focus this action when the dialog opens. */
+  buttonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export interface DialogProps {
@@ -28,6 +34,12 @@ export interface DialogProps {
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
   className?: string;
+  /** Set false for a confirmation that has no close button (defaults to true). */
+  showClose?: boolean;
+  /** Optional id of the body copy that describes this dialog. */
+  describedBy?: string;
+  /** Destructive confirmations use the alertdialog role; the default is dialog. */
+  role?: 'dialog' | 'alertdialog';
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -43,7 +55,7 @@ export function Dialog(props: DialogProps): JSX.Element {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
-  const { busy = false, width = 520 } = props;
+  const { busy = false, width = 520, showClose = true } = props;
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const onCloseRef = useRef(props.onClose);
@@ -125,9 +137,10 @@ export function Dialog(props: DialogProps): JSX.Element {
     >
       <div
         ref={panelRef}
-        role="dialog"
+        role={props.role ?? 'dialog'}
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={props.describedBy}
         tabIndex={-1}
         className={['dialog-panel', props.className].filter(Boolean).join(' ')}
         style={{ width: `min(${width}px, 100%)` }}
@@ -137,7 +150,7 @@ export function Dialog(props: DialogProps): JSX.Element {
             <h2 id={titleId}>{props.title}</h2>
             {props.subtitle !== undefined && <p className="dialog-subtitle">{props.subtitle}</p>}
           </div>
-          <button
+          {showClose && <button
             type="button"
             className="dialog-close"
             aria-label="Close"
@@ -145,7 +158,7 @@ export function Dialog(props: DialogProps): JSX.Element {
             onClick={() => { if (!busy) props.onClose(); }}
           >
             <Icon name="close" size={16} />
-          </button>
+          </button>}
         </div>
         <div className="dialog-body">{props.children}</div>
         <div className="dialog-footer">
@@ -155,7 +168,10 @@ export function Dialog(props: DialogProps): JSX.Element {
               <button
                 key={`${index}-${action.label}`}
                 type="button"
-                className={`dialog-action ${action.variant === 'primary' ? 'dialog-action-primary' : 'dialog-action-secondary'}`}
+                ref={action.buttonRef}
+                className={`dialog-action ${action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary'}`}
+                aria-busy={action.busy ? true : undefined}
+                aria-describedby={action.descriptionId}
                 disabled={action.disabled || busy}
                 onClick={action.onClick}
               >

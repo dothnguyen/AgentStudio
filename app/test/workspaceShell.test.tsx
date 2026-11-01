@@ -7,7 +7,7 @@ import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder'
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
 import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred } from './teamsFixtures';
-import { roleItem, rolesFixture } from './rolesFixtures';
+import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
 
@@ -391,7 +391,23 @@ describe('WorkspaceShell', () => {
     await view.findByRole('region', { name: 'Role instructions' });
     fireEvent.click(view.getByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
-    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getByText('qa-b')).toBeTruthy());
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByText('qa-b').length).toBeGreaterThan(0));
+  });
+
+  it('role_used_by_open_link_opens_the_member_page', async () => {
+    const fake = fakeManagement({
+      overview: [{ ok: true, data: overviewFixture([team({ id: 'core', name: 'Core', members: [member({ memberId: 'dev-1', name: 'Dev' })] })]) }],
+      roles: [{ ok: true, data: rolesFixture({ items: [roleItem('Developer', { name: 'Developer', usage: usageOf({}, [{ teamDefId: 'core', teamName: 'Core', memberId: 'dev-1', memberName: 'Dev', saved: { path: 'teams.json', memberIndex: 0 }, live: null }]) })] }) }],
+    });
+    const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />);
+    fireEvent.click(view.getByRole('button', { name: 'Roles' }));
+    const list = await view.findByRole('list', { name: 'Saved roles' });
+    fireEvent.click(within(list).getByRole('button', { name: 'Open role Developer' }));
+    const rolePage = await view.findByRole('region', { name: 'Role details' });
+    fireEvent.click(within(rolePage).getByRole('button', { name: 'Open Dev' }));
+    await waitFor(() => expect(view.container.querySelector('[data-section="teams"]')).toBeTruthy());
+    await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Dev' })).toBeTruthy());
+    expect(view.getByText(/Member of Core/)).toBeTruthy();
   });
 
   it('direct_roles_navigation_clears_requested_role', async () => {
@@ -401,7 +417,7 @@ describe('WorkspaceShell', () => {
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
-    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getByText('qa-b')).toBeTruthy());
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByText('qa-b').length).toBeGreaterThan(0));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(view.getByRole('button', { name: 'Roles' }));
     const list = await view.findByRole('list', { name: 'Saved roles' });

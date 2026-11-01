@@ -66,6 +66,9 @@ export interface TeamsScreenProps {
   onOpenBoard?(): void;
   /** Navigates to the Agents catalog from the Edit agent options dialog. */
   onOpenAgents?(): void;
+  /** One-shot request to open a member page, usually from a role's Used by list. */
+  requestedMember?: { teamId: string; memberId: string } | null;
+  onRequestedMemberConsumed?(): void;
   createTeamRequested: boolean;
   onCreateTeamRequestedChange(requested: boolean): void;
   onTeamsWritePendingChange(pending: boolean): void;
@@ -92,6 +95,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const [boardAction, setBoardAction] = useState<BoardAction | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberSelection | null>(null);
+  const appliedMemberRequest = useRef<string | null>(null);
   const [viewState, setViewState] = useState<TeamsViewState>(INITIAL_TEAMS_VIEW);
   const refreshLock = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -672,6 +676,30 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     document.getElementById('teams-detail-title')?.focus();
   }, [seenIntent]);
   useEffect(() => { if (selectedMember && selectedMember.teamKey !== view.teamKey) setSelectedMember(null); }, [selectedMember, view.teamKey]);
+  useEffect(() => {
+    const request = props.requestedMember;
+    if (request === null || request === undefined) { appliedMemberRequest.current = null; return; }
+    const requestKey = `${request.teamId}:${request.memberId}`;
+    if (appliedMemberRequest.current === requestKey) return;
+    const item = navigation.items.find((candidate) => candidate.team.id === request.teamId || candidate.team.runtime.teamId === request.teamId);
+    if (item === undefined) return;
+    const exists = item.team.members.some((member) => member.memberId === request.memberId);
+    if (!exists) {
+      appliedMemberRequest.current = requestKey;
+      props.onRequestedMemberConsumed?.();
+      return;
+    }
+    // Selecting another team resets the member selection during the render that
+    // applies the new team key; wait for that render, then open the member.
+    if (navigation.selectedKey !== item.key) {
+      navigation.selectTeam(item.key);
+      return;
+    }
+    appliedMemberRequest.current = requestKey;
+    setViewState({ teamKey: item.key, view: 'overview', memberId: request.memberId });
+    setSelectedMember({ teamKey: item.key, memberId: request.memberId });
+    props.onRequestedMemberConsumed?.();
+  }, [props.requestedMember, navigation.items, navigation.selectTeam, navigation.selectedKey]);
   const notices = data === null ? [] : overviewNotices(data);
   const rolesPending = roleCatalog.loading && roleCatalog.error === null;
   const agentsPending = agents.loading && agents.error === null;

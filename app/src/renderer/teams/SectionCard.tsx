@@ -8,6 +8,8 @@ export interface SectionCardAction {
   ariaLabel: string;
   onClick(): void;
   disabled?: boolean;
+  /** Optional id of the explanation associated with a disabled action. */
+  descriptionId?: string;
   /** Optional handle so the owner can return focus to the action after a dialog. */
   buttonRef?: RefObject<HTMLButtonElement | null>;
 }
@@ -41,6 +43,7 @@ export function SectionCard(props: SectionCardProps): JSX.Element {
             ref={props.action.buttonRef}
             className="section-card-action"
             aria-label={props.action.ariaLabel}
+            aria-describedby={props.action.disabled ? props.action.descriptionId : undefined}
             disabled={props.action.disabled}
             onClick={props.action.onClick}
           >

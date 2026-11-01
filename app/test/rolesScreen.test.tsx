@@ -14,10 +14,10 @@ afterEach(cleanup);
 const workspace: Workspace = { id: 'a', name: 'A', path: '/a', exists: true, missing: false };
 const ok = (data: RoleCatalogList) => ({ ok: true as const, data });
 
-function setup(data: RoleCatalogList = rolesFixture(), connection?: ConnectionStatus, requestedRoleId: string | null = null) {
+function setup(data: RoleCatalogList = rolesFixture(), connection?: ConnectionStatus, requestedRoleId: string | null = null, onOpenMember?: (teamId: string, memberId: string) => void) {
   const roles = vi.fn(async (_id: string) => ok(data));
   const fake = fakeManagement({ calls: { roles } });
-  const view = render(<main><RolesScreen workspace={workspace} management={fake.api} connection={connection} requestedRoleId={requestedRoleId} /></main>);
+  const view = render(<main><RolesScreen workspace={workspace} management={fake.api} connection={connection} requestedRoleId={requestedRoleId} onOpenMember={onOpenMember} /></main>);
   return { view, roles, fake };
 }
 const roleList = (view: ReturnType<typeof render>) => view.getByRole('list', { name: 'Saved roles' });
@@ -161,22 +161,22 @@ describe('RolesScreen', () => {
 
     const user = userEvent.setup();
     await user.click(rowById(view, 'Reviewer'));
-    expect(details(view).getByRole('heading', { level: 3, name: 'Code Reviewer' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Code Reviewer' })).toBeTruthy();
     expect(view.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toContain('RolesCode Reviewer');
     expect(view.queryByRole('list', { name: 'Saved roles' })).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Role details' })));
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { level: 1, name: /Code Reviewer|Planner|Writer|QA Lead/ })));
     await user.click(view.getByRole('button', { name: 'Roles' }));
     await view.findByRole('list', { name: 'Saved roles' });
 
     rowById(view, 'Planner').focus();
     await user.keyboard('{Enter}');
-    expect(details(view).getByRole('heading', { level: 3, name: 'Planner' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Planner' })).toBeTruthy();
     await user.click(view.getByRole('button', { name: 'Roles' }));
     await view.findByRole('list', { name: 'Saved roles' });
 
     rowById(view, 'Writer').focus();
     await user.keyboard(' ');
-    expect(details(view).getByRole('heading', { level: 3, name: 'Writer' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Writer' })).toBeTruthy();
   });
 
   it('breadcrumb_returns_to_list_with_the_search_text_and_focus_on_the_opened_row', async () => {
@@ -186,7 +186,7 @@ describe('RolesScreen', () => {
     fireEvent.change(view.getByLabelText('Search roles'), { target: { value: 'bet' } });
     expect(view.getByText('1 of 3 roles')).toBeTruthy();
     fireEvent.click(rowById(view, 'beta'));
-    expect(details(view).getByRole('heading', { level: 3, name: 'Beta' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Beta' })).toBeTruthy();
     backToRoles(view);
     await waitFor(() => expect(view.getByRole('list', { name: 'Saved roles' })).toBeTruthy());
     expect((view.getByLabelText('Search roles') as HTMLInputElement).value).toBe('bet');
@@ -202,7 +202,7 @@ describe('RolesScreen', () => {
     fireEvent.change(view.getByLabelText('Search roles'), { target: { value: 'dev' } });
     view.rerender(<main><RolesScreen workspace={workspace} management={fake.api} requestedRoleId="qa-b" /></main>);
     await view.findByRole('region', { name: 'Role details' });
-    expect(details(view).getByText('qa-b')).toBeTruthy();
+    expect(details(view).getAllByText('qa-b').length).toBeGreaterThan(0);
     expect(view.queryByText(/is unavailable in this workspace/)).toBeNull();
     expect(view.queryByRole('list', { name: 'Saved roles' })).toBeNull();
     backToRoles(view);
@@ -223,7 +223,7 @@ describe('RolesScreen', () => {
   it('breadcrumb_from_a_requested_role_returns_to_the_list_and_focuses_that_row', async () => {
     const { view } = setup(rolesFixture(), undefined, 'Writer');
     await view.findByRole('region', { name: 'Role details' });
-    expect(details(view).getByRole('heading', { level: 3, name: 'Writer' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Writer' })).toBeTruthy();
     expect(view.queryByRole('list', { name: 'Saved roles' })).toBeNull();
     backToRoles(view);
     await view.findByRole('list', { name: 'Saved roles' });
@@ -260,6 +260,18 @@ describe('RolesScreen', () => {
     expect(view.queryByRole('button', { name: 'New role' })).toBeNull();
   });
 
+  it('role_page_is_read_only_until_the_edit_dialogs_exist', async () => {
+    const { view } = setup();
+    await view.findByRole('list', { name: 'Saved roles' });
+    openRow(view, 'Developer');
+    const edit = view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement;
+    expect(edit.disabled).toBe(true);
+    expect(edit.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
+    expect(document.getElementById('roles-mutation-reason')!.textContent).toBe('Editing the role overview is available in the next update.');
+    fireEvent.click(edit);
+    expect(view.queryByRole('dialog')).toBeNull();
+  });
+
   it('role_page_replaces_the_list_chrome_and_the_breadcrumb_shows_the_display_name', async () => {
     const { view } = setup();
     await view.findByRole('list', { name: 'Saved roles' });
@@ -269,7 +281,7 @@ describe('RolesScreen', () => {
     expect(view.queryByRole('button', { name: 'New role' })).toBeNull();
     expect(view.queryByLabelText('Search roles')).toBeNull();
     expect(view.queryByText('5 roles')).toBeNull();
-    expect(view.queryByText('Saved changes apply to new assignments. Assignments already running keep the instructions they started with.')).toBeNull();
+    expect(view.getByText('Saved changes apply to new assignments. Assignments already running keep the instructions they started with.')).toBeTruthy();
     const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' })).getAllByRole('listitem');
     expect(crumbs.map(li => li.textContent)).toEqual(['Roles', 'Code Reviewer']);
     expect(crumbs[1].getAttribute('aria-current')).toBe('page');
@@ -282,8 +294,8 @@ describe('RolesScreen', () => {
     for (const [id, key] of [['Planner', '{Enter}'], ['Writer', ' ']] as const) {
       rowById(view, id).focus();
       await user.keyboard(key);
-      await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { name: 'Role details' })));
-      expect(details(view).getByText(id, { selector: 'code' })).toBeTruthy();
+      await waitFor(() => expect(document.activeElement).toBe(view.getByRole('heading', { level: 1, name: /Code Reviewer|Planner|Writer|QA Lead/ })));
+      expect(details(view).getAllByText(id, { selector: 'code' })).toHaveLength(2);
       backToRoles(view);
       await view.findByRole('list', { name: 'Saved roles' });
     }
@@ -303,7 +315,7 @@ describe('RolesScreen', () => {
     expect(await view.findByText('Role "retired" is unavailable in this workspace.')).toBeTruthy();
     fireEvent.click(rowById(view, 'dev'));
     expect(view.queryByText('Role "retired" is unavailable in this workspace.')).toBeNull();
-    expect(details(view).getByRole('heading', { level: 3, name: 'Dev' })).toBeTruthy();
+    expect(details(view).getByRole('heading', { level: 1, name: 'Dev' })).toBeTruthy();
   });
 
   it('workspace_change_resets_the_view_to_the_list_and_rejects_the_old_deferred_response', async () => {
@@ -331,14 +343,15 @@ describe('RolesScreen', () => {
     const { view } = setup();
     await view.findByRole('list', { name: 'Saved roles' });
     await showRole(view, 'Developer');
-    expect(view.getAllByText(/read when an assignment starts/).length).toBeGreaterThan(0);
+    expect(view.getAllByText(/Read when an assignment starts/).length).toBeGreaterThan(0);
     let d = details(view);
-    expect(d.getByText('Developer', { selector: 'code' })).toBeTruthy();
+    expect(d.getAllByText('Developer', { selector: 'code' })).toHaveLength(2);
     expect(d.getByText('Implements stories')).toBeTruthy();
     expect(d.getByText('.agent-studio/roles/Developer.md')).toBeTruthy();
+    expect(d.getByText('2 lines · 26 / 16,384 bytes')).toBeTruthy();
     expect(d.getByText(/Write tests\./).textContent).toBe('Write tests.\nKeep it small.');
-    expect(d.getByText('python-testing').parentElement!.textContent).toBe('python-testing — Available');
-    expect(d.getByText('retired-skill').parentElement!.textContent).toBe('retired-skill — Missing');
+    expect(d.getByText('python-testing').closest('.roles-skill-chip')!.textContent).toBe('python-testing');
+    expect(d.getByText('retired-skill').closest('.roles-skill-chip')!.textContent).toBe('retired-skill · missing');
     expect(d.getByText('3 warnings')).toBeTruthy();
     expect(d.getByText('Skill retired-skill is missing')).toBeTruthy();
     expect(d.getByText('roles.Developer: role problem text')).toBeTruthy();
@@ -346,9 +359,10 @@ describe('RolesScreen', () => {
 
     await showRole(view, 'Reviewer'); d = details(view);
     expect(d.getByText('The configured instruction file is missing.')).toBeTruthy();
-    expect(d.getByText('Display name: Code Reviewer')).toBeTruthy();
+    expect(d.getByText('Display name')).toBeTruthy();
+    expect(d.getAllByText('Code Reviewer').length).toBeGreaterThan(0);
     expect(d.getByText('No skills configured.')).toBeTruthy();
-    expect(d.getByText('No warnings')).toBeTruthy();
+    expect(d.queryByText('Warnings and problems')).toBeNull();
     await showRole(view, 'Planner'); d = details(view);
     expect(d.getByText('Shared instructions are unavailable because the configured file is invalid or unsafe.')).toBeTruthy();
     expect(d.getByText('No description')).toBeTruthy();
@@ -372,10 +386,10 @@ describe('RolesScreen', () => {
     await showRole(view, 'Developer');
     const items = details(view).getAllByRole('listitem').filter(li => / · (Saved|Live)/.test(li.textContent ?? ''));
     expect(items.map(li => li.textContent)).toEqual([
-      'Core (core) — Dev (dev-1) · Saved and Live · available, assignment running',
-      'Core (core) — Dev (dev-2) · Saved',
-      'Ops (ops) — Dev (dev-3) · Live · busy',
-      'Unknown team — Unnamed member · Saved',
+      'DEDevCore · Saved and Live · available, assignment runningTeam id core. Member id dev-1.',
+      'DEDevCore · SavedTeam id core. Member id dev-2.',
+      'DEDevOps · Live · busyTeam id ops. Member id dev-3.',
+      'UMUnnamed memberUnknown team · Saved',
     ]);
     const text = details(view).getByText(/Roles do not grant permissions/).textContent!;
     expect(text).toMatch(/do not choose agents/);
@@ -482,6 +496,128 @@ describe('RolesScreen', () => {
     // Opening a role is not announced.
     fireEvent.click(rowById(view, 'Writer'));
     expect(view.queryAllByRole('status')).toHaveLength(0);
+  });
+
+  it('role_page_header_shows_the_name_id_usage_pill_and_running_text', async () => {
+    const used = roleItem('team-lead', {
+      name: 'Team Lead',
+      instructions: { state: 'ok', path: '.agent-studio/roles/team-lead.md', text: 'line', sha256: 'a'.repeat(64), bytes: 4 },
+      usage: usageOf({}, [{ teamDefId: 'core', teamName: 'Core', memberId: 'lead', memberName: 'Lead', saved: { path: 'teams.json', memberIndex: 0 }, live: { availability: 'available', assignment: { id: 'a-1', status: 'running' } } }]),
+    });
+    const { view } = setup(rolesFixture({ items: [used] }));
+    await view.findByRole('list', { name: 'Saved roles' });
+    await showRole(view, 'team-lead');
+    const region = view.getByRole('region', { name: 'Role details' });
+    expect(within(region).getByRole('heading', { level: 1, name: 'Team Lead' })).toBeTruthy();
+    expect(region.querySelector('.roles-role-id-chip')?.textContent).toBe('team-lead');
+    expect(within(region).getByText('Used by 1 member')).toBeTruthy();
+    expect(within(region).getByText('1 running assignment')).toBeTruthy();
+    expect(within(region).getByRole('button', { name: 'Roles' })).toBeTruthy();
+    expect(within(region).getByText('Saved changes apply to new assignments. Assignments already running keep the instructions they started with.')).toBeTruthy();
+    cleanup();
+    const unused = setup(rolesFixture({ items: [roleItem('unused', { name: 'Unused role' })] }));
+    await unused.view.findByRole('list', { name: 'Saved roles' });
+    await showRole(unused.view, 'unused');
+    const unusedRegion = unused.view.getByRole('region', { name: 'Role details' });
+    const pill = within(unusedRegion).getByText('Unused');
+    expect(pill.classList.contains('roles-role-usage-pill')).toBe(true);
+    expect(pill.classList.contains('is-muted')).toBe(true);
+    expect(within(unusedRegion).getByText('No running assignments')).toBeTruthy();
+  });
+
+  it('delete_is_disabled_with_the_reference_reason_and_enabled_for_an_unused_role', async () => {
+    const referenced = roleItem('used', { name: 'Used role', usage: usageOf({ blocking: true, count: 1 }, [{ teamDefId: 'core', teamName: 'Core', memberId: 'dev-1', memberName: 'Dev', saved: { path: 'teams.json', memberIndex: 0 }, live: null }]) });
+    const unused = roleItem('free', { name: 'Free role' });
+    const { view } = setup(rolesFixture({ items: [referenced, unused] }));
+    await view.findByRole('list', { name: 'Saved roles' });
+    await showRole(view, 'used');
+    let region = view.getByRole('region', { name: 'Role details' });
+    let button = within(region).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-describedby')).toBe('roles-delete-reason');
+    const referencedReason = within(region).getByText('This role is still referenced. Remove its references before deleting it.');
+    expect(referencedReason.classList.contains('roles-role-reason')).toBe(true);
+    expect(referencedReason.classList.contains('is-warning')).toBe(true);
+    fireEvent.click(button);
+    expect(view.queryByRole('dialog')).toBeNull();
+    await showRole(view, 'free');
+    region = view.getByRole('region', { name: 'Role details' });
+    button = within(region).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    const unusedReason = within(region).getByText('No member uses this role, so it can be deleted.');
+    expect(unusedReason.classList.contains('roles-role-reason')).toBe(true);
+    expect(unusedReason.classList.contains('is-muted')).toBe(true);
+    fireEvent.click(button);
+    expect(view.getByRole('alertdialog', { name: 'Delete Free role?' })).toBeTruthy();
+  });
+
+  it('delete_reason_on_the_page_follows_the_existing_rules_beyond_referenced_roles', async () => {
+    const partial = roleItem('partial', { name: 'Partial role', usage: usageOf({ partial: true }) });
+    const invalid = roleItem('invalid', { name: 'Invalid role', instructions: { state: 'invalid', path: null, text: null, sha256: null, bytes: null } });
+    const { view } = setup(rolesFixture({ items: [partial, invalid] }));
+    await view.findByRole('list', { name: 'Saved roles' });
+    await showRole(view, 'partial');
+    let region = view.getByRole('region', { name: 'Role details' });
+    let button = within(region).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    let reason = within(region).getByText('Role usage could not be checked completely, so deletion is unavailable. Retry loading roles.');
+    expect(reason.classList.contains('roles-role-reason')).toBe(true);
+    expect(reason.classList.contains('is-warning')).toBe(true);
+    await showRole(view, 'invalid');
+    region = view.getByRole('region', { name: 'Role details' });
+    button = within(region).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-describedby')).toBe('roles-delete-reason');
+    reason = within(region).getByText('The instruction file is invalid or truncated, so deletion is unavailable until it is fixed.');
+    expect(reason.classList.contains('is-warning')).toBe(true);
+    cleanup();
+    const lost = setup(rolesFixture(), { state: 'lost', error: null, distro: null, command: null } as ConnectionStatus);
+    await lost.view.findByRole('list', { name: 'Saved roles' });
+    await showRole(lost.view, 'Developer');
+    const lostRegion = lost.view.getByRole('region', { name: 'Role details' });
+    const lostButton = within(lostRegion).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(lostButton.disabled).toBe(true);
+    const lostReason = within(lostRegion).getByText('Delete is unavailable while the backend connection is not ready.');
+    expect(lostReason.classList.contains('roles-role-reason')).toBe(true);
+    expect(lostReason.classList.contains('is-warning')).toBe(true);
+  });
+
+  it('used_by_rows_open_members_only_when_both_ids_are_known', async () => {
+    const openMember = vi.fn();
+    const { view } = setup(rolesFixture(), undefined, null, openMember);
+    await view.findByRole('list', { name: 'Saved roles' });
+    await showRole(view, 'Developer');
+    const rows = details(view).getAllByRole('listitem').filter(li => / · (Saved|Live)/.test(li.textContent ?? ''));
+    expect(rows).toHaveLength(4);
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Open Dev' }));
+    expect(openMember).toHaveBeenCalledWith('core', 'dev-1');
+    fireEvent.click(within(rows[2]!).getByRole('button', { name: 'Open Dev' }));
+    expect(openMember).toHaveBeenLastCalledWith('ops', 'dev-3');
+    expect(within(rows[3]!).queryByRole('button', { name: /^Open / })).toBeNull();
+  });
+
+  it('role_page_css_wraps_to_one_column_at_900px_and_clamps_the_instruction_preview', () => {
+    const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
+    expect(css).toMatch(/\.roles-role-main \{ flex: 999 1 560px;/);
+    expect(css).toMatch(/\.roles-role-aside \{ flex: 1 1 320px; display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 400px; \}/);
+    expect(css).toMatch(/@media \(max-width: 900px\) \{ \.roles-role-layout \{ flex-direction: column; \} \.roles-role-main, \.roles-role-aside \{ width: 100%; flex: 1 1 auto; max-width: none; \} \}/);
+    expect(css).toMatch(/\.roles-instructions-preview pre \{[^}]*max-height: 300px/);
+    expect(css).toMatch(/\.roles-role-delete \{[^}]*border: 1px solid #4a2c2c[^}]*color: #f0a3a3/);
+  });
+
+  it('role_page_header_and_cards_follow_the_design_metrics_and_tones', () => {
+    const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
+    // Avatar is a 48 px rounded square and the id is a mono chip.
+    expect(css).toMatch(/\.roles-role-avatar \{[^}]*width: 48px; height: 48px;[^}]*border-radius: 11px/);
+    expect(css).toMatch(/\.roles-role-id-chip \{[^}]*font-family: var\(--font-mono\)/);
+    // Blue "used" pill, amber warnings and a bottom fade on the instruction preview.
+    expect(css).toMatch(/\.roles-role-usage-pill\.is-used \{[^}]*rgba\(91, 156, 255, 0\.12\)/);
+    expect(css).toMatch(/\.roles-role-reason\.is-warning \{ color: #f0b453; \}/);
+    expect(css).toMatch(/\.roles-warning-list \{[^}]*color: #f0b453/);
+    // Missing skill chips are amber like the list, and the disclaimer is muted at the card bottom.
+    expect(css).toMatch(/\.roles-skill-chip-missing \{[^}]*color: var\(--warning\)/);
+    expect(css).toMatch(/\.roles-usedby-disclaimer \{[^}]*color: #8d949e/);
+    expect(css).toMatch(/\.roles-instructions-fade \{[^}]*linear-gradient\(to bottom, rgba\(18, 20, 24, 0\), #121418\)/);
   });
 
   it('roles_layout_css_defines_the_shared_grid_template_once_and_scrolls_narrow_tables', () => {

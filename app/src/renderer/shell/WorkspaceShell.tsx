@@ -28,6 +28,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
 
   const [requestedRoleId, setRequestedRoleId] = useState<string | null>(null);
+  const [requestedMember, setRequestedMember] = useState<{ teamId: string; memberId: string } | null>(null);
   const teamsNavigation = useTeamsNavigationController(props.workspace.id, props.management.overview, props.connection);
   const [teamChildCurrent, setTeamChildCurrent] = useState(false);
   const teamsParentRef = useRef<HTMLButtonElement>(null);
@@ -41,6 +42,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
     setRequestedRoleId(null);
+    setRequestedMember(null);
     setTeamChildCurrent(false);
     setCreateTeamRequested(false);
     setPendingFocus(null);
@@ -64,12 +66,13 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     if (teamsNavigation.selectedKey === null) setTeamChildCurrent(false);
   }, [teamsNavigation.selectedKey]);
 
-  function navigate(nextId: string, options?: { roleId?: string }): void {
+  function navigate(nextId: string, options?: { roleId?: string; member?: { teamId: string; memberId: string } }): void {
     if (createTeamRequested && teamsWritePending && nextId !== 'teams') return;
     const item = items.find((candidate) => candidate.id === nextId);
     if (item === undefined || item.disabled === true) return;
     const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
     setRequestedRoleId(roleId);
+    setRequestedMember(nextId === 'teams' && options?.member ? options.member : null);
     if (nextId !== 'teams') setCreateTeamRequested(false);
     setTeamChildCurrent(false);
     setSectionId(nextId);
@@ -94,6 +97,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onViewRole={(roleId) => navigate('roles', { roleId })}
       onOpenBoard={items.some((i) => i.id === 'boards' && i.disabled !== true) ? () => navigate('boards') : undefined}
       onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
+      requestedMember={requestedMember}
+      onRequestedMemberConsumed={() => setRequestedMember(null)}
       createTeamRequested={createTeamRequested}
       onCreateTeamRequestedChange={setCreateTeamRequested}
       onTeamsWritePendingChange={setTeamsWritePending}
@@ -107,6 +112,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       management={props.management}
       connection={props.connection}
       requestedRoleId={requestedRoleId}
+      onOpenMember={(teamId, memberId) => navigate('teams', { member: { teamId, memberId } })}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
