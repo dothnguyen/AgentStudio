@@ -170,7 +170,7 @@ function roleItems(): RoleCatalogItem[] {
       skills: [],
       warnings: [],
       problems: [],
-      usage: { members: [], boardRules: [], workflows: [], legacyRoster: [], liveRuntime: [], count: 0, blocking: false, partial: false },
+      usage: { members: [], boardRules: [], workflows: [], liveRuntime: [], count: 0, blocking: false, partial: false },
     };
   });
 }

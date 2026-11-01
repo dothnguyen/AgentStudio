@@ -144,7 +144,7 @@ function roleItem(id: string): RoleCatalogItem {
     skills: [],
     warnings: [],
     problems: [],
-    usage: { members: [], boardRules: [], workflows: [], legacyRoster: [], liveRuntime: { state: 'connected', error: null }, problems: [], count: 0, blocking: false, partial: false },
+    usage: { members: [], boardRules: [], workflows: [], liveRuntime: { state: 'connected', error: null }, problems: [], count: 0, blocking: false, partial: false },
   } as unknown as RoleCatalogItem;
 }
 

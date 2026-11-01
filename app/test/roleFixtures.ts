@@ -23,7 +23,6 @@ export function roleCatalogFixture(overrides: Partial<RoleCatalogList> = {}): Ro
         }],
         boardRules: [],
         workflows: [],
-        legacyRoster: [],
         liveRuntime: [],
         count: 1,
         blocking: true,

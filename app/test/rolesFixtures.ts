@@ -15,7 +15,7 @@ export function roleItem(id: string, over: Loose = {}): RoleCatalogItem {
     skills: [],
     warnings: [],
     problems: [],
-    usage: { members: [], boardRules: [], workflows: [], legacyRoster: [], liveRuntime: { state: 'connected', error: null }, problems: [], count: 0, blocking: false, partial: false },
+    usage: { members: [], boardRules: [], workflows: [], liveRuntime: { state: 'connected', error: null }, problems: [], count: 0, blocking: false, partial: false },
     ...over,
   } as unknown as RoleCatalogItem;
 }

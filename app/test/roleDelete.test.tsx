@@ -208,8 +208,8 @@ describe('RolesScreen delete flow', () => {
     const long = 'L'.repeat(400);
     const usage = {
       members: [{ teamDefId: 'core', teamName: 'Core', memberId: 'dev-1', memberName: 'Dev', saved: true, live: null }],
-      boardRules: [{ index: 0, status: 'todo' }], workflows: [{ name: 'first', stageId: 'work' }],
-      legacyRoster: [{ memberIndex: 0, memberName: long }], liveRuntime: [{ teamId: 'live', memberId: 'm1', availability: 'busy', assignmentId: 'as-1' }], count: 5,
+      boardRules: [{ index: 0, status: 'todo' }], workflows: [{ name: 'first', stageId: 'work', label: long }],
+      liveRuntime: [{ teamId: 'live', memberId: 'm1', availability: 'busy', assignmentId: 'as-1' }], count: 4,
     };
     const deleteRole = vi.fn(async () => fail('ROLE_IN_USE', { roleId: 'a', usage }));
     const { view } = setup([catalog([role('a')])], deleteRole as never);
@@ -221,7 +221,7 @@ describe('RolesScreen delete flow', () => {
     const alert = await view.findByRole('alert');
     expect(view.queryByRole('alertdialog')).toBeNull();
     const titles = [...alert.querySelectorAll('h4')].map(h => h.textContent);
-    expect(titles).toEqual(['Team members', 'Board rules', 'Workflow stages', 'Legacy roster', 'Live runtime']);
+    expect(titles).toEqual(['Team members', 'Board rules', 'Workflow stages', 'Live runtime']);
     expect(alert.textContent).toMatch(/Core \(core\) — Dev \(dev-1\)/);
     expect(alert.textContent).toMatch(/Rule 1 \(status todo\)/);
     expect(alert.textContent).toMatch(/first — stage work/);

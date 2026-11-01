@@ -71,7 +71,6 @@ function role(id: string, running = false, used = true): RoleCatalogItem {
       members: used ? [usageMember(running)] as never : [],
       boardRules: [],
       workflows: [],
-      legacyRoster: [],
       liveRuntime: { state: 'connected', error: null } as never,
       count: used ? 1 : 0,
       blocking: used,

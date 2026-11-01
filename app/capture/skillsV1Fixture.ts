@@ -102,7 +102,6 @@ function skillsV1Roles(): RoleCatalogList {
       members: [],
       boardRules: [],
       workflows: [],
-      legacyRoster: [],
       liveRuntime: { state: 'connected', error: null } as never,
       count: 0,
       blocking: false,

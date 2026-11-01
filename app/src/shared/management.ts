@@ -381,7 +381,6 @@ export interface RoleUsage {
   members: RoleUsageMember[];
   boardRules: RoleUsageReference[];
   workflows: RoleUsageReference[];
-  legacyRoster: RoleUsageReference[];
   liveRuntime: RoleUsageReference[];
   count: number;
   blocking: boolean;

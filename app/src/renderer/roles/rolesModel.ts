@@ -169,10 +169,10 @@ export function roleUsageFromDeleteError(error: ManagementError): RoleUsageView 
   if (!usage) return null;
   const out = {
     members: array(usage.members), boardRules: array(usage.boardRules), workflows: array(usage.workflows),
-    legacyRoster: array(usage.legacyRoster), liveRuntime: array(usage.liveRuntime),
+    liveRuntime: array(usage.liveRuntime),
     count: typeof usage.count === 'number' ? usage.count : 0, blocking: true, partial: usage.partial === true,
   };
-  const total = out.members.length + out.boardRules.length + out.workflows.length + out.legacyRoster.length + out.liveRuntime.length;
+  const total = out.members.length + out.boardRules.length + out.workflows.length + out.liveRuntime.length;
   return total === 0 ? null : out as unknown as RoleUsageView;
 }
 export function roleUsageProblemsFromDeleteError(error: ManagementError): Array<{ source: string; message: string }> {
@@ -195,10 +195,6 @@ export function roleBlockerGroups(usage: RoleUsageView): RoleBlockerGroup[] {
       return `Rule ${index}${text(r.status) ? ` (status ${text(r.status)})` : ''}${text(r.label) ? ` — ${text(r.label)}` : ''}`;
     }) },
     { key: 'workflows', title: 'Workflow stages', items: array(u.workflows).map(w => `${text(w.name) ?? text(w.definition) ?? text(w.sourceId) ?? 'Workflow'} — stage ${text(w.stageId) ?? 'unknown'}${text(w.label) ? ` · ${text(w.label)}` : ''}`) },
-    { key: 'legacyRoster', title: 'Legacy roster', items: array(u.legacyRoster).map((l, i) => {
-      const index = typeof l.memberIndex === 'number' ? l.memberIndex + 1 : i + 1;
-      return `${named(text(l.memberName), text(l.memberId), `Member ${index}`)}${text(l.label) ? ` · ${text(l.label)}` : ''}`;
-    }) },
     { key: 'liveRuntime', title: 'Live runtime', items: array(u.liveRuntime).map(r => `${named(text(r.teamName), text(r.teamId), 'Unknown team')} — ${named(text(r.memberName), text(r.memberId), 'Unnamed member')}${[text(r.availability), text(r.assignmentId) ? `assignment ${text(r.assignmentId)}` : null].filter(Boolean).map(x => ` · ${x}`).join('')}`) },
   ];
   return groups.filter(g => g.items.length > 0).map(g => ({ ...g, items: g.items.map(bound) }));

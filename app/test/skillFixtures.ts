@@ -388,7 +388,7 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
         warnings: [],
         problems: [],
         usage: {
-          members: [], boardRules: [], workflows: [], legacyRoster: [], liveRuntime: [],
+          members: [], boardRules: [], workflows: [], liveRuntime: [],
           count: 0, blocking: false, partial: false,
         },
       })),
