@@ -110,12 +110,15 @@ export function MemberForm(props: {
   roleCatalogMessage: string | null;
   pending: boolean;
   readOnly?: boolean;
+  /** v7 member settings edits name, role and permission in their own dialog; this form then edits agent options only. */
+  showMemberSettings?: boolean;
   submitLabel?: string;
   cancelLabel?: string;
   onSubmit(values: MemberFormValues): void;
   onCancel(): void;
 }): JSX.Element {
   const { mode, heading, initial, originalOptions, inlineContext, agents, roles, roleCatalogMessage, pending, onSubmit, onCancel } = props;
+  const showSettings = props.showMemberSettings !== false;
   const uid = useId();
   const [values, setValues] = useState<MemberFormValues>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof MemberFormValues, string>>>({});
@@ -137,7 +140,7 @@ export function MemberForm(props: {
   const changes = mode === 'edit' ? memberChanges(initial, values) : null;
   const catalogBlocked = mode === 'add'
     ? roles === null || (values.useCatalogAgents && agents === null)
-    : (changes?.role !== undefined && roles === null) || (changes?.agents !== undefined && agents === null);
+    : (showSettings && changes?.role !== undefined && roles === null) || (changes?.agents !== undefined && agents === null);
   const missing = new Set(values.agents.filter((id) => agents === null
     ? originalOptions.some((o) => o.id === id && o.state === 'missing')
     : !agents.some((a) => a.id === id)));
@@ -146,6 +149,7 @@ export function MemberForm(props: {
     e.preventDefault();
     if (pending || props.readOnly || catalogBlocked) return;
     const found = validateMemberForm(values, mode, missing);
+    if (!showSettings) { delete found.name; delete found.role; }
     setErrors(found);
     setFormError(null);
     if (Object.keys(found).length > 0) { setInvalidSubmit(n => n + 1); return; }
@@ -217,40 +221,42 @@ export function MemberForm(props: {
           {errors.agents && <p className="teams-field-error" id={agentF.err} role="alert">{errors.agents}</p>}
         </div>
       )}
-      <label htmlFor={roleF.id}>Role</label>
-      {roles !== null ? (
-        <select
-          id={roleF.id}
-          value={values.role}
-          disabled={pending}
-          aria-invalid={roleF.invalid}
-          aria-describedby={[roleF.described, roleHintId].filter(Boolean).join(' ')}
-          onChange={(e) => set('role', e.target.value)}
-        >
-          {mode === 'add' && <option value="">Choose a role</option>}
-          {roleChoices.map((c) => <option key={`${c.state}:${c.id}`} value={c.id}>{c.label}</option>)}
-        </select>
-      ) : (
-        <select id={roleF.id} value={values.role} disabled aria-describedby={roleHintId}>
-          {values.role === '' ? <option value="">No role available</option> : <option value={values.role}>{values.role}</option>}
-        </select>
-      )}
-      {roles === null && roleCatalogMessage !== null && <p className="panel-note">{roleCatalogMessage}</p>}
-      {roles !== null && roles.length === 0 && <p className="panel-note">No roles are configured.</p>}
-      <p id={roleHintId} className="panel-note">Role metadata and instructions are shared. Ticket permission and saved agent options remain settings of this member.</p>
-      <FieldError id={roleF.err} message={errors.role} />
-      <label htmlFor={nameF.id}>{mode === 'add' ? 'Member name (optional)' : 'Member name'}</label>
-      <input
-        id={nameF.id}
-        type="text"
-        value={values.name}
-        aria-invalid={nameF.invalid}
-        aria-describedby={nameF.described}
-        onChange={(e) => set('name', e.target.value)}
-      />
-      <FieldError id={nameF.err} message={errors.name} />
-      <div className="teams-permission-field"><input id={`${uid}-canAddTickets`} type="checkbox" checked={values.canAddTickets === true} disabled={pending || (mode === 'edit' && values.canAddTickets === undefined)} aria-describedby={`${uid}-canAddTickets-hint`} onChange={e => setValues(v => ({ ...v, canAddTickets: e.target.checked }))} /><label htmlFor={`${uid}-canAddTickets`}>Can add tickets</label></div>
-      <p id={`${uid}-canAddTickets-hint`} className="panel-note">{mode === 'edit' && values.canAddTickets === undefined ? TICKET_PERMISSION_UNKNOWN : TICKET_PERMISSION_HINT}</p>
+      {showSettings && <>
+        <label htmlFor={roleF.id}>Role</label>
+        {roles !== null ? (
+          <select
+            id={roleF.id}
+            value={values.role}
+            disabled={pending}
+            aria-invalid={roleF.invalid}
+            aria-describedby={[roleF.described, roleHintId].filter(Boolean).join(' ')}
+            onChange={(e) => set('role', e.target.value)}
+          >
+            {mode === 'add' && <option value="">Choose a role</option>}
+            {roleChoices.map((c) => <option key={`${c.state}:${c.id}`} value={c.id}>{c.label}</option>)}
+          </select>
+        ) : (
+          <select id={roleF.id} value={values.role} disabled aria-describedby={roleHintId}>
+            {values.role === '' ? <option value="">No role available</option> : <option value={values.role}>{values.role}</option>}
+          </select>
+        )}
+        {roles === null && roleCatalogMessage !== null && <p className="panel-note">{roleCatalogMessage}</p>}
+        {roles !== null && roles.length === 0 && <p className="panel-note">No roles are configured.</p>}
+        <p id={roleHintId} className="panel-note">Role metadata and instructions are shared. Ticket permission and saved agent options remain settings of this member.</p>
+        <FieldError id={roleF.err} message={errors.role} />
+        <label htmlFor={nameF.id}>{mode === 'add' ? 'Member name (optional)' : 'Member name'}</label>
+        <input
+          id={nameF.id}
+          type="text"
+          value={values.name}
+          aria-invalid={nameF.invalid}
+          aria-describedby={nameF.described}
+          onChange={(e) => set('name', e.target.value)}
+        />
+        <FieldError id={nameF.err} message={errors.name} />
+        <div className="teams-permission-field"><input id={`${uid}-canAddTickets`} type="checkbox" checked={values.canAddTickets === true} disabled={pending || (mode === 'edit' && values.canAddTickets === undefined)} aria-describedby={`${uid}-canAddTickets-hint`} onChange={e => setValues(v => ({ ...v, canAddTickets: e.target.checked }))} /><label htmlFor={`${uid}-canAddTickets`}>Can add tickets</label></div>
+        <p id={`${uid}-canAddTickets-hint`} className="panel-note">{mode === 'edit' && values.canAddTickets === undefined ? TICKET_PERMISSION_UNKNOWN : TICKET_PERMISSION_HINT}</p>
+      </>}
       {formError !== null && <p className="teams-field-error" role={errors.agents ? undefined : 'alert'}>{formError}</p>}
       <div className="teams-team-actions">
         <button ref={submitRef} type="submit" disabled={pending || props.readOnly === true || catalogBlocked || (mode === 'edit' && changes === null)}>

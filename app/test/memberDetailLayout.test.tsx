@@ -206,28 +206,31 @@ describe('member detail v7 layout', () => {
     expect(within(detail).queryByRole('button', { name: 'Remove runtime-only' })).toBeNull();
   });
 
-  it('keeps the legacy saved-configuration editor working for save and discard', async () => {
+  it('saves and discards member settings through the single dialog', async () => {
     const updateMember = vi.fn().mockResolvedValue(ok({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'lead', name: 'Renamed', role: 'TeamLead' }, appliesOnNextStart: true, problems: [] }));
     const user = userEvent.setup();
     await mount(runningOverview(), { updateMember });
     const detail = await open('Lead Developer');
     expect(within(detail).getByRole('heading', { name: 'Saved configuration (temporary)', level: 2 })).toBeTruthy();
     expect(within(detail).getByRole('heading', { name: 'Live agent (temporary)', level: 2 })).toBeTruthy();
+    const edit = within(detail).getByRole('button', { name: 'Edit member settings' });
 
-    await user.click(within(detail).getByRole('button', { name: 'Edit saved configuration' }));
-    await user.clear(screen.getByLabelText('Member name'));
-    await user.type(screen.getByLabelText('Member name'), 'Renamed');
-    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await user.click(edit);
+    const dialog = screen.getByRole('dialog', { name: 'Edit member settings' });
+    await user.clear(within(dialog).getByLabelText('Display name'));
+    await user.type(within(dialog).getByLabelText('Display name'), 'Renamed');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'lead', { name: 'Renamed' });
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(document.activeElement).toBe(edit);
 
-    await user.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    await user.clear(screen.getByLabelText('Member name'));
-    await user.type(screen.getByLabelText('Member name'), 'Discarded');
-    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    await user.click(edit);
+    const reopened = screen.getByRole('dialog', { name: 'Edit member settings' });
+    await user.clear(within(reopened).getByLabelText('Display name'));
+    await user.type(within(reopened).getByLabelText('Display name'), 'Discarded');
+    await user.click(within(reopened).getByRole('button', { name: 'Cancel' }));
     expect(updateMember).toHaveBeenCalledTimes(1);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(document.activeElement).toBe(edit);
   });
 
   it('keeps the legacy live agent section inside its temporary card', async () => {

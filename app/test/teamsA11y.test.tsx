@@ -191,7 +191,7 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   await act(async () => {});
   expect(document.activeElement).toBe(document.getElementById('teams-member-detail-title'));
   const detailOrder = await tabNames(24);
-  inOrder(detailOrder, [/^View .* in Roles$/, 'Edit saved configuration', 'Switch', 'Remove dev']);
+  inOrder(detailOrder, [/^View .* in Roles$/, 'Edit saved configuration', 'Switch', 'Edit member settings', 'Remove dev']);
   expect(detailOrder).toContain('Back to members');
   // The page heading takes focus on open, but Back to members is still the
   // first focusable control on the page.
@@ -201,6 +201,9 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   expect(focusables[1]?.textContent).toMatch(/^View .* in Roles$/);
   expect(focusables[2]?.textContent).toBe('Retry loading ticket permission');
   expect(focusables[3]?.textContent).toBe('Edit saved configuration');
+  expect(focusables[4]?.textContent).toBe('Switch');
+  expect(focusables[5]?.textContent).toBe('Edit');
+  expect(focusables[6]?.textContent).toBe('Remove');
   // Back restores the invoking row
   await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
   expect(document.activeElement).toBe(memberOpen('dev'));

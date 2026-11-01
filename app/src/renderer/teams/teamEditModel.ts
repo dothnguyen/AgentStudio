@@ -31,11 +31,24 @@ export interface MemberFormValues {
   canAddTickets?: boolean;
 }
 
+/** The same error the Teams feedback line shows, handed back to an inline editor. */
+export type ErrorFeedback = Extract<WriteFeedback, { kind: 'error' }>;
+
+/** A member write kept inline: the dialog shows `feedback` itself instead of the page feedback line. */
+export interface MemberWriteOutcome {
+  ok: boolean;
+  feedback: ErrorFeedback | null;
+}
+
 export interface TeamWrites {
   rename(team: OverviewTeam, name: string): Promise<boolean>;
   deleteTeam(team: OverviewTeam): Promise<boolean>;
   addMember(team: OverviewTeam, values: MemberFormValues): Promise<boolean>;
-  updateMember(team: OverviewTeam, memberId: string, changes: MemberChanges): Promise<boolean>;
+  /**
+   * Saves the changed member fields. `options.inlineFailure` keeps a failure out
+   * of the page feedback line so the caller can show it inside its own dialog.
+   */
+  updateMember(team: OverviewTeam, memberId: string, changes: MemberChanges, options?: { inlineFailure?: boolean }): Promise<MemberWriteOutcome>;
   removeMember(team: OverviewTeam, memberId: string): Promise<boolean>;
 }
 
@@ -61,6 +74,12 @@ export function ticketPermissionText(p: TicketPermissionState): string {
   if (p.state === 'loading') return 'Checking ticket permission…';
   if (p.state === 'error') return `Ticket permission could not be loaded (${p.error.code}: ${p.error.message}).`;
   return p.canAddTickets === null ? 'Can add tickets: Not available for this member' : `Can add tickets: ${p.canAddTickets ? 'Yes' : 'No'}`;
+}
+/** Read-only Member settings card value: Allowed / Not allowed / the unknown explanation. */
+export function ticketPermissionValue(p: TicketPermissionState): string {
+  if (p.state === 'loading') return 'Checking ticket permission…';
+  if (p.state === 'error' || p.canAddTickets === null) return TICKET_PERMISSION_UNKNOWN;
+  return p.canAddTickets ? 'Allowed' : 'Not allowed';
 }
 export const NEXT_START_DEFAULT = 'Next-start default';
 /** The single notice row on the member details screen (v7). */
@@ -193,6 +212,19 @@ export function validateAgentOptions(agents: readonly string[], missingAgentIds:
   if (new Set(agents).size !== agents.length) return 'Each agent can appear only once.';
   if (agents.some((id) => missingAgentIds.has(id))) return 'Remove or replace missing catalog agents before saving.';
   return null;
+}
+/**
+ * The four fields the v7 Member settings dialog edits. Ticket permission is
+ * only included when it could be read, so an unknown permission is never sent.
+ */
+export function memberSettingsInitial(m: OverviewMember, canAddTickets?: boolean | null): MemberFormValues {
+  return {
+    name: m.name ?? '',
+    role: m.role ?? '',
+    agents: [],
+    useCatalogAgents: false,
+    ...(typeof canAddTickets === 'boolean' ? { canAddTickets } : {}),
+  };
 }
 export function memberFormInitial(m: OverviewMember, canAddTickets?: boolean | null): MemberFormValues {
   const catalog = m.agentMode !== 'inline';

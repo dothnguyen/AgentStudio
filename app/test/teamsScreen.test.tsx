@@ -79,6 +79,16 @@ async function renderMembers(opts: Parameters<typeof fakeManagement>[0] = {}) {
   return out;
 }
 
+/** Opens the member details and its single v7 settings dialog. */
+async function openSettings(name: string): Promise<HTMLElement> {
+  if (!screen.queryByRole('region', { name })) openMember(name);
+  const button = within(screen.getByRole('region', { name })).getByRole('button', { name: 'Edit member settings' });
+  button.focus();
+  fireEvent.click(button);
+  await act(async () => {});
+  return screen.getByRole('dialog', { name: 'Edit member settings' });
+}
+
 const cardNames = (root: HTMLElement) =>
   Array.from(root.querySelectorAll('.team-nav-label')).map((n) => n.textContent);
 const card = teamRow;
@@ -1274,7 +1284,10 @@ describe('member detail focus and settings', () => {
   it('separates member settings, saved options and live state with timing copy', async () => {
     await renderScreen(); showMembers(); const detail = openMember('dev');
     expect(within(detail).getByRole('navigation', {name: 'Member location'}).textContent).toBe('Dev TeamMembersdev');
-    for (const label of ['Name', 'Member id', 'Role', 'Ticket permission']) expect(within(detail).getByText(label)).toBeTruthy();
+    const settings = within(detail).getByRole('region', {name: 'Member settings'});
+    for (const label of ['Display name', 'Member id', 'Assigned role', 'Can add tickets']) expect(within(settings).getByText(label)).toBeTruthy();
+    const saved = within(detail).getByRole('region', {name: 'Saved configuration (temporary)'});
+    for (const label of ['Name', 'Member id', 'Role', 'Ticket permission']) expect(within(saved).getByText(label)).toBeTruthy();
     for (const text of [
       'Name, role, permissions and agent options apply the next time the team starts. Switching the live agent and editing role instructions take effect on new work straight away.',
       'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.',
@@ -1299,8 +1312,10 @@ describe('member detail focus and settings', () => {
     const detail = openMember('dev');
     expect(detail.textContent).toContain('Choose an existing role by editing this member.');
     expect(within(detail).queryByRole('button', {name: /in Roles/})).toBeNull();
-    fireEvent.click(within(detail).getByRole('button', {name: 'Edit saved configuration'}));
-    expect(within(screen.getByLabelText('Role')).getByRole('option', {name: 'retired — missing from role catalog'})).toBeTruthy();
+    const dialog = await openSettings('dev');
+    const missing = within(dialog).getByRole('radio', {name: /retired — missing from role catalog/});
+    expect(missing.getAttribute('aria-checked')).toBe('true');
+    expect(missing.textContent).toContain('Implements scoped tickets.');
   });
   it('focuses the heading and restores the roster row on return', async () => {
     await renderScreen(); showMembers(); openMember('dev');
@@ -1393,9 +1408,9 @@ describe('member detail focus and settings', () => {
     const live0 = () => within(screen.getByRole('region', {name: /^Live for/})).getByText('live-p', {exact: false}).closest('section')!.textContent;
     openMember('dev');
     const before = live0();
-    fireEvent.click(screen.getByRole('button', {name: 'Edit saved configuration'}));
-    fireEvent.change(screen.getByLabelText('Member name'), {target: {value: 'renamed'}});
-    fireEvent.click(screen.getByRole('button', {name: 'Save changes'}));
+    const dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), {target: {value: 'renamed'}});
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
     expect(live0()).toBe(before);
     await act(async () => {});
     expect(updateMember).toHaveBeenCalledTimes(1);
@@ -1660,20 +1675,33 @@ describe('T-082 states', () => {
       ? { roles: [okR(rolesFixture()), failure, okR(rolesFixture())] }
       : { agents: [okR(catalogFixture()), failure, okR(catalogFixture())] };
     await renderMembers({ ...opts, calls: { updateMember } });
+    if (source === 'roles') {
+      const dialog = await openSettings('dev');
+      fireEvent.click(within(dialog).getByRole('radio', { name: /Reviewer/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+      expect(within(dialog).getByRole('radiogroup', { name: 'Assigned role' }).getAttribute('aria-disabled')).toBe('true');
+      const save = within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+      expect(save.disabled).toBe(true);
+      fireEvent.click(save);
+      expect(updateMember).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry loading roles' }));
+      await act(async () => {});
+      expect(save.disabled).toBe(false);
+      expect(within(dialog).getByRole('radio', { name: /Reviewer/ }).getAttribute('aria-checked')).toBe('true');
+      return;
+    }
     fireEvent.click(memberRow('dev')); await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
-    else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
     const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.submit(save.closest('form')!);
     expect(updateMember).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: source === 'roles' ? 'Retry loading roles' : 'Retry loading agents' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading agents' }));
     await act(async () => {});
     expect(save.disabled).toBe(false);
-    if (source === 'roles') expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('Reviewer');
-    else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
   });
 
   it.each(['roles', 'agents'] as const)('pending %s refresh blocks dependent member changes until fresh data arrives', async (source) => {
@@ -1684,31 +1712,38 @@ describe('T-082 states', () => {
       ? { roles: [okR(rolesFixture()), roleGate.promise] }
       : { agents: [okR(catalogFixture()), agentGate.promise] };
     await renderMembers({ ...opts, calls: { updateMember } });
+    if (source === 'roles') {
+      const dialog = await openSettings('dev');
+      fireEvent.click(within(dialog).getByRole('radio', { name: /Reviewer/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
+      const save = within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+      expect(save.disabled).toBe(true);
+      fireEvent.click(save);
+      expect(updateMember).not.toHaveBeenCalled();
+      await act(async () => { roleGate.resolve(okR(rolesFixture())); });
+      expect(save.disabled).toBe(false);
+      expect(within(dialog).getByRole('radio', { name: /Reviewer/ }).getAttribute('aria-checked')).toBe('true');
+      return;
+    }
     fireEvent.click(memberRow('dev')); await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    if (source === 'roles') fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'Reviewer' } });
-    else fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
+    fireEvent.change(screen.getByLabelText('Add agent option'), { target: { value: 'spare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' })); await act(async () => {});
     const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.submit(save.closest('form')!);
     expect(updateMember).not.toHaveBeenCalled();
-    await act(async () => {
-      if (source === 'roles') roleGate.resolve(okR(rolesFixture()));
-      else agentGate.resolve(okR(catalogFixture()));
-    });
+    await act(async () => { agentGate.resolve(okR(catalogFixture())); });
     expect(save.disabled).toBe(false);
-    if (source === 'roles') expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('Reviewer');
-    else expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Remove Spare agent' })).toBeTruthy();
   });
 
   it('stale catalogs do not block an unrelated member name change', async () => {
     const updateMember = vi.fn(async () => okR({ team: {}, member: { name: 'Renamed' }, problems: [], appliesOnNextStart: false }));
     await renderMembers({ roles: [managementError('ROLES_DOWN', 'roles unavailable')], agents: [managementError('AGENTS_DOWN', 'agents unavailable')], calls: { updateMember } });
-    fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Renamed' } });
-    const save = screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
+    const dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'Renamed' } });
+    const save = within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
     expect(save.disabled).toBe(false);
     fireEvent.click(save); await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { name: 'Renamed' });
@@ -1849,18 +1884,21 @@ describe('T-082 states', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' })); await act(async () => {});
     expect(document.activeElement).toBe(memberOpen('dev'));
     fireEvent.click(memberRow('dev')); await act(async () => {});
-    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' })); await act(async () => {});
-    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await act(async () => {});
+    const dialog = await openSettings('dev');
+    const nameInput = within(dialog).getByLabelText('Display name');
+    fireEvent.change(nameInput, { target: { value: '' } });
+    const save = within(dialog).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save); await act(async () => {});
     expect(updateMember).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByLabelText('Member name'));
-    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'dev2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); await act(async () => {});
+    expect(document.activeElement).toBe(nameInput);
+    fireEvent.change(nameInput, { target: { value: 'dev2' } });
+    fireEvent.click(save); await act(async () => {});
     expect(updateMember).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole('alert')).toHaveLength(1);
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save changes' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' })); await act(async () => {});
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(document.activeElement).toBe(screen.getByRole('alert'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' })); await act(async () => {});
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit member settings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove dev' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel removing dev' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm remove dev' })); await act(async () => {});
@@ -1876,14 +1914,14 @@ describe('T-082 states', () => {
     const updateMember = vi.fn().mockResolvedValue(okR({ team: { id: 'dev-team', name: 'Dev Team', members: [] }, member: { id: 'dev', name: 'Updated developer', role: 'Developer' }, appliesOnNextStart: true, problems: [] }));
     await renderMembers({ overview: [okR(twoTeams()), okR(refreshed)], calls: { updateMember } });
     openMember('dev');
-    fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    fireEvent.change(screen.getByLabelText('Member name'), { target: { value: 'Updated developer' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'Updated developer' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev', { name: 'Updated developer' });
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit member settings' }));
     expect(screen.getByRole('heading', { name: 'Updated developer', level: 1 })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Edit member settings' })).toBeNull();
   });
 
   it('successful_removal_clears_detail_and_focuses_the_next_action_after_refresh', async () => {

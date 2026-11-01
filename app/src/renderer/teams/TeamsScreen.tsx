@@ -40,6 +40,7 @@ import {
   nextStartSuffix,
   problemsSuffix,
   thrownError,
+  type ErrorFeedback,
   type TeamActions,
   type TeamWrites,
   type WriteFeedback,
@@ -157,10 +158,16 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     failTitle: string,
     call: () => Promise<ManagementResult<T>>,
     onOk: (data: T) => { text: string; selectCreated?: string },
+    options: { inlineFailure?: boolean; feedback?: { current: ErrorFeedback | null } } = {},
   ): Promise<boolean> {
+    const reportFailure = options.inlineFailure !== true;
+    const recordFailure = (feedback: ErrorFeedback): void => {
+      if (options.feedback !== undefined) options.feedback.current = feedback;
+      if (reportFailure) setFeedback(feedback);
+    };
     if (writeLock.current) return false;
     if (readOnlyRef.current) {
-      setFeedback({ kind: 'error', title: failTitle, code: 'STALE_DATA', message: 'Team data is not current.', remediation: 'Wait for the connection and team data to finish loading, then try again.', problems: [], hint: null });
+      recordFailure({ kind: 'error', title: failTitle, code: 'STALE_DATA', message: 'Team data is not current.', remediation: 'Wait for the connection and team data to finish loading, then try again.', problems: [], hint: null });
       return false;
     }
     writeLock.current = true;
@@ -183,7 +190,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       return result.ok;
     }
     if (!result.ok) {
-      setFeedback(errorFeedback(failTitle, result.error));
+      recordFailure(errorFeedback(failTitle, result.error));
       return false;
     }
     setSavedRevision(r => r + 1);
@@ -313,9 +320,12 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     addMember: (team, values) => runWrite('Member was not added.', () => mgmt.addMember(ws, team.id!, addMemberInput(values)), (d) => ({
       text: `Added ${d.member.name} to ${teamLabel(team)}.${nextStartSuffix(d.appliesOnNextStart)}${problemsSuffix(d.problems)}`,
     })),
-    updateMember: (team, memberId, changes) => runWrite('Member was not saved.', () => mgmt.updateMember(ws, team.id!, memberId, changes), (d) => ({
-      text: `Saved ${d.member.name}.${nextStartSuffix(d.appliesOnNextStart)}${problemsSuffix(d.problems)}`,
-    })),
+    updateMember: (team, memberId, changes, options) => {
+      const feedback: { current: ErrorFeedback | null } = { current: null };
+      return runWrite('Member was not saved.', () => mgmt.updateMember(ws, team.id!, memberId, changes), (d) => ({
+        text: `Saved ${d.member.name}.${nextStartSuffix(d.appliesOnNextStart)}${problemsSuffix(d.problems)}`,
+      }), { inlineFailure: options?.inlineFailure, feedback }).then(ok => ({ ok, feedback: feedback.current }));
+    },
     removeMember: (team, memberId) => runWrite('Member was not removed.', () => mgmt.removeMember(ws, team.id!, memberId), (d) => ({
       text: `Removed ${d.removed.name} from ${teamLabel(team)}.${problemsSuffix(d.problems)}`,
     })),

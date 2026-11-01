@@ -392,16 +392,13 @@ describe('member row actions', () => {
     expect(screen.getByRole('status').textContent).toBe('Cancelled app-deps-install.');
   });
 
-  it('opens the saved editor with focus on its first field', async () => {
+  it('opens the member settings dialog with focus on its first field', async () => {
     await renderScreen();
     await openMenu();
     fireEvent.click(menuItem('Edit configuration…'));
     await flush();
-    const region = screen.getByRole('region', { name: 'dev' });
-    await waitFor(() => expect(within(region).getByRole('form', { name: 'Edit dev' })).toBeTruthy());
-    const form = within(region).getByRole('form', { name: 'Edit dev' });
-    expect(form.contains(document.activeElement)).toBe(true);
-    expect(document.activeElement?.tagName).toMatch(/^(INPUT|SELECT|TEXTAREA)$/);
+    const dialog = await screen.findByRole('dialog', { name: 'Edit member settings' });
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Display name'));
   });
 
   it('consumes the Edit configuration intent once, so a later plain open is not an edit', async () => {
@@ -409,17 +406,17 @@ describe('member row actions', () => {
     await openMenu();
     fireEvent.click(menuItem('Edit configuration…'));
     await flush();
-    let region = screen.getByRole('region', { name: 'dev' });
-    const form = await within(region).findByRole('form', { name: 'Edit dev' });
-    fireEvent.click(within(form).getByRole('button', { name: 'Discard changes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit member settings' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await flush();
+    const region = screen.getByRole('region', { name: 'dev' });
+    expect(screen.queryByRole('dialog', { name: 'Edit member settings' })).toBeNull();
     fireEvent.click(within(region).getByRole('button', { name: 'Back to members' }));
     await flush();
     fireEvent.click(memberOpen('dev'));
     await flush();
-    region = screen.getByRole('region', { name: 'dev' });
-    expect(within(region).queryByRole('form', { name: 'Edit dev' })).toBeNull();
-    expect(within(region).getByRole('button', { name: 'Edit saved configuration' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Edit member settings' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'dev' })).getByRole('button', { name: 'Edit member settings' })).toBeTruthy();
   });
 
   it('opens the existing removal confirmation with focus on Cancel', async () => {

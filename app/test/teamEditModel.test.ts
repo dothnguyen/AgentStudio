@@ -7,7 +7,7 @@ import {
   findCatalogRole,
   memberRoleChoices,
   roleChoiceLabel,
-  memberChanges, ticketPermissionText,
+  memberChanges, memberSettingsInitial, ticketPermissionText, ticketPermissionValue, TICKET_PERMISSION_UNKNOWN,
   nextStartSuffix,
   problemsSuffix,
   validateMemberForm,
@@ -166,5 +166,15 @@ describe('ticket permission', () => {
     expect(ticketPermissionText({state: 'ready', canAddTickets: false})).toBe('Can add tickets: No');
     expect(ticketPermissionText({state: 'ready', canAddTickets: null})).toBe('Can add tickets: Not available for this member');
     expect(ticketPermissionText({state: 'error', error: {code: 'INTERNAL', message: 'oops', retryable: false}})).toBe('Ticket permission could not be loaded (INTERNAL: oops).');
+  });
+  it('renders the read-only card value and never sends an unknown permission', () => {
+    expect(ticketPermissionValue({state: 'loading'})).toBe('Checking ticket permission…');
+    expect(ticketPermissionValue({state: 'ready', canAddTickets: true})).toBe('Allowed');
+    expect(ticketPermissionValue({state: 'ready', canAddTickets: false})).toBe('Not allowed');
+    expect(ticketPermissionValue({state: 'ready', canAddTickets: null})).toBe(TICKET_PERMISSION_UNKNOWN);
+    expect(ticketPermissionValue({state: 'error', error: {code: 'INTERNAL', message: 'oops', retryable: false}})).toBe(TICKET_PERMISSION_UNKNOWN);
+    const initial = memberSettingsInitial(member({name: 'dev', role: 'Developer'}), null);
+    expect(initial).toEqual({name: 'dev', role: 'Developer', agents: [], useCatalogAgents: false});
+    expect(memberChanges(initial, {...initial, canAddTickets: true})).toBeNull();
   });
 });

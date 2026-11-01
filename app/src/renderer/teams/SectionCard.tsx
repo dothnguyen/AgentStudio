@@ -1,4 +1,4 @@
-import { useId, type JSX, type ReactNode } from 'react';
+import { useId, type JSX, type ReactNode, type RefObject } from 'react';
 import { Icon } from '../icons/Icon';
 
 export interface SectionCardAction {
@@ -8,6 +8,8 @@ export interface SectionCardAction {
   ariaLabel: string;
   onClick(): void;
   disabled?: boolean;
+  /** Optional handle so the owner can return focus to the action after a dialog. */
+  buttonRef?: RefObject<HTMLButtonElement | null>;
 }
 
 export interface SectionCardProps {
@@ -36,6 +38,7 @@ export function SectionCard(props: SectionCardProps): JSX.Element {
         {props.action !== undefined && (
           <button
             type="button"
+            ref={props.action.buttonRef}
             className="section-card-action"
             aria-label={props.action.ariaLabel}
             disabled={props.action.disabled}

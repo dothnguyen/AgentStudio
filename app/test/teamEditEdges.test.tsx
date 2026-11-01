@@ -17,6 +17,14 @@ const ok = <T,>(data: T) => ({ ok: true as const, data });
 const fail = (error: { code: string; message: string }) => ({ ok: false as const, error: { retryable: false, ...error } });
 const openTab = async (name: string) => { fireEvent.click(screen.getByRole('tab', { name })); await flush(); };
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+const openSettings = async (name: string) => {
+  if (!screen.queryByRole('region', { name })) openMember(name);
+  const button = within(screen.getByRole('region', { name })).getByRole('button', { name: 'Edit member settings' });
+  button.focus();
+  fireEvent.click(button);
+  await flush();
+  return screen.getByRole('dialog', { name: 'Edit member settings' });
+};
 async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const fake = fakeManagement(opts);
   render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
@@ -278,9 +286,15 @@ describe('team editing edge cases', () => {
     render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
     await flush(); await openTab('Overview'); openMember('dev'); await flush();
     const counts = () => [updateMember.mock.calls.length, removeMember.mock.calls.length, onViewRole.mock.calls.length];
-    await click('Edit saved configuration'); type('Member name', 'dirty'); await click('Discard changes');
+    let dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'dirty' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await flush();
     expect(counts()).toEqual([0, 0, 0]);
-    await click('Edit saved configuration'); type('Member name', 'dev2'); await click('Save changes');
+    dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'dev2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await flush();
     expect(counts()).toEqual([1, 0, 0]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove dev' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel removing dev' }));
@@ -308,7 +322,10 @@ describe('T-090 mutation isolation', () => {
     const ui = (ws = workspaceA) => <TeamsHarness sidebar workspace={ws} management={fake.api} />;
     const view = render(ui());
     await flush(); await openTab('Overview'); openMember('dev');
-    await click('Edit saved configuration'); type('Member name', 'renamed'); await click('Save changes');
+    const dialog = await openSettings('dev');
+    fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'renamed' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await flush();
     expect(updateMember).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ })); await flush();
     await act(async () => { updateGate.resolve(upd); });
