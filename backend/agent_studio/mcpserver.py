@@ -253,6 +253,9 @@ OPERATOR_WRITE_TOOLS = [
      "inputSchema": _op_schema(dict(_KEY, to={"type": "string"}), ["key"])},
     {"name": "ticket_retry", "description": "Release a stuck ticket's claim and cancel its run.",
      "inputSchema": _op_schema(_KEY, ["key"])},
+    {"name": "ticket_phase", "description": "Move a ticket to another open phase (not while it is claimed).",
+     "inputSchema": _op_schema(dict(_KEY, phase={"type": "string", "description": "phase slug, e.g. phase-05"}),
+                               ["key", "phase"])},
     {"name": "command_approve", "description": "Approve a delegated command waiting for human approval.",
      "inputSchema": {"type": "object", "properties": {"requestId": {"type": "string"}}, "required": ["requestId"]}},
     {"name": "command_reject", "description": "Reject a delegated command waiting for approval.",
@@ -362,6 +365,9 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         extra = {"key": _need(args, "key"), "on": args.get("on") or [], "remove": args.get("remove") or []}
         data = call("ticket.depend", extra, True)
         return text(_json_text(data), **data)
+    if name == "ticket_phase":
+        data = call("ticket.phase", {"key": _need(args, "key"), "phase": _need(args, "phase")}, True)
+        return text(f"{data['ticket']['key']} is now in phase {data['ticket']['phase']}", ticket=data["ticket"])
     if name in ("ticket_unblock", "ticket_retry"):
         extra = dict(_optional(args, "to") if name == "ticket_unblock" else {}, key=_need(args, "key"))
         data = call("ticket." + name.split("_")[1], extra, True)

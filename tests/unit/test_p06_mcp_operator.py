@@ -31,7 +31,7 @@ class OperatorTools(unittest.TestCase):
 
     def test_writes_are_listed_when_allowed(self):
         names = self.names(True)
-        for n in ("ticket_move", "ticket_unblock", "ticket_retry", "command_approve"):
+        for n in ("ticket_move", "ticket_phase", "ticket_unblock", "ticket_retry", "command_approve"):
             self.assertIn(n, names)
 
     def test_write_refused_without_the_flag(self):
@@ -72,6 +72,19 @@ class OperatorTools(unittest.TestCase):
             call("ticket_unblock", {"key": "T-1"}, dict(op, session="s2"), rid=7)
         self.assertEqual(keys[0], keys[1])
         self.assertNotEqual(keys[0], keys[2])
+
+    def test_ticket_phase_sends_the_phase_command(self):
+        seen = {}
+
+        def fake(req, require_id=False):
+            seen.update(req)
+            return {"ok": True, "data": {"ticket": {"key": "T-1", "phase": "phase-05"}}}
+        with mock.patch.object(mcpserver.dispatch, "handle_request", fake), \
+                mock.patch.object(mcpserver.wsmod, "resolve", return_value={"path": "/w"}):
+            r = call("ticket_phase", {"key": "T-1", "phase": "phase-05"}, dict(OP, allowWrites=True))
+        self.assertFalse(r["isError"])
+        self.assertEqual((seen["command"], seen["args"]), ("ticket.phase", {"key": "T-1", "phase": "phase-05", "workspace": "/w"}))
+        self.assertTrue(call("ticket_phase", {"key": "T-1", "phase": "phase-05"})["isError"])   # read-only server
 
     def test_command_errors_are_tool_results(self):
         from agent_studio.protocol import AsError

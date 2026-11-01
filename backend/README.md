@@ -347,7 +347,7 @@ switch get no MCP server and their assignments are unchanged.
 
 `agent-studio mcp --operator` serves the board to Claude Code, Codex, OpenCode or any MCP client you run yourself
 (no assignment needed). It is read-only by default; add `--allow-writes` to also offer `ticket_add`, `ticket_move`,
-`ticket_depend`, `ticket_unblock`, `ticket_retry`, `command_approve` and `command_reject`. There is no free-form
+`ticket_depend`, `ticket_phase`, `ticket_unblock`, `ticket_retry`, `command_approve` and `command_reject`. There is no free-form
 command tool: every call is one of these fixed tools and goes through the same validated command path as the CLI.
 `--workspace PATH` pins the workspace (default: `AGENT_STUDIO_WORKSPACE`, else the workspace at or above the
 directory the client starts the server in; each tool also takes a `workspace` argument).
