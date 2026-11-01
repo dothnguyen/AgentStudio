@@ -10,6 +10,7 @@ import type {
 import { useDashboardSection, type DashboardSectionController } from '../dashboard/useDashboardSection';
 import { SectionError } from '../teams/SectionError';
 import { RoutingSettingsPanel } from '../teams/RoutingSettingsPanel';
+import { useTeamsNavigationController, type TeamsNavigationController } from '../teams/useTeamsNavigationController';
 
 export interface RoutingScreenProps {
   workspace: Workspace;
@@ -17,14 +18,27 @@ export interface RoutingScreenProps {
   connection?: ConnectionStatus;
   /** Opens a role in the Roles section, as the Teams screen does today. */
   onViewRole?(roleId: string): void;
+  /** The Teams screen's shared overview, so Routing does not fetch it a second time. */
+  navigation?: TeamsNavigationController;
+  onOpenTeam?(teamId: string | null): void;
+  onOpenTeams?(): void;
 }
 
 /** Routing belongs to the workspace board, so it owns its own screen and reads. */
 export function RoutingScreen(props: RoutingScreenProps): JSX.Element {
-  return <RoutingBrowser key={props.workspace.id} {...props} />;
+  return props.navigation !== undefined
+    ? <RoutingBrowser key={props.workspace.id} {...props} navigation={props.navigation} />
+    : <RoutingWithOwnTeams key={props.workspace.id} {...props} />;
 }
 
-function RoutingBrowser(props: RoutingScreenProps): JSX.Element {
+/** Standalone use (for example a test or a host that does not mount the Teams sidebar). */
+function RoutingWithOwnTeams(props: RoutingScreenProps): JSX.Element {
+  const navigation = useTeamsNavigationController(props.workspace.id, props.management.overview, props.connection);
+  return <RoutingBrowser {...props} navigation={navigation} />;
+}
+
+function RoutingBrowser(props: RoutingScreenProps & { navigation: TeamsNavigationController }): JSX.Element {
+  const { navigation } = props;
   const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
   const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const connected = props.connection === undefined || props.connection.state === 'connected';
@@ -71,7 +85,7 @@ function RoutingBrowser(props: RoutingScreenProps): JSX.Element {
     setRefreshing(true);
     setAnnouncement('');
     try {
-      const results = await Promise.all([board, roleCatalog].map(async (section) => {
+      const results = await Promise.all([board, roleCatalog, navigation.overview].map(async (section) => {
         if (!section.reloadFresh) { await section.reload(); return true; }
         return (await section.reloadFresh()).ok;
       }));
@@ -143,6 +157,10 @@ function RoutingBrowser(props: RoutingScreenProps): JSX.Element {
         onLocalErrorChange={setRoutingError}
         roleItems={roleItems}
         onViewRole={props.onViewRole}
+        teams={navigation.data}
+        teamsState={navigation.data !== null ? 'ready' : navigation.overview.state}
+        onOpenTeam={props.onOpenTeam}
+        onOpenTeams={props.onOpenTeams}
         refreshing={refreshing}
         refreshRef={refreshRef}
         onRefresh={() => { void refresh(); }}

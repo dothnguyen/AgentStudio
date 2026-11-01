@@ -37,14 +37,13 @@ async function setup(calls: Parameters<typeof fakeManagement>[0]['calls'] = {}, 
   return { fake, panel: within(view.getByRole('region', { name: 'Workspace board routing' })) };
 }
 it('renders live paths and protected routes', async () => {
-  const { panel } = await setup(); fireEvent.click(panel.getByRole('button', { name: 'Merge and worktree settings' }));
-  expect(panel.getByText('Base branch: main')).toBeTruthy();
-  const rows = panel.getAllByRole('row').slice(1);
+  const { panel } = await setup();
+  expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('main')).toBeTruthy();
+  const rows = within(panel.getByRole('list', { name: 'Routing transitions' })).getAllByRole('listitem');
   expect(rows).toHaveLength(5);
-  expect(Array.from(rows[0].querySelectorAll('td'), td => td.textContent)).toEqual(['1','backlog','Agent','Developer','board-develop','Isolated worktree · sync base','merge-ready','dev-ready','—','3','—','—']);
-  expect(rows[1].textContent).toContain('Action: merge'); expect(rows[3].textContent).toContain('Protected');
-  fireEvent.click(panel.getByRole('button', { name: 'Protected conflict routing' }));
-  expect(panel.getAllByText(/merge-conflict must be handled by role/) ).toBeTruthy();
+  for (const text of ['1', 'backlog', 'Developer', 'board-develop', 'Isolated worktree · sync base', 'merge-ready', 'dev-ready', 'Max 3 rounds']) expect(rows[0]!.textContent).toContain(text);
+  expect(rows[1]!.textContent).toContain('Merge'); expect(rows[1]!.textContent).toContain('Built-in action, no agent'); expect(rows[3]!.textContent).toContain('Protected');
+  expect(rows[3]!.textContent).toContain('merge-conflict');
 });
 it('saves raw rules with SHA and reloads', async () => {
   const update = vi.fn(async () => ({ ok: true as const, data: {} })); const s = routingSettingsFixture(); const next = routingSettingsFixture({ worktree: { baseBranch: 'new-base', worktreeStatuses: [] } });
@@ -52,7 +51,7 @@ it('saves raw rules with SHA and reloads', async () => {
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new-base' } }); fireEvent.change(panel.getAllByLabelText('Workspace')[0], { target: { value: 'main' } });
   await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); });
   expect(update).toHaveBeenCalledWith('ws-a', { baseBranch: 'new-base', rules: expect.arrayContaining([expect.objectContaining({ maxRounds: 3, syncBase: true, onFailPriority: 2, onPassCreatedTickets: { status: 'backlog' }, workspace: 'main' })]) }, s.board.sha256);
-  expect(fake.boardSettings).toHaveBeenCalledTimes(2); expect(panel.getByText('Routing settings saved.')).toBeTruthy(); expect(panel.getByText('Base branch: new-base')).toBeTruthy();
+  expect(fake.boardSettings).toHaveBeenCalledTimes(2); expect(panel.getByText('Routing settings saved.')).toBeTruthy(); expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('new-base')).toBeTruthy();
 });
 it('keeps invalid and conflicting edits until explicit reload', async () => {
   const update = vi.fn(async () => ({ ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } })); const { panel, fake } = await setup({ updateBoardSettings: update });
@@ -78,7 +77,7 @@ it.each(['merge-conflict', 'plan-merge-conflict'])('shows the protected role pro
 it('shows backend validation inline without reloading', async () => {
   const update = vi.fn(async () => ({ ok: false as const, error: { code: 'BOARD_CONFIG_INVALID', message: 'invalid', retryable: false, data: { problems: [{ path: 'rules[0].role', message: 'Rejected role' }] } } }));
   const { panel, fake } = await setup({ updateBoardSettings: update }); fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' })); fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new' } });
-  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); }); expect(panel.getByText('rules[0].role: Rejected role')).toBeTruthy(); expect(panel.getAllByRole('row')[1].textContent).toContain('Developer'); expect(fake.boardSettings).toHaveBeenCalledTimes(1);
+  await act(async () => { fireEvent.submit(panel.getByRole('button', { name: 'Save' }).closest('form')!); }); expect(panel.getByText('rules[0].role: Rejected role')).toBeTruthy(); expect(within(panel.getByRole('list', { name: 'Routing transitions' })).getAllByRole('listitem')[0]!.textContent).toContain('Developer'); expect(fake.boardSettings).toHaveBeenCalledTimes(1);
 });
 it('missing configuration is inspect only', async () => {
   const s = routingSettingsFixture(); s.board = { ...s.board, state: 'missing', message: 'Board missing' }; s.roles = { ...s.roles, state: 'invalid', message: 'Roles invalid' };
@@ -99,7 +98,7 @@ it('blocks duplicate routes and unreachable done without changing the live view'
   expect(panel.getByText('rules[1].when.status: Only one rule can start from status "backlog".')).toBeTruthy();
   expect(panel.getByText('rules: No routing path reaches a done status.')).toBeTruthy();
   expect((panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
-  expect(panel.getAllByRole('row')[1].querySelectorAll('td')[6].textContent).toBe('merge-ready');
+  expect(within(panel.getByRole('list', { name: 'Routing transitions' })).getAllByRole('listitem')[0]!.textContent).toContain('merge-ready');
   expect(update).not.toHaveBeenCalled();
 });
 
@@ -116,8 +115,11 @@ it('uses dynamic status labels and disables unavailable workflows', async () => 
   s.statuses = s.statuses.map(x => x.id === 'dev-ready' || x.id === 'merge-ready' ? { ...x, name: 'Same name' } : x);
   s.workflows = [...s.workflows, { name: 'broken-flow', builtin: false, roles: ['Developer'], errors: ['bad'] }];
   const { panel } = await setup({}, [s]);
-  fireEvent.click(panel.getByRole('button', { name: 'Workflow availability' }));
-  expect(panel.getByText('broken-flow (workspace) — roles: Developer — Unavailable')).toBeTruthy();
+  const workflows = within(panel.getByRole('region', { name: 'Workflows' }));
+  expect(workflows.getByText('broken-flow')).toBeTruthy();
+  expect(workflows.getByText('workspace')).toBeTruthy();
+  expect(workflows.getByText('unavailable')).toBeTruthy();
+  expect(workflows.getAllByText('Roles: Developer').length).toBeGreaterThan(0);
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   const source = panel.getAllByLabelText('Source status')[0];
   expect(within(source).getByRole('option', { name: 'Same name (dev-ready)' })).toBeTruthy();
@@ -156,7 +158,7 @@ it('waits for an in-flight settings refresh before reporting a saved route', asy
   expect(panel.queryByText('Routing settings saved.')).toBeNull();
   await act(async () => { finishLatest({ ok: true, data: refreshed }); });
   expect(panel.getByText('Routing settings saved.')).toBeTruthy();
-  expect(panel.getByText('Base branch: new-base')).toBeTruthy();
+  expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('new-base')).toBeTruthy();
 });
 
 it.each(['write', 'conflict'])('keeps the %s draft when latest settings fail to load', async kind => {
@@ -176,7 +178,7 @@ it.each(['write', 'conflict'])('keeps the %s draft when latest settings fail to 
   expect(panel.queryByText('Routing settings saved.')).toBeNull();
   await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Retry latest settings' })); });
   expect(panel.queryByLabelText('Base branch')).toBeNull();
-  expect(panel.getByText('Base branch: latest')).toBeTruthy();
+  expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('latest')).toBeTruthy();
   if (kind === 'write') expect(panel.getByText('Routing settings saved.')).toBeTruthy();
   expect(updateBoardSettings).toHaveBeenCalledTimes(1);
 });
@@ -353,7 +355,7 @@ it('does_not_render_or_call_role_metadata_editing', async () => {
   expect(updateRole).not.toHaveBeenCalled();
 });
 
-it('renders configured policies and accessible disclosures from returned data', async () => {
+it('renders configured policies and inline rule facts from returned data', async () => {
   const { escalationSettingsFixture } = await import('./teamsFixtures');
   const { RoutingSettingsPanel } = await import('../src/renderer/teams/RoutingSettingsPanel');
   const { roleItem } = await import('./rolesFixtures');
@@ -365,24 +367,17 @@ it('renders configured policies and accessible disclosures from returned data', 
   const onViewRole = vi.fn();
   const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fakeManagement().api} connected section={{ state: 'ready', data: s, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}) }} roleItems={[roleItem('QA', { name: 'Quality' })]} onViewRole={onViewRole} />);
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  const rows = panel.getAllByRole('row').slice(1);
+  const rows = within(panel.getByRole('list', { name: 'Routing transitions' })).getAllByRole('listitem');
   expect(rows).toHaveLength(s.rules.length);
-  expect(Array.from(rows[5].querySelectorAll('td'), td => td.textContent)).toEqual(['6', 'QA ready (qa-ready)', 'Agent', 'Quality QA', 'board-qa', 'Isolated worktree', 'merge-ready', 'dev-ready', 'unknown (unknown status)', '4', '5', '3 fails → Escalate (need-escalate)']);
+  for (const text of ['6', 'QA ready', 'qa-ready', 'Quality', 'board-qa', 'Isolated worktree', 'merge-ready', 'dev-ready', 'unknown (unknown status)', 'Max 4 rounds · priority 5', 'After 3 fails → Escalate']) expect(rows[5]!.textContent).toContain(text);
   fireEvent.click(panel.getByRole('button', { name: 'View Quality in Roles (rule 6)' })); expect(onViewRole).toHaveBeenCalledWith('QA');
-  expect(rows[3].textContent).toContain('Needs repair'); expect(rows[3].textContent).toContain('Role not in catalog');
-  for (const title of ['Merge and worktree settings', 'Failure escalation', 'Protected conflict routing', 'Action rules', 'Workflow availability']) {
-    const toggle = panel.getByRole('button', { name: title }); toggle.focus(); expect(document.activeElement).toBe(toggle);
-    expect(toggle.tagName).toBe('BUTTON'); expect(toggle.getAttribute('type')).toBe('button'); expect(toggle.tabIndex).not.toBe(-1);
-    const content = document.getElementById(toggle.getAttribute('aria-controls')!)!;
-    expect(toggle.getAttribute('aria-expanded')).toBe('false'); expect(content.hasAttribute('hidden')).toBe(true);
-    fireEvent.click(toggle); expect(toggle.getAttribute('aria-expanded')).toBe('true'); expect(content.hasAttribute('hidden')).toBe(false);
-    fireEvent.click(toggle); expect(toggle.getAttribute('aria-expanded')).toBe('false'); expect(content.hasAttribute('hidden')).toBe(true);
-    fireEvent.click(toggle);
-  }
-  expect(panel.getByText(/QA ready \(qa-ready\) \(role QA\): after 3 failed runs/)).toBeTruthy();
-  expect(panel.getAllByText('Escalate (need-escalate) is handled by role SeniorDeveloper using workflow board-senior-develop.')).toBeTruthy();
+  expect(rows[3]!.textContent).toContain('Needs repair'); expect(rows[3]!.textContent).toContain('Role not in catalog');
   expect(panel.getByText('Change the rule for merge-conflict to use role TeamLead.')).toBeTruthy();
-  expect(panel.getByText('merge-ready: action merge → pass done, fail merge-conflict; tickets created on pass: backlog')).toBeTruthy();
+  expect(rows[1]!.textContent).toContain('Merge'); expect(rows[1]!.textContent).toContain('Built-in action, no agent');
+  expect(rows[1]!.textContent).toContain('tickets created on pass: backlog');
+  const workflows = within(panel.getByRole('region', { name: 'Workflows' }));
+  expect(workflows.getByText('board-qa')).toBeTruthy();
+  expect(workflows.getByText('Roles: QA')).toBeTruthy();
 });
 
 it('shows missing, stale and disconnected states without invented routes', async () => {
@@ -391,7 +386,7 @@ it('shows missing, stale and disconnected states without invented routes', async
   const section = { state: 'ready' as const, data: s, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}) };
   const fake = fakeManagement();
   const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={section} />);
-  expect(view.getByText('rules[0]: broken rule')).toBeTruthy(); expect(view.queryByRole('table')).toBeNull();
+  expect(view.getByText('rules[0]: broken rule')).toBeTruthy(); expect(view.queryByRole('list', { name: 'Routing transitions' })).toBeNull();
   view.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected={false} section={{ ...section, data: null, error: { code: 'OFFLINE', message: 'offline', retryable: true } }} />);
   expect(view.getByText(/Showing the last loaded routing/)).toBeTruthy(); expect(view.getByText(/Disconnected from the backend/)).toBeTruthy();
   expect(view.getByText('Role names are unavailable; rules show stable role ids.')).toBeTruthy();
@@ -407,10 +402,8 @@ it('uses renamed routing identifiers and reports missing workflows and handlers'
   const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fakeManagement().api} connected section={{ state: 'ready', data: s, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}) }} />);
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   expect(panel.getAllByText('flow-a — not found').length).toBeGreaterThan(0);
-  expect(panel.getAllByText('3 fails → Triage (triage)')).toHaveLength(2);
+  expect(panel.getAllByText(/After 3 fails → Triage/)).toHaveLength(2);
   expect(panel.queryByText(/need-escalate|SeniorDeveloper|board-develop/)).toBeNull();
-  fireEvent.click(panel.getByRole('button', { name: 'Failure escalation' }));
-  expect(panel.getAllByText('No rule starts from Triage (triage); escalated tickets wait there.')).toHaveLength(2);
   expect(panel.queryByRole('button', { name: /in Roles/ })).toBeNull();
 });
 
@@ -591,7 +584,7 @@ it('loading_missing_invalid_disconnected_stale_and_retry_states', async () => {
   const mount = (section: Section, connected = true) => render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected={connected} section={section} />);
   const loading = mount(sectionOf({ state: 'loading', loading: true }));
   expect(loading.getByRole('status').textContent).toBe('Loading settings…');
-  expect(loading.queryByRole('table')).toBeNull(); expect(loading.queryByRole('button', { name: 'Edit routing settings' })).toBeNull();
+  expect(loading.queryByRole('list', { name: 'Routing transitions' })).toBeNull(); expect(loading.queryByRole('button', { name: 'Edit routing settings' })).toBeNull();
   loading.unmount();
   const reloadFresh = vi.fn(async () => ({ ok: false as const, error: { code: 'READ_FAILED', message: 'boom', retryable: true } }));
   const failed = mount(sectionOf({ state: 'error', error: { code: 'READ_FAILED', message: 'boom', retryable: true, remediation: 'Restart the coordinator.' }, reloadFresh }));
@@ -619,7 +612,7 @@ it('loading_missing_invalid_disconnected_stale_and_retry_states', async () => {
   expect((first.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
   first.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={sectionOf({ state: 'error', data: null, error: { code: 'READ_FAILED', message: 'boom', retryable: true } })} />);
   expect(first.getByText('Showing the last loaded routing; it may be out of date.')).toBeTruthy();
-  expect(first.getByRole('table', { name: 'Routing transitions' })).toBeTruthy();
+  expect(first.getByRole('list', { name: 'Routing transitions' })).toBeTruthy();
   expect((first.getByRole('button', { name: 'Edit routing settings' }) as HTMLButtonElement).disabled).toBe(true);
   expect(first.getAllByRole('alert')).toHaveLength(1);
 });
@@ -659,20 +652,13 @@ it('failed_board_refresh_identifies_previously_loaded_routing_in_its_warning', a
   expect(alert.textContent).toContain('BOARD_DOWN: board unreadable');
 });
 
-it('routing_disclosures_are_native_and_keyboard_operable', async () => {
+it('routing_table_is_keyboard_reachable_and_old_disclosures_are_gone', async () => {
   const { panel } = await setup();
-  const toggles = ['Merge and worktree settings', 'Failure escalation', 'Protected conflict routing', 'Action rules', 'Workflow availability'].map(n => panel.getByRole('button', { name: n }));
-  for (const t of toggles) {
-    expect(t.tagName).toBe('BUTTON'); expect(t.getAttribute('aria-expanded')).toBe('false');
-    const region = document.getElementById(t.getAttribute('aria-controls')!)!;
-    expect(region.hidden).toBe(true); expect(region.getAttribute('aria-labelledby')).toBe(t.id);
-    t.focus();
-    await userEvent.keyboard('{Enter}');
-    expect(t.getAttribute('aria-expanded')).toBe('true'); expect(region.hidden).toBe(false); expect(document.activeElement).toBe(t);
-    await userEvent.keyboard(' ');
-    expect(t.getAttribute('aria-expanded')).toBe('false'); expect(region.hidden).toBe(true);
-  }
-  expect(panel.getByRole('region', { name: 'Routing transitions (scrollable)' }).tabIndex).toBe(0);
+  for (const title of ['Merge and worktree settings', 'Failure escalation', 'Protected conflict routing', 'Action rules', 'Workflow availability']) expect(panel.queryByRole('button', { name: title })).toBeNull();
+  const scroll = panel.getByRole('region', { name: 'Routing transitions (scrollable)' });
+  expect(scroll.tabIndex).toBe(0);
+  scroll.focus();
+  expect(document.activeElement).toBe(scroll);
 });
 
 it('long_dynamic_routes_and_failure_escalation_are_not_hard_coded', async () => {
@@ -680,14 +666,11 @@ it('long_dynamic_routes_and_failure_escalation_are_not_hard_coded', async () => 
   expect(long.panel.getAllByText(new RegExp(LONG_UNBROKEN)).length).toBeGreaterThan(0);
   cleanup();
   const custom = await setup({}, [onFailureLimitRouting(7, 'custom-escalation')]);
-  fireEvent.click(custom.panel.getByRole('button', { name: 'Failure escalation' }));
-  const chains = custom.panel.getByRole('list', { name: 'Failure escalation chains' }).textContent!;
-  expect(chains).toContain('after 7 failed runs'); expect(chains).toContain('custom-escalation');
-  expect(chains).not.toContain('after 3 failed runs');
+  expect(custom.panel.getAllByText(/After 7 fails → custom-escalation/).length).toBeGreaterThan(0);
+  expect(custom.panel.queryByText(/After 3 fails/)).toBeNull();
   cleanup();
   const none = await setup({}, [onFailureLimitRouting(null)]);
-  fireEvent.click(none.panel.getByRole('button', { name: 'Failure escalation' }));
-  expect(none.panel.getByText('No failure escalation is configured.')).toBeTruthy();
+  expect(none.panel.queryByText(/After \d+ fails/)).toBeNull();
 });
 
 it('role_links_use_stable_ids_or_render_diagnostics', async () => {
@@ -802,7 +785,7 @@ it('no_op_cancel_double_submit_and_config_changed_reload_are_safe', async () => 
   await act(async () => { fireEvent.click(reload); });
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
   expect(panel.queryByLabelText('Base branch')).toBeNull();
-  expect(panel.getByText('Base branch: fresh')).toBeTruthy();
+  expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('fresh')).toBeTruthy();
   expect(document.activeElement).toBe(panel.getByRole('heading', { name: 'Workspace board routing' }));
 });
 

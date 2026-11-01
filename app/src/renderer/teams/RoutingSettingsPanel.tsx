@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
-import type { BoardSettings, ManagementApi, ManagementError, RoleCatalogItem } from '../../shared/management';
-import { RoutingReadView } from './RoutingReadView';
+import type { BoardSettings, ManagementApi, ManagementError, RoleCatalogItem, TeamOverview } from '../../shared/management';
+import { RoutingReadView, type RoutingTeamsState } from './RoutingReadView';
 import { RoutingEditForm, routingSummaryProblems } from './RoutingEditForm';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import { boardSettingsChanges, createRoutingDraft, errorProblems, updateRuleField, setRuleFailureLimit, removeRuleFailureLimit, validateRoutingDraft, type EditableRuleField, type RoutingDraft } from './routingSettingsModel';
 
-export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; alert?: boolean; announce?: boolean; onLocalErrorChange?(active: boolean): void; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void; refreshing?: boolean; refreshRef?: RefObject<HTMLButtonElement | null>; onRefresh?(): void }
-export function RoutingSettingsPanel({ workspaceId, management, section, connected, alert = true, announce = true, onLocalErrorChange, roleItems = null, onViewRole, refreshing = false, refreshRef, onRefresh }: RoutingSettingsPanelProps): JSX.Element {
+export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; alert?: boolean; announce?: boolean; onLocalErrorChange?(active: boolean): void; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void; teams?: TeamOverview | null; teamsState?: RoutingTeamsState; onOpenTeam?(teamId: string | null): void; onOpenTeams?(): void; refreshing?: boolean; refreshRef?: RefObject<HTMLButtonElement | null>; onRefresh?(): void }
+export function RoutingSettingsPanel({ workspaceId, management, section, connected, alert = true, announce = true, onLocalErrorChange, roleItems = null, onViewRole, teams = null, teamsState, onOpenTeam, onOpenTeams, refreshing = false, refreshRef, onRefresh }: RoutingSettingsPanelProps): JSX.Element {
   const [draft, setDraft] = useState<RoutingDraft | null>(null);
   const rootRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -77,14 +77,9 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
     {!connected && settings && <p className="panel-note">Disconnected from the backend. Routing is read-only until the connection returns.</p>}
     {settings && (section.error !== null || section.data === null) && <p className="panel-note">Showing the last loaded routing; it may be out of date.</p>}
     {settings && <>
-      {settings.board.state === 'missing' && <p className="routing-problem">No workspace board is configured, so no routing is shown.</p>}
-      {settings.board.state === 'invalid' && <p className="routing-problem">The workspace board configuration is invalid. Routing cannot be shown until it is repaired.</p>}
-      {settings.board.message && <p>{settings.board.message}</p>}
-      {settings.board.problems.map((p, i) => <p className="routing-problem" key={i}>{p.path}: {p.message}</p>)}
-      {settings.roles.state !== 'ok' && <p>{settings.roles.message ?? `Workspace roles are ${settings.roles.state}.`}</p>}
       {roleItems === null && <p className="panel-note">Role names are unavailable; rules show stable role ids.</p>}
       {notice && <p role={announce && !section.loading ? 'status' : undefined}>{notice}</p>}
-      <RoutingReadView settings={settings} roleItems={roleItems} onViewRole={onViewRole} />
+      <RoutingReadView settings={settings} roleItems={roleItems} teams={teams} teamsState={teamsState} onViewRole={onViewRole} onOpenTeam={onOpenTeam} onOpenTeams={onOpenTeams} />
       {!draft && <button type="button" data-focus="edit" disabled={!canEdit || pending} onClick={() => { setEditSettings(settings); setDraft(createRoutingDraft(settings)); setError(null); setNotice(''); }}>Edit routing settings</button>}
       {draft && editSettings && <RoutingEditForm draft={draft} settings={editSettings} problems={problems} pending={pending} connected={connected} locked={!!savedKind} canEdit={canEdit} conflict={error?.code === 'CONFIG_CHANGED'} alert={alert && !reloadError && !error} onChange={change} onBaseBranchChange={v => { setDraft({ ...draft, baseBranch: v }); setError(p => p?.code === 'CONFIG_CHANGED' ? p : null); setNotice(''); }} onFailureChange={(index, count, status) => { setDraft(d => d && setRuleFailureLimit(d, index, count, status)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }} onFailureRemove={index => { setDraft(d => d && removeRuleFailureLimit(d, index)); setError(e => e?.code === 'CONFIG_CHANGED' ? e : null); setNotice(''); }} onSubmit={() => void save()} onCancel={() => { setDraft(null); setEditSettings(null); setError(null); setReloadError(null); setNotice(''); requestFocus('edit'); }} />}
       {reloadError && <div className="panel-error" role={alert ? 'alert' : undefined}><p>Reload failed: {reloadError.code}: {reloadError.message}</p><p>{reloadError.remediation || 'Retry loading the latest settings; if it keeps failing, check the Agent Studio connection.'}</p><button type="button" data-focus="reload-retry" disabled={pending || !connected} onClick={() => void reload()}>Retry latest settings</button></div>}

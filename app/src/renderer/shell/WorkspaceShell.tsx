@@ -122,7 +122,14 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       workspace={props.workspace}
       management={props.management}
       connection={props.connection}
+      navigation={teamsNavigation}
       onViewRole={(roleId) => navigate('roles', { roleId })}
+      onOpenTeam={(teamId) => {
+        const item = teamId === null ? undefined : teamsNavigation.items.find(candidate => candidate.team.id === teamId);
+        if (item !== undefined) teamsNavigation.selectTeam(item.key);
+        navigate('teams');
+      }}
+      onOpenTeams={() => navigate('teams')}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />

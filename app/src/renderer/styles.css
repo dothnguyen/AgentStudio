@@ -1173,6 +1173,81 @@ ul[aria-label="Workspaces"] {
 .routing-disclosure h3 button::before { content: '▸ '; }
 .routing-disclosure h3 button[aria-expanded="true"]::before { content: '▾ '; }
 .routing-role-link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; }
+.routing-read-view { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.routing-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: stretch; min-width: 0; }
+.routing-summary-card > .section-card-body { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.routing-team-list { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.routing-team { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.routing-team-line { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.routing-team-avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 8px; background: #1f2630; color: #9ec3ff; font-size: 12px; font-weight: 600; }
+.routing-team-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.routing-team-name { color: #e7e9ec; font-weight: 500; overflow-wrap: anywhere; }
+.routing-team-count { color: #a3a9b2; font-size: 12px; }
+.routing-running-pill { display: inline-flex; align-items: center; gap: 6px; flex: none; padding: 3px 9px; border-radius: 999px; background: rgba(74, 194, 107, 0.12); color: #6fd38b; font-size: 12px; font-weight: 500; }
+.routing-running-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ac26b; }
+.routing-link-button { align-self: flex-start; min-height: 0; padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; text-decoration: none; }
+.routing-link-button:hover:not(:disabled) { border: 0; background: none; color: var(--link-hover); text-decoration: underline; }
+.routing-link-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.routing-summary-empty { display: flex; flex-direction: column; gap: 10px; }
+.routing-summary-note { margin: 0; color: #8d949e; font-size: 12px; }
+.routing-worktree-list { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 0; padding: 0; }
+.routing-worktree-list dt { margin-bottom: 3px; color: #8d949e; font-size: 12px; }
+.routing-worktree-list dd { margin: 0; color: #e7e9ec; }
+.routing-coverage-count { margin: 0; color: #e7e9ec; font-weight: 500; }
+.routing-coverage-gap { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: #f0b453; font-size: 12px; }
+.routing-coverage-gap .icon { flex: none; margin-top: 1px; }
+.routing-rules-card > .section-card-body { padding: 0; }
+.routing-rules-body { min-width: 0; }
+.routing-warnings { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border-bottom: 1px solid #23262c; background: rgba(240, 180, 83, 0.04); }
+.routing-warning-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: #f0b453; font-size: 12px; }
+.routing-warning-note .icon { flex: none; margin-top: 1px; }
+.routing-table-wrap { overflow-x: auto; max-width: 100%; }
+.routing-rules-inner { min-width: 1040px; }
+.routing-rules-header, .routing-rule-row { display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; }
+.routing-rules-header { padding-block: 10px; border-bottom: 1px solid #23262c; color: #8d949e; font-size: 12px; font-weight: 500; }
+.routing-rules-list { margin: 0; padding: 0; list-style: none; }
+.routing-rule-row { border-bottom: 1px solid #1f2328; }
+.routing-rule-row:last-child { border-bottom: 0; }
+.routing-rule-row:hover { background: #1a1e24; }
+.routing-rule-index { padding-top: 2px; color: #8d949e; font-variant-numeric: tabular-nums; }
+.routing-rule-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.routing-status-line { display: inline-flex; align-items: center; gap: 8px; color: #e7e9ec; font-weight: 500; min-width: 0; }
+.routing-status-name { min-width: 0; overflow-wrap: anywhere; }
+.routing-status-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 50%; background: #8d949e; }
+.routing-status-dot-grey, .routing-status-dot-neutral { background: #8d949e; }
+.routing-status-dot-blue { background: #5b9cff; }
+.routing-status-dot-amber { background: #f0b453; }
+.routing-status-dot-red { background: #e5736a; }
+.routing-status-dot-green { background: #4ac26b; }
+.routing-mono { color: #8d949e; font-family: var(--font-mono); font-size: 11.5px; overflow-wrap: anywhere; }
+.routing-workflow { color: #a3a9b2; }
+.routing-tag { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border: 1px solid #2a2e35; border-radius: 5px; background: #1e2228; color: #c4cad2; font-size: 11px; }
+.routing-tag-protected .icon { color: #c4cad2; }
+.routing-tag-repair, .routing-tag-unavailable { border-color: rgba(240, 180, 83, 0.32); background: rgba(240, 180, 83, 0.1); color: #f0b453; }
+.routing-repair-note { color: #f0b453; font-size: 12px; }
+.routing-role-line { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #e7e9ec; font-weight: 500; min-width: 0; }
+.routing-role-avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-size: 11px; font-weight: 600; }
+.routing-role-line .routing-problem, .routing-role-line .panel-note { margin: 0; font-weight: 400; }
+.routing-worked-by { color: #8d949e; font-size: 12px; }
+.routing-worked-by-missing, .routing-worked-by-unknown { display: inline-flex; align-items: flex-start; gap: 6px; color: #f0b453; font-size: 12px; }
+.routing-rule-warning { color: #f0b453; font-size: 12px; }
+.routing-role-id { margin-left: 2px; }
+.routing-action-name { display: inline-flex; align-items: center; gap: 8px; color: #e7e9ec; font-weight: 500; }
+.routing-action-name .icon { color: #c4cad2; }
+.routing-rule-meta { color: #a3a9b2; font-size: 12px; overflow-wrap: anywhere; }
+.routing-status-chip { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; max-width: 100%; padding: 2px 9px; border: 1px solid #2a2e35; border-radius: 6px; background: #1e2228; color: #e7e9ec; font-size: 12px; }
+.routing-chip-arrow { color: #8d949e; }
+.routing-status-chip .routing-status-dot { width: 7px; height: 7px; }
+.routing-rule-action { display: flex; justify-content: flex-end; }
+.routing-workflow-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.routing-workflow-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid #1f2328; }
+.routing-workflow-item:last-child { padding-bottom: 0; border-bottom: 0; }
+.routing-workflow-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.routing-workflow-line .routing-mono { color: #e7e9ec; }
+.routing-workflow-kind { color: #8d949e; font-size: 12px; }
+.routing-workflow-roles { margin: 0; color: #a3a9b2; font-size: 12px; }
+.routing-workflow-error { margin: 0; color: #f0b453; font-size: 12px; }
+.routing-rules-empty { margin: 0; padding: 16px 18px; }
 
 .routing-settings { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
 .routing-rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }

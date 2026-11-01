@@ -86,12 +86,12 @@ it('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   await userEvent.keyboard('{Escape}');
   expect(view.queryByRole('dialog')).toBeNull(); expect(document.activeElement).toBe(opener);
   cleanup();
-  const routing = await mount({}, 'Routing');
-  const toggle = routing.view.getByRole('button', { name: 'Action rules' }); toggle.focus();
-  await userEvent.keyboard('{Enter}');
-  expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  await userEvent.keyboard(' ');
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
+  const scroll = routing.view.getByRole('region', { name: 'Routing transitions (scrollable)' });
+  scroll.focus();
+  expect(document.activeElement).toBe(scroll);
+  expect(scroll.tabIndex).toBe(0);
+  expect(routing.view.queryByRole('button', { name: 'Action rules' })).toBeNull();
 });
 
 it('teams_long_content_remains_present', async () => {
@@ -101,7 +101,7 @@ it('teams_long_content_remains_present', async () => {
   expect(view.getAllByRole('alert')[0]!.textContent).toContain(`${LONG_UNBROKEN} remediation`);
   cleanup();
   const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
-  expect(routing.view.getByRole('table', { name: 'Routing transitions' }).textContent).toContain(LONG_UNBROKEN);
+  expect(routing.view.getByRole('list', { name: 'Routing transitions' }).textContent).toContain(LONG_UNBROKEN);
 });
 
 it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
@@ -122,7 +122,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
     expect(body, selector).not.toMatch(/display: ?none/);
     expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);
     expect(body, selector).not.toMatch(/white-space: ?nowrap/);
-    if (!/status-dot|teams-members-table|teams-visually-hidden|teams-member-hero-avatar|teams-live-status-dot|teams-agent-mark/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
+    if (!/status-dot|routing-team-avatar|routing-role-avatar|routing-running-dot|routing-rules-inner|teams-members-table|teams-visually-hidden|teams-member-hero-avatar|teams-live-status-dot|teams-agent-mark/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
   }
   expect(rules.find(r => /teams-live-modal/.test(r.selector) && /overflow-x: hidden/.test(r.body))).toBeTruthy();
 });
@@ -251,9 +251,9 @@ it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantic
   expect(second.view.queryAllByRole('status').filter(s => s.textContent?.includes('duplicate-xyz'))).toHaveLength(0);
   // disclosure semantics
   cleanup();
-  const routing = await mount({}, 'Routing');
-  const toggle = routing.view.getByRole('button', { name: 'Action rules' });
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
+  expect(routing.view.queryByRole('button', { name: 'Action rules' })).toBeNull();
+  expect(routing.view.getByRole('region', { name: 'Routing transitions (scrollable)' }).tabIndex).toBe(0);
 });
 
 it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_contract', async () => {

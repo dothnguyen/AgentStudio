@@ -26,7 +26,7 @@ it('renders the design header and notice above the existing routing panel with o
   expect(view.getByRole('heading', { level: 2, name: 'Workspace board routing' })).toBeTruthy();
   expect(fake.boardSettings).toHaveBeenCalledTimes(1);
   expect(fake.roles).toHaveBeenCalledTimes(1);
-  expect(fake.overview).not.toHaveBeenCalled();
+  expect(fake.overview).toHaveBeenCalledTimes(1);
 });
 
 it('keeps the page header to the heading and subtitle from the design', async () => {
@@ -58,7 +58,7 @@ it('announces loading once and retries a failed board read with focus on the pan
   await act(async () => {});
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
   expect(fake.roles).toHaveBeenCalledTimes(1);
-  expect(panel.getByText('Base branch: main')).toBeTruthy();
+  expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('main')).toBeTruthy();
   expect(document.activeElement).toBe(panel.getByRole('heading', { level: 2, name: 'Workspace board routing' }));
 });
 
@@ -132,7 +132,7 @@ it('switching workspace reloads routing for the new workspace and resets local s
   expect(view.getByRole('heading', { level: 1, name: 'Routing' })).toBeTruthy();
   expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
   expect(view.queryByLabelText('Base branch')).toBeNull();
-  expect(view.getByText('Base branch: main')).toBeTruthy();
+  expect(within(view.getByRole('region', { name: 'Worktrees' })).getByText('main')).toBeTruthy();
 });
 
 it('opens the Roles section for a role link through onViewRole', async () => {
@@ -190,10 +190,10 @@ it('does not show a previous workspace routing response after switching workspac
   await act(async () => {});
   view.rerender(<RoutingScreen workspace={workspaceB} management={fake.api} />);
   await act(async () => {});
-  expect(view.getByText('Base branch: workspace-b')).toBeTruthy();
+  expect(within(view.getByRole('region', { name: 'Worktrees' })).getByText('workspace-b')).toBeTruthy();
   await act(async () => { gateA.resolve(okR(routingSettingsFixture())); });
-  expect(view.getByText('Base branch: workspace-b')).toBeTruthy();
-  expect(view.queryByText('Base branch: main')).toBeNull();
+  expect(within(view.getByRole('region', { name: 'Worktrees' })).getByText('workspace-b')).toBeTruthy();
+  expect(within(view.getByRole('region', { name: 'Worktrees' })).queryByText('main')).toBeNull();
   expect(view.getByRole('heading', { level: 1, name: 'Routing' })).toBeTruthy();
 });
 
@@ -211,8 +211,8 @@ it('keeps board routing visible when only the role catalog refresh fails and doe
   expect(view.queryByText('Routing data refreshed.')).toBeNull();
   expect(view.getAllByRole('alert')).toHaveLength(1);
   expect(view.getByRole('alert').textContent).toContain('Role catalog: ROLES_DOWN: roles unreadable');
-  expect(view.getByText('Base branch: main')).toBeTruthy();
-  expect(view.getByRole('table', { name: 'Routing transitions' })).toBeTruthy();
+  expect(within(view.getByRole('region', { name: 'Worktrees' })).getByText('main')).toBeTruthy();
+  expect(view.getByRole('list', { name: 'Routing transitions' })).toBeTruthy();
 });
 
 it('shows role names without Roles links when onViewRole is not provided', async () => {
@@ -220,7 +220,7 @@ it('shows role names without Roles links when onViewRole is not provided', async
   const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
   expect(view.queryByRole('button', { name: /in Roles/ })).toBeNull();
-  const table = within(view.getByRole('table', { name: 'Routing transitions' }));
+  const table = within(view.getByRole('list', { name: 'Routing transitions' }));
   expect(table.getAllByText('Developer').length).toBeGreaterThan(0);
   expect(table.getAllByText('TeamLead').length).toBeGreaterThan(0);
 });
