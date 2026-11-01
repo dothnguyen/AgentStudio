@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { TeamsHarness } from './teamsHarness';
+import { RoutingScreen } from '../src/renderer/routing/RoutingScreen';
 import { workspaceA } from './dashboardFixtures';
 import userEvent from '@testing-library/user-event';
 import type { BoardSettings } from '../src/renderer/api';
@@ -10,19 +10,21 @@ import { rolesFixture, roleItem } from './rolesFixtures';
 import { fakeManagement, routingSettingsFixture, escalationSettingsFixture, invalidBoardSettings, missingBoardSettings, longRoutingSettings, onFailureLimitRouting, LONG_UNBROKEN, managementError } from './teamsFixtures';
 afterEach(cleanup);
 it.each(['board', 'roles'] as const)('blocks an open routing editor when refreshed %s configuration becomes invalid', async invalidFile => {
-  const { RoutingSettingsPanel } = await import('../src/renderer/teams/RoutingSettingsPanel');
   const boardWrite = vi.fn(); const roleWrite = vi.fn();
-  const fake = fakeManagement({ calls: { updateBoardSettings: boardWrite, updateRole: roleWrite } });
   const settings = routingSettingsFixture();
-  const section = { state: 'ready' as const, data: settings, error: null, loading: false, lastUpdatedAt: null, reload: vi.fn(async () => {}) };
-  const view = render(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={section} />);
-  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
-  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
   const invalid = invalidFile === 'board'
     ? { ...settings, board: { ...settings.board, state: 'invalid' as const, message: 'Board invalid' } }
     : { ...settings, roles: { ...settings.roles, state: 'invalid' as const, message: 'Roles invalid' } };
-  view.rerender(<RoutingSettingsPanel workspaceId="ws-a" management={fake.api} connected section={{ ...section, data: invalid }} />);
+  const fake = fakeManagement({
+    calls: { updateBoardSettings: boardWrite, updateRole: roleWrite },
+    boardSettings: [{ ok: true, data: settings }, { ok: true, data: invalid }],
+  });
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
+  await act(async () => {});
+  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
+  fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
+  await act(async () => { fireEvent.click(panel.getByRole('button', { name: 'Refresh' })); });
   const save = panel.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
   expect(save.disabled).toBe(true);
   fireEvent.submit(save.closest('form')!);
@@ -31,8 +33,7 @@ it.each(['board', 'roles'] as const)('blocks an open routing editor when refresh
 });
 async function setup(calls: Parameters<typeof fakeManagement>[0]['calls'] = {}, boards = [routingSettingsFixture()]) {
   const fake = fakeManagement({ calls, boardSettings: boards.map(data => ({ ok: true as const, data })) });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />); await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
   return { fake, panel: within(view.getByRole('region', { name: 'Workspace board routing' })) };
 }
 it('renders live paths and protected routes', async () => {
@@ -141,9 +142,8 @@ it('waits for an in-flight settings refresh before reporting a saved route', asy
   const boardSettings = vi.fn().mockResolvedValueOnce({ ok: true, data: initial }).mockImplementationOnce(() => new Promise(resolve => { finishRefresh = resolve; })).mockImplementationOnce(() => new Promise(resolve => { finishLatest = resolve; }));
   const updateBoardSettings = vi.fn(() => new Promise<{ ok: true; data: {} }>(resolve => { finishWrite = resolve; }));
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings } });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'new-base' } });
@@ -165,8 +165,7 @@ it.each(['write', 'conflict'])('keeps the %s draft when latest settings fail to 
   const boardSettings = vi.fn().mockResolvedValueOnce({ ok: true, data: initial }).mockResolvedValueOnce({ ok: false, error: { code: 'OFFLINE', message: 'reload failed', retryable: true } }).mockResolvedValueOnce({ ok: true, data: latest });
   const updateBoardSettings = vi.fn(async () => kind === 'write' ? { ok: true as const, data: {} } : { ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'changed', retryable: false } });
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings } });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />); await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft' } });
@@ -221,8 +220,7 @@ it('locks the saved routing draft after a reload failure until retry succeeds', 
   const updateBoardSettings = vi.fn(async () => ({ ok: true as const, data: {} }));
   const updateRole = vi.fn(async () => ({ ok: true as const, data: {} }));
   const fake = fakeManagement({ calls: { boardSettings, updateBoardSettings, updateRole } });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />); await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   const control = panel.getByLabelText('Base branch') as HTMLInputElement;
@@ -284,8 +282,7 @@ it('associates validation messages with invalid controls and graph errors with a
 
 it('routing_validation_alert_does_not_duplicate_section_error_alert', async () => {
   const fake = fakeManagement({ boardSettings: [{ ok: true as const, data: routingSettingsFixture() }], roles: [{ ok: true as const, data: rolesFixture() }, managementError('ROLES_DOWN', 'roles unreadable')] });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />); await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' })); await act(async () => {});
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />); await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.click(view.getByRole('button', { name: 'Refresh' })); await act(async () => {});
@@ -634,9 +631,8 @@ it('failed_board_refresh_keeps_open_routing_draft_read_only_until_retry_succeeds
     boardSettings: [{ ok: true, data: settings }, managementError('BOARD_DOWN', 'board unreadable'), { ok: true, data: settings }],
     calls: { updateBoardSettings: update },
   });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   fireEvent.click(panel.getByRole('button', { name: 'Edit routing settings' }));
   fireEvent.change(panel.getByLabelText('Base branch'), { target: { value: 'draft-branch' } });
@@ -655,9 +651,8 @@ it('failed_board_refresh_keeps_open_routing_draft_read_only_until_retry_succeeds
 
 it('failed_board_refresh_identifies_previously_loaded_routing_in_its_warning', async () => {
   const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }, managementError('BOARD_DOWN', 'board unreadable')] });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
   await act(async () => { fireEvent.click(view.getByRole('button', { name: 'Refresh' })); });
   const alert = within(view.getByRole('region', { name: 'Workspace board routing' })).getByRole('alert');
   expect(alert.textContent).toContain('Showing previously loaded data.');

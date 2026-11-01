@@ -1,6 +1,6 @@
-export type SectionId = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration';
+export type SectionId = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'routing' | 'configuration';
 
-export type NavIconName = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration';
+export type NavIconName = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'routing' | 'configuration';
 
 export interface NavItem {
   id: string;
@@ -17,6 +17,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'agents', label: 'Agents', icon: 'agents' },
   { id: 'roles', label: 'Roles', icon: 'roles' },
   { id: 'boards', label: 'Boards', icon: 'boards' },
+  { id: 'routing', label: 'Routing', icon: 'routing' },
   { id: 'configuration', label: 'Configuration', icon: 'configuration' },
 ];
 

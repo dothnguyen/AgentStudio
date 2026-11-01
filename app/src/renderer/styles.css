@@ -1141,12 +1141,27 @@ ul[aria-label="Workspaces"] {
 .teams-tone-danger .status-dot { background: var(--danger); }
 .teams-board { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); }
 .teams-connection-note { color: var(--warning); overflow-wrap: anywhere; }
-.teams-view-tabs { display: flex; flex-wrap: wrap; gap: 22px; margin: 0; border-bottom: 1px solid #23262c; }
-.teams-view-tabs .teams-view-tab { min-height: 0; margin-bottom: -1px; padding: 0 2px 10px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: #a3a9b2; font-weight: 500; overflow-wrap: anywhere; }
-.teams-view-tabs .teams-view-tab:hover:not(:disabled) { background: none; color: #e7e9ec; }
-.teams-view-tabs .teams-view-tab[aria-selected="true"] { color: #e7e9ec; border-bottom-color: #5b9cff; }
 .teams-view-panel { min-width: 0; }
-.teams-view-tab:focus-visible, .teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.teams-routing-link { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; }
+.teams-routing-link-button { min-height: 0; padding: 0; border: 0; background: none; color: var(--link); font: inherit; cursor: pointer; text-decoration: underline; }
+.teams-routing-link-button:hover:not(:disabled) { border: 0; background: none; color: var(--link-hover); }
+.teams-routing-link-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Routing screen v1 */
+.routing-screen { display: flex; flex-direction: column; gap: 22px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-wrap: anywhere; }
+.routing-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; min-width: 0; }
+.routing-heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 760px; }
+.routing-heading h1 { margin: 0; color: var(--text); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.routing-subtitle { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+.routing-screen .routing-refresh { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--text-muted); font-size: 12.5px; }
+.routing-screen .routing-refresh:hover:not(:disabled) { border-color: var(--border-strong, #3a4048); color: var(--text); }
+.routing-notice { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg-alt); color: var(--text-muted); font-size: 12.5px; }
+.routing-notice svg { flex: none; color: #9ec3ff; }
+.routing-notice span { min-width: 0; overflow-wrap: anywhere; }
+.routing-connection-note { color: var(--warning); overflow-wrap: anywhere; }
+.routing-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 13px; }
+.routing-panel-header h2 { margin-bottom: 0; }
 
 /* Routing settings (P05-S16) */
 .routing-scope { color: var(--text-muted); }

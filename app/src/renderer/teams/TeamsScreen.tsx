@@ -2,9 +2,7 @@ import { SectionError } from './SectionError';
 import { TeamOverviewPanel } from './TeamOverviewPanel';
 import { MembersView } from './MembersView';
 import type { MemberListActions } from './MemberList';
-import { RoutingSettingsPanel } from './RoutingSettingsPanel';
-import { TeamViewTabs } from './TeamViewTabs';
-import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
+import { INITIAL_TEAMS_VIEW, selectTeamView, type TeamsViewState } from './teamsViewModel';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AgentCatalogList,
@@ -64,6 +62,8 @@ export interface TeamsScreenProps {
   connection?: ConnectionStatus;
   onViewRole?(roleId: string): void;
   onOpenBoard?(): void;
+  /** Navigates to the workspace Routing screen. */
+  onOpenRouting?(): void;
   /** Navigates to the Agents catalog from the Edit agent options dialog. */
   onOpenAgents?(): void;
   /** One-shot request to open a member page, usually from a role's Used by list. */
@@ -102,7 +102,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const busy = refreshing || overview.loading || agents.loading || board.loading || roleCatalog.loading;
   const [feedback, setFeedback] = useState<WriteFeedback | null>(null);
   const { status: copyStatus, copy } = useCopyStatus();
-  const [routingError, setRoutingError] = useState(false);
   const [formAlert, setFormAlert] = useState(false);
   const [memberNotice, setMemberNotice] = useState(false);
   const [pending, setPending] = useState(false);
@@ -116,9 +115,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [actions, setActions] = useState<Record<string, MemberActionInFlight>>({});
   const [polling, setPolling] = useState<Record<string, boolean>>({});
   const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean; fromRow?: boolean } | null>(null);
-  const alertSource = confirmation?.changed ? 'confirmation' : createError !== null && props.createTeamRequested ? 'create' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : routingError ? 'routing' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
+  const alertSource = confirmation?.changed ? 'confirmation' : createError !== null && props.createTeamRequested ? 'create' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
   const confirmationGeneration = useRef(0);
-  const selectionIdentity = JSON.stringify([props.workspace.id, navigation.selectedKey, navigation.selectionVersion, viewState.teamKey, viewState.view, selectedMember?.teamKey, selectedMember?.memberId]);
+  const selectionIdentity = JSON.stringify([props.workspace.id, navigation.selectedKey, navigation.selectionVersion, viewState.teamKey, selectedMember?.teamKey, selectedMember?.memberId]);
   const previousSelectionIdentity = useRef(selectionIdentity);
   if (previousSelectionIdentity.current !== selectionIdentity) {
     previousSelectionIdentity.current = selectionIdentity;
@@ -223,7 +222,6 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     if (confirmation && (
       (!confirmation.fromRow && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey))
       || navigation.selectedKey !== confirmation.selectionKey
-      || viewState.view !== 'overview'
     )) {
       confirmationGeneration.current++;
       restoreFocus.current = null;
@@ -696,7 +694,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       return;
     }
     appliedMemberRequest.current = requestKey;
-    setViewState({ teamKey: item.key, view: 'overview', memberId: request.memberId });
+    setViewState({ teamKey: item.key, memberId: request.memberId });
     setSelectedMember({ teamKey: item.key, memberId: request.memberId });
     props.onRequestedMemberConsumed?.();
   }, [props.requestedMember, navigation.items, navigation.selectTeam, navigation.selectedKey]);
@@ -809,9 +807,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             pending={pending || teamTransition !== null}
             announce={announceChild}
             onMemberNoticeChange={setMemberNotice}
-            view={view.view}
-            onSelectView={(next) => { if (next !== 'overview') setSelectedMember(null); setViewState(selectChildView(view, next)); }}
-            routing={<RoutingSettingsPanel workspaceId={props.workspace.id} management={props.management} section={board} connected={connected} announce={announceChild} alert={alertSource === 'board' || alertSource === 'routing'} onLocalErrorChange={setRoutingError} roleItems={roleItems} onViewRole={props.onViewRole} />}
+            onOpenRouting={props.onOpenRouting}
             board={{
               section: board,
               lastSettings: lastBoard.current,
@@ -856,9 +852,7 @@ function TeamDetailPanel(props: {
   readOnly: boolean;
   writes: TeamWrites;
   pending: boolean;
-  view: TeamsChildView;
-  onSelectView(view: TeamsChildView): void;
-  routing: JSX.Element;
+  onOpenRouting?(): void;
   board: {
     section: DashboardSectionController<BoardSettings>;
     lastSettings: BoardSettings | null;
@@ -873,32 +867,27 @@ function TeamDetailPanel(props: {
   };
 }): JSX.Element {
   const { team, overview, writes, pending, board } = props;
-
-  const panel = (id: TeamsChildView): JSX.Element | null => {
-    if (id === 'routing') return props.routing;
-    if (id === 'overview') return (
-      <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
-        agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogSha={props.roleCatalogSha} reloadRoleCatalog={props.reloadRoleCatalog} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
-        onManageAgents={props.onManageAgents}
-        writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
-        onSwitch={props.onSwitch} onResume={props.onResume}
-        attention={team.attention}
-        blockedTickets={overview.blockedTickets}
-        boardStatuses={props.board.section.data?.statuses ?? props.board.lastSettings?.statuses ?? null}
-        memberActions={props.memberActions}
-        copy={props.copy}
-        summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} pending={pending} board={board} />} />
-    );
-    return null;
-  };
   return (
     <section className="teams-detail" aria-labelledby="teams-detail-title">
-      <TeamViewTabs teamName={teamLabel(team)} selected={props.view} onSelect={props.onSelectView} />
-      {TEAMS_CHILD_VIEWS.map(({ id }) => (
-        <div key={id} role="tabpanel" id={teamsPanelId(id)} aria-labelledby={teamsTabId(id)} className="teams-view-panel" hidden={id !== props.view} tabIndex={id === props.view ? 0 : undefined}>
-          {id === props.view && panel(id)}
-        </div>
-      ))}
+      <section className="teams-view-panel" aria-label="Overview">
+        <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
+          agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogSha={props.roleCatalogSha} reloadRoleCatalog={props.reloadRoleCatalog} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
+          onManageAgents={props.onManageAgents}
+          writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
+          onSwitch={props.onSwitch} onResume={props.onResume}
+          attention={team.attention}
+          blockedTickets={overview.blockedTickets}
+          boardStatuses={props.board.section.data?.statuses ?? props.board.lastSettings?.statuses ?? null}
+          memberActions={props.memberActions}
+          copy={props.copy}
+          summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} pending={pending} board={board} />} />
+      </section>
+      {props.onOpenRouting !== undefined && (
+        <p className="teams-routing-link">
+          Autonomous work follows the board&apos;s routing.{' '}
+          <button type="button" className="teams-routing-link-button" onClick={props.onOpenRouting}>Open Routing</button>
+        </p>
+      )}
     </section>
   );
 }

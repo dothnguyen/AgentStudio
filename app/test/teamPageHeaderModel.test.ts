@@ -25,8 +25,7 @@ describe('team page header model', () => {
     expect(definitionMetaText(team({ definition: { state: 'missing', problems: [] } }))).toEqual({ text: 'No definition (runtime only)', tone: 'warning' });
   });
 
-  it('styles_match_the_v4_header_and_tab_reference_values', () => {
-    expect(flat).toContain('.teams-view-tabs .teams-view-tab[aria-selected="true"] { color: #e7e9ec; border-bottom-color: #5b9cff; }');
+  it('styles_match_the_v4_header_reference_values', () => {
     expect(flat).toContain('.teams-page-title-row h1 { margin: 0; color: #e7e9ec; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;');
     expect(flat).toContain('.teams-screen.teams-screen-v4 { box-sizing: content-box; max-width: 1120px;');
   });

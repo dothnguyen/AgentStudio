@@ -6,7 +6,7 @@ import type { ConnectionStatus, DashboardApi, Workspace } from '../src/renderer/
 import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder';
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
-import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred } from './teamsFixtures';
+import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred, routingSettingsFixture } from './teamsFixtures';
 import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -71,7 +71,7 @@ describe('WorkspaceShell', () => {
     expect(name.getAttribute('title')).toBe(workspace.name);
     expect(path.getAttribute('title')).toBe(workspace.path);
     expect(Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent)).toEqual([
-      'Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Configuration',
+      'Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
     const agents = within(nav).getAllByRole('button', { name: 'Agents' });
@@ -93,7 +93,7 @@ describe('WorkspaceShell', () => {
     const name = result.getByText(workspace.name);
     const path = result.getByText(workspace.path);
 
-    for (const label of ['Teams', 'Agents', 'Roles', 'Boards', 'Configuration'] as const) {
+    for (const label of ['Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration'] as const) {
       const button = result.getByRole('button', { name: label });
       button.focus();
       fireEvent.click(button);
@@ -101,7 +101,7 @@ describe('WorkspaceShell', () => {
       expect(result.getByText(workspace.name)).toBe(name);
       expect(result.getByText(workspace.path)).toBe(path);
       expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      if (label === 'Teams' || label === 'Agents' || label === 'Roles') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
+      if (label === 'Teams' || label === 'Agents' || label === 'Roles' || label === 'Routing') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
       else expect(result.getByText(descriptions[label])).toBeTruthy();
       expect(currentButtons(result.container)).toEqual([button]);
       expect(document.activeElement).toBe(button);
@@ -335,7 +335,7 @@ describe('WorkspaceShell', () => {
     const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
     const buttons = result.container.querySelectorAll('nav button.nav-item');
-    expect(buttons).toHaveLength(7);
+    expect(buttons).toHaveLength(8);
     buttons.forEach((button, index) => {
       expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(button.textContent).toBe(items[index].label);
@@ -345,10 +345,10 @@ describe('WorkspaceShell', () => {
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(9);
+    expect(buttons).toHaveLength(10);
     expect(buttons[0].className).toContain('workspace-selector');
-    expect(buttons.slice(1, 8).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Boards', 'Configuration']);
-    expect(buttons[8].className).toContain('switch-workspace');
+    expect(buttons.slice(1, 9).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration']);
+    expect(buttons[9].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');
@@ -384,8 +384,6 @@ describe('WorkspaceShell', () => {
   it('saved_member_role_link_opens_exact_stable_role', async () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    const members = await view.findByRole('tab', { name: 'Overview' });
-    fireEvent.click(members);
     await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     await view.findByRole('region', { name: 'Role instructions' });
@@ -413,7 +411,7 @@ describe('WorkspaceShell', () => {
   it('direct_roles_navigation_clears_requested_role', async () => {
     const { view } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
+    await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
@@ -429,7 +427,7 @@ describe('WorkspaceShell', () => {
   it('workspace_change_clears_section_and_role_request', async () => {
     const { view, ui } = deepLinkShell();
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-    fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
+    await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
@@ -446,17 +444,15 @@ describe('WorkspaceShell', () => {
     const ui = (w: Workspace) => <WorkspaceShellComponent workspace={w} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />;
     const view = render(ui(workspace));
     const pressed = (name: RegExp) => (view.getByRole('button', { name }).getAttribute('aria-current') === 'page' ? 'true' : 'false');
-    const selected = () => view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent);
+    const selected = () => (view.queryByRole('region', { name: 'Overview' }) !== null ? ['Overview'] : []);
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(await view.findByRole('button', { name: /^Open Release Team,/ }));
-    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     expect(pressed(/^Open Release Team,/)).toBe('true');
     fireEvent.click(view.getByRole('button', { name: 'Agents' }));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy());
     expect(pressed(/^Open Release Team,/)).toBe('false');
     expect(selected()).toEqual(['Overview']);
-    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     view.rerender(ui({ ...workspace, id: 'b', name: 'Workspace B' }));
     await waitFor(() => expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page'));
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
@@ -479,7 +475,7 @@ describe('WorkspaceShell', () => {
       const fake = fakeManagement({ calls: { overview } });
       const view = render(shell(fake, workspace));
       fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-      fireEvent.click(await view.findByRole('tab', { name: 'Overview' }));
+      await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
       fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
       await waitFor(() => expect(document.activeElement?.id).toBe('teams-member-detail-title'));
       expect(overview).toHaveBeenLastCalledWith('a');
@@ -492,7 +488,7 @@ describe('WorkspaceShell', () => {
       structure(view);
       expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Only B');
       expect(view.queryByText(/Dev Team|Release Team/)).toBeNull();
-      expect(view.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent)).toEqual(['Overview']);
+      expect(view.getByRole('region', { name: 'Overview' })).toBeTruthy();
       expect(view.queryByRole('region', { name: 'dev' })).toBeNull();
       const h2 = view.getAllByRole('heading', { level: 1 }).map(h => h.textContent);
       expect(h2).toContain('Only B');
@@ -516,7 +512,7 @@ describe('WorkspaceShell', () => {
       }
       view.getByRole('button', { name: 'Teams' }).focus();
       await userEvent.keyboard(' ');
-      await view.findByRole('tab', { name: 'Overview' });
+      await waitFor(() => expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team'));
       structure(view);
       expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
     });
@@ -526,8 +522,7 @@ describe('WorkspaceShell', () => {
       const reads = () => [fake.overview, fake.agents, fake.boardSettings, fake.roles].map(f => f.mock.calls.length);
       const view = render(shell(fake, workspace));
       fireEvent.click(view.getByRole('button', { name: 'Teams' }));
-      await view.findByRole('tab', { name: 'Overview' });
-      fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
+      await waitFor(() => expect(reads()).toEqual([1, 1, 1, 1]));
       const before = reads();
       expect(before).toEqual([1, 1, 1, 1]);
       view.rerender(shell(fake, workspace, connectionFixture('lost')));
@@ -539,9 +534,125 @@ describe('WorkspaceShell', () => {
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(reads()).toEqual([2, 2, 2, 2]);
       expect(fake.overview.mock.calls.every(c => c[0] === 'a')).toBe(true);
-      expect(view.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+      expect(view.getByRole('region', { name: 'Overview' })).toBeTruthy();
       structure(view);
     });
+  });
+});
+
+describe('Routing screen navigation', () => {
+  const shell = (fake: ReturnType<typeof fakeManagement>, ws: Workspace = workspace, conn: ConnectionStatus = connection) => (
+    <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />
+  );
+  const settle = () => act(async () => {});
+
+  it('sidebar_shows_routing_after_boards_and_opens_one_h1_screen', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(shell(fake));
+    await settle();
+    const nav = view.getByRole('navigation', { name: 'Workspace' });
+    const labels = Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent);
+    expect(labels).toEqual(['Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration']);
+    const routing = within(nav).getByRole('button', { name: 'Routing' });
+    const icon = routing.querySelector('svg')!;
+    expect(icon.getAttribute('data-icon')).toBe('routing');
+    expect(icon.getAttribute('width')).toBe('16');
+    expect(icon.getAttribute('height')).toBe('16');
+    expect(icon.getAttribute('stroke-width')).toBe('1.8');
+    expect(icon.querySelectorAll('circle')).toHaveLength(3);
+    expect(icon.querySelector('path')?.getAttribute('d')).toBe('M6 8.5v7M18 10.5c0 4-7 3-11 6.2');
+    fireEvent.click(routing);
+    await settle();
+    expect(routing.getAttribute('aria-current')).toBe('page');
+    expect(view.container.querySelector('[data-section="routing"]')).toBeTruthy();
+    expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Routing');
+    expect(view.getByText(/Routing belongs to the workspace board, not to one team/)).toBeTruthy();
+    expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
+    expect(fake.boardSettings).toHaveBeenLastCalledWith(workspace.id);
+    expect(fake.roles).toHaveBeenLastCalledWith(workspace.id);
+  });
+
+  it('routing_role_link_opens_roles_with_that_role', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(shell(fake));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Routing' }));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
+    await settle();
+    expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy();
+    expect(view.getByRole('heading', { level: 1, name: 'Developer' })).toBeTruthy();
+  });
+
+  it('workspace_switch_resets_the_routing_screen', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(shell(fake));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Routing' }));
+    await settle();
+    expect(view.container.querySelector('[data-section="routing"]')).toBeTruthy();
+    view.rerender(shell(fake, { ...workspace, id: 'b', name: 'Workspace B' }));
+    await settle();
+    expect(view.container.querySelector('[data-section="routing"]')).toBeNull();
+    expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(view.getByRole('button', { name: 'Routing' }));
+    await settle();
+    expect(fake.boardSettings).toHaveBeenLastCalledWith('b');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Routing');
+  });
+
+  it('routing_nav_item_is_keyboard_reachable_and_current', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(shell(fake));
+    await settle();
+    const routing = view.getByRole('button', { name: 'Routing' });
+    expect(routing.tagName).toBe('BUTTON');
+    expect(routing.hasAttribute('tabindex')).toBe(false);
+    routing.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(routing.getAttribute('aria-current')).toBe('page'));
+    expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(document.activeElement).toBe(routing);
+
+    fireEvent.click(view.getByRole('button', { name: 'Boards' }));
+    await settle();
+    routing.focus();
+    await userEvent.keyboard(' ');
+    await waitFor(() => expect(routing.getAttribute('aria-current')).toBe('page'));
+    expect(view.container.querySelector('[data-section="routing"]')).toBeTruthy();
+  });
+
+  it('team_page_open_routing_link_navigates_to_the_routing_section', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(shell(fake));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+    await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy());
+    expect(view.queryByRole('tablist')).toBeNull();
+    expect(view.queryByRole('tab')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Open Routing' }));
+    await settle();
+    expect(view.container.querySelector('[data-section="routing"]')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Routing' }).getAttribute('aria-current')).toBe('page');
+    expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Routing');
+    expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
+  });
+
+  it('team_page_hides_open_routing_when_routing_is_missing_or_disabled', async () => {
+    for (const items of [
+      NAV_ITEMS.filter((item) => item.id !== 'routing'),
+      NAV_ITEMS.map((item) => (item.id === 'routing' ? { ...item, disabled: true } : item)),
+    ] as Array<readonly NavItem[]>) {
+      const fake = fakeManagement();
+      const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} items={items} onSwitchWorkspace={vi.fn()} />);
+      await settle();
+      fireEvent.click(view.getByRole('button', { name: 'Teams' }));
+      await waitFor(() => expect(view.getByRole('heading', { level: 1, name: 'Dev Team' })).toBeTruthy());
+      expect(view.queryByRole('button', { name: 'Open Routing' })).toBeNull();
+      view.unmount();
+    }
   });
 });
 
@@ -555,7 +666,7 @@ describe('T-084 sidebar team navigation', () => {
   const rows = (view: ReturnType<typeof render>) => view.queryAllByRole('listitem').flatMap((li) => Array.from(li.querySelectorAll<HTMLButtonElement>('.team-nav-item')));
   const row = (view: ReturnType<typeof render>, name: string) => view.getByRole('button', { name: new RegExp(`^Open ${name},`) });
   const teamsButton = (view: ReturnType<typeof render>) => view.getByRole('button', { name: 'Teams' });
-  const tabs = (view: ReturnType<typeof render>) => view.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
+  const tabs = (view: ReturnType<typeof render>) => (view.queryByRole('region', { name: 'Overview' }) !== null ? ['Overview'] : []);
   const running = (t: ReturnType<typeof team>) => ({ ...t, runtime: { state: 'running' as const, teamId: 'live', status: 'running' } });
 
   it('open_board_from_team_overview_navigates_to_boards', async () => {
@@ -754,15 +865,12 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     fireEvent.click(row(view, 'Release Team'));
     await settle();
-    fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
-    await settle();
     fireEvent.click(view.getByRole('button', { name: 'Home' }));
     await settle();
     fireEvent.click(teamsButton(view));
     await settle();
     expect(view.getByRole('heading', { level: 1, name: 'Release Team' })).toBeTruthy();
     expect(teamsButton(view).getAttribute('aria-current')).toBe('page');
-    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     await settle();
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     await settle();
@@ -785,7 +893,6 @@ describe('T-084 sidebar team navigation', () => {
     const view = render(ui(fake));
     await settle();
     fireEvent.click(row(view, 'Release Team'));
-    fireEvent.click(view.getByRole('tab', { name: 'Overview' }));
     fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Release Team', 'Dev Team']);
@@ -808,13 +915,12 @@ describe('T-084 sidebar team navigation', () => {
     const view = render(ui(fake));
     await settle();
     fireEvent.click(row(view, 'Live only'));
-    fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
     fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(rows(view).map((r) => r.querySelector('.team-nav-label')!.textContent)).toEqual(['Saved team', 'Live only']);
     expect(row(view, 'Live only').getAttribute('aria-current')).toBe('page');
     expect(view.getByRole('heading', { level: 1, name: 'Live only' })).toBeTruthy();
-    expect(tabs(view)).toEqual(['Routing']);
+    expect(tabs(view)).toEqual(['Overview']);
   });
 
   it('partial_truncated_sidebar_rows_with_markup_names_remain_selectable_as_text', async () => {

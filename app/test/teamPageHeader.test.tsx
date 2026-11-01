@@ -206,14 +206,11 @@ describe('team page header', () => {
     expect(screen.queryByRole('button', { name: 'More team actions' })).toBeNull();
   });
 
-  it('underline_tabs_keep_aria_and_rename_heading_is_h2', async () => {
+  it('team_page_has_no_tabs_and_rename_heading_is_h2', async () => {
     await renderTeam(withTeam(running()));
-    const overview = screen.getByRole('tab', { name: 'Overview' });
-    expect(overview.getAttribute('aria-selected')).toBe('true');
-    expect(overview.classList.contains('teams-view-tab')).toBe(true);
-    fireEvent.keyDown(overview, { key: 'ArrowRight' }); await flush();
-    expect(screen.getByRole('tab', { name: 'Routing' }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' })); await flush();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Overview' })).toBeTruthy();
     fireEvent.click(btn('Rename team')); await flush();
     const form = screen.getByRole('form', { name: 'Rename team' });
     expect(within(form).getByRole('heading', { level: 2, name: 'Rename team' })).toBeTruthy();

@@ -8,7 +8,6 @@ import { MemberList, type MemberListActions } from './MemberList';
 import { MemberForm } from './TeamEditForms';
 import { canEditTeam, emptyMemberForm } from './teamEditModel';
 import type { BoardStatus } from './teamActionsModel';
-import { teamsPanelId } from './teamsViewModel';
 import { filterMembers, missingMemberNotice, resolveMemberSelection, type MemberSelection } from './teamsModel';
 
 export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'agentsSection'> {
@@ -48,7 +47,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
     if (result.state === 'missing') { setLost(result.memberId); setReturnFocus({ memberId: null }); onSelect(null); }
     else if (result.state === 'other-team') onSelect(null);
   }, [result.state, selection]);
-  useEffect(() => { if (selection !== null || returnFocus === null) return; const target = returnFocus === 'add' ? addRef.current : returnFocus.memberId === null ? null : rows.current.get(returnFocus.memberId); if (target?.disabled) return; (target ?? document.getElementById(headingId) ?? document.getElementById(teamsPanelId('overview')))?.focus(); setReturnFocus(null); }, [selection, returnFocus, props.pending, props.readOnly, filtered]);
+  useEffect(() => { if (selection !== null || returnFocus === null) return; const target = returnFocus === 'add' ? addRef.current : returnFocus.memberId === null ? null : rows.current.get(returnFocus.memberId); if (target?.disabled) return; (target ?? document.getElementById(headingId) ?? document.getElementById('teams-detail-title'))?.focus(); setReturnFocus(null); }, [selection, returnFocus, props.pending, props.readOnly, filtered]);
   function open(id: string, nextIntent?: 'edit' | 'remove'): void { setLost(null); setAdding(false); setLastOpened(id); setIntent(nextIntent ?? null); onSelect({ teamKey, memberId: id }); }
   function back(): void { setReturnFocus({ memberId: selection?.memberId ?? null }); setIntent(null); onSelect(null); }
   function removed(): void { setReturnFocus(canEditTeam(team) ? 'add' : { memberId: null }); setIntent(null); onSelect(null); }

@@ -34,7 +34,7 @@ async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}, con
 }
 const flush = () => act(async () => {});
 const board = () => screen.getByRole('region', { name: 'Board' });
-const overviewPanel = () => screen.getByRole('tabpanel', { name: 'Overview' });
+const overviewPanel = () => screen.getByRole('region', { name: 'Overview' });
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
 const boardValue = () => board().querySelector('.teams-summary-value')!.textContent;
 const boardButton = (name: string) => within(board()).getByRole('button', { name }) as HTMLButtonElement;
@@ -66,7 +66,6 @@ describe('live team state', () => {
       ],
     })]);
     await renderScreen({ overview: [ok(o)] });
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(name => memberRow(name));
     expect(rows.map(r => field(r, 'availability'))).toEqual(['Available', 'Working', 'Waiting for input', 'Limit reached', 'Offline', 'Not in runtime', 'Unavailable']);
     ['ok', 'busy', 'warning', 'warning', 'danger', 'muted', 'muted'].forEach((tone, i) => expect(rows[i]!.querySelector('.teams-member-status')!.className).toContain(`teams-tone-${tone}`));
@@ -76,7 +75,6 @@ describe('live team state', () => {
   it('stopped_team_members_say_unavailable', async () => {
     await renderScreen();
     fireEvent.click(screen.getByRole('button', { name: /^Open Release Team,/ }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     const row = memberRow('qa');
     expect(field(row, 'availability')).toBe('Stopped');
     expect(row.querySelector('.teams-member-status')!.className).toContain('teams-tone-muted');
@@ -352,10 +350,8 @@ describe('board controls', () => {
     });
     expect(within(board()).getByRole('alert').textContent).toContain('BOARD_CONFIG_INVALID: board.json is invalid');
     expect(within(board()).queryByRole('button', { name: 'Run board' })).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     await flush();
     expect(showMembers()).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     await flush();
     fireEvent.click(within(board()).getByRole('button', { name: 'Retry' }));
     await flush();
@@ -455,7 +451,6 @@ describe('board controls', () => {
 
   it('role_integration_preserves_live_and_agents_controls', async () => {
     await renderScreen();
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     openMember('dev');
     expect(screen.getByRole('region', {name: 'Agents'})).toBeTruthy();
     expect(button('Refresh')).toBeTruthy();

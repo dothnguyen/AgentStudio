@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
+import { RoutingScreen } from '../src/renderer/routing/RoutingScreen';
 import { TeamsHarness, teamRow } from './teamsHarness';
 import type { TeamsNavigationController } from '../src/renderer/teams/useTeamsNavigationController';
 import { RUNNING_TEAM_NOTICE } from '../src/renderer/teams/teamEditModel';
@@ -27,19 +28,16 @@ it('disconnected_with_pending_board_load_announces_only_one_status', async () =>
   await act(async () => { boardGate.resolve(okR(boardSettingsFixture())); });
 });
 
-it('routing_refresh_with_overview_pending_announces_only_one_status', async () => {
-  const overviewGate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
+it('routing_refresh_announces_only_one_status', async () => {
   const boardGate = deferred<ReturnType<typeof okR<ReturnType<typeof boardSettingsFixture>>>>();
-  const fake = fakeManagement({ overview: [okR(twoTeams()), overviewGate.promise], boardSettings: [okR(boardSettingsFixture()), boardGate.promise] });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+  const fake = fakeManagement({ boardSettings: [okR(boardSettingsFixture()), boardGate.promise] });
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
   fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
   await act(async () => {});
-  expect(view.getByText(/Refreshing teams… Showing previously loaded data/)).toBeTruthy();
   expect(view.getByText(/Refreshing routing settings… Showing previously loaded data/)).toBeTruthy();
   expect(view.getAllByRole('status')).toHaveLength(1);
-  await act(async () => { overviewGate.resolve(okR(twoTeams())); boardGate.resolve(okR(boardSettingsFixture())); });
+  await act(async () => { boardGate.resolve(okR(boardSettingsFixture())); });
 });
 
 it('retained_refresh_success_does_not_duplicate_pending_or_connection_status', async () => {
@@ -68,14 +66,9 @@ async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
   return { fake, result };
 }
 
-const tab = (r: { getByRole: (role: string, o: { name: string }) => HTMLElement }, name: string) => r.getByRole('tab', { name });
-async function openTab(r: { getByRole: (role: string, o: { name: string }) => HTMLElement }, name: string) {
-  fireEvent.click(tab(r, name));
-  await act(async () => {});
-}
+// The team page has no child views or tabs: its single Overview is always rendered.
 async function renderMembers(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const out = await renderScreen(opts);
-  await openTab(out.result, 'Overview');
   return out;
 }
 
@@ -102,7 +95,7 @@ describe('compact team overview', () => {
       members: [member({ memberId: 'a', name: 'a', presence: 'busy' }), member({ memberId: 'b', name: 'b', presence: 'idle' })],
     })]);
     const { result } = await renderScreen({ overview: [{ ok: true, data }] });
-    expect(within(result.getByRole('tabpanel', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Runtime', 'Availability', 'Board', 'Members']);
+    expect(within(result.getByRole('region', { name: 'Overview' })).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Runtime', 'Availability', 'Board', 'Members']);
     expect(result.queryByRole('heading', { name: 'Team status' })).toBeNull();
     expect(result.queryByRole('heading', { name: 'Member availability' })).toBeNull();
     const status = result.getByRole('heading', { name: 'Runtime' }).closest('section')!;
@@ -180,36 +173,37 @@ describe('compact team overview', () => {
     expect((result.getByRole('button', { name: 'More team actions' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('overview_tabs_are_only_overview_and_routing_and_keep_roving_keyboard_semantics', async () => {
-    const { result } = await renderScreen();
-    const tabs = result.getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Routing']);
-    expect(result.getAllByRole('tabpanel', { hidden: true })).toHaveLength(2);
-    const selected = () => tabs.filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
-    expect(selected()).toEqual(['Overview']);
-    expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
-    for (const t of tabs) expect(document.getElementById(t.getAttribute('aria-controls')!)).toBeTruthy();
-    fireEvent.click(tabs[1]!);
-    expect(selected()).toEqual(['Routing']);
-    fireEvent.keyDown(tabs[1]!, { key: 'ArrowRight' });
-    expect(selected()).toEqual(['Overview']);
-    expect(document.activeElement).toBe(tabs[0]);
-    fireEvent.keyDown(tabs[0]!, { key: 'ArrowLeft' });
-    expect(selected()).toEqual(['Routing']);
-    fireEvent.keyDown(tabs[1]!, { key: 'Home' });
-    expect(selected()).toEqual(['Overview']);
-    fireEvent.keyDown(tabs[0]!, { key: 'End' });
-    expect(selected()).toEqual(['Routing']);
-    expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
+  it('team_page_has_no_tabs_or_child_views_and_links_to_routing', async () => {
+    const onOpenRouting = vi.fn();
+    const fake = fakeManagement();
+    const result = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onOpenRouting={onOpenRouting} />);
+    await act(async () => {});
+    expect(result.queryByRole('tablist')).toBeNull();
+    expect(result.queryByRole('tab')).toBeNull();
+    expect(result.queryByRole('tabpanel')).toBeNull();
+    const overview = result.getByRole('region', { name: 'Overview' });
+    expect(overview).toBeTruthy();
+    expect(result.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
+    expect(result.getByText("Autonomous work follows the board's routing.")).toBeTruthy();
+    const link = result.getByRole('button', { name: 'Open Routing' }) as HTMLButtonElement;
+    expect(link.type).toBe('button');
+    // The link sits after the overview content, replacing the old tab as the discovery path.
+    expect(overview.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    link.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(onOpenRouting).toHaveBeenCalledTimes(1);
+    fireEvent.click(link);
+    expect(onOpenRouting).toHaveBeenCalledTimes(2);
   });
 
-  it('routing_tab_keeps_workspace_routing_without_extra_reads', async () => {
-    const { result, fake } = await renderScreen();
-    const reads = () => [fake.api.overview, fake.api.boardSettings, fake.api.agents, fake.api.roles].map((f) => (f as unknown as { mock?: { calls: unknown[] } }).mock?.calls.length ?? 0);
-    const before = reads();
-    await openTab(result, 'Routing');
+  it('routing_screen_reads_board_and_roles_once', async () => {
+    const fake = fakeManagement();
+    const result = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
+    await act(async () => {});
+    expect(result.getByRole('heading', { level: 1, name: 'Routing' })).toBeTruthy();
     expect(result.getByText('Workspace board routing')).toBeTruthy();
-    expect(reads()).toEqual(before);
+    expect(fake.boardSettings).toHaveBeenCalledTimes(1);
+    expect(fake.roles).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -222,7 +216,6 @@ describe('TeamsScreen', () => {
     });
     const result = render(<TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
     await act(async () => {});
-    await openTab(result, 'Overview');
     openMember('dev');
     const row = result.getByRole('region', { name: 'dev' });
     expect(row.textContent).toContain('qa-b');
@@ -256,7 +249,6 @@ describe('TeamsScreen', () => {
     const detail = result.getByRole('region', { name: 'Dev Team' });
     expect(detail.textContent).toContain('Running');
     expect(detail.textContent).toContain('Running');
-    await openTab(result, 'Overview');
     const r1 = openMember('dev').textContent;
     expect(r1).toContain('OpenCode Sonnet');
     expect(r1).toContain('opencode · claude-sonnet');
@@ -277,7 +269,6 @@ describe('TeamsScreen', () => {
     fireEvent.click(card(list, 'Release Team'));
     expect(card(list, 'Release Team').getAttribute('aria-current')).toBe('page');
     expect(card(list, 'Dev Team').getAttribute('aria-current')).toBeNull();
-    await openTab(result, 'Overview');
     const detail = result.getByRole('region', { name: 'Release Team' });
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Release Team');
     const row = openMember('qa');
@@ -292,14 +283,12 @@ describe('TeamsScreen', () => {
     expect(result.queryByRole('heading', { name: 'Agent catalog' })).toBeNull();
     expect(result.queryByRole('list', { name: 'Agent catalog' })).toBeNull();
     expect(fake.agents).toHaveBeenCalledTimes(1);
-    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Add member' }));
     expect(result.getByRole('option', { name: 'OpenCode Sonnet (opencode-sonnet)' })).toBeTruthy();
   });
 
   it('keeps members visible and catalog choices unavailable when catalog loading fails', async () => {
     const { result } = await renderScreen({ agents: [{ ok: false, error: { code: 'CATALOG_FAIL', message: 'failed', retryable: true } }] });
-    await openTab(result, 'Overview');
     const detail = result.getByRole('region', { name: 'Dev Team' });
     expect(memberRow('dev').textContent).toContain('dev');
     fireEvent.click(result.getByRole('button', { name: 'Add member' }));
@@ -344,7 +333,6 @@ describe('TeamsScreen', () => {
     for (const t of ['ghost', 'Runtime unavailable', 'Definition unreadable']) expect(list.textContent).toContain(t);
     const detail = result.getByRole('region', { name: 'ghost' });
     expect(detail.textContent).toContain('$: could not load team definition: TEAM_CONFIG_INVALID');
-    await openTab(result, 'Overview');
     const row = openMember('m1');
     for (const t of ['m1', 'Agent definition gone is missing', 'No role', 'Role descriptions unavailable', 'Live state is unavailable because this member has no running runtime record.']) {
       expect(row.textContent).toContain(t);
@@ -370,7 +358,6 @@ describe('TeamsScreen', () => {
     const hits = result.getAllByText(long);
     expect(hits).toHaveLength(3);
     for (const h of hits) expect(h.textContent).toBe(long);
-    await openTab(result, 'Overview');
     expect(result.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
     expect(within(result.getByRole('list', { name: 'Data notices' })).getByText('Showing the first 1 team. More teams exist in this workspace.')).toBeTruthy();
   });
@@ -437,10 +424,9 @@ describe('TeamsScreen', () => {
     const { result } = await renderScreen();
     for (const b of result.container.querySelectorAll('button')) {
       expect(b.getAttribute('type')).toBe('button');
-      if (b.matches('[role="tab"]')) expect(['0', '-1']).toContain(b.getAttribute('tabindex'));
-      else expect(b.hasAttribute('tabindex')).toBe(false);
+      expect(b.hasAttribute('tabindex')).toBe(false);
     }
-    expect(Array.from(result.container.querySelectorAll('[role="tab"]')).filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1);
+    expect(result.queryByRole('tab')).toBeNull();
     expect(result.container.querySelector('.teams-card, .teams-layout')).toBeNull();
     expect(result.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(result.getByRole('region', { name: 'Dev Team' })).toBeTruthy();
@@ -462,7 +448,8 @@ describe('TeamsScreen', () => {
     fireEvent.click(within(result.getByRole('region', { name: 'Team status' })).getByRole('button', { name: /View teams/ }));
     await act(async () => {});
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
-    expect(result.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(result.getByRole('region', { name: 'Overview' })).toBeTruthy();
+    expect(result.queryByRole('tab')).toBeNull();
     expect(result.getByRole('button', { name: 'Teams' }).getAttribute('aria-current')).toBe('page');
     expect(card(result.getByRole('navigation', { name: 'Workspace' }), 'Dev Team').getAttribute('aria-current')).toBeNull();
     expect(fake.overview).toHaveBeenCalledWith('ws-a');
@@ -470,7 +457,8 @@ describe('TeamsScreen', () => {
 });
 
 describe('focused navigation', () => {
-  const selectedTabs = (r: ReturnType<typeof render>) => r.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
+  // The page has one view, so "the current view" is Overview whenever it is rendered.
+  const selectedTabs = (r: ReturnType<typeof render>) => (r.queryByRole('region', { name: 'Overview' }) !== null ? ['Overview'] : []);
   const list = (r: ReturnType<typeof render>) => r.getByRole('navigation', { name: 'Harness sidebar' });
   const reordered = () => {
     const data = twoTeams();
@@ -483,47 +471,13 @@ describe('focused navigation', () => {
   it('initial_selection_is_first_ordered_team_on_overview', async () => {
     const { result } = await renderScreen();
     expect(card(list(result), 'Dev Team').getAttribute('aria-current')).toBe('page');
-    const tablist = result.getByRole('tablist', { name: 'Dev Team views' });
-    const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Routing']);
-    expect(tabs.map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false']);
-    expect(tabs.map((t) => t.tabIndex)).toEqual([0, -1]);
-    const panels = result.getAllByRole('tabpanel');
-    expect(panels).toHaveLength(1);
-    expect(panels[0]!.id).toBe('teams-panel-overview');
-    expect(panels[0]!.getAttribute('aria-labelledby')).toBe('teams-tab-overview');
-    expect(panels[0]!.textContent).toContain('Running');
-    expect(panels[0]!.textContent).toContain('Board');
+    const panel = result.getByRole('region', { name: 'Overview' });
+    expect(panel.textContent).toContain('Running');
+    expect(panel.textContent).toContain('Board');
+    expect(result.queryByRole('tablist')).toBeNull();
+    expect(result.queryByRole('tab')).toBeNull();
     expect(result.queryByRole('table')).toBeNull();
     expect(result.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
-  });
-
-  it('routing_tab_shows_exactly_one_panel', async () => {
-    const { result } = await renderScreen();
-    expect(result.getAllByRole('tabpanel')).toHaveLength(1);
-    await openTab(result, 'Routing');
-    expect(result.getAllByRole('tabpanel')).toHaveLength(1);
-    expect(within(result.getByRole('tabpanel')).getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
-    expect(result.queryByRole('table')).toBeNull();
-  });
-
-  it('tab_keyboard_moves_focus_selection_and_wraps', async () => {
-    const { result } = await renderScreen();
-    tab(result, 'Overview').focus();
-    const steps: Array<[string, string]> = [
-      ['ArrowRight', 'Routing'], ['ArrowRight', 'Overview'],
-      ['ArrowLeft', 'Routing'], ['Home', 'Overview'], ['End', 'Routing'],
-    ];
-    for (const [key, name] of steps) {
-      fireEvent.keyDown(document.activeElement!, { key });
-      expect(document.activeElement).toBe(tab(result, name));
-      expect(selectedTabs(result)).toEqual([name]);
-      expect(result.getAllByRole('tab').filter((t) => t.tabIndex === 0)).toHaveLength(1);
-      const selected = tab(result, name);
-      expect(result.getByRole('tabpanel').id).toBe(selected.getAttribute('aria-controls'));
-    }
-    expect(fireEvent.keyDown(tab(result, 'Routing'), { key: 'ArrowDown' })).toBe(true);
-    expect(selectedTabs(result)).toEqual(['Routing']);
   });
 
   it('sidebar_team_rows_use_native_tab_order_without_roving_keys', async () => {
@@ -541,11 +495,9 @@ describe('focused navigation', () => {
 
   it('selecting_a_new_team_returns_to_overview', async () => {
     const { result } = await renderScreen();
-    await openTab(result, 'Overview');
     fireEvent.click(card(list(result), 'Release Team'));
     expect(card(list(result), 'Release Team').getAttribute('aria-current')).toBe('page');
     expect(selectedTabs(result)).toEqual(['Overview']);
-    await openTab(result, 'Overview');
     fireEvent.click(card(list(result), 'Release Team'));
     expect(selectedTabs(result)).toEqual(['Overview']);
   });
@@ -553,7 +505,6 @@ describe('focused navigation', () => {
   it('refresh_reorder_preserves_selection_and_view', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: true, data: reordered() }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(cardNames(list(result))).toEqual(['Release Team', 'Dev Team']);
@@ -565,7 +516,6 @@ describe('focused navigation', () => {
   it('refresh_removal_falls_back_to_first_team_overview', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: true, data: overviewFixture([twoTeams().teams[1]!]) }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(cardNames(list(result))).toEqual(['Dev Team']);
@@ -579,7 +529,7 @@ describe('focused navigation', () => {
     await act(async () => {});
     expect(result.getByText('No teams defined in this workspace.')).toBeTruthy();
     expect(result.queryByRole('tablist')).toBeNull();
-    expect(result.queryAllByRole('tabpanel')).toHaveLength(0);
+    expect(result.queryByRole('region', { name: 'Overview' })).toBeNull();
     expect(result.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
     for (const name of ['New team', 'Refresh']) expect((result.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -587,7 +537,6 @@ describe('focused navigation', () => {
   it('overview_error_after_refresh_retains_selection_and_view', async () => {
     const { result } = await renderScreen({ overview: [{ ok: true, data: twoTeams() }, { ok: false, error: { code: 'INTERNAL', message: 'boom', retryable: true } }] });
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Overview');
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(within(result.getByRole('region', { name: 'Teams data status' })).getByRole('alert').textContent).toContain('INTERNAL: boom');
@@ -601,7 +550,6 @@ describe('focused navigation', () => {
     const result = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} />);
     await act(async () => {});
     fireEvent.click(card(list(result), 'Release Team'));
-    await openTab(result, 'Routing');
     result.rerender(<TeamsHarness sidebar workspace={{ ...workspaceA, id: 'ws-b' }} management={fake.api} />);
     await act(async () => {});
     expect(card(list(result), 'Ops Team').getAttribute('aria-current')).toBe('page');
@@ -609,11 +557,8 @@ describe('focused navigation', () => {
     expect(fake.overview).toHaveBeenLastCalledWith('ws-b');
   });
 
-  it('tab_and_team_changes_issue_no_management_reads', async () => {
+  it('team_changes_issue_no_management_reads', async () => {
     const { fake, result } = await renderScreen();
-    for (const name of ['Routing', 'Overview']) await openTab(result, name);
-    tab(result, 'Overview').focus();
-    for (const key of ['ArrowRight', 'ArrowRight', 'Home', 'End']) fireEvent.keyDown(document.activeElement!, { key });
     fireEvent.click(card(list(result), 'Release Team'));
     fireEvent.keyDown(document.activeElement ?? card(list(result), 'Release Team'), { key: 'ArrowDown' });
     fireEvent.keyDown(card(list(result), 'Release Team'), { key: 'ArrowUp' });
@@ -621,7 +566,7 @@ describe('focused navigation', () => {
     for (const fn of [fake.overview, fake.agents, fake.boardSettings, fake.roles]) expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it('global_status_and_feedback_stay_outside_tab_panels', async () => {
+  it('global_status_and_feedback_stay_outside_the_overview_panel', async () => {
     const fake = fakeManagement({
       roles: [{ ok: false, error: { code: 'INTERNAL', message: 'roles down', retryable: false } }],
       overview: [{ ok: true, data: overviewFixture(twoTeams().teams, { truncated: true }) }],
@@ -639,27 +584,24 @@ describe('focused navigation', () => {
     expect(result.getByRole('button', { name: 'Retry loading roles' }).parentElement?.textContent).toContain('INTERNAL: roles down');
     result.rerender(<TeamsHarness workspace={workspaceA} management={fake.api} connection={conn('lost')} />);
     await act(async () => {});
-    for (const name of ['Overview', 'Routing']) {
-      await openTab(result, name);
-      const panel = result.getByRole('tabpanel');
-      const outside = [
-        result.getByRole('list', { name: 'Data notices' }),
-        result.getByRole('button', { name: 'Retry loading roles' }),
-        result.getByText('Connection lost. Showing previously loaded data.'),
-        result.getAllByRole('alert').find((a) => a.textContent?.includes('BAD_REQUEST: dup'))!,
-        result.getByRole('button', { name: 'New team' }),
-        result.getByRole('button', { name: 'Refresh' }),
-      ];
-      for (const el of outside) {
-        expect(el).toBeTruthy();
-        expect(panel.contains(el)).toBe(false);
-      }
+    const panel = result.getByRole('region', { name: 'Overview' });
+    const outside = [
+      result.getByRole('list', { name: 'Data notices' }),
+      result.getByRole('button', { name: 'Retry loading roles' }),
+      result.getByText('Connection lost. Showing previously loaded data.'),
+      result.getAllByRole('alert').find((a) => a.textContent?.includes('BAD_REQUEST: dup'))!,
+      result.getByRole('button', { name: 'New team' }),
+      result.getByRole('button', { name: 'Refresh' }),
+    ];
+    for (const el of outside) {
+      expect(el).toBeTruthy();
+      expect(panel.contains(el)).toBe(false);
     }
   });
 });
 
 describe('team overview', () => {
-  const panel = () => screen.getByRole('tabpanel', { name: 'Overview' });
+  const panel = () => screen.getByRole('region', { name: 'Overview' });
 
   it('overview_shows_definition_runtime_members_and_coordinator', async () => {
     await renderScreen();
@@ -709,10 +651,9 @@ describe('team overview', () => {
     for (const sample of ['Developer', 'QA', 'T-031']) expect(panel().textContent).not.toContain(sample);
   });
 
-  it('overview_tab_shows_no_extra_reads', async () => {
+  it('overview_render_shows_no_extra_reads', async () => {
     const { fake } = await renderScreen();
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+    expect(screen.getByRole('region', { name: 'Overview' })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
   });
@@ -734,11 +675,11 @@ describe('member roster', () => {
   const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
   const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'ALPHA-two', presence: 'busy' })];
 
-  it('renders the sole member roster and Add member below compact Overview with only Overview and Routing tabs', async () => {
+  it('renders the sole member roster and Add member below compact Overview without tabs', async () => {
     const { result } = await renderScreen();
-    expect(result.getAllByRole('tab').map(t => t.textContent)).toEqual(['Overview', 'Routing']);
+    expect(result.queryByRole('tablist')).toBeNull();
     expect(result.queryByRole('tab', { name: 'Members' })).toBeNull();
-    expect(result.getAllByRole('tabpanel')).toHaveLength(1);
+    expect(result.getByRole('region', { name: 'Overview' })).toBeTruthy();
     expect(result.getAllByRole('list', { name: /^Members of / })).toHaveLength(1);
     const heading = result.getByRole('heading', { name: 'Members' });
     const summary = result.getByRole('heading', { name: 'Availability', level: 2 });
@@ -946,7 +887,6 @@ describe('member roster', () => {
     const {fake} = await renderScreen();
     showMembers(); openMember('dev');
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
-    fireEvent.click(screen.getByRole('tab', {name: 'Overview'}));
     showMembers();
     expect(fake.overview).toHaveBeenCalledTimes(1);
     expect(fake.agents).toHaveBeenCalledTimes(1);
@@ -958,7 +898,7 @@ describe('member roster', () => {
   });
   it('empty_roster_and_truncation_are_truthful', async () => {
     const empty = await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: []})])}]});
-    fireEvent.click(screen.getByRole('tab', {name: 'Overview'})); expect(screen.getByText('This team has no members.')).toBeTruthy(); expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull(); empty.result.unmount();
+    expect(screen.getByText('This team has no members.')).toBeTruthy(); expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull(); empty.result.unmount();
     const members = Array.from({length: 16}, (_, i) => member({memberId: `m${i}`, name: `m${i}`}));
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members, membersTruncated: true})])}]});
     expect(within(showMembers()).getAllByRole('listitem')).toHaveLength(16); expect(screen.getByText('Showing 16 of 16 returned members. More members may exist; filters apply only to returned members.')).toBeTruthy();
@@ -1207,14 +1147,12 @@ describe('roster evidence and team removal', () => {
   });
 });
 
-it('routing tab shows workspace routing with role links without extra reads', async () => {
+it('routing screen shows workspace routing with role links without extra reads', async () => {
   const { routingSettingsFixture } = await import('./teamsFixtures');
   const onViewRole = vi.fn();
   const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
-  const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
+  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
   await act(async () => {});
-  expect(view.queryByRole('region', { name: 'Workspace board routing' })).toBeNull();
-  fireEvent.click(view.getByRole('tab', { name: 'Routing' }));
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   expect(panel.getByText(/Changes affect every team/)).toBeTruthy();
   fireEvent.click(panel.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
@@ -1341,7 +1279,7 @@ describe('T-082 states', () => {
     expect(result.queryByText('Teams data refreshed.')).toBeNull();
     expect(result.getByRole('alert').textContent).toContain('ROLES_DOWN: catalog unavailable');
     expect(result.getByRole('alert').textContent).toContain('Showing previously loaded data.');
-    expect(result.getByRole('tab', { name: 'Overview' }).hasAttribute('disabled')).toBe(false);
+    expect(result.getByRole('region', { name: 'Overview' })).toBeTruthy();
 
     fireEvent.click(btn(result, 'Retry loading roles'));
     await act(async () => {});
@@ -1413,7 +1351,7 @@ describe('T-082 states', () => {
     expect(btn(result, 'Rename team').disabled).toBe(true);
     expect(result.queryByRole('button', { name: 'Run board' })).toBeNull();
     expect(runBoard).not.toHaveBeenCalled();
-    expect(result.getByRole('tab', { name: 'Overview' }).hasAttribute('disabled')).toBe(false);
+    expect(result.getByRole('region', { name: 'Overview' })).toBeTruthy();
     fireEvent.click(btn(result, 'Retry'));
     await act(async () => {});
     expect(calls(fake)).toEqual([3, 2, 2, 2]);
@@ -1605,8 +1543,6 @@ describe('T-082 states', () => {
     expect(btn(result, 'Rename team').disabled).toBe(true);
     expect(result.queryByRole('button', { name: 'Run board' })).toBeNull();
     expect(btn(result, 'Refresh').disabled).toBe(false);
-    expect(result.getByRole('tab', { name: 'Routing' }).hasAttribute('disabled')).toBe(false);
-    fireEvent.click(result.getByRole('tab', { name: 'Overview' }));
     expect(openMember('dev')).toBeTruthy();
     expect(btn(result, 'Edit member settings').disabled).toBe(true);
     expect(btn(result, 'Back to members').disabled).toBe(false);
@@ -1617,24 +1553,10 @@ describe('T-082 states', () => {
     for (const write of Object.values(writes)) expect(write).not.toHaveBeenCalled();
   });
 
-  it('team_tabs_roving_and_sidebar_native_keyboard_behavior', async () => {
+  it('sidebar_native_keyboard_behavior_without_team_tabs', async () => {
     const { result } = await renderScreen();
-    const tabs = result.getAllByRole('tab');
-    expect(tabs.filter(t => t.tabIndex === 0)).toHaveLength(1);
-    tabs[0]!.focus();
-    await userEvent.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
-    expect(result.getByRole('tab', { name: 'Routing' }).getAttribute('aria-selected')).toBe('true');
-    await userEvent.keyboard('{Home}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Overview' }));
-    await userEvent.keyboard('{End}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
-    await userEvent.keyboard('{ArrowRight}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Overview' }));
-    await userEvent.keyboard('{ArrowLeft}');
-    expect(document.activeElement).toBe(result.getByRole('tab', { name: 'Routing' }));
-    await userEvent.keyboard('{Home}');
-    expect(result.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(result.queryByRole('tab')).toBeNull();
+    expect(result.getByRole('region', { name: 'Overview' })).toBeTruthy();
     const cards = within(result.getByRole('list', { name: 'Workspace teams' })).getAllByRole('button');
     expect(cards.every(c => c.tabIndex === 0)).toBe(true);
     cards[1]!.focus();
@@ -1956,7 +1878,7 @@ it('failed_board_retry_in_empty_workspace_keeps_focus_and_reloads_only_board', a
 });
 
 describe('T-084 shared sidebar navigation controller', () => {
-  const selectedTabs = (r: ReturnType<typeof render>) => r.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent);
+  const selectedTabs = (r: ReturnType<typeof render>) => (r.queryByRole('region', { name: 'Overview' }) !== null ? ['Overview'] : []);
   const liveRuntime = () => ({ ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['opencode-sonnet', 'codex-gpt'], activeAgent: 'opencode-sonnet', paneState: 'alive', availability: 'idle' });
   const settle = () => act(async () => {});
   async function renderWithController(opts: Parameters<typeof fakeManagement>[0] = {}, connection?: ReturnType<typeof connectionFixture>) {
@@ -1976,8 +1898,6 @@ describe('T-084 shared sidebar navigation controller', () => {
     const { fake, result } = await renderWithController();
     const sidebar = result.getByRole('navigation', { name: 'Harness sidebar' });
     fireEvent.click(teamRow(sidebar, 'Release Team'));
-    await openTab(result, 'Overview');
-    await openTab(result, 'Routing');
     fireEvent.click(teamRow(sidebar, 'Dev Team'));
     expect(fake.overview).toHaveBeenCalledTimes(1);
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
@@ -1987,7 +1907,6 @@ describe('T-084 shared sidebar navigation controller', () => {
 
   it('external_team_selection_clears_member_and_returns_to_overview', async () => {
     const { result, controller } = await renderWithController();
-    await openTab(result, 'Overview');
     openMember('dev');
     expect(document.getElementById('teams-member-detail-title')).toBeTruthy();
     act(() => controller().selectTeam('release'));
@@ -1999,10 +1918,9 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(controller().selectedKey).toBe('release');
   });
 
-  it('same_team_selection_intent_returns_routing_to_overview', async () => {
+  it('same_team_selection_intent_updates_the_version_and_keeps_overview', async () => {
     const { fake, result, controller } = await renderWithController();
-    await openTab(result, 'Routing');
-    expect(selectedTabs(result)).toEqual(['Routing']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
     const version = controller().selectionVersion;
     act(() => controller().selectTeam('dev-team'));
     expect(controller().selectionVersion).toBe(version + 1);
@@ -2010,11 +1928,10 @@ describe('T-084 shared sidebar navigation controller', () => {
     expect(fake.overview).toHaveBeenCalledTimes(1);
   });
 
-  it('refresh_reorder_preserves_team_tab_member_and_focus', async () => {
+  it('refresh_reorder_preserves_team_member_and_focus', async () => {
     const [release, dev] = [twoTeams().teams[0]!, twoTeams().teams[1]!];
     const after = overviewFixture([{ ...release, runtime: { state: 'running', teamId: 'r', status: 'running' } }, { ...dev, runtime: { state: 'stopped', teamId: null, status: null } }]);
     const { fake, result } = await renderWithController({ overview: [okR(twoTeams()), okR(after)] });
-    await openTab(result, 'Overview');
     openMember('dev');
     const row = teamRow(result.getByRole('navigation', { name: 'Harness sidebar' }), 'Dev Team');
     row.focus();
@@ -2033,7 +1950,6 @@ describe('T-084 shared sidebar navigation controller', () => {
     const other = team({ id: 'other', name: 'Other Team', members: [member({ memberId: 'o', name: 'o' })] });
     const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'assignment-A' } } });
     const { result } = await renderWithController({ overview: [okR(overviewFixture([live, other])), okR(overviewFixture([other]))], calls: { switchMemberAgent } });
-    await openTab(result, 'Overview');
     openMember('dev');
     fireEvent.click(result.getByRole('button', { name: 'Switch live agent to Codex GPT' }));
     await settle();
@@ -2094,12 +2010,10 @@ describe('T-084 shared sidebar navigation controller', () => {
     const createTeam = vi.fn(async () => okR({ team: teamDefinition({ id: 'qa-team', name: 'QA Team' }), problems: [] }));
     const after = overviewFixture([...twoTeams().teams, team({ id: 'qa-team', name: 'QA Team', members: [] })]);
     const { result } = await renderWithController({ overview: [okR(twoTeams()), okR(after)], calls: { createTeam } });
-    fireEvent.click(tab(result, 'Routing'));
-    await settle();
-    expect(selectedTabs(result)).toEqual(['Routing']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
     fireEvent.click(result.getByRole('button', { name: 'New team' }));
     await settle();
-    expect(selectedTabs(result)).toEqual(['Routing']);
+    expect(selectedTabs(result)).toEqual(['Overview']);
     fireEvent.change(result.getByLabelText('Team name'), { target: { value: 'QA Team' } });
     fireEvent.click(result.getByRole('button', { name: 'Create team' }));
     await settle();
@@ -2120,7 +2034,7 @@ describe('T-090 state and roster completion', () => {
     // zero teams
     let out = await renderScreen({ overview: [okR(emptyWorkspace())] });
     expect(screen.getByText('No teams defined in this workspace.')).toBeTruthy();
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Overview' })).toBeNull();
     out.result.unmount();
     // zero members
     out = await renderScreen({ overview: [okR(emptyRoster())] });
@@ -2300,21 +2214,13 @@ describe('T-090 state and roster completion', () => {
     expect(overview).toHaveBeenCalledTimes(2);
   });
 
-  it('overview_routing_back_and_role_link_keyboard_flow_has_correct_tab_current_and_focus_state', async () => {
+  it('overview_back_and_role_link_keyboard_flow_has_correct_current_and_focus_state', async () => {
     const onViewRole = vi.fn();
     const fake = fakeManagement({ roles: [okR(teamRolesFixture())] });
     render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
     await settle();
-    const overviewTab = screen.getByRole('tab', { name: 'Overview' }), routingTab = screen.getByRole('tab', { name: 'Routing' });
-    expect(overviewTab.getAttribute('aria-selected')).toBe('true');
-    expect(routingTab.getAttribute('aria-selected')).toBe('false');
-    overviewTab.focus();
-    await userEvent.keyboard('{ArrowRight}');
-    expect(routingTab.getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(routingTab);
-    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
-    await userEvent.keyboard('{ArrowLeft}');
-    expect(overviewTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Overview' })).toBeTruthy();
     const row = memberOpen('dev');
     row.focus();
     await userEvent.keyboard('{Enter}');

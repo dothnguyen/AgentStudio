@@ -15,7 +15,6 @@ const click = async (name: string | RegExp) => {
 };
 const ok = <T,>(data: T) => ({ ok: true as const, data });
 const fail = (error: { code: string; message: string }) => ({ ok: false as const, error: { retryable: false, ...error } });
-const openTab = async (name: string) => { fireEvent.click(screen.getByRole('tab', { name })); await flush(); };
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const openSettings = async (name: string) => {
   if (!screen.queryByRole('region', { name })) openMember(name);
@@ -83,7 +82,7 @@ describe('team editing edge cases', () => {
       const fake = fakeManagement({ overview: [ok(overviewFixture([c.t]))] });
       const view = render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
       await flush();
-      const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
+      const panel = within(screen.getByRole('region', { name: 'Overview' }));
       expect(panel.getByText(c.note)).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Rename team' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
@@ -97,7 +96,7 @@ describe('team editing edge cases', () => {
     });
     render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
     await flush();
-    const panel = within(screen.getByRole('tabpanel', { name: 'Overview' }));
+    const panel = within(screen.getByRole('region', { name: 'Overview' }));
     expect(panel.getByText(/could not be read; fix the file/)).toBeTruthy();
     expect(panel.getByText('Definition: Unreadable')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Delete team' })).toBeNull();
@@ -264,7 +263,7 @@ describe('team editing edge cases', () => {
     const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn(), onViewRole = vi.fn();
     const fake = fakeManagement({ calls: { updateMember, removeMember, switchMemberAgent, resumeMemberAgent } });
     render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
-    await flush(); await openTab('Overview'); openMember('dev'); await flush();
+    await flush(); openMember('dev'); await flush();
     const counts = () => [updateMember.mock.calls.length, removeMember.mock.calls.length, onViewRole.mock.calls.length];
     let dialog = await openSettings('dev');
     fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'dirty' } });
@@ -301,7 +300,7 @@ describe('T-090 mutation isolation', () => {
     const fake = fakeManagement({ calls: { updateMember, deleteTeam, createTeam } });
     const ui = (ws = workspaceA) => <TeamsHarness sidebar workspace={ws} management={fake.api} />;
     const view = render(ui());
-    await flush(); await openTab('Overview'); openMember('dev');
+    await flush(); openMember('dev');
     const dialog = await openSettings('dev');
     fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'renamed' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
@@ -332,7 +331,7 @@ describe('T-090 mutation isolation', () => {
   it('remove_confirmation_names_exact_team_and_member_and_escape_restores_remove_button', async () => {
     const removeMember = vi.fn();
     await renderScreen({ calls: { removeMember } });
-    await openTab('Overview'); openMember('lead');
+    openMember('lead');
     const trigger = screen.getByRole('button', { name: 'Remove lead' });
     trigger.focus();
     await userEvent.keyboard('{Enter}');

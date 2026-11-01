@@ -252,8 +252,6 @@ export function escalationSettingsFixture(): BoardSettings {
 }
 
 export function showMembers(root: HTMLElement = document.body): HTMLElement {
-  const tab = within(root).queryByRole('tab', { name: 'Members' });
-  if (tab && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
   return within(root).getByRole('list', { name: /^Members of / });
 }
 export function memberRow(name: string, root: HTMLElement = document.body): HTMLElement {

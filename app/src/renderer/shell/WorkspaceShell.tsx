@@ -4,6 +4,7 @@ import { DashboardHome } from '../dashboard/DashboardHome';
 import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceholder';
 import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
+import { RoutingScreen } from '../routing/RoutingScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
 import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
@@ -95,6 +96,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       navigation={teamsNavigation}
       connection={props.connection}
       onViewRole={(roleId) => navigate('roles', { roleId })}
+      onOpenRouting={items.some((i) => i.id === 'routing' && i.disabled !== true) ? () => navigate('routing') : undefined}
       onOpenBoard={items.some((i) => i.id === 'boards' && i.disabled !== true) ? () => navigate('boards') : undefined}
       onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
       requestedMember={requestedMember}
@@ -113,6 +115,14 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       connection={props.connection}
       requestedRoleId={requestedRoleId}
       onOpenMember={(teamId, memberId) => navigate('teams', { member: { teamId, memberId } })}
+    />
+  ) : sectionId === 'routing' ? (
+    <RoutingScreen
+      key={props.workspace.id}
+      workspace={props.workspace}
+      management={props.management}
+      connection={props.connection}
+      onViewRole={(roleId) => navigate('roles', { roleId })}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />

@@ -34,7 +34,6 @@ async function mount(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const user = userEvent.setup();
   render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
   await flush();
-  fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
   await flush();
   return { fake, user };
 }

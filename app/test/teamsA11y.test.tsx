@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { TeamsHarness } from './teamsHarness';
+import { RoutingScreen } from '../src/renderer/routing/RoutingScreen';
 import { workspaceA } from './dashboardFixtures';
 import {
   LONG_UNBROKEN, fakeManagement, longContentOverview, longRoutingSettings, managementError, member, memberRow, memberOpen, openMember, overviewFixture, team, twoTeams,
@@ -24,11 +25,12 @@ function teamsRules(): Array<{ selector: string; body: string }> {
   return rules;
 }
 
-async function mount(opts: Parameters<typeof fakeManagement>[0] = {}, tab?: string) {
+async function mount(opts: Parameters<typeof fakeManagement>[0] = {}, section: 'Overview' | 'Routing' | null = null) {
   const fake = fakeManagement(opts);
-  const view = render(<main><TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
+  const view = section === 'Routing'
+    ? render(<main><RoutingScreen workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>)
+    : render(<main><TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
   await act(async () => {});
-  if (tab) { fireEvent.click(view.getByRole('tab', { name: tab })); await act(async () => {}); }
   return { fake, view };
 }
 
@@ -41,12 +43,13 @@ it('teams_has_one_main_one_h1_logical_landmarks_and_named_controls', async () =>
   expect(levels[0]).toBe(1);
   levels.forEach((level, i) => { if (i > 0) expect(level).toBeLessThanOrEqual(levels[i - 1]! + 1); });
   expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Dev Team');
-  expect(view.getByRole('tablist')).toBeTruthy();
-  for (const control of view.getAllByRole('button').concat(view.getAllByRole('tab'))) {
+  expect(view.queryByRole('tablist')).toBeNull();
+  expect(view.queryByRole('tab')).toBeNull();
+  for (const control of view.getAllByRole('button')) {
     expect((control.getAttribute('aria-label') ?? control.textContent ?? '').trim().length).toBeGreaterThan(0);
   }
-  const panel = view.getByRole('tabpanel');
-  expect(panel.getAttribute('aria-labelledby')).toBe(view.getByRole('tab', { name: 'Overview' }).id);
+  const panel = view.getByRole('region', { name: 'Overview' });
+  expect(panel.getAttribute('aria-labelledby')).toBeNull();
   expect(view.container.querySelector('[tabindex]:not([tabindex="0"]):not([tabindex="-1"])')).toBeNull();
 });
 
@@ -183,7 +186,7 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_agents_rol
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
   const overviewOrder = await tabNames(30);
-  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdev/]);
+  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Run board', /^Filter members/, 'Add member', /^DEdevdev/]);
     // Enter opens the exact member; detail order reaches the agents editor, live Switch, role editor and Remove
   const row = memberOpen('dev');
   row.focus();
@@ -212,11 +215,10 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_agents_rol
 it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantics', async () => {
   const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'job-1' } } });
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }], calls: { switchMemberAgent } });
-  // tabs: exactly Overview and Routing with selected state and panel association
-  const tabs = view.getAllByRole('tab');
-  expect(tabs.map(t => t.textContent)).toEqual(['Overview', 'Routing']);
-  expect(tabs.map(t => t.getAttribute('aria-selected'))).toEqual(['true', 'false']);
-  expect(view.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(tabs[0]!.id);
+  // the team page has one named Overview region and no tab strip
+  expect(view.queryByRole('tablist')).toBeNull();
+  expect(view.queryByRole('tab')).toBeNull();
+  expect(view.getByRole('region', { name: 'Overview' })).toBeTruthy();
   // sidebar rows: named, exactly one aria-current
   const rows = within(view.getByRole('list', { name: 'Workspace teams' })).getAllByRole('button');
   expect(rows.every(r => (r.getAttribute('aria-label') ?? '').startsWith('Open '))).toBe(true);

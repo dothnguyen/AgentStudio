@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-export type ShellIconName = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration' | 'switch' | 'chevron' | 'chevrons-up-down' | 'plus' | 'terminal' | 'refresh' | 'item';
+export type ShellIconName = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'routing' | 'configuration' | 'switch' | 'chevron' | 'chevrons-up-down' | 'plus' | 'terminal' | 'refresh' | 'item';
 
 const SHAPES: Record<ShellIconName, JSX.Element> = {
   home: <path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
@@ -23,6 +23,14 @@ const SHAPES: Record<ShellIconName, JSX.Element> = {
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M9 4v16M15 4v16" />
+    </>
+  ),
+  routing: (
+    <>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <circle cx="18" cy="8" r="2.5" />
+      <path d="M6 8.5v7M18 10.5c0 4-7 3-11 6.2" />
     </>
   ),
   configuration: (

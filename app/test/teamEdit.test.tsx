@@ -28,14 +28,7 @@ async function renderScreen(opts: Parameters<typeof fakeManagement>[0] = {}) {
 }
 
 const flush = () => act(async () => {});
-const openTab = async (name: string) => {
-  fireEvent.click(screen.getByRole('tab', { name }));
-  await flush();
-};
-const MEMBER_ACTION = /^(Add member|Edit |Remove |Confirm remove )/;
 const click = async (name: string | RegExp) => {
-  if (typeof name === 'string' && MEMBER_ACTION.test(name)
-    && screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected') !== 'true') await openTab('Overview');
   if (typeof name === 'string' && /^Remove (dev|lead)$/.test(name) && !screen.queryByRole('region', { name: name.split(' ')[1] })) openMember(name.split(' ')[1]!);
   fireEvent.click(screen.getByRole('button', { name }));
   await flush();
@@ -46,7 +39,6 @@ const submitAddMember = async () => {
 };
 /** Opens the member details and its single v7 settings dialog. */
 const openSettings = async (name: string) => {
-  if (screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected') !== 'true') await openTab('Overview');
   if (!screen.queryByRole('region', { name })) openMember(name);
   const button = within(screen.getByRole('region', { name })).getByRole('button', { name: 'Edit member settings' });
   button.focus();
@@ -60,7 +52,7 @@ const fail = (error: { code: string; message: string; remediation?: string; data
   ({ ok: false as const, error: { retryable: false, ...error } });
 const cardPressed = (name: string) =>
   screen.getByRole('button', { name: new RegExp(`^Open ${name},`) }).getAttribute('aria-current');
-const overviewPanel = () => screen.getByRole('tabpanel', { name: 'Overview' });
+const overviewPanel = () => screen.getByRole('region', { name: 'Overview' });
 
 describe('team editing', () => {
   it('create_team_saves_and_selects_it', async () => {
@@ -78,7 +70,7 @@ describe('team editing', () => {
     expect(createTeam).toHaveBeenCalledWith('ws-a', { name: 'QA Team' });
     expect(screen.getByRole('status').textContent).toContain('Created team "QA Team".');
     expect(cardPressed('QA Team')).toBe('page');
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Overview' })).toBeTruthy();
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.agents).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('form', { name: 'New team' })).toBeNull();
@@ -106,7 +98,7 @@ describe('team editing', () => {
     gate.resolve(ok(after));
     await flush();
     expect(cardPressed('QA Team')).toBe('page');
-    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Overview' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('Created team "QA Team".');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(fake.api.overview).toHaveBeenCalledTimes(2);
@@ -508,13 +500,10 @@ describe('team editing', () => {
       members: [member({ source: 'runtime', memberId: 'x', name: 'x' })],
     })]);
     await renderScreen({ overview: [ok(o)] });
-    for (const view of ['Overview', 'Routing']) {
-      await openTab(view);
-      for (const name of ['Rename team', 'Delete team', 'Add member', 'Edit x']) {
-        expect(screen.queryByRole('button', { name })).toBeNull();
-      }
+    expect(screen.queryByRole('tab')).toBeNull();
+    for (const name of ['Rename team', 'Delete team', 'Add member', 'Edit x']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
     }
-    await openTab('Overview');
     expect(screen.getByText('This team has no definition file; it cannot be edited here.')).toBeTruthy();
   });
 
@@ -534,7 +523,7 @@ describe('ticket permission and member focus', () => {
   it('retries a failed permission read and displays the saved value', async () => {
     const teamCall = vi.fn().mockResolvedValueOnce(fail({code: 'INTERNAL', message: 'offline'}))
       .mockResolvedValueOnce(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
-    await renderScreen({calls: {team: teamCall}}); await openTab('Overview'); openMember('dev'); await flush();
+    await renderScreen({calls: {team: teamCall}}); openMember('dev'); await flush();
     expect(screen.getByText(TICKET_PERMISSION_UNKNOWN)).toBeTruthy();
     const dialog = await openSettings('dev');
     fireEvent.click(within(dialog).getByRole('button', {name: 'Retry loading ticket permission'}));
@@ -611,7 +600,7 @@ describe('permission request lifetime', () => {
     const second = deferred<ReturnType<typeof ok<{team: ReturnType<typeof teamDefinition>; members: never[]; problems: never[]; active: null}>>>();
     const teamCall = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     await renderScreen({calls: {team: teamCall}});
-    await openTab('Overview'); openMember('dev');
+    openMember('dev');
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'})); openMember('lead');
     await act(async () => { first.resolve(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null})); });
     expect(screen.getByRole('region', {name: 'lead'}).textContent).not.toContain('Can add tickets: Yes');
