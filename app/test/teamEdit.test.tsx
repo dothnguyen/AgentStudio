@@ -16,7 +16,7 @@ import {
   teamDefinition,
   twoTeams,
 } from './teamsFixtures';
-import { MEMBER_TIMING_NOTE, ROLE_SHARING_NOTE, RUNNING_TEAM_NOTICE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
+import { MEMBER_DETAIL_TIMING_NOTE, ROLE_SHARING_NOTE, RUNNING_TEAM_NOTICE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
 
 afterEach(cleanup);
 
@@ -345,7 +345,7 @@ describe('team editing', () => {
       else { fireEvent.keyDown(screen.getByRole('form', {name: 'Edit dev'}), {key: 'Escape'}); await flush(); }
       expect(updateMember).not.toHaveBeenCalled();
       expect(screen.queryByRole('form', {name: 'Edit dev'})).toBeNull();
-      const saved = screen.getByRole('region', {name: 'Saved configuration'});
+      const saved = screen.getByRole('region', {name: 'Saved configuration (temporary)'});
       expect(saved.textContent).not.toContain('dirty');
       expect(saved.textContent).not.toContain('Codex GPT');
       expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit saved configuration'}));
@@ -871,7 +871,7 @@ describe('T-090 saved configuration completion', () => {
       .mockResolvedValue(upd('dev', 'renamed'));
     await renderScreen({ calls: { updateMember } });
     await click('Edit dev');
-    expect(screen.getByText(MEMBER_TIMING_NOTE)).toBeTruthy();
+    expect(screen.getByText(MEMBER_DETAIL_TIMING_NOTE)).toBeTruthy();
     // no-op: Save is disabled and a forced submit never reaches the backend
     expect((screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.submit(screen.getByRole('form', { name: 'Edit dev' })); await flush();
@@ -886,7 +886,7 @@ describe('T-090 saved configuration completion', () => {
     await click('Discard changes');
     expect(updateMember).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('form', { name: 'Edit dev' })).toBeNull();
-    expect(screen.getByRole('region', { name: 'Saved configuration' }).textContent).not.toContain('renamed');
+    expect(screen.getByRole('region', { name: 'Saved configuration (temporary)' }).textContent).not.toContain('renamed');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
     expect(screen.getByText(SAVED_OPTIONS_NOTE)).toBeTruthy();
     expect(screen.getByText(ROLE_SHARING_NOTE)).toBeTruthy();
@@ -925,7 +925,7 @@ describe('T-090 saved configuration completion', () => {
     const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn();
     await renderScreen({ calls: { overview, updateMember, switchMemberAgent, resumeMemberAgent } });
     openMember('dev');
-    const liveText = () => screen.getByRole('region', { name: 'dev' }).textContent!.split('Saved configuration')[0]!;
+    const liveText = () => screen.getByRole('region', { name: 'Live for dev' }).textContent!;
     const liveFacts = ['Active agent', 'opencode-sonnet · opencode · claude-sonnet', 'No active assignment'];
     for (const fact of liveFacts) expect(liveText()).toContain(fact);
     await click('Edit saved configuration');

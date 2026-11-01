@@ -63,7 +63,8 @@ export function ticketPermissionText(p: TicketPermissionState): string {
   return p.canAddTickets === null ? 'Can add tickets: Not available for this member' : `Can add tickets: ${p.canAddTickets ? 'Yes' : 'No'}`;
 }
 export const NEXT_START_DEFAULT = 'Next-start default';
-export const MEMBER_TIMING_NOTE = 'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.';
+/** The single notice row on the member details screen (v7). */
+export const MEMBER_DETAIL_TIMING_NOTE = 'Name, role, permissions and agent options apply the next time the team starts. Switching the live agent and editing role instructions take effect on new work straight away.';
 export const ROLE_SHARING_NOTE = 'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.';
 export const SAVED_OPTIONS_NOTE = 'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.';
 export const LIVE_STATE_NOTE = 'Live state comes from the running team. Saving member settings does not change it.';

@@ -20,7 +20,7 @@ describe('Icon', () => {
   });
 
   it('icon_renders_every_name_including_roles_as_decorative_svg', () => {
-    for (const name of ['home', 'teams', 'agents', 'roles', 'boards', 'configuration', 'switch', 'chevron', 'refresh', 'item'] as const) {
+    for (const name of ['home', 'teams', 'agents', 'roles', 'boards', 'configuration', 'switch', 'chevron', 'refresh', 'item', 'info', 'pencil', 'close'] as const) {
       const { container } = render(<Icon name={name} />);
       const svg = container.querySelector('svg')!;
       expect(svg.getAttribute('data-icon')).toBe(name);

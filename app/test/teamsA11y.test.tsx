@@ -104,8 +104,9 @@ it('teams_long_content_remains_present', async () => {
 it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
   for (const bp of [900, 700, 560]) expect(flat).toContain(`@media (max-width: ${bp}px)`);
   expect(flat).toMatch(/\.teams-overview \{ display: grid; grid-template-columns: minmax\(0, 1fr\);/);
-  expect(flat).toMatch(/\.teams-member-detail \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview, \.teams-member-detail, \.routing-rule-grid, \.routing-escalation-fields \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  expect(flat).toMatch(/\.teams-member-detail \{ display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 1120px; margin: 0 auto;/);
+  expect(flat).toMatch(/\.teams-member-layout \{ display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px;/);
+  expect(flat).toMatch(/@media \(max-width: 1240px\) \{ \.teams-member-layout \{ flex-direction: column; \} \.teams-member-main \{ width: 100%; flex: 1 1 auto; \} \.teams-member-aside \{ width: 100%; max-width: none; \}/);
   expect(flat).toMatch(/\.teams-overview > \*, \.teams-member-detail > \*[^{]*\{ min-width: 0; \}/);
   expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.routing-table-wrap \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/\.teams-members-scroll \{ overflow-x: auto; max-width: 100%; \}/);
@@ -118,7 +119,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
     expect(body, selector).not.toMatch(/display: ?none/);
     expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);
     expect(body, selector).not.toMatch(/white-space: ?nowrap/);
-    if (!/status-dot|teams-members-table|teams-visually-hidden/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
+    if (!/status-dot|teams-members-table|teams-visually-hidden|teams-member-hero-avatar|teams-live-status-dot/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
   }
   expect(rules.find(r => /teams-live-modal/.test(r.selector) && /overflow-x: hidden/.test(r.body))).toBeTruthy();
 });
@@ -183,14 +184,23 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   view.getByRole('button', { name: 'Teams' }).focus();
   const overviewOrder = await tabNames(30);
   inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdev/]);
-    // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
+    // Enter opens the exact member; detail order reaches the role link, saved editor, live Switch and Remove
   const row = memberOpen('dev');
   row.focus();
   await userEvent.keyboard('{Enter}');
   await act(async () => {});
   expect(document.activeElement).toBe(document.getElementById('teams-member-detail-title'));
   const detailOrder = await tabNames(24);
-  inOrder(detailOrder, ['Back to members', 'Switch', /^View .* in Roles$/, 'Edit saved configuration', 'Remove dev']);
+  inOrder(detailOrder, [/^View .* in Roles$/, 'Edit saved configuration', 'Switch', 'Remove dev']);
+  expect(detailOrder).toContain('Back to members');
+  // The page heading takes focus on open, but Back to members is still the
+  // first focusable control on the page.
+  const detail = document.querySelector('.teams-member-detail')!;
+  const focusables = Array.from(detail.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+  expect(focusables[0]?.textContent).toBe('Back to members');
+  expect(focusables[1]?.textContent).toMatch(/^View .* in Roles$/);
+  expect(focusables[2]?.textContent).toBe('Retry loading ticket permission');
+  expect(focusables[3]?.textContent).toBe('Edit saved configuration');
   // Back restores the invoking row
   await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
   expect(document.activeElement).toBe(memberOpen('dev'));

@@ -388,7 +388,7 @@ describe('WorkspaceShell', () => {
     fireEvent.click(members);
     await waitFor(() => expect(view.container.querySelector('.teams-member-row')).toBeTruthy());
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
-    const saved = await view.findByRole('region', { name: 'Saved configuration' });
+    const saved = await view.findByRole('region', { name: 'Saved configuration (temporary)' });
     fireEvent.click(within(saved).getByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
     await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));

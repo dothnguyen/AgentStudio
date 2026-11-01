@@ -217,7 +217,7 @@ describe('TeamsScreen', () => {
     const row = result.getByRole('region', { name: 'dev' });
     expect(row.textContent).toContain('qa-b');
     expect(row.textContent).toContain('Second QA');
-    expect(result.getByText(/Changes to name, role, ticket permission/)).toBeTruthy();
+    expect(result.getByText(/Name, role, permissions and agent options apply the next time the team starts/)).toBeTruthy();
     fireEvent.click(within(row).getByRole('button', { name: 'View QA in Roles' }));
     expect(onViewRole).toHaveBeenCalledWith('qa-b');
     expect(onViewRole).toHaveBeenCalledTimes(1);
@@ -509,8 +509,8 @@ describe('live member actions', () => {
       const detail = openMember('dev');
       expect(within(detail).queryByRole('button', {name: 'Switch'})).toBeNull();
       if (!m.runtime) expect(detail.textContent).toContain('Live state is unavailable because this member has no running runtime record.');
-      else if (m.agentMode === 'inline') { expect(detail.textContent).toContain('Live switching is unavailable for inline members.'); expect(within(detail).getByText('Active agent')).toBeTruthy(); }
-      else expect(within(detail).getByText('Active agent')).toBeTruthy();
+      else if (m.agentMode === 'inline') { expect(detail.textContent).toContain('Live switching is unavailable for inline members.'); expect(within(within(detail).getByRole('region', {name: 'Live for dev'})).getByText('Active agent')).toBeTruthy(); }
+      else expect(within(within(detail).getByRole('region', {name: 'Live for dev'})).getByText('Active agent')).toBeTruthy();
       result.unmount();
     }
   });
@@ -1276,7 +1276,7 @@ describe('member detail focus and settings', () => {
     expect(within(detail).getByRole('navigation', {name: 'Member location'}).textContent).toBe('Dev TeamMembersdev');
     for (const label of ['Name', 'Member id', 'Role', 'Ticket permission']) expect(within(detail).getByText(label)).toBeTruthy();
     for (const text of [
-      'Changes to name, role, ticket permission, and saved agent options apply the next time the team starts. Saving does not change the running member.',
+      'Name, role, permissions and agent options apply the next time the team starts. Switching the live agent and editing role instructions take effect on new work straight away.',
       'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.',
       'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.',
     ]) expect(detail.textContent).toContain(text);
@@ -1304,38 +1304,39 @@ describe('member detail focus and settings', () => {
   });
   it('focuses the heading and restores the roster row on return', async () => {
     await renderScreen(); showMembers(); openMember('dev');
-    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 2}));
-    expect(screen.getByRole('heading', {name: 'Saved configuration', level: 3})).toBeTruthy();
-    expect(screen.getByRole('heading', {name: 'Agent options', level: 4})).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading', {name: 'dev', level: 1}));
+    expect(screen.getByRole('heading', {name: 'Saved configuration (temporary)', level: 2})).toBeTruthy();
+    expect(screen.getByRole('heading', {name: 'Agent options', level: 3})).toBeTruthy();
     expect(screen.getByRole('heading', {name: 'Live', level: 3})).toBeTruthy();
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
     expect(document.activeElement).toBe(document.querySelector('[data-member-row="dev"]'));
   });
   it('member_detail_leads_with_one_live_section_without_duplicate_summary', async () => {
     await renderScreen(); showMembers(); const detail = openMember('dev');
-    const h2 = within(detail).getByRole('heading', {name: 'dev', level: 2});
+    const h1 = within(detail).getByRole('heading', {name: 'dev', level: 1});
     const live = within(detail).getByRole('heading', {name: 'Live', level: 3});
-    const settings = within(detail).getByRole('heading', {name: 'Saved configuration', level: 3});
-    expect(h2.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(live.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const settings = within(detail).getByRole('heading', {name: 'Saved configuration (temporary)', level: 2});
+    expect(h1.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(settings.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(detail).getAllByRole('region', {name: 'Live for dev'})).toHaveLength(1);
     const region = within(detail).getByRole('region', {name: 'Live for dev'});
+    const status = within(detail).getByRole('region', {name: 'Live status'});
     for (const label of ['Active agent', 'Availability']) {
-      expect(within(detail).getAllByText(label)).toHaveLength(1);
+      expect(within(status).getAllByText(label)).toHaveLength(1);
       expect(within(region).getAllByText(label)).toHaveLength(1);
     }
     expect(detail.textContent).not.toContain('Current work:');
     expect(detail.textContent).not.toContain('Live state comes from the running team');
   });
-  it('member_detail_places_saved_configuration_after_live_state', async () => {
+  it('member_detail_keeps_saved_and_live_legacy_sections_in_the_main_column', async () => {
     await renderScreen(); showMembers(); const detail = openMember('dev');
     const live = within(detail).getByRole('heading', {name: 'Live', level: 3});
-    const saved = within(detail).getByRole('heading', {name: 'Saved configuration', level: 3});
-    expect(live.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const saved = within(detail).getByRole('heading', {name: 'Saved configuration (temporary)', level: 2});
+    expect(saved.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(detail).getAllByRole('region', {name: 'Live for dev'})).toHaveLength(1);
-    expect(within(detail).getAllByRole('region', {name: 'Saved configuration'})).toHaveLength(1);
-    const section = within(detail).getByRole('region', {name: 'Saved configuration'});
-    expect(section.textContent).toContain('apply the next time the team starts');
+    expect(within(detail).getAllByRole('region', {name: 'Saved configuration (temporary)'})).toHaveLength(1);
+    const section = within(detail).getByRole('region', {name: 'Saved configuration (temporary)'});
+    expect(detail.textContent).toContain('apply the next time the team starts');
     for (const label of ['Active agent', 'Availability', 'Current assignment']) expect(within(section).queryByText(label)).toBeNull();
   });
   it('saved_configuration_labels_next_start_default_only_on_first_option', async () => {
@@ -1343,7 +1344,7 @@ describe('member detail focus and settings', () => {
     const b = {id: 'b', name: 'B', provider: 'p', model: 'm2', reasoning: 'low', description: null, state: 'ok' as const};
     const gone = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
     await renderMembers({overview: [{ok: true, data: overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [a, b, gone]})]})])}]});
-    const section = within(openMember('dev')).getByRole('region', {name: 'Saved configuration'});
+    const section = within(openMember('dev')).getByRole('region', {name: 'Saved configuration (temporary)'});
     const items = within(section).getAllByRole('listitem');
     expect(items.map(i => i.textContent?.includes('Next-start default'))).toEqual([true, false, false]);
     expect(items[0]!.textContent).toContain('First agent');
@@ -1361,7 +1362,7 @@ describe('member detail focus and settings', () => {
       member({memberId: 'rt', name: 'rt', source: 'runtime', runtime: null, agentOptions: []}),
     ];
     await renderMembers({overview: [okR(overviewFixture([team({members})]))]});
-    const savedOf = (id: string) => { const d = openMember(id); const r = within(d).getByRole('region', {name: 'Saved configuration'}); return {d, r}; };
+    const savedOf = (id: string) => { const d = openMember(id); const r = within(d).getByRole('region', {name: 'Saved configuration (temporary)'}); return {d, r}; };
     let {r} = savedOf('ord');
     expect(r.textContent).toContain('ord');
     expect(within(r).getAllByRole('listitem').map(i => i.textContent?.includes('Next-start default'))).toEqual([true, false]);
@@ -1493,7 +1494,7 @@ describe('T-082 states', () => {
   it('member_activation_focuses_the_member_detail_h2', async () => {
     await renderMembers();
     fireEvent.click(memberRow('dev'));
-    const heading = screen.getByRole('heading', { name: 'dev', level: 2 });
+    const heading = screen.getByRole('heading', { name: 'dev', level: 1 });
     expect(heading.getAttribute('tabindex')).toBe('-1');
     expect(document.activeElement).toBe(heading);
   });
@@ -1842,7 +1843,7 @@ describe('T-082 states', () => {
     await renderMembers({ calls: { updateMember, removeMember } });
     const row = memberRow('dev');
     fireEvent.click(row); await act(async () => {});
-    const heading = screen.getByRole('heading', { name: 'dev', level: 2 });
+    const heading = screen.getByRole('heading', { name: 'dev', level: 1 });
     expect(document.activeElement).toBe(heading);
     expect(heading.getAttribute('tabindex')).toBe('-1');
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' })); await act(async () => {});
@@ -1881,7 +1882,7 @@ describe('T-082 states', () => {
     await act(async () => {});
     expect(updateMember).toHaveBeenCalledWith(workspaceA.id, 'dev-team', 'dev', { name: 'Updated developer' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit saved configuration' }));
-    expect(screen.getByRole('heading', { name: 'Updated developer', level: 2 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Updated developer', level: 1 })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
   });
 

@@ -3,7 +3,8 @@ import type { JSX } from 'react';
 export type IconName =
   | 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration' | 'switch' | 'chevron' | 'refresh' | 'item'
   | 'document' | 'ticket' | 'check-circle' | 'check' | 'clock' | 'arrow-right' | 'lock'
-  | 'box' | 'git-branch' | 'code' | 'search' | 'gear' | 'warning' | 'plus' | 'chevron-right' | 'more';
+  | 'box' | 'git-branch' | 'code' | 'search' | 'gear' | 'warning' | 'plus' | 'chevron-right' | 'more'
+  | 'pencil' | 'close' | 'info';
 export type IconTone = 'success' | 'info' | 'warning' | 'danger';
 export interface IconSpec { name: IconName; tone: IconTone | null }
 
@@ -34,6 +35,9 @@ const PATHS: Record<IconName, string> = {
   plus: 'M8 3v10M3 8h10',
   'chevron-right': 'm6 4 4 4-4 4',
   more: 'M3 8h.01M8 8h.01M13 8h.01',
+  pencil: 'M2.5 13.5h3L13 6 10 3 2.5 10.5zM9 4l3 3',
+  close: 'M4 4l8 8M12 4l-8 8',
+  info: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 7v4.5M8 4.75v.5',
 };
 
 export function Icon(props: { name: IconName; size?: number; tone?: IconTone | null; className?: string }): JSX.Element {

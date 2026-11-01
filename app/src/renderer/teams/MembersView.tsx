@@ -51,7 +51,10 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   function open(id: string, nextIntent?: 'edit' | 'remove'): void { setLost(null); setAdding(false); setLastOpened(id); setIntent(nextIntent ?? null); onSelect({ teamKey, memberId: id }); }
   function back(): void { setReturnFocus({ memberId: selection?.memberId ?? null }); setIntent(null); onSelect(null); }
   function removed(): void { setReturnFocus(canEditTeam(team) ? 'add' : { memberId: null }); setIntent(null); onSelect(null); }
-  if (result.state === 'selected') return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} intent={intent ?? undefined} onIntentConsumed={() => setIntent(null)} liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} announce={props.announce} inFlight={props.actions[memberActionKey(team.id ?? '', result.member.memberId ?? '')] ?? null} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
+  if (result.state === 'selected') {
+    const liveInFlight = props.actions[memberActionKey(team.id ?? '', result.member.memberId ?? '')] ?? null;
+    return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} intent={intent ?? undefined} onIntentConsumed={() => setIntent(null)} inFlight={liveInFlight} liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} announce={props.announce} inFlight={liveInFlight} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
+  }
   const empty = team.members.length === 0;
   return <div className="teams-members teams-members-view">
     {props.summary}

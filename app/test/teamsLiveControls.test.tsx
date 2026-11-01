@@ -534,7 +534,7 @@ describe('live member actions', () => {
     await act(async () => { response.resolve(confirmation('late-assignment')); });
     expect(result.queryByRole('dialog')).toBeNull();
     expect(call).toHaveBeenCalledTimes(1);
-    expect(result.getByRole('heading', {name: 'other', level: 2})).toBeTruthy();
+    expect(result.getByRole('heading', {name: 'other', level: 1})).toBeTruthy();
   });
   it('returning_to_the_same_member_does_not_revive_an_old_confirmation', async () => {
     const response = deferred<ReturnType<typeof confirmation>>();

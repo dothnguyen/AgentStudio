@@ -258,7 +258,7 @@ describe('team editing edge cases', () => {
       .mockResolvedValue(ok({ team: teamDefinition({ members: [{ id: 'dev', role: 'Developer', canAddTickets: false }] }), members: [], problems: [], active: null }));
     await renderScreen({ calls: { team: teamCall }, roles: [fail({ code: 'INTERNAL', message: 'roles down' })], agents: [fail({ code: 'OFFLINE', message: 'offline' })] });
     await openTab('Overview'); openMember('dev');
-    const saved = () => screen.getByRole('region', { name: 'Saved configuration' });
+    const saved = () => screen.getByRole('region', { name: 'Saved configuration (temporary)' });
     expect(saved().textContent).toContain('Checking ticket permission…');
     await act(async () => { gate.resolve(fail({ code: 'INTERNAL', message: 'first' })); });
     expect(saved().textContent).toContain('Ticket permission could not be loaded (INTERNAL: first).');

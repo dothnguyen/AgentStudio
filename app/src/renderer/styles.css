@@ -1127,7 +1127,10 @@ ul[aria-label="Workspaces"] {
 .teams-edit-form label { display: flex; flex-direction: column; gap: 4px; }
 .teams-field-error { color: var(--danger); }
 .teams-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-.teams-member-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+/* Page padding is composed with its shell wrappers: workspace-content (32px),
+   teams-screen-v4 (margin -4px top, 8px sides, 16px bottom) and this rule give
+   the design's 28px top, 40px sides and 56px bottom at the default width. */
+.teams-member-detail { display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 1120px; margin: 0 auto; padding: 0 0 8px; }
 .teams-member-settings { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 4px 12px; }
 .teams-member-settings dt { color: var(--text-muted); }
 .teams-member-settings dd { margin: 0; }
@@ -1250,7 +1253,6 @@ ul[aria-label="Workspaces"] {
 
 /* Teams states, accessibility and responsive behavior (P05-S47) */
 .teams-overview > *, .teams-member-detail > *, .teams-members-view > *, .teams-screen > * { min-width: 0; }
-.teams-member-detail > * { grid-column: 1 / -1; }
 .teams-members-view { display: flex; flex-direction: column; gap: 8px; }
 .teams-screen :is(button, a, input:not([type="checkbox"]), select, textarea, summary) { min-height: 36px; max-width: 100%; }
 .teams-screen :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -1261,7 +1263,7 @@ ul[aria-label="Workspaces"] {
 .team-nav :is(.team-nav-item, .team-nav-label, .team-nav-state, .team-nav-warning, .team-nav-status, .team-nav-new), .teams-screen :is(.teams-roster, .teams-member-row, .teams-member-name, .teams-role-name, .teams-member-agent, .teams-member-detail, .teams-saved-configuration, .teams-member-remove, .teams-confirm, .teams-live-actions, .teams-edit-form, .teams-create-dialog), .teams-create-dialog { overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
 .teams-member-remove, .teams-confirm[role="alertdialog"] { box-sizing: border-box; }
 @media (max-width: 900px) {
-  .teams-overview, .teams-member-detail, .routing-rule-grid, .routing-escalation-fields { grid-template-columns: minmax(0, 1fr); }
+  .teams-overview, .routing-rule-grid, .routing-escalation-fields { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
   .routing-table-wrap { overflow-x: auto; max-width: 100%; }
@@ -1283,15 +1285,99 @@ ul[aria-label="Workspaces"] {
 .teams-create-dialog input { min-width: 0; max-width: 100%; }
 
 
-.teams-saved-configuration { display: flex; flex-direction: column; gap: 8px; min-width: 0; box-sizing: border-box; padding: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); overflow-wrap: anywhere; }
-.teams-saved-configuration > :is(h3, h4, p) { margin: 0; }
+.teams-saved-configuration > .section-card-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .teams-saved-configuration .teams-member-settings { gap: 12px 16px; }
 .teams-saved-configuration .teams-edit-form { margin-top: 0; border-radius: 6px; background: var(--surface); min-width: 0; }
 .teams-saved-options { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .teams-saved-options li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--border); min-width: 0; }
 .teams-saved-option-detail { flex-basis: 100%; color: var(--text-muted); }
 .teams-saved-configuration .teams-option-default { color: var(--accent-hover); }
-.teams-member-remove { min-width: 0; box-sizing: border-box; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; }
+.teams-member-remove { min-width: 0; box-sizing: border-box; padding: 14px 18px; border: 1px solid #3a2626; border-radius: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.teams-member-remove-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.teams-member-remove-text h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.teams-member-remove-text p { margin: 0; color: #a3a9b2; font-size: 12px; }
+.teams-member-remove-actions button { box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 14px; border: 1px solid #4a2c2c; border-radius: 7px; background: transparent; color: #b88a8a; font-size: 12.5px; font-weight: 500; }
+.teams-member-remove-actions button:disabled { opacity: 0.45; cursor: default; }
+.teams-member-remove .teams-confirm { flex-basis: 100%; }
+
+/* Member details v7: page layout, section cards and shared dialog */
+.teams-screen .teams-member-detail { max-width: 1120px; margin: 0 auto; }
+.teams-member-detail-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.teams-member-breadcrumb { margin: 0; }
+.teams-member-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; }
+.teams-member-identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.teams-member-hero-avatar { width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #1f2630; color: #9ec3ff; font-size: 15px; font-weight: 600; }
+.teams-member-identity-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.teams-member-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.teams-member-title-row h1 { margin: 0; font-size: 22px; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: #e7e9ec; overflow-wrap: anywhere; }
+.teams-member-subline { margin: 0; font-size: 12px; color: #a3a9b2; overflow-wrap: anywhere; }
+.teams-member-subline code { color: #e7e9ec; }
+.teams-member-notices { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.teams-member-notice { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.teams-member-notice-icon { flex: none; margin-top: 2px; color: #9ec3ff; }
+.teams-member-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; min-width: 0; }
+.teams-member-main { flex: 999 1 560px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.teams-member-aside { flex: 1 1 320px; display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 400px; }
+
+.section-card { min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; }
+.section-card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c; }
+.section-card-heading { min-width: 0; }
+.section-card-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; color: #e7e9ec; font-size: 14px; font-weight: 600; }
+.section-card-heading p { margin: 2px 0 0; color: #8d949e; font-size: 12px; }
+.teams-screen .section-card-action { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; }
+.teams-screen .section-card-action:hover:not(:disabled) { background: #222831; }
+.teams-screen .section-card-action:disabled { opacity: 0.45; cursor: default; }
+.section-card-body { min-width: 0; padding: 16px 18px; }
+.section-card .teams-live-actions { width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+
+.teams-live-status-card .section-card-body { padding: 14px 18px; }
+.teams-live-status-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: #8d949e; }
+.teams-live-status-dot.teams-tone-ok { background: var(--success); box-shadow: 0 0 0 4px rgba(74, 194, 107, 0.15); }
+.teams-live-status-dot.teams-tone-busy { background: var(--info); }
+.teams-live-status-dot.teams-tone-warning { background: var(--warning); }
+.teams-live-status-dot.teams-tone-danger { background: var(--danger); }
+.teams-live-status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 18px; margin: 0; }
+.teams-live-status-grid dt { margin-bottom: 3px; color: #8d949e; font-size: 12px; }
+.teams-live-status-grid dd { margin: 0; color: #e7e9ec; font-weight: 500; overflow-wrap: anywhere; }
+.teams-live-status-value { display: inline-flex; align-items: center; gap: 7px; }
+.teams-live-status-value .status-dot { width: 7px; height: 7px; margin: 0; flex: none; }
+.teams-live-status-empty { margin: 0; color: #a3a9b2; font-size: 12.5px; }
+
+.dialog-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-start; justify-content: center; padding: 96px 24px 24px; background: rgba(6, 7, 9, 0.68); box-sizing: border-box; }
+.dialog-panel { display: flex; flex-direction: column; box-sizing: border-box; max-width: 100%; max-height: calc(100vh - 120px); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55); overflow: hidden; }
+.dialog-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.dialog-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c; }
+.dialog-header h2 { margin: 0; color: #e7e9ec; font-size: 15px; font-weight: 600; }
+.dialog-close { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #a3a9b2; }
+.dialog-close:hover:not(:disabled) { background: #1b1f24; color: #e7e9ec; }
+.dialog-close:disabled { opacity: 0.45; cursor: default; }
+.dialog-body { min-height: 0; padding: 20px; overflow-y: auto; }
+.dialog-footer { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a; }
+.dialog-footer-note { color: #8d949e; font-size: 12px; }
+/* Footer buttons are their own row: no margin, padding or border from the
+   legacy .dialog-actions block, and pushed right even without a footer note. */
+.dialog-footer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; padding: 0; border: 0; }
+.dialog-action { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 14px; border: 1px solid #2f343c; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.dialog-action-secondary { color: #e7e9ec; background: #1b1f24; }
+.dialog-action-secondary:hover:not(:disabled) { background: #222831; }
+.dialog-action-primary { border-color: #5b9cff; background: #5b9cff; color: #0b1220; font-weight: 600; }
+.dialog-action-primary:hover:not(:disabled) { border-color: #7cb0ff; background: #7cb0ff; }
+.dialog-action:disabled { opacity: 0.45; cursor: default; }
+.dialog-close:focus-visible, .dialog-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Switch to one column before flex wrapping would leave the aside alone in a
+   second row still capped at 400px. The layout needs 560px main + 320px aside +
+   22px gap; adding the shell's 320px leaves about 1222px of viewport until it
+   fits, plus a little room for the scrollbar. */
+@media (max-width: 1240px) {
+  .teams-member-layout { flex-direction: column; }
+  .teams-member-main { width: 100%; flex: 1 1 auto; }
+  .teams-member-aside { width: 100%; max-width: none; }
+}
+@media (max-width: 560px) {
+  .dialog-backdrop { padding: 24px 12px; }
+  .dialog-panel { max-height: calc(100vh - 48px); }
+  .dialog-footer { align-items: flex-start; }
+}
 /* v4 shared components (P05-S55) */
 .ui-dot { display: inline-block; width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text-label); }
 .ui-dot-lg { width: 8px; height: 8px; }
