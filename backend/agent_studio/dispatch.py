@@ -254,6 +254,28 @@ def _skill_show(args, req):
     return skills.show_skill(ws, skill)
 
 
+def _skill_create(args, req):
+    ws = _catalog_workspace(args, {"workspace", "skill"}, "skill.create")
+    if "skill" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'skill'.")
+    return skills.create_skill(ws, args["skill"])
+
+
+def _skill_update(args, req):
+    ws = _catalog_workspace(args, {"workspace", "skill", "text", "expectedSha256"}, "skill.update")
+    skill = args.get("skill")
+    if not isinstance(skill, str) or not roles.SKILL_RE.fullmatch(skill):
+        raise AsError(BAD_REQUEST, "skill must be a skill folder name (lowercase letters, digits, '.', '_', '-').")
+    if "text" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'text'.")
+    if "expectedSha256" not in args:
+        raise AsError(BAD_REQUEST, "Missing required argument 'expectedSha256'.")
+    expected = _sha_arg(args)
+    if expected is None:
+        raise AsError(BAD_REQUEST, "expectedSha256 must be a lowercase hex sha256.")
+    return skills.update_skill(ws, skill, args["text"], expected)
+
+
 def _agentdef_list(args, req):
     ws = _catalog_workspace(args, {"workspace"}, "agentdef.list")
     return dict(agentcatalog.list_agents(ws), workspace=ws)
@@ -1098,6 +1120,8 @@ COMMANDS = {
     "role.delete": _role_delete,
     "skill.list": _skill_list,
     "skill.show": _skill_show,
+    "skill.create": _skill_create,
+    "skill.update": _skill_update,
     "board.run": _inbox("board.run", _validate_board_run),
     "board.stop": _inbox("board.stop", _validate_board_show),
     "phase.add": _inbox("phase.add", _validate_phase_add),

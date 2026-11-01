@@ -164,8 +164,19 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   roles, a null `rolesSha256` and one problem.
 - `skill.show {workspace, skill}` returns `{workspace, skill, text}` for one skill id; `text` is null unless the
   state is `ok` or `truncated` (the first 32 KiB). A bad id is `BAD_REQUEST`; an id with no folder that no role
-  lists is `SKILL_NOT_FOUND`. Both skill commands are direct, read-only requests: they take no write lock and do
-  not require a running coordinator.
+  lists is `SKILL_NOT_FOUND`. The read commands are direct requests: they take no write lock and do not require
+  a running coordinator.
+- `skill.create {workspace, skill: {id, text}}` creates `.agent-studio/skills/<id>/SKILL.md` as exact UTF-8 text
+  (empty allowed, at most 32 KiB), making the skill folders when they are missing and never through a symlink.
+  A bad `skill.id`/`skill.text` is `BAD_REQUEST`; an existing file is `SKILL_EXISTS`, re-checked immediately
+  before the atomic replace. It returns `{workspace, skill, text}` (the `SkillItem` and its text).
+- `skill.update {workspace, skill, text, expectedSha256}` atomically replaces one `SKILL.md`, keeping its mode,
+  and returns `{workspace, skill, text}`. A missing file is `SKILL_NOT_FOUND`; a symlink, directory, non-regular
+  target, or a file larger than the 32 KiB limit is `BAD_REQUEST` (shorten an oversized file outside the app).
+  A stale `expectedSha256` or a file changed before the replace is `CONFIG_CHANGED` with
+  `data.skillSha256` (or null); identical bytes are a no-op that does not touch the file. Both writes are direct
+  requests, must not read or write `roles.json`, and use a staged same-directory temp file plus atomic
+  `os.replace`; temp files and newly created empty folders are removed on failure.
 
 Protected routes: when a board has the `merge-conflict` or `plan-merge-conflict` status, it must keep it, with a
 rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the existing `board.run` and
