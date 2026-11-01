@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRunningAssignments, roleRuntimeState, requestedRoleSelection, roleRows, roleUsageSummary, selectedRoleId } from '../src/renderer/roles/rolesModel';
+import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRunningAssignments, roleRuntimeState, roleRows, roleUsageSummary } from '../src/renderer/roles/rolesModel';
 import { MEMBERS, roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 describe('rolesModel', () => {
@@ -14,16 +14,6 @@ describe('rolesModel', () => {
     expect(filterRoleRows(rows, 'python-testing')).toEqual([]);
     expect(filterRoleRows(rows, 'Write tests')).toEqual([]);
     expect(filterRoleRows(rows, 'Core')).toEqual([]);
-  });
-
-  it('selection_persists_while_visible_then_falls_back_to_first_or_null', () => {
-    const rows = roleRows(rolesFixture().items);
-    expect(selectedRoleId(rows, 'Writer')).toBe('Writer');
-    expect(selectedRoleId(rows, 'gone')).toBe('Developer');
-    expect(selectedRoleId(rows, null)).toBe('Developer');
-    const filtered = filterRoleRows(rows, 'review');
-    expect(selectedRoleId(filtered, 'Writer')).toBe('Reviewer');
-    expect(selectedRoleId([], 'Writer')).toBeNull();
   });
 
   it('builds_display_labels_initials_and_exact_issue_counts', () => {
@@ -91,14 +81,5 @@ describe('rolesModel', () => {
     const noRuntime = roleItem('a', { usage: usageOf({ liveRuntime: null }, MEMBERS.slice(0, 1)) });
     expect(roleRuntimeState(noRuntime)).toBe('unknown');
     expect(roleUsageSummary(noRuntime)).toEqual({ members: '1 member', running: 'Usage incomplete', incomplete: true });
-  });
-
-  it('requested_role_selection_is_exact_id_only', () => {
-    const items = [roleItem('qa-a', { name: 'QA' }), roleItem('qa-b', { name: 'QA' })];
-    expect(requestedRoleSelection(items, 'qa-b')).toBe('qa-b');
-    expect(requestedRoleSelection(items, 'QA')).toBe('qa-a');
-    expect(requestedRoleSelection(items, 'retired')).toBe('qa-a');
-    expect(requestedRoleSelection(items, null)).toBe('qa-a');
-    expect(requestedRoleSelection([], 'qa-b')).toBeNull();
   });
 });

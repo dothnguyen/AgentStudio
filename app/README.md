@@ -123,7 +123,24 @@ cd C:\Works\Projects\AgentStudio\app
 npm run capture:teams
 ```
 
-The capture page is read-only: it uses no backend or WSL connection. The command opens a hidden
+### Roles v2 visual check (Windows)
+
+Renders the real Roles screen (`WorkspaceShell` + `RolesScreen`) with the sample data of
+`design/roles-catalog-v2/` from `capture/rolesCatalogV2Fixture.ts`, and writes the list, the role page and
+each dialog to `design/roles-catalog-v2/captures/`.
+
+Prerequisites: `npm ci` has been run on Windows (PowerShell) and the Electron binary is present.
+
+```powershell
+cd C:\Works\Projects\AgentStudio\app
+npm run capture:roles
+```
+
+The command opens a hidden 1440x1240 window at device scale factor 1 and writes `list.png`, `detail.png`,
+`edit-overview.png`, `edit-instructions.png`, `edit-skills.png`, `new-role.png`, `delete-role.png` and a
+`manifest.json` with their sizes and checksums. It is an operator check and is not part of `npm test`.
+
+The Teams capture page is read-only: it uses no backend or WSL connection. The command opens a hidden
 1440x1000 window at device scale factor 1 and writes:
 
 - `test-results/teams-overview-v4-actual.png` — the captured screen.

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ManagementApi, RoleCatalogItem, RoleCatalogList } from '../src/renderer/api';
-import { editRoleForm } from '../src/renderer/roles/roleEditModel';
+import type { RoleFormValues } from '../src/renderer/roles/roleEditModel';
 import { INSTRUCTIONS_MESSAGE, PROMPT_TOO_LONG, runRoleSave, TOKENS_MESSAGE, VERIFY_MESSAGE } from '../src/renderer/roles/roleSave';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
@@ -20,6 +20,16 @@ function developer(over: Partial<RoleCatalogItem> = {}): RoleCatalogItem {
     skills: [{ id: 'python-testing', state: 'ok' }],
     ...over,
   });
+}
+
+function editRoleForm(role: RoleCatalogItem): RoleFormValues {
+  return {
+    id: role.id,
+    name: role.name,
+    description: role.description ?? '',
+    instructions: role.instructions.text ?? '',
+    skills: role.skills.map(skill => skill.id),
+  };
 }
 
 function catalog(role: RoleCatalogItem, sha = SHA): RoleCatalogList {

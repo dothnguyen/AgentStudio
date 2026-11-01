@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildRoleSavePlan, editRoleForm, emptyRoleForm, instructionBytes, roleErrorProblems, suggestRoleId, validateRoleForm,
+  buildRoleSavePlan, instructionBytes, roleErrorProblems, suggestRoleId, validateRoleForm,
 } from '../src/renderer/roles/roleEditModel';
+import type { RoleCatalogItem } from '../src/shared/management';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
 const catalog = rolesFixture();
-const valid = { ...emptyRoleForm(), id: 'new-role', name: 'New Role' };
+const emptyForm = { id: '', name: '', description: '', instructions: '', skills: [] as string[] };
+const valid = { ...emptyForm, id: 'new-role', name: 'New Role' };
+const formOf = (role: RoleCatalogItem) => ({
+  id: role.id,
+  name: role.name,
+  description: role.description ?? '',
+  instructions: role.instructions.text ?? '',
+  skills: role.skills.map(skill => skill.id),
+});
 const SKILL_MSG = "Use 1–64 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit.";
 
 describe('roleEditModel', () => {
@@ -40,7 +49,7 @@ describe('roleEditModel', () => {
 
   it('checks_names_case_insensitively_but_excludes_the_edited_role', () => {
     expect(validateRoleForm({ ...valid, name: '  code REVIEWER ' }, 'create', catalog).name).toBe('That role name is already in use.');
-    const reviewer = editRoleForm(catalog.items[1]!);
+    const reviewer = formOf(catalog.items[1]!);
     expect(validateRoleForm({ ...reviewer, name: 'CODE reviewer' }, 'edit', catalog)).toEqual({});
     expect(validateRoleForm({ ...reviewer, name: 'developer' }, 'edit', catalog).name).toBe('That role name is already in use.');
     expect(validateRoleForm({ ...reviewer, id: 'ignored-in-edit' }, 'edit', catalog).id).toBeUndefined();
@@ -51,7 +60,7 @@ describe('roleEditModel', () => {
     expect(buildRoleSavePlan('create', null, { ...valid, description: ' hi ', instructions: 'x' }).create).toEqual({ id: 'new-role', name: 'New Role', description: 'hi', skills: [] });
     expect(buildRoleSavePlan('create', null, { ...valid, instructions: 'x' }).instructionsChanged).toBe(true);
     const dev = catalog.items[0]!;
-    const form = editRoleForm(dev);
+    const form = formOf(dev);
     expect(buildRoleSavePlan('edit', dev, form)).toEqual({ create: null, metadata: null, instructionsChanged: false });
     expect(buildRoleSavePlan('edit', dev, { ...form, name: ' Dev2 ', id: 'other' }).metadata).toEqual({ name: 'Dev2' });
     expect(buildRoleSavePlan('edit', dev, { ...form, description: '  ' }).metadata).toEqual({ description: null });
@@ -59,14 +68,14 @@ describe('roleEditModel', () => {
 
   it('detects_instruction_and_skill_order_changes_without_normalizing_instruction_text', () => {
     const dev = catalog.items[0]!;
-    const form = editRoleForm(dev);
+    const form = formOf(dev);
     expect(buildRoleSavePlan('edit', dev, { ...form, instructions: `${form.instructions} ` })).toMatchObject({ instructionsChanged: true, metadata: null });
     expect(buildRoleSavePlan('edit', dev, { ...form, instructions: '' }).instructionsChanged).toBe(true);
     expect(buildRoleSavePlan('edit', dev, { ...form, skills: [...form.skills].reverse() }).metadata).toEqual({ skills: ['retired-skill', 'python-testing'] });
   });
 
   it('keeps_missing_skills_in_the_edit_form_values', () => {
-    expect(editRoleForm(catalog.items[0]!).skills).toEqual(['python-testing', 'retired-skill']);
+    expect(formOf(catalog.items[0]!).skills).toEqual(['python-testing', 'retired-skill']);
   });
 
   it('maps_backend_field_problems_and_preserves_unmatched_problems', () => {

@@ -27,13 +27,6 @@ export function filterRoleRows(rows: readonly RoleCatalogRow[], query: string): 
   if (!q) return [...rows];
   return rows.filter(({ role }) => [role.id, role.name, role.description].some(v => typeof v === 'string' && v.toLocaleLowerCase().includes(q)));
 }
-export function selectedRoleId(rows: readonly RoleCatalogRow[], currentId: string | null): string | null {
-  return rows.some(row => row.role.id === currentId) ? currentId : rows[0]?.role.id ?? null;
-}
-export function requestedRoleSelection(items: readonly RoleCatalogItem[], requestedRoleId: string | null): string | null {
-  if (requestedRoleId !== null && items.some(item => item.id === requestedRoleId)) return requestedRoleId;
-  return selectedRoleId(roleRows(items), null);
-}
 export function roleDisplayLabel(role: RoleCatalogItem): string {
   return text(role.name)?.trim() ?? text(role.id)?.trim() ?? '';
 }
@@ -169,17 +162,6 @@ export function roleDeleteDisabledReason(args: {
   if (state === 'ok' && !sha256) return 'The instruction file has no version token, so deletion is unavailable. Reload Roles.';
   return null;
 }
-export function selectionAfterRoleDeletion(beforeVisibleIds: readonly string[], afterVisibleIds: readonly string[], deletedId: string): string | null {
-  const remaining = new Set(afterVisibleIds.filter(id => id !== deletedId));
-  const at = beforeVisibleIds.indexOf(deletedId);
-  if (at >= 0) {
-    const next = beforeVisibleIds.slice(at + 1).find(id => remaining.has(id));
-    if (next !== undefined) return next;
-    for (let i = at - 1; i >= 0; i--) if (remaining.has(beforeVisibleIds[i]!)) return beforeVisibleIds[i]!;
-  }
-  return afterVisibleIds.find(id => id !== deletedId) ?? null;
-}
-
 const array = (v: unknown): Loose[] => (Array.isArray(v) ? v.map(loose).filter((x): x is Loose => x !== null) : []);
 export function roleUsageFromDeleteError(error: ManagementError): RoleUsageView | null {
   if (error.code !== 'ROLE_IN_USE') return null;

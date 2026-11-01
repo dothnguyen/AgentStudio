@@ -1450,13 +1450,17 @@ ul[aria-label="Workspaces"] {
 .role-instructions-warnings { margin: 0; padding-left: 18px; color: #f0b453; font-size: 12px; overflow-wrap: anywhere; }
 .role-instructions-announcement { margin: 0; color: #6fd38b; font-size: 12.5px; }
 
-.role-instructions-dialog .dialog-body { display: flex; flex-direction: column; gap: 16px; }
+.role-instructions-dialog .dialog-body { display: flex; flex-direction: column; gap: 16px; padding: 18px 20px; }
+/* The Roles v2 instructions design uses a tighter 14px gap; the member
+   details v7 design keeps the shared 16px. */
+.roles-instructions-dialog .dialog-body { gap: 14px; }
 .role-instructions-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .role-instructions-field label { color: #c4cad2; font-size: 12px; font-weight: 500; }
 .role-instructions-field textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit; line-height: 1.5; white-space: pre-wrap; resize: vertical; }
 .role-instructions-field textarea:disabled { opacity: 0.55; }
 .role-instructions-field textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .role-instructions-field .role-instructions-prompt-input { min-height: 280px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; resize: vertical; }
+.roles-instructions-dialog .role-instructions-prompt-input { min-height: 320px; }
 .role-instructions-field-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
 .role-instructions-hint { margin: 0; color: #a3a9b2; font-size: 12px; }
 .role-instructions-note { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px; background: rgba(240, 180, 83, 0.07); color: #f0b453; font-size: 12px; }
@@ -1678,28 +1682,24 @@ ul[aria-label="Workspaces"] {
 .roles-screen .roles-back { min-height: 0; padding: 0; border: 0; background: none; color: var(--link); font: inherit; cursor: pointer; }
 .roles-screen .roles-back:hover:not(:disabled) { border: 0; background: none; color: var(--link-hover); text-decoration: underline; }
 .roles-page { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
-.roles-instructions { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; margin: 0; }
 .roles-screen :is(button, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .roles-screen :is(button, input[type="search"]) { min-height: 36px; }
 .roles-screen .roles-row, .roles-screen .roles-back { min-height: 0; }
 .roles-screen .roles-row:focus-visible { outline-offset: -2px; }
-.roles-error, .roles-problems, .roles-details { min-width: 0; overflow-wrap: anywhere; }
-.roles-edit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.roles-mutation-reason { min-width: 0; color: var(--text-muted); font-size: 12px; overflow-wrap: anywhere; }
-.roles-delete-alert, .roles-delete-group, .roles-delete-dialog, .roles-actions, .roles-delete-reason { min-width: 0; overflow-wrap: anywhere; }
-.roles-detail-pane { display: grid; gap: 12px; }
-.roles-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
-.roles-delete-reason, .roles-delete-copy, .roles-delete-name { min-width: 0; overflow-wrap: anywhere; margin: 0; }
-.roles-delete-trigger, .roles-delete-confirm { border-color: #4a2c2c; color: #f0a3a3; }
-.roles-delete-trigger[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
+.roles-error, .roles-problems { min-width: 0; overflow-wrap: anywhere; }
+.roles-delete-alert, .roles-delete-group, .roles-delete-dialog { min-width: 0; overflow-wrap: anywhere; }
+.roles-delete-copy { min-width: 0; overflow-wrap: anywhere; margin: 0; }
 .roles-delete-alert ul { margin: 4px 0 8px; padding-left: 20px; }
 .roles-delete-group h4 { margin: 8px 0 4px; }
-.roles-delete-dialog { max-width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
+/* Delete is a compact confirmation: title and copy sit together, with no
+   separate header bar (design/roles-catalog-v2/delete-role.html). */
+.roles-delete-dialog .dialog-header { align-items: flex-start; padding: 20px 20px 0; border-bottom: 0; }
+.roles-delete-dialog .dialog-body { padding: 8px 20px 8px; color: #a3a9b2; }
+.roles-delete-dialog .dialog-footer { justify-content: flex-end; padding: 16px 20px; border-top: 0; background: transparent; }
+.roles-delete-dialog .dialog-footer-actions { margin: 0; }
 .roles-delete-dialog .dialog-action-danger { border-color: #b4413b; background: #b4413b; color: #ffffff; }
 .roles-delete-dialog .dialog-action-danger:hover:not(:disabled) { border-color: #c34e47; background: #c34e47; color: #ffffff; }
 .roles-delete-dialog :is(button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (max-width: 560px) { .roles-delete-actions { flex-direction: column-reverse; align-items: stretch; } .roles-delete-dialog { width: calc(100vw - 32px); } }
-.roles-saved { overflow-wrap: anywhere; }
 /* Roles v2 role page (T-113): header, section cards and delete confirmation. */
 .roles-role-top { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .roles-role-header { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -1731,7 +1731,8 @@ ul[aria-label="Workspaces"] {
 .roles-overview-description dd { color: #d6dae0; font-weight: 400; }
 .roles-overview-id { color: #c4cad2; font-family: var(--font-mono); font-size: 12.5px; }
 .roles-edit-reason { margin: 12px 0 0; color: #8d949e; font-size: 12px; overflow-wrap: anywhere; }
-.roles-instructions-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.roles-instructions-card > .section-card-body { display: flex; flex-direction: column; gap: 10px; }
+.roles-instructions-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between; }
 .roles-instructions-file { display: inline-flex; align-items: center; gap: 8px; color: #8d949e; font-size: 12px; overflow-wrap: anywhere; }
 .roles-instructions-file code { color: #c4cad2; font-family: var(--font-mono); }
 .roles-instructions-count { color: #8d949e; font-size: 11.5px; }
@@ -1743,6 +1744,7 @@ ul[aria-label="Workspaces"] {
 .roles-warning-group h3 { margin: 0 0 4px; color: #f0b453; font-size: 12px; font-weight: 600; }
 .roles-warning-list { margin: 0; padding-left: 18px; color: #f0b453; font-size: 12.5px; overflow-wrap: anywhere; }
 .roles-skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.roles-skill-chips .roles-skill-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 12px; }
 .roles-skills-empty { margin: 0; color: #a3a9b2; font-size: 12.5px; }
 .roles-skill-missing-label { color: #f0b453; font-weight: 600; }
 .roles-usedby-card .section-card-body { padding: 0; }
@@ -1760,39 +1762,22 @@ ul[aria-label="Workspaces"] {
 .roles-usedby-note + .roles-usedby-note, .roles-usedby-empty + .roles-usedby-note { border-top: 1px solid #23262c; }
 .roles-usedby-note + .roles-usedby-list, .roles-usedby-empty + .roles-usedby-list { border-top: 1px solid #23262c; }
 .roles-usedby-disclaimer { margin: 0; padding: 12px 18px; border-top: 1px solid #23262c; color: #8d949e; font-size: 12px; overflow-wrap: anywhere; }
-@media (max-width: 900px) {
+/* Switch to one column before flex wrapping would leave the aside alone in a
+   second row still capped at 400px. The layout needs 560px main + 320px aside +
+   22px gap; adding the shell's 320px leaves about 1222px of viewport until it
+   fits, plus a little room for the scrollbar. */
+@media (max-width: 1240px) {
   .roles-role-layout { flex-direction: column; }
   .roles-role-main, .roles-role-aside { width: 100%; flex: 1 1 auto; max-width: none; }
 }
-.roles-form { display: flex; flex-direction: column; gap: 12px; width: min(640px, 100%); max-height: 100%; min-width: 0; padding: 20px; overflow: auto; overflow-wrap: anywhere; background: var(--surface, #fff); color: var(--text, #111); }
-.roles-field, .roles-form fieldset, .roles-form-alert, .roles-conflict, .roles-conflict-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
-.roles-form :is(input, textarea, select) { min-width: 0; max-width: 100%; box-sizing: border-box; padding: 8px; }
-.roles-form textarea { min-height: 6rem; resize: vertical; }
-.roles-form .roles-instructions-input { min-height: 12rem; font-family: var(--font-mono, monospace); }
-.roles-form :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.roles-form button { min-height: 36px; }
-.roles-field-error { color: var(--color-danger, #b42318); overflow-wrap: anywhere; }
-.roles-form-actions, .roles-skill-add, .roles-skill-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
-.roles-skill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.roles-skill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
-.roles-skill-row code { min-width: 0; overflow-wrap: anywhere; }
-.roles-skill-missing { font-weight: 600; }
-.roles-conflict dl { margin: 0; display: grid; gap: 8px; }
-.roles-conflict dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 560px) {
-  .roles-form { padding: 12px; }
-  .roles-form-actions, .roles-skill-add, .roles-skill-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
-}
-
-
 /* Roles v2 edit dialogs (T-114) */
 .roles-screen .section-card-action { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; }
 .roles-screen .section-card-action:hover:not(:disabled) { background: #222831; }
 .roles-screen .section-card-action:disabled { opacity: 0.45; cursor: default; }
 .roles-screen .roles-new-button:disabled { opacity: 0.45; cursor: default; }
 .role-overview-dialog .dialog-body,
-.role-skills-dialog .dialog-body,
 .role-create-dialog .dialog-body { display: flex; flex-direction: column; gap: 16px; }
+.role-skills-dialog .dialog-body { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; }
 .role-dialog-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .role-dialog-field > label, .role-dialog-label { color: #c4cad2; font-size: 12px; font-weight: 500; }
 .role-dialog-field input,

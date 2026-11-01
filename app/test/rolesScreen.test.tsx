@@ -623,11 +623,13 @@ describe('RolesScreen', () => {
     expect(within(rows[3]!).queryByRole('button', { name: /^Open / })).toBeNull();
   });
 
-  it('role_page_css_wraps_to_one_column_at_900px_and_clamps_the_instruction_preview', () => {
+  it('role_page_css_stacks_to_one_column_before_the_aside_wraps_and_clamps_the_instruction_preview', () => {
     const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
     expect(css).toMatch(/\.roles-role-main \{ flex: 999 1 560px;/);
     expect(css).toMatch(/\.roles-role-aside \{ flex: 1 1 320px; display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 400px; \}/);
-    expect(css).toMatch(/@media \(max-width: 900px\) \{ \.roles-role-layout \{ flex-direction: column; \} \.roles-role-main, \.roles-role-aside \{ width: 100%; flex: 1 1 auto; max-width: none; \} \}/);
+    // The two columns need 902px of content, so stack before the aside is left
+    // alone in a second row; this also covers the required one column at 900px.
+    expect(css).toMatch(/@media \(max-width: 1240px\) \{ \.roles-role-layout \{ flex-direction: column; \} \.roles-role-main, \.roles-role-aside \{ width: 100%; flex: 1 1 auto; max-width: none; \} \}/);
     expect(css).toMatch(/\.roles-instructions-preview pre \{[^}]*max-height: 300px/);
     expect(css).toMatch(/\.roles-role-delete \{[^}]*border: 1px solid #4a2c2c[^}]*color: #f0a3a3/);
   });

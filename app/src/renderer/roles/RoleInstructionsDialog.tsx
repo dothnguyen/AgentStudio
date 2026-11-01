@@ -20,6 +20,8 @@ export interface RoleInstructionsDialogProps {
   countMode?: 'characters' | 'bytes';
   promptLabel?: string;
   promptRows?: number;
+  /** Extra dialog class, for example the role page's larger prompt editor. */
+  className?: string;
   onSave(description: string, prompt: string): Promise<RoleSaveOutcome>;
   onReload(): Promise<Result<RoleCatalogList>>;
   onClearError(): void;
@@ -110,7 +112,7 @@ export function RoleInstructionsDialog(props: RoleInstructionsDialogProps): JSX.
     onClose={props.onCancel}
     footerNote="Takes effect on the next assignment"
     initialFocus={showDescription ? descriptionRef : promptRef}
-    className="role-instructions-dialog"
+    className={`role-instructions-dialog${props.className ? ` ${props.className}` : ''}`}
     actions={[
       { label: 'Cancel', onClick: props.onCancel },
       { label: props.pending ? 'Saving...' : 'Save to file', variant: 'primary', disabled: saveDisabled, onClick: () => { void save(); } },

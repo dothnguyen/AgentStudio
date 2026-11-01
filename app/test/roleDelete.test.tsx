@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ManagementError, Workspace } from '../src/renderer/api';
 import { RoleDeleteDialog } from '../src/renderer/roles/RoleDeleteDialog';
 import { RolesScreen } from '../src/renderer/roles/RolesScreen';
-import { instructionDeleteDescription, roleDeleteDisabledReason, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion } from '../src/renderer/roles/rolesModel';
+import { instructionDeleteDescription, roleDeleteDisabledReason, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError } from '../src/renderer/roles/rolesModel';
 import type { RoleCatalogItem, RoleCatalogList } from '../src/shared/management';
 import { fakeManagement } from './teamsFixtures';
 import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
@@ -58,13 +58,6 @@ describe('role delete model', () => {
     expect(reason(role('a'), { disconnected: true })).toMatch(/connection/);
     expect(reason(role('a'), { mutationPending: true })).toMatch(/in progress/);
     expect(reason(role('a'), { refreshRequired: true })).toMatch(/Retry Roles/);
-  });
-
-  it('selection_after_deletion_prefers_next_then_previous_then_first', () => {
-    expect(selectionAfterRoleDeletion(['a', 'b', 'c'], ['a', 'c'], 'b')).toBe('c');
-    expect(selectionAfterRoleDeletion(['a', 'b', 'c'], ['a', 'b'], 'c')).toBe('b');
-    expect(selectionAfterRoleDeletion(['a', 'b'], ['x'], 'b')).toBe('x');
-    expect(selectionAfterRoleDeletion(['a'], [], 'a')).toBeNull();
   });
 
   it('error_parsers_ignore_malformed_data', () => {
@@ -263,7 +256,7 @@ describe('RolesScreen delete flow', () => {
     expect(deleteRole).toHaveBeenCalledTimes(2);
   });
 
-  it('successful_delete_waits_for_reload_then_selects_next_visible_role', async () => {
+  it('successful_delete_waits_for_reload_then_returns_to_the_list_with_the_deleted_status', async () => {
     const cases: Array<[string, string]> = [['deleted', 'instruction file was deleted'], ['preserved', 'custom or shared instruction file was preserved'], ['missing', 'already missing'], ['none', 'No instruction file was configured']];
     for (const [disposition, copy] of cases) {
       cleanup();
@@ -373,12 +366,14 @@ describe('RolesScreen delete flow', () => {
     expect(roles).toHaveBeenCalledTimes(2);
   });
 
-  it('delete_dialog_and_blockers_fit_narrow_layout_and_wrap_long_values', () => {
+  it('delete_dialog_follows_the_compact_design_and_wraps_long_values', () => {
     const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
-    expect(css).toMatch(/\.roles-delete-dialog \{ max-width: min\(480px, calc\(100vw - 32px\)\)/);
+    expect(css).toMatch(/\.roles-delete-dialog \.dialog-header \{ align-items: flex-start; padding: 20px 20px 0; border-bottom: 0; \}/);
+    expect(css).toMatch(/\.roles-delete-dialog \.dialog-body \{ padding: 8px 20px 8px; color: #a3a9b2; \}/);
+    expect(css).toMatch(/\.roles-delete-dialog \.dialog-footer \{ justify-content: flex-end; padding: 16px 20px; border-top: 0; background: transparent; \}/);
     expect(css).toMatch(/\.roles-delete-dialog \.dialog-action-danger \{ border-color: #b4413b; background: #b4413b; color: #ffffff; \}/);
-    expect(css).toMatch(/\.roles-delete-reason, \.roles-delete-copy, \.roles-delete-name \{ min-width: 0; overflow-wrap: anywhere/);
-    expect(css).toMatch(/@media \(max-width: 560px\) \{ \.roles-delete-actions \{ flex-direction: column-reverse; align-items: stretch; \}/);
-    expect(css).toMatch(/\.roles-delete-alert, \.roles-delete-group, \.roles-delete-dialog, [^{]*\{ min-width: 0; overflow-wrap: anywhere/);
+    expect(css).toMatch(/\.roles-delete-copy \{ min-width: 0; overflow-wrap: anywhere; margin: 0; \}/);
+    expect(css).not.toContain('.roles-delete-reason');
+    expect(css).toMatch(/\.roles-delete-alert, \.roles-delete-group, \.roles-delete-dialog \{ min-width: 0; overflow-wrap: anywhere; \}/);
   });
 });

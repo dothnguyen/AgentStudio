@@ -6,7 +6,6 @@ export type RoleFormField = 'id' | 'name' | 'description' | 'instructions' | 'sk
 export type RoleFormErrors = Partial<Record<RoleFormField, string>>;
 export interface RoleSavePlan { create: RoleCreateInput | null; metadata: RoleChanges | null; instructionsChanged: boolean }
 
-export const ROLE_FIELDS: readonly RoleFormField[] = ['id', 'name', 'description', 'instructions', 'skills'];
 export const MAX_NAME = 80;
 export const MAX_DESCRIPTION = 2000;
 export const MAX_INSTRUCTION_BYTES = 16384;
@@ -15,10 +14,6 @@ const SKILL_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export const SKILL_ID_MESSAGE = "Use 1–64 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit.";
 const encoder = new TextEncoder();
 
-export function emptyRoleForm(): RoleFormValues { return { id: '', name: '', description: '', instructions: '', skills: [] }; }
-export function editRoleForm(role: RoleCatalogItem): RoleFormValues {
-  return { id: role.id, name: role.name, description: role.description ?? '', instructions: role.instructions.text ?? '', skills: role.skills.map(s => s.id) };
-}
 export function suggestRoleId(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64).replace(/-+$/, '');
 }

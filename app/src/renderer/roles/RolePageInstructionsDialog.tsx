@@ -37,6 +37,7 @@ export function RolePageInstructionsDialog(props: RolePageInstructionsDialogProp
     countMode="bytes"
     promptLabel="Instructions"
     promptRows={16}
+    className="roles-instructions-dialog"
     onSave={(_description, prompt) => save.save(roleInstructionsValues(props.role, props.role.description ?? '', prompt))}
     onReload={save.reloadCurrent}
     onClearError={save.clear}

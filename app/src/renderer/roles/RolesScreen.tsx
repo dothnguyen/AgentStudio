@@ -139,7 +139,7 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
     : !shown ? 'Role changes are unavailable until the catalog loads.'
     : shown.state === 'invalid' || shown.problems.length > 0 ? 'Role changes are unavailable while the roles catalog has problems.'
     : refreshRequired ? 'Role changes are unavailable until Roles is reloaded.'
-    : deletePending || deleteTarget !== null ? 'A role deletion is in progress.'
+    : deletePending ? 'A role deletion is in progress.'
     : dialogPending ? 'Another role change is in progress.' : null;
 
   const dialogRole = dialog !== null && dialog.kind !== 'create' && shown !== null
@@ -193,7 +193,7 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
   }, [focusTrigger, view]);
 
   const selectedRole = rolePage;
-  const disabledReason = selectedRole ? roleDeleteDisabledReason({ role: selectedRole, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: deletePending || dialogPending || deleteTarget !== null, refreshRequired }) : null;
+  const disabledReason = selectedRole ? roleDeleteDisabledReason({ role: selectedRole, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: deletePending || dialogPending, refreshRequired }) : null;
   const targetCurrent = deleteTarget ? shown?.items.find(r => r.id === deleteTarget.role.id) : undefined;
   const targetChanged = !!deleteTarget && (!targetCurrent || currentId !== deleteTarget.role.id
     || shown?.sha256 !== deleteTarget.catalogSha256 || (targetCurrent.instructions.sha256 ?? null) !== deleteTarget.instructionsSha256
