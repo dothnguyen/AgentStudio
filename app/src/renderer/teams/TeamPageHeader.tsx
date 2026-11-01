@@ -4,6 +4,8 @@ import { Icon } from '../icons/Icon';
 import { ActionMenu } from '../ui/ActionMenu';
 import type { MenuItem } from '../ui/actionMenuModel';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { TeamStopDialog } from './TeamStopDialog';
+import type { StopSequenceState } from './teamStopModel';
 import { useCopyStatus } from '../ui/useCopyStatus';
 import { TeamNameForm } from './TeamEditForms';
 import { canEditTeam, type TeamActions, type TeamWrites } from './teamEditModel';
@@ -23,6 +25,14 @@ export interface TeamPageHeaderProps {
   connected: boolean;
   pending: boolean;
   readOnly: boolean;
+  stopDialog?: {
+    state: StopSequenceState;
+    chooseSafe(): void;
+    stopNow(): void;
+    cancelWaiting(): void;
+    confirmPaused(): void;
+    cancel(): void;
+  } | null;
 }
 
 type HeaderConfirm =
@@ -123,6 +133,9 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
       // when the header's runtime meta row (and its local status) is absent.
       copy: (text, label) => teamActions.copy(text, label),
       attach: (kind) => { void teamActions.attachCommand(team, kind); },
+      startTeam: () => { void teamActions.startTeam(team); },
+      stopTeam: () => { void teamActions.stopTeam(team, 'stop'); },
+      restartTeam: () => { void teamActions.restartTeam(team, 'restart'); },
       deleteTeam: chooseDelete,
     },
   });
@@ -282,6 +295,18 @@ export function TeamPageHeader(props: TeamPageHeaderProps): JSX.Element {
           returnFocusRef={menuButtonRef}
           onCancel={() => setConfirm(null)}
           onConfirm={(reason) => { const request = confirm.request; restoreMenuFocus.current = true; setConfirm(null); void teamActions.cancelCommand(request.id, reason); }}
+        />
+      )}
+      {props.stopDialog !== null && props.stopDialog !== undefined && (
+        <TeamStopDialog
+          teamName={props.stopDialog.state.teamName}
+          state={props.stopDialog.state}
+          returnFocusRef={menuButtonRef}
+          onChooseSafe={props.stopDialog.chooseSafe}
+          onStopNow={props.stopDialog.stopNow}
+          onCancelWaiting={props.stopDialog.cancelWaiting}
+          onConfirmPaused={props.stopDialog.confirmPaused}
+          onCancel={props.stopDialog.cancel}
         />
       )}
     </header>

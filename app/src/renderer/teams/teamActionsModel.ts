@@ -16,6 +16,9 @@ export interface TeamMenuActions {
   cancelCommand(id: string): void;
   copy(text: string, label: string): void;
   attach(kind: 'wsl' | 'windowsTerminal'): void;
+  startTeam(): void;
+  stopTeam(): void;
+  restartTeam(): void;
   deleteTeam(): void;
 }
 
@@ -315,7 +318,37 @@ export function buildTeamMenu(input: BuildTeamMenuInput): MenuItem[] {
   items.push({ kind: 'submenu', id: 'copy', label: 'Copy', items: copyItems, disabledReason: globalReason ?? undefined });
 
   items.push({ kind: 'separator' });
-  // T-101 inserts Start team / Stop team… here, between this separator and Delete team.
+  if (!running) {
+    const startReason = team.id === null
+      ? 'This team has no definition id.'
+      : team.definition.state === 'problems'
+        ? 'Fix the definition problems first.'
+        : team.definition.state === 'unreadable' || team.definition.state === 'missing'
+          ? 'This team has no readable definition.'
+          : undefined;
+    items.push({
+      kind: 'action',
+      id: 'start-team',
+      label: 'Start team',
+      disabledReason: globalReason ?? startReason,
+      onSelect: () => actions.startTeam(),
+    });
+  } else {
+    items.push({
+      kind: 'action',
+      id: 'stop-team',
+      label: 'Stop team…',
+      disabledReason: globalReason ?? undefined,
+      onSelect: () => actions.stopTeam(),
+    });
+    items.push({
+      kind: 'action',
+      id: 'restart-team',
+      label: 'Restart team…',
+      disabledReason: globalReason ?? undefined,
+      onSelect: () => actions.restartTeam(),
+    });
+  }
   items.push({
     kind: 'action',
     id: 'delete-team',

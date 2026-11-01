@@ -339,6 +339,8 @@ export function createTeamsOverviewV4Apis(): { management: ManagementApi; dashbo
     rejectCommand: () => readOnly(),
     cancelCommand: () => readOnly(),
     attachInfo: () => readOnly(),
+    startTeam: () => readOnly(),
+    stopTeam: () => readOnly(),
   };
 
   const dashboard: DashboardApi = {

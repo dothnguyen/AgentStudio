@@ -6,12 +6,13 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(33);
+    expect(MANAGEMENT_SPECS).toHaveLength(35);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
       'management.resetUsage', 'management.resumeMemberAgent', 'management.retryRun', 'management.retryTicket',
-      'management.runBoard', 'management.stopBoard', 'management.switchMemberAgent', 'management.unblockTicket',
+      'management.runBoard', 'management.startTeam', 'management.stopBoard', 'management.stopTeam',
+      'management.switchMemberAgent', 'management.unblockTicket',
     ]);
   });
 
@@ -198,12 +199,16 @@ describe('managementSpecs', () => {
       ['cancelCommand', { requestId: uuid }, 'command.cancel', { requestId: uuid }],
       ['cancelCommand', { requestId: uuid, reason: 'stale' }, 'command.cancel', { requestId: uuid, reason: 'stale' }],
       ['attachInfo', { teamId: uuid }, 'team.attach', { teamId: uuid }],
+      ['startTeam', { teamDefId: 'core' }, 'team.start', { teamDefId: 'core' }],
+      ['stopTeam', { teamId: uuid }, 'team.stop', { teamId: uuid }],
     ];
     for (const [method, request, command, args] of rows) {
       expect(byLabel(method).command).toBe(command);
       expect(parse(method, request)).toEqual(args);
     }
     expect(byLabel('attachInfo').mutating).toBe(false);
+    expect(byLabel('startTeam').mutating).toBe(true);
+    expect(byLabel('stopTeam').mutating).toBe(true);
   });
 
   it('rejects malformed action identifiers, ticket keys and reasons', () => {
@@ -217,6 +222,12 @@ describe('managementSpecs', () => {
     expect(parse('cancelRun', {})).toBe('management.cancelRun: workflowRunId is required.');
     expect(parse('approveCommand', { requestId: 'ABC' })).toBe('management.approveCommand: requestId must be a lowercase UUID v4.');
     expect(parse('attachInfo', {})).toBe('management.attachInfo: teamId is required.');
+    expect(parse('startTeam', { teamDefId: 'Bad Id' })).toBe("management.startTeam: teamDefId must be a slug (lowercase letters, digits, '-'; at most 64 characters).");
+    expect(parse('startTeam', {})).toBe('management.startTeam: teamDefId is required.');
+    expect(parse('startTeam', { teamDefId: 'core', roster: [] })).toBe('management.startTeam: unknown field(s): roster.');
+    expect(parse('stopTeam', { teamId: 'abc' })).toBe('management.stopTeam: teamId must be a lowercase UUID v4.');
+    expect(parse('stopTeam', {})).toBe('management.stopTeam: teamId is required.');
+    expect(parse('stopTeam', { teamId: uuid, teamDefId: 'core' })).toBe('management.stopTeam: unknown field(s): teamDefId.');
     expect(parse('rejectCommand', { requestId: uuid, reason: 5 as never })).toBe('management.rejectCommand: reason must be a string.');
     expect(parse('rejectCommand', { requestId: uuid, reason: 'x'.repeat(501) })).toBe('management.rejectCommand: reason must be at most 500 characters.');
     expect(parse('rejectCommand', { requestId: uuid, reason: '\ud800' })).toContain('unpaired surrogates');

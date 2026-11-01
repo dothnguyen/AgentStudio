@@ -18,6 +18,9 @@ function menuActions(): TeamMenuActions {
     cancelCommand: vi.fn(),
     copy: vi.fn(),
     attach: vi.fn(),
+    startTeam: vi.fn(),
+    stopTeam: vi.fn(),
+    restartTeam: vi.fn(),
     deleteTeam: vi.fn(),
   };
 }
@@ -401,7 +404,7 @@ describe('buildTeamMenu provider detection and order', () => {
     expect(submenu(commands.items, 'command-cmd-1').label).toBe('app-dev-dependency-add · claude-dev');
   });
 
-  it('lists exactly the design items in order and leaves no Start/Stop placeholder', () => {
+  it('lists exactly the design items in order with Stop and Restart before Delete', () => {
     const attention = {
       runs: [run()],
       commandRequests: [request()],
@@ -415,10 +418,49 @@ describe('buildTeamMenu provider detection and order', () => {
     const order = items
       .filter((entry): entry is MenuActionItem | MenuSubmenuItem => entry.kind === 'action' || entry.kind === 'submenu')
       .map((entry) => entry.id);
-    expect(order).toEqual(['reset-usage', 'blocked-tickets', 'retry-paused-runs', 'command-approvals', 'copy', 'delete-team']);
-    expect(order.some((id) => /^(start|stop)-team$/.test(id))).toBe(false);
+    expect(order).toEqual(['reset-usage', 'blocked-tickets', 'retry-paused-runs', 'command-approvals', 'copy', 'stop-team', 'restart-team', 'delete-team']);
+    action(items, 'stop-team').onSelect(trigger);
+    action(items, 'restart-team').onSelect(trigger);
+    expect(actions.stopTeam).toHaveBeenCalledTimes(1);
+    expect(actions.restartTeam).toHaveBeenCalledTimes(1);
     action(items, 'delete-team').onSelect(trigger);
     expect(actions.deleteTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Start team for a stopped team and explains why it cannot start', () => {
+    const stopped = team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' } });
+    const { items, actions } = build({ team: stopped });
+    const order = items
+      .filter((entry): entry is MenuActionItem | MenuSubmenuItem => entry.kind === 'action' || entry.kind === 'submenu')
+      .map((entry) => entry.id);
+    expect(order).toEqual(['reset-usage', 'blocked-tickets', 'retry-paused-runs', 'copy', 'start-team', 'delete-team']);
+    expect(action(items, 'start-team').label).toBe('Start team');
+    expect(action(items, 'start-team').disabledReason).toBeUndefined();
+    action(items, 'start-team').onSelect(trigger);
+    expect(actions.startTeam).toHaveBeenCalledTimes(1);
+
+    const problems = build({ team: team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' }, definition: { state: 'problems', problems: [] } }) });
+    expect(action(problems.items, 'start-team').disabledReason).toBe('Fix the definition problems first.');
+    const unreadable = build({ team: team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' }, definition: { state: 'unreadable', problems: [] } }) });
+    expect(action(unreadable.items, 'start-team').disabledReason).toBe('This team has no readable definition.');
+    const missing = build({ team: team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' }, definition: { state: 'missing', problems: [] } }) });
+    expect(action(missing.items, 'start-team').disabledReason).toBe('This team has no readable definition.');
+  });
+
+  it('disables Start team when a stopped runtime has no definition id', () => {
+    const runtimeOnly = team({
+      id: null, name: null,
+      definition: { state: 'missing', problems: [] },
+      runtime: { state: 'stopped', teamId: 'runtime-1', status: 'stopped' },
+    });
+    const { items } = build({ team: runtimeOnly });
+    expect(action(items, 'start-team').disabledReason).toBe('This team has no definition id.');
+  });
+
+  it('disables Start team with the global reason as well', () => {
+    const stopped = team({ runtime: { state: 'stopped', teamId: null, status: 'stopped' } });
+    const { items } = build({ team: stopped, disabledReason: 'Another change is in progress.' });
+    expect(action(items, 'start-team').disabledReason).toBe('Another change is in progress.');
   });
 
   it('applies the global reason to nested actions too', () => {

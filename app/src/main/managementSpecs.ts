@@ -35,6 +35,8 @@ export const MANAGEMENT_CHANNELS = {
   managementRejectCommand: 'management:rejectCommand',
   managementCancelCommand: 'management:cancelCommand',
   managementAttachInfo: 'management:attachInfo',
+  managementStartTeam: 'management:startTeam',
+  managementStopTeam: 'management:stopTeam',
 } as const;
 
 export interface ManagementSpec {
@@ -411,4 +413,10 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementAttachInfo, 'attachInfo', 'team.attach', {
     teamId: { kind: 'uuid', required: true },
   }),
+  spec(C.managementStartTeam, 'startTeam', 'team.start', {
+    teamDefId,
+  }, { mutating: true }),
+  spec(C.managementStopTeam, 'stopTeam', 'team.stop', {
+    teamId: { kind: 'uuid', required: true },
+  }, { mutating: true }),
 ];

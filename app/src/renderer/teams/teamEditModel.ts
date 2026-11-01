@@ -51,6 +51,9 @@ export interface TeamActions {
   rejectCommand(id: string, reason?: string): Promise<boolean>;
   cancelCommand(id: string, reason?: string): Promise<boolean>;
   attachCommand(team: OverviewTeam, kind: 'wsl' | 'windowsTerminal'): Promise<boolean>;
+  startTeam(team: OverviewTeam): Promise<boolean>;
+  stopTeam(team: OverviewTeam, mode: 'stop'): Promise<boolean>;
+  restartTeam(team: OverviewTeam, mode: 'restart'): Promise<boolean>;
   copy(text: string, label: string): void;
 }
 export type TicketPermissionState = { state: 'loading' } | { state: 'ready'; canAddTickets: boolean | null } | { state: 'error'; error: ManagementError };

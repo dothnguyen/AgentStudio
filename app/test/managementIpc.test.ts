@@ -84,6 +84,8 @@ const LABELS: Record<string, string> = {
   [C.managementRejectCommand]: 'rejectCommand',
   [C.managementCancelCommand]: 'cancelCommand',
   [C.managementAttachInfo]: 'attachInfo',
+  [C.managementStartTeam]: 'startTeam',
+  [C.managementStopTeam]: 'stopTeam',
 };
 
 const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
@@ -123,6 +125,8 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementCancelCommand, { requestId: UUID }, 'command.cancel', { requestId: UUID }],
   [C.managementCancelCommand, { requestId: UUID, reason: 'stale' }, 'command.cancel', { requestId: UUID, reason: 'stale' }],
   [C.managementAttachInfo, { teamId: UUID }, 'team.attach', { teamId: UUID }],
+  [C.managementStartTeam, { teamDefId: 'core' }, 'team.start', { teamDefId: 'core' }],
+  [C.managementStopTeam, { teamId: UUID }, 'team.stop', { teamId: UUID }],
 ];
 
 const SLUG_MSG = (f: string) => `${f} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
@@ -188,6 +192,8 @@ describe('management IPC', () => {
     await bad(C.managementRemoveMember, { teamDefId: 'core', memberId: '' }, `management.removeMember: ${SLUG_MSG('memberId')}`);
     await bad(C.managementAddMember, { teamDefId: 'core', member: { agent: 'Bad Id' } }, `management.addMember: ${SLUG_MSG('member.agent')}`);
     await bad(C.managementRunBoard, { teamId: 'abc' }, 'management.runBoard: teamId must be a lowercase UUID v4.');
+    await bad(C.managementStartTeam, { teamDefId: 'Bad Id' }, `management.startTeam: ${SLUG_MSG('teamDefId')}`);
+    await bad(C.managementStopTeam, { teamId: 'abc' }, 'management.stopTeam: teamId must be a lowercase UUID v4.');
     await bad(C.managementRetryTicket, { key: 'T-1' }, 'management.retryTicket: key must be a ticket key (T- followed by at least three digits).');
     await bad(C.managementRetryRun, { workflowRunId: 'abc' }, 'management.retryRun: workflowRunId must be a lowercase UUID v4.');
     await bad(C.managementApproveCommand, { requestId: UUID, command: 'ticket.retry' }, 'management.approveCommand: unknown field(s): command.');
@@ -412,7 +418,8 @@ describe('management IPC', () => {
       'agentdef.create', 'agentdef.delete', 'agentdef.list', 'agentdef.update', 'board.run', 'board.settings',
       'board.settings.update', 'board.stop', 'command.approve', 'command.cancel', 'command.reject',
       'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update', 'team.attach',
-      'team.member.resume', 'team.member.switch', 'team.overview', 'team.usage.reset', 'teamdef.create',
+      'team.member.resume', 'team.member.switch', 'team.overview', 'team.start', 'team.stop', 'team.usage.reset',
+      'teamdef.create',
       'teamdef.delete', 'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename',
       'teamdef.show', 'teamdef.validate', 'ticket.retry', 'ticket.unblock', 'workflow.cancel', 'workflow.retry',
       'workspace.list',

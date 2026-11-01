@@ -135,6 +135,7 @@ describe('getManagementApi', () => {
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
     'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
     'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
+    'startTeam', 'stopTeam',
   ];
   const fakes = () => {
     const fns: Record<string, ReturnType<typeof vi.fn>> = {};

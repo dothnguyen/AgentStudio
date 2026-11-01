@@ -1396,6 +1396,10 @@ ul[aria-label="Workspaces"] {
 .ui-confirm-actions button:disabled { color: #8d949e; cursor: default; }
 .ui-confirm-actions .ui-confirm-confirm { background: #1b1f25; }
 .ui-confirm-actions .ui-confirm-confirm-danger { color: #f48771; border-color: #5a2d28; }
+.team-stop-dialog .ui-confirm-actions { align-items: flex-start; }
+.team-stop-dialog .ui-confirm-actions .ui-confirm-confirm { text-align: left; }
+.team-stop-list-title { margin: 0 0 4px !important; color: #a3a9b2 !important; font-size: 12px !important; font-weight: 600; }
+.team-stop-status { min-height: 20px; }
 .ui-confirm-actions button:focus-visible, .ui-confirm-reason input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .ui-menu, .ui-confirm { transition: none; animation: none; } }
 

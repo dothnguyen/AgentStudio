@@ -23,6 +23,7 @@ const METHODS = [
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
   'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
   'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
+  'startTeam', 'stopTeam',
 ];
 
 describe('preload', () => {
@@ -82,6 +83,8 @@ describe('preload', () => {
     m.deleteRole('ws', 'TeamLead', { expectedRolesSha256: sha, expectedInstructionsSha256: null }, x);
     m.runBoard('ws', uuid, x);
     m.stopBoard('ws', x);
+    m.startTeam('ws', 'core', x);
+    m.stopTeam('ws', uuid, x);
     m.switchMemberAgent('ws', 'core', 'm1', 'ada');
     m.switchMemberAgent('ws', 'core', 'm1', 'ada', { cancelActive: true, assignmentId: uuid }, x);
     m.resumeMemberAgent('ws', 'core', 'm1', 'ada', x);
@@ -125,6 +128,8 @@ describe('preload', () => {
       [P.managementDeleteRole, 'ws', { roleId: 'TeamLead', confirmation: { expectedRolesSha256: sha, expectedInstructionsSha256: null } }],
       [P.managementRunBoard, 'ws', { teamId: uuid }],
       [P.managementStopBoard, 'ws', {}],
+      [P.managementStartTeam, 'ws', { teamDefId: 'core' }],
+      [P.managementStopTeam, 'ws', { teamId: uuid }],
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
       [P.managementSwitchMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada', confirmation: { cancelActive: true, assignmentId: uuid } }],
       [P.managementResumeMemberAgent, 'ws', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],

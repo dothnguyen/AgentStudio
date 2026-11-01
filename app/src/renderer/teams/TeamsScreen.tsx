@@ -45,6 +45,7 @@ import {
   type WriteFeedback,
 } from './teamEditModel';
 import { useCopyStatus } from '../ui/useCopyStatus';
+import { buildStopPlan, TeamStopSequence, type StopMode, type StopRefresh, type StopSequenceState } from './teamStopModel';
 import {
 
   memberName,
@@ -97,6 +98,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const [formAlert, setFormAlert] = useState(false);
   const [memberNotice, setMemberNotice] = useState(false);
   const [pending, setPending] = useState(false);
+  const [teamTransition, setTeamTransition] = useState<StopMode | null>(null);
+  const [stopState, setStopState] = useState<StopSequenceState | null>(null);
+  const stopSequence = useRef<TeamStopSequence | null>(null);
   const [savedRevision, setSavedRevision] = useState(0);
   const [createError, setCreateError] = useState<Extract<WriteFeedback, { kind: 'error' }> | null>(null);
   const writeLock = useRef(false);
@@ -220,6 +224,85 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   }
   const ws = props.workspace.id;
   const mgmt = props.management;
+
+  function handleStopChange(next: StopSequenceState): void {
+    if (!mounted.current) return;
+    setStopState(next.phase === 'done' || next.phase === 'aborted' ? null : next);
+    if (next.feedback !== null) setFeedback(next.feedback);
+    if (next.phase === 'done' || next.phase === 'aborted') {
+      setTeamTransition(null);
+      stopSequence.current = null;
+    }
+  }
+
+  function openStopSequence(mode: StopMode, team: OverviewTeam): void {
+    if (stopSequence.current !== null) return;
+    const runtimeTeamId = team.runtime.teamId;
+    if (runtimeTeamId === null) {
+      setFeedback(errorFeedback(mode === 'restart' ? 'The team was not restarted.' : 'The team was not stopped.', {
+        code: 'TEAM_NOT_RUNNING', message: 'The team is not running.', retryable: false,
+      }));
+      return;
+    }
+    if (mode === 'restart' && team.id === null) {
+      setFeedback(errorFeedback('The team was not restarted.', {
+        code: 'NO_DEFINITION', message: 'This team has no definition id.', retryable: false,
+      }));
+      return;
+    }
+    const runner = (board.data ?? lastBoard.current)?.runner ?? null;
+    const plan = buildStopPlan(team, navigation.data, runner);
+    const refresh = async (): Promise<ManagementResult<StopRefresh>> => {
+      const loaded = overview.reloadFresh === undefined ? null : await overview.reloadFresh();
+      if (loaded === null) {
+        return { ok: false, error: { code: 'INTERNAL', message: 'Teams cannot be refreshed.', retryable: true } };
+      }
+      if (!loaded.ok) return { ok: false, error: loaded.error };
+      let currentRunner = (board.data ?? lastBoard.current)?.runner ?? null;
+      if (board.reloadFresh !== undefined) {
+        const refreshedBoard = await board.reloadFresh();
+        if (refreshedBoard.ok) currentRunner = refreshedBoard.data.runner;
+      }
+      return { ok: true, data: { overview: loaded.data, runner: currentRunner } };
+    };
+    const sequence = new TeamStopSequence({
+      mode,
+      teamDefId: team.id ?? '',
+      runtimeTeamId,
+      teamName: teamLabel(team),
+      plan,
+      deps: {
+        stopBoard: () => mgmt.stopBoard(ws),
+        stopTeam: (teamId) => mgmt.stopTeam(ws, teamId),
+        startTeam: (teamDefId) => mgmt.startTeam(ws, teamDefId),
+        refresh,
+      },
+      onChange: handleStopChange,
+    });
+    stopSequence.current = sequence;
+    setTeamTransition(mode);
+    setFeedback(null);
+    setStopState(sequence.snapshot);
+  }
+
+  useEffect(() => {
+    return () => { stopSequence.current?.abort(); stopSequence.current = null; };
+  }, []);
+  useEffect(() => {
+    return () => { stopSequence.current?.abort(); };
+  }, [ws, navigation.selectedKey]);
+  useEffect(() => {
+    if (!connected) stopSequence.current?.abort();
+  }, [connected]);
+
+  const stopDialogActions = {
+    chooseSafe: () => stopSequence.current?.chooseSafe(),
+    stopNow: () => stopSequence.current?.stopNow(),
+    cancelWaiting: () => stopSequence.current?.cancelWaiting(),
+    confirmPaused: () => stopSequence.current?.confirmPaused(),
+    cancel: () => stopSequence.current?.cancel(),
+  };
+
   const writes: TeamWrites = {
     rename: (team, name) => runWrite('Team was not renamed.', () => mgmt.renameTeam(ws, team.id!, name), (d) => ({
       text: `Renamed team to "${d.team.name}".${nextStartSuffix(d.appliesOnNextStart)}${problemsSuffix(d.problems)}`,
@@ -316,6 +399,18 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
       copy(result.data[kind], kind === 'wsl' ? 'Attach command (WSL)' : 'Attach command (Windows Terminal)');
       return true;
     },
+    startTeam: (team) => {
+      if (team.id === null) {
+        setFeedback(errorFeedback('The team was not started.', { code: 'NO_DEFINITION', message: 'This team has no definition id.', retryable: false }));
+        return Promise.resolve(false);
+      }
+      const boardRunning = ((board.data ?? lastBoard.current)?.runner.status === 'running');
+      return runWrite('The team was not started.', () => mgmt.startTeam(ws, team.id!), () => ({
+        text: `Started ${teamLabel(team)}.${boardRunning ? '' : ' The board is not running; use Run board to start claiming tickets.'}`,
+      }));
+    },
+    stopTeam: (team, mode) => { openStopSequence(mode, team); return Promise.resolve(true); },
+    restartTeam: (team, mode) => { openStopSequence(mode, team); return Promise.resolve(true); },
     copy,
   };
 
@@ -573,8 +668,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         blockedTicketsTruncated={data?.blockedTicketsTruncated ?? false}
         boardStatuses={(board.data ?? lastBoard.current)?.statuses ?? null}
         connected={connected}
-        pending={pending}
+        pending={pending || teamTransition !== null}
         readOnly={!overviewFresh}
+        stopDialog={stopState === null ? null : { state: stopState, ...stopDialogActions }}
       />
       {roleCatalog.error !== null && <SectionError section={roleCatalog} alert={alertSource === 'roles'} label="Role catalog" retryLabel="Retry loading roles" retryId="teams-retry-roles" stale={rolesData !== null} onRetry={() => { void retrySection(roleCatalog, 'teams-retry-roles', 'teams-detail-title'); }} />}
       {agents.error !== null && <SectionError section={agents} alert={alertSource === 'agents'} label="Agent catalog" retryLabel="Retry loading agents" retryId="teams-retry-agents" stale={lastAgents.current !== null} onRetry={() => { void retrySection(agents, 'teams-retry-agents', 'teams-detail-title'); }} />}
@@ -651,7 +747,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
             memberActions={memberActions}
             copy={copy}
-            pending={pending}
+            pending={pending || teamTransition !== null}
             announce={announceChild}
             onMemberNoticeChange={setMemberNotice}
             view={view.view}

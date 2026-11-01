@@ -45,6 +45,8 @@ export const PRELOAD_CHANNELS = {
   managementRejectCommand: 'management:rejectCommand',
   managementCancelCommand: 'management:cancelCommand',
   managementAttachInfo: 'management:attachInfo',
+  managementStartTeam: 'management:startTeam',
+  managementStopTeam: 'management:stopTeam',
 } as const;
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'on' | 'removeListener'>;
@@ -117,6 +119,8 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
         ipc.invoke(PRELOAD_CHANNELS.managementCancelCommand, w, reason === undefined ? { requestId } : { requestId, reason }),
       attachInfo: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementAttachInfo, w, { teamId }),
       stopBoard: (w) => ipc.invoke(PRELOAD_CHANNELS.managementStopBoard, w, {}),
+      startTeam: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementStartTeam, w, { teamDefId }),
+      stopTeam: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementStopTeam, w, { teamId }),
     },
     connection: {
       onChange: (cb) => {

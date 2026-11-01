@@ -135,6 +135,9 @@ describe('team page header', () => {
       rejectCommand: vi.fn(async () => true),
       cancelCommand: vi.fn(async () => true),
       attachCommand: vi.fn(async () => true),
+      startTeam: vi.fn(async () => true),
+      stopTeam: vi.fn(async () => true),
+      restartTeam: vi.fn(async () => true),
       copy: vi.fn(),
     };
     render(

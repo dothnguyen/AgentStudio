@@ -475,6 +475,35 @@ export interface AttachInfo {
   powershell: string;
   keys: Record<string, string>;
 }
+export interface TeamStartAgent {
+  agentId: string;
+  memberId?: string | null;
+  providerId: string;
+  role: string;
+  displayName: string;
+  paneId: string;
+  model?: string | null;
+  reasoning?: string | null;
+  activeCatalogAgent?: string | null;
+  roleConfigured?: boolean;
+  roleSources?: string[];
+  roleWarnings?: string[];
+  [key: string]: unknown;
+}
+export interface TeamStartResult {
+  teamId: string;
+  name: string;
+  workspace: string;
+  agents: TeamStartAgent[];
+  attach: AttachInfo;
+}
+export interface TeamStopResult {
+  teamId: string;
+  stopped: true;
+  alreadyStopped?: boolean;
+  sessionWasPresent?: boolean;
+  tmuxInventory?: { before: string[]; after: string[] };
+}
 
 type R<T> = Promise<ManagementResult<T>>;
 export interface ManagementApi {
@@ -511,4 +540,6 @@ export interface ManagementApi {
   rejectCommand(workspaceId: string, requestId: string, reason?: string): R<CommandActionResult>;
   cancelCommand(workspaceId: string, requestId: string, reason?: string): R<CommandActionResult>;
   attachInfo(workspaceId: string, teamId: string): R<AttachInfo>;
+  startTeam(workspaceId: string, teamDefId: string): R<TeamStartResult>;
+  stopTeam(workspaceId: string, teamId: string): R<TeamStopResult>;
 }

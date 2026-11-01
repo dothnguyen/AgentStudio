@@ -77,7 +77,7 @@ Copy ▸
     Attach command (WSL)
     Attach command (Windows Terminal)
 ──────────
-Start team   |   Stop team…        (T-101)
+Start team   |   Stop team… / Restart team…   (T-101)
 Delete team…                       (danger)
 ```
 
@@ -136,7 +136,7 @@ Global: every item that changes something is disabled when the app is disconnect
 - No confirmation (reversible, no data loss): Reset usage limits, Unblock, Retry stage, Approve, Resume agent, Copy.
 - Confirmation dialog (names the exact team/ticket/run, says what happens, default focus on Cancel): Retry paused runs, Requeue ticket, Stop run and block ticket, Reject (optional reason), Cancel running command, Stop team, Remove member, Delete team (existing).
 - Switch agent keeps its existing confirmation before cancelling active work.
-- **Stop team** must not be a one-click way to block tickets. The dialog shows who is working on what and offers, as the default, "Stop the board and wait for the running work to finish, then stop the team"; "Stop now" is a separate danger button that says tickets with running work become blocked and need unblocking.
+- **Stop team** must not be a one-click way to block tickets. The dialog shows who is working on what and offers, as the default, "Stop the board and wait for the running work to finish, then stop the team"; "Stop now" is a separate danger button that says tickets with running work become blocked and need unblocking. "Restart team…" uses the same dialog and sequence and starts the team again at the end.
 - Every action reports through the Teams screen's existing feedback line (success text or `CODE: message` plus the backend's remediation) and then refreshes the overview.
 
 ## 5. Visual design

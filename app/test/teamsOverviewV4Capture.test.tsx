@@ -172,7 +172,7 @@ describe('Teams v4 capture fixture', () => {
       'addMember', 'updateMember', 'removeMember', 'updateBoardSettings', 'createRole', 'updateRole',
       'updateRoleInstructions', 'deleteRole', 'runBoard', 'switchMemberAgent', 'resumeMemberAgent', 'stopBoard',
       'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand',
-      'cancelCommand',
+      'cancelCommand', 'startTeam', 'stopTeam',
     ];
     const api = management as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
     for (const name of writes) {

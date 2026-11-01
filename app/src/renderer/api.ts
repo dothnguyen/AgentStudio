@@ -34,6 +34,9 @@ export type {
   TicketActionResult,
   CommandActionResult,
   AttachInfo,
+  TeamStartAgent,
+  TeamStartResult,
+  TeamStopResult,
   ResolvedAgentOption,
   RuntimeSwitchState,
   QuotaHoldMap,
@@ -256,6 +259,8 @@ export function getManagementApi(): ManagementApi {
     cancelCommand: (...args) => real.cancelCommand(...args),
     attachInfo: (...args) => real.attachInfo(...args),
     stopBoard: (...args) => real.stopBoard(...args),
+    startTeam: (...args) => real.startTeam(...args),
+    stopTeam: (...args) => real.stopTeam(...args),
   };
 }
 

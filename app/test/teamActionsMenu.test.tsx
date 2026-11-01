@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TeamsHarness } from './teamsHarness';
-import { workspaceA } from './dashboardFixtures';
+import { TeamsHarness, teamRow } from './teamsHarness';
+import { workspaceA, workspaceB } from './dashboardFixtures';
 import {
   boardSettingsFixture,
   connectionFixture,
@@ -11,6 +11,7 @@ import {
   member,
   overviewFixture,
   routingSettingsFixture,
+  runner,
   team,
 } from './teamsFixtures';
 import type { AttentionCommandRequest, AttentionRun, BlockedTicket, ConnectionStatus, OverviewTeam } from '../src/renderer/api';
@@ -360,6 +361,327 @@ describe('team actions menu: copy', () => {
     fireEvent.click(item('Team id')); await flush();
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Copied Team id'));
     expect(writeText).toHaveBeenCalledWith('dev-team');
+  });
+});
+
+describe('team actions menu: start, stop and restart', () => {
+  const stopped = () => team({
+    id: 'dev-team', name: 'Dev Team',
+    runtime: { state: 'stopped', teamId: null, status: 'stopped' },
+  });
+
+  it('starts a stopped valid team and mentions the board when it is not running', async () => {
+    const startTeam = vi.fn(async () => ok({
+      teamId: RUNTIME_ID, name: 'Dev Team', workspace: '/work/alpha', agents: [],
+      attach: { sessionName: 's', wsl: 'w', windowsTerminal: 't', powershell: 'p', keys: {} },
+    }));
+    await renderTeam({ overview: [ok(overviewFixture([stopped()]))], calls: { startTeam } });
+    openMenu(); await flush();
+    fireEvent.click(item('Start team')); await flush();
+    await waitFor(() => expect(startTeam).toHaveBeenCalledWith('ws-a', 'dev-team'));
+    expect(screen.getByRole('status').textContent).toBe('Started Dev Team. The board is not running; use Run board to start claiming tickets.');
+  });
+
+  it('omits the board sentence when the board is already running', async () => {
+    const startTeam = vi.fn(async () => ok({
+      teamId: RUNTIME_ID, name: 'Dev Team', workspace: '/work/alpha', agents: [],
+      attach: { sessionName: 's', wsl: 'w', windowsTerminal: 't', powershell: 'p', keys: {} },
+    }));
+    await renderTeam({
+      overview: [ok(overviewFixture([stopped()]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'running', teamId: 'c4597175-1111-2222-3333-4444f9548168' })))],
+      calls: { startTeam },
+    });
+    openMenu(); await flush();
+    fireEvent.click(item('Start team')); await flush();
+    await waitFor(() => expect(startTeam).toHaveBeenCalledWith('ws-a', 'dev-team'));
+    expect(screen.getByRole('status').textContent).toBe('Started Dev Team.');
+  });
+
+  it('disables Start team with the reason from the definition state', async () => {
+    await renderTeam({ overview: [ok(overviewFixture([team({
+      runtime: { state: 'stopped', teamId: null, status: 'stopped' },
+      definition: { state: 'problems', problems: [{ path: 'members', message: 'missing role' }] },
+    })]))] });
+    openMenu(); await flush();
+    const problems = screen.getByRole('menuitem', { name: /Start team/ });
+    expect(problems.getAttribute('aria-disabled')).toBe('true');
+    expect(problems.textContent).toContain('Fix the definition problems first.');
+
+    cleanup();
+    await renderTeam({ overview: [ok(overviewFixture([team({
+      runtime: { state: 'stopped', teamId: null, status: 'stopped' },
+      definition: { state: 'unreadable', problems: [] },
+    })]))] });
+    openMenu(); await flush();
+    const unreadable = screen.getByRole('menuitem', { name: /Start team/ });
+    expect(unreadable.getAttribute('aria-disabled')).toBe('true');
+    expect(unreadable.textContent).toContain('This team has no readable definition.');
+  });
+
+  it('shows Stop team… and Restart team… only while the team is running', async () => {
+    await renderTeam({ overview: [ok(overviewFixture([runningTeam()]))] });
+    openMenu(); await flush();
+    expect(screen.queryByRole('menuitem', { name: /Start team/ })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Stop team…' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Restart team…' })).toBeTruthy();
+
+    cleanup();
+    await renderTeam({ overview: [ok(overviewFixture([stopped()]))] });
+    openMenu(); await flush();
+    expect(screen.getByRole('menuitem', { name: 'Start team' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Stop team…' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Restart team…' })).toBeNull();
+  });
+
+  it('opens the Stop dialog and locks every other action until it is cancelled', async () => {
+    const data = runningTeam({
+      attention: {
+        runs: [{
+          workflowRunId: 'run-1', status: 'running', stage: 'develop', memberId: 'claude-dev', ticketKey: 'T-091',
+          assignmentId: 'as-1', assignmentStatus: 'running', diagnosticCode: null, delegating: false,
+        }],
+        commandRequests: [], truncated: { runs: false, commandRequests: false },
+      },
+    });
+    await renderTeam({ overview: [ok(overviewFixture([data]))] });
+    openMenu(); await flush();
+    fireEvent.click(item('Stop team…')); await flush();
+    expect(screen.getByRole('alertdialog', { name: 'Stop Dev Team?' })).toBeTruthy();
+    expect((menuTrigger() as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); await flush();
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitFor(() => expect((menuTrigger() as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('opens the Restart dialog from the menu', async () => {
+    await renderTeam({ overview: [ok(overviewFixture([runningTeam()]))] });
+    openMenu(); await flush();
+    fireEvent.click(item('Restart team…')); await flush();
+    expect(screen.getByRole('alertdialog', { name: 'Restart Dev Team?' })).toBeTruthy();
+  });
+
+  it('disables every member action while the stop dialog is open', async () => {
+    await renderTeam({ overview: [ok(overviewFixture([runningTeam()]))] });
+    openMenu(); await flush();
+    fireEvent.click(item('Stop team…')); await flush();
+    expect(screen.getByRole('alertdialog', { name: 'Stop Dev Team?' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for claude-dev' })); await flush();
+    for (const name of ['Edit configuration…', 'Remove member…']) {
+      expect(screen.getByRole('menuitem', { name }).getAttribute('aria-disabled')).toBe('true');
+    }
+  });
+
+  it('stops the board, waits for the running member and then stops the team from the safe path', async () => {
+    const working = runningTeam({
+      attention: {
+        runs: [{
+          workflowRunId: 'run-1', status: 'running', stage: 'develop', memberId: 'claude-dev', ticketKey: 'T-091',
+          assignmentId: 'as-1', assignmentStatus: 'running', diagnosticCode: null, delegating: false,
+        }],
+        commandRequests: [], truncated: { runs: false, commandRequests: false },
+      },
+    });
+    const idle = runningTeam();
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: null } }));
+    const stopTeam = vi.fn(async () => ok({ teamId: RUNTIME_ID, stopped: true as const }));
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([working])), ok(overviewFixture([working])), ok(overviewFixture([idle]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'running', teamId: RUNTIME_ID, teamDefId: 'dev-team' })))],
+      calls: { stopBoard, stopTeam },
+    });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+    await flush();
+
+    vi.useFakeTimers();
+    try {
+      openMenu(); await flush();
+      fireEvent.click(item('Stop team…')); await flush();
+      fireEvent.click(screen.getByRole('button', { name: 'Stop the board and wait for running work to finish, then stop the team' }));
+      await flush();
+      expect(stopBoard).toHaveBeenCalledWith('ws-a');
+      expect(stopTeam).not.toHaveBeenCalled();
+      expect(screen.getByRole('status').textContent).toContain('Waiting for claude-dev (T-091 · develop)');
+
+      for (let i = 0; i < 5 && stopTeam.mock.calls.length === 0; i++) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      }
+      expect(stopTeam).toHaveBeenCalledWith('ws-a', RUNTIME_ID);
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Stopped Dev Team.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels the wait, leaves the board stopped and never stops the team', async () => {
+    const working = runningTeam({
+      attention: {
+        runs: [{
+          workflowRunId: 'run-1', status: 'running', stage: 'develop', memberId: 'claude-dev', ticketKey: 'T-091',
+          assignmentId: 'as-1', assignmentStatus: 'running', diagnosticCode: null, delegating: false,
+        }],
+        commandRequests: [], truncated: { runs: false, commandRequests: false },
+      },
+    });
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: null } }));
+    const stopTeam = vi.fn(async () => ok({ teamId: RUNTIME_ID, stopped: true as const }));
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([working])), ok(overviewFixture([working]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'running', teamId: RUNTIME_ID, teamDefId: 'dev-team' })))],
+      calls: { stopBoard, stopTeam },
+    });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+    await flush();
+
+    vi.useFakeTimers();
+    try {
+      openMenu(); await flush();
+      fireEvent.click(item('Stop team…')); await flush();
+      await chooseSafe();
+      expect((menuTrigger() as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel waiting' })); await flush();
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('Stopped waiting. The board stays stopped; use Run board to resume claiming.');
+      expect(stopBoard).toHaveBeenCalledWith('ws-a');
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(stopTeam).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops an idle team from the dialog without mentioning blocked tickets', async () => {
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: null } }));
+    const stopTeam = vi.fn(async () => ok({ teamId: RUNTIME_ID, stopped: true as const }));
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([runningTeam()]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'stopped' })))],
+      calls: { stopBoard, stopTeam },
+    });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} />);
+    await flush();
+    openMenu(); await flush();
+    fireEvent.click(item('Stop team…')); await flush();
+    expect(screen.getByRole('alertdialog').textContent).toContain('No member has running work.');
+    fireEvent.click(screen.getByRole('button', { name: 'Stop team' })); await flush();
+    await waitFor(() => expect(stopTeam).toHaveBeenCalledWith('ws-a', RUNTIME_ID));
+    expect(stopBoard).not.toHaveBeenCalled();
+    expect(screen.getByRole('status').textContent).toBe('Stopped Dev Team.');
+  });
+
+  async function openRunningStopDialog(opts: { workspace?: typeof workspaceA; connection?: ConnectionStatus } = {}) {
+    const working = runningTeam({
+      attention: {
+        runs: [{
+          workflowRunId: 'run-1', status: 'running', stage: 'develop', memberId: 'claude-dev', ticketKey: 'T-091',
+          assignmentId: 'as-1', assignmentStatus: 'running', diagnosticCode: null, delegating: false,
+        }],
+        commandRequests: [], truncated: { runs: false, commandRequests: false },
+      },
+    });
+    const idle = runningTeam();
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: null } }));
+    const stopTeam = vi.fn(async () => ok({ teamId: RUNTIME_ID, stopped: true as const }));
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([working])), ok(overviewFixture([working])), ok(overviewFixture([idle]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'running', teamId: RUNTIME_ID, teamDefId: 'dev-team' })))],
+      calls: { stopBoard, stopTeam },
+    });
+    const view = render(<TeamsHarness workspace={opts.workspace ?? workspaceA} management={fake.api} connection={opts.connection} />);
+    await flush();
+    openMenu(); await flush();
+    fireEvent.click(item('Stop team…')); await flush();
+    expect(screen.getByRole('alertdialog', { name: 'Stop Dev Team?' })).toBeTruthy();
+    return { view, fake, stopBoard, stopTeam };
+  }
+
+  async function chooseSafe(): Promise<void> {
+    fireEvent.click(screen.getByRole('button', { name: 'Stop the board and wait for running work to finish, then stop the team' }));
+    await flush();
+  }
+
+  it('never stops the team when the screen unmounts during the wait', async () => {
+    const { view, stopTeam } = await openRunningStopDialog();
+    vi.useFakeTimers();
+    try {
+      await chooseSafe();
+      expect(screen.getByRole('status').textContent).toContain('Waiting for claude-dev (T-091 · develop)');
+      view.unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(stopTeam).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never stops the team when the workspace switches during the wait', async () => {
+    const { view, fake, stopTeam } = await openRunningStopDialog();
+    vi.useFakeTimers();
+    try {
+      await chooseSafe();
+      expect(screen.getByRole('status').textContent).toContain('Waiting for claude-dev (T-091 · develop)');
+      view.rerender(<TeamsHarness workspace={workspaceB} management={fake.api} />);
+      await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(stopTeam).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never stops the team when the app disconnects during the wait', async () => {
+    const { view, fake, stopTeam } = await openRunningStopDialog({ connection: connectionFixture('connected') });
+    vi.useFakeTimers();
+    try {
+      await chooseSafe();
+      expect(screen.getByRole('status').textContent).toContain('Waiting for claude-dev (T-091 · develop)');
+      view.rerender(<TeamsHarness workspace={workspaceA} management={fake.api} connection={connectionFixture('lost')} />);
+      await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(stopTeam).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never stops the team when the user switches to another team during the wait', async () => {
+    const working = runningTeam({
+      attention: {
+        runs: [{
+          workflowRunId: 'run-1', status: 'running', stage: 'develop', memberId: 'claude-dev', ticketKey: 'T-091',
+          assignmentId: 'as-1', assignmentStatus: 'running', diagnosticCode: null, delegating: false,
+        }],
+        commandRequests: [], truncated: { runs: false, commandRequests: false },
+      },
+    });
+    const other = team({
+      id: 'release-team', name: 'Release Team',
+      runtime: { state: 'stopped', teamId: null, status: 'stopped' },
+    });
+    const stopBoard = vi.fn(async () => ok({ board: { workspace: '/work/alpha', status: 'stopped' as const, teamId: null } }));
+    const stopTeam = vi.fn(async () => ok({ teamId: RUNTIME_ID, stopped: true as const }));
+    const fake = fakeManagement({
+      overview: [ok(overviewFixture([working, other])), ok(overviewFixture([runningTeam(), other]))],
+      boardSettings: [ok(boardSettingsFixture(runner({ status: 'running', teamId: RUNTIME_ID, teamDefId: 'dev-team' })))],
+      calls: { stopBoard, stopTeam },
+    });
+    render(<TeamsHarness workspace={workspaceA} management={fake.api} sidebar />);
+    await flush();
+    vi.useFakeTimers();
+    try {
+      openMenu(); await flush();
+      fireEvent.click(item('Stop team…')); await flush();
+      await chooseSafe();
+      expect(screen.getByRole('status').textContent).toContain('Waiting for claude-dev (T-091 · develop)');
+      fireEvent.click(teamRow(document.body, 'Release Team'));
+      await flush();
+      await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+      expect(stopTeam).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
