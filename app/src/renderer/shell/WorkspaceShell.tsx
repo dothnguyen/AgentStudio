@@ -10,7 +10,19 @@ import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
 import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
 import { ShellIcon } from './ShellIcon';
-import { DEFAULT_SECTION, NAV_ITEMS, workspaceInitials, type NavItem } from './navModel';
+import {
+  BOARD_NAV_ITEMS,
+  BOARDS_DEFAULT_ROUTE,
+  DEFAULT_SECTION,
+  NAV_ITEMS,
+  boardTicketKey,
+  findNavItem,
+  findNavItemById,
+  isBoardRoute,
+  navItemRoute,
+  workspaceInitials,
+  type NavItem,
+} from './navModel';
 
 export interface WorkspaceShellProps {
   workspace: Workspace;
@@ -41,7 +53,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const [createTeamRequested, setCreateTeamRequested] = useState(false);
   const [teamsWritePending, setTeamsWritePending] = useState(false);
   const [pendingFocus, setPendingFocus] = useState<CreateFocusTarget | null>(null);
+  const [currentPhaseTicketCount, setCurrentPhaseTicketCount] = useState<number | null>(null);
   const connected = props.connection.state === 'connected';
+  const boardsItem = items.find((item) => item.id === 'boards');
+  const boardsEnabled = boardsItem !== undefined && boardsItem.disabled !== true;
 
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
@@ -52,7 +67,31 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     setTeamChildCurrent(false);
     setCreateTeamRequested(false);
     setPendingFocus(null);
+    setCurrentPhaseTicketCount(null);
   }, [props.workspace.id]);
+
+  // The Boards sidebar badge is a read of the current phase. Keep it truthful:
+  // no badge while disconnected or when the read fails, and never from another workspace.
+  useEffect(() => {
+    if (!boardsEnabled || !connected) {
+      setCurrentPhaseTicketCount(null);
+      return;
+    }
+    let cancelled = false;
+    setCurrentPhaseTicketCount(null);
+    void props.management.boardPhases(props.workspace.id).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        setCurrentPhaseTicketCount(null);
+        return;
+      }
+      const current = result.data.phases.find((phase) => phase.slug === result.data.currentPhase.slug);
+      setCurrentPhaseTicketCount(current?.ticketCount ?? 0);
+    }).catch(() => {
+      if (!cancelled) setCurrentPhaseTicketCount(null);
+    });
+    return () => { cancelled = true; };
+  }, [boardsEnabled, connected, props.management, props.workspace.id]);
 
   // Fulfil a focus request once the dialog is gone and the sidebar has rerendered.
   useEffect(() => {
@@ -79,8 +118,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     member?: { teamId: string; memberId: string };
   }): void {
     if (createTeamRequested && teamsWritePending && nextId !== 'teams') return;
-    const item = items.find((candidate) => candidate.id === nextId);
-    if (item === undefined || item.disabled === true) return;
+    const item = findNavItemById(items, nextId) ?? findNavItem(items, nextId);
+    const route = item === undefined ? nextId : navItemRoute(item);
+    if (isBoardRoute(route) && !boardsEnabled) return;
+    if (item === undefined ? !isBoardRoute(route) : item.disabled === true) return;
     const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
     const skillId = nextId === 'skills' && options?.skillId ? options.skillId : null;
     setRequestedRoleId(roleId);
@@ -89,12 +130,13 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     setRequestedMember(nextId === 'teams' && options?.member ? options.member : null);
     if (nextId !== 'teams') setCreateTeamRequested(false);
     setTeamChildCurrent(false);
-    setSectionId(nextId);
+    setSectionId(route);
   }
 
-  const selectedItem = items.find((item) => item.id === sectionId);
+  const selectedItem = findNavItem(items, sectionId);
+  const ticketKey = boardTicketKey(sectionId);
   const section = props.renderSection?.(sectionId, (nextId) => navigate(nextId));
-  const content = getSectionContent(sectionId, selectedItem?.label ?? sectionId);
+  const content = getSectionContent(sectionId, selectedItem?.label ?? ticketKey ?? sectionId);
   const defaultSection = sectionId === 'home' ? (
     <DashboardHome
       workspace={props.workspace}
@@ -110,7 +152,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       connection={props.connection}
       onViewRole={(roleId) => navigate('roles', { roleId })}
       onOpenRouting={items.some((i) => i.id === 'routing' && i.disabled !== true) ? () => navigate('routing') : undefined}
-      onOpenBoard={items.some((i) => i.id === 'boards' && i.disabled !== true) ? () => navigate('boards') : undefined}
+      onOpenBoard={boardsEnabled ? () => navigate(BOARDS_DEFAULT_ROUTE) : undefined}
       onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
       requestedMember={requestedMember}
       onRequestedMemberConsumed={() => setRequestedMember(null)}
@@ -155,6 +197,12 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       }}
       onOpenTeams={() => navigate('teams')}
     />
+  ) : ticketKey !== null ? (
+    <SectionPlaceholder
+      sectionId={sectionId}
+      title={ticketKey}
+      description="Not available yet. The ticket details will appear here."
+    />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
   );
@@ -180,57 +228,105 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
           <ShellIcon name="chevrons-up-down" size={14} strokeWidth={2} className="workspace-selector-chevron" />
         </button>
         <nav aria-label="Workspace" className="workspace-nav">
-          {items.map((item) => (
-            <Fragment key={item.id}>
-              <button
-                type="button"
-                className={`nav-item${item.id === 'teams' && sectionId === 'teams' ? ' nav-item-open' : ''}`}
-                ref={item.id === 'teams' ? teamsParentRef : undefined}
-                disabled={item.disabled === true}
-                aria-current={item.id === sectionId && !(item.id === 'teams' && teamChildCurrent && teamsNavigation.selectedKey !== null) ? 'page' : undefined}
-                onClick={() => navigate(item.id)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    navigate(item.id);
-                  }
-                }}
-              >
-                <ShellIcon name={item.icon ?? 'item'} />
-                <span className="nav-label">{item.label}</span>
-                {item.id === 'teams' && item.disabled !== true && (
-                  <ShellIcon name="chevron" size={14} strokeWidth={2} className="nav-expand-icon" />
+          {items.map((item) => {
+            const isTeams = item.id === 'teams';
+            const isBoards = item.id === 'boards';
+            const boardsOpen = isBoards && isBoardRoute(sectionId);
+            const teamsOpen = isTeams && sectionId === 'teams';
+            const current = isBoards
+              ? undefined
+              : item.id === sectionId && !(isTeams && teamChildCurrent && teamsNavigation.selectedKey !== null)
+                ? 'page'
+                : undefined;
+            return (
+              <Fragment key={item.id}>
+                <button
+                  type="button"
+                  className={`nav-item${teamsOpen || boardsOpen ? ' nav-item-open' : ''}`}
+                  ref={isTeams ? teamsParentRef : undefined}
+                  disabled={item.disabled === true}
+                  aria-current={current}
+                  onClick={() => navigate(item.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(item.id);
+                    }
+                  }}
+                >
+                  <ShellIcon name={item.icon ?? 'item'} />
+                  <span className="nav-label">{item.label}</span>
+                  {(isTeams || isBoards) && item.disabled !== true && (
+                    <ShellIcon name="chevron" size={14} strokeWidth={2} className="nav-expand-icon" />
+                  )}
+                </button>
+                {isTeams && item.disabled !== true && (
+                  <WorkspaceTeamNavigation
+                    controller={teamsNavigation}
+                    active={sectionId === 'teams' && teamChildCurrent}
+                    teamsOpen={sectionId === 'teams'}
+                    parentButtonRef={teamsParentRef}
+                    newTeam={{
+                      disabled: !connected || teamsWritePending || createTeamRequested,
+                      softDisabled: !teamsNavigation.fresh,
+                      buttonRef: newTeamRef,
+                      onClick: () => {
+                        if (sectionId !== 'teams') navigate('teams');
+                        setCreateTeamRequested(true);
+                      },
+                      registerRow: (key, element) => {
+                        if (element === null) teamRows.current.delete(key);
+                        else teamRows.current.set(key, element);
+                      },
+                    }}
+                    onOpenTeam={(key) => {
+                      if (createTeamRequested && teamsWritePending) return;
+                      teamsNavigation.selectTeam(key);
+                      navigate('teams');
+                      setTeamChildCurrent(true);
+                    }}
+                  />
                 )}
-              </button>
-              {item.id === 'teams' && item.disabled !== true && (
-                <WorkspaceTeamNavigation
-                  controller={teamsNavigation}
-                  active={sectionId === 'teams' && teamChildCurrent}
-                  teamsOpen={sectionId === 'teams'}
-                  parentButtonRef={teamsParentRef}
-                  newTeam={{
-                    disabled: !connected || teamsWritePending || createTeamRequested,
-                    softDisabled: !teamsNavigation.fresh,
-                    buttonRef: newTeamRef,
-                    onClick: () => {
-                      if (sectionId !== 'teams') navigate('teams');
-                      setCreateTeamRequested(true);
-                    },
-                    registerRow: (key, element) => {
-                      if (element === null) teamRows.current.delete(key);
-                      else teamRows.current.set(key, element);
-                    },
-                  }}
-                  onOpenTeam={(key) => {
-                    if (createTeamRequested && teamsWritePending) return;
-                    teamsNavigation.selectTeam(key);
-                    navigate('teams');
-                    setTeamChildCurrent(true);
-                  }}
-                />
-              )}
-            </Fragment>
-          ))}
+                {isBoards && item.disabled !== true && (
+                  <div className="boards-nav">
+                    <ul className="boards-nav-list" aria-label="Boards">
+                      {(item.children ?? BOARD_NAV_ITEMS).map((child) => {
+                        const route = navItemRoute(child);
+                        const active = sectionId === route || (route === BOARDS_DEFAULT_ROUTE && ticketKey !== null);
+                        return (
+                          <li key={child.id}>
+                            <button
+                              type="button"
+                              className={`boards-nav-item${active ? ' boards-nav-item-selected' : ''}`}
+                              aria-current={active ? 'page' : undefined}
+                              onClick={() => navigate(child.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  navigate(child.id);
+                                }
+                              }}
+                            >
+                              <span className="nav-label">{child.label}</span>
+                              {route === BOARDS_DEFAULT_ROUTE && currentPhaseTicketCount !== null && (
+                                <span
+                                  className="boards-nav-count"
+                                  aria-hidden="true"
+                                  title={`${currentPhaseTicketCount} tickets in the current phase`}
+                                >
+                                  {currentPhaseTicketCount}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
         </nav>
         <div className="sidebar-footer">
           <button type="button" className="switch-workspace" onClick={props.onSwitchWorkspace}>

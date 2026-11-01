@@ -24,6 +24,18 @@ export const SECTION_CONTENT: Readonly<Record<string, SectionContent>> = {
     title: 'Boards',
     description: 'Not available yet. Board phases and tickets will appear here.',
   },
+  'boards/current': {
+    title: 'Current Phase',
+    description: 'Not available yet. The current phase board will appear here.',
+  },
+  'boards/backlog': {
+    title: 'Backlog',
+    description: 'Coming in the next update',
+  },
+  'boards/phases': {
+    title: 'Phases',
+    description: 'Coming in the next update',
+  },
   configuration: {
     title: 'Configuration',
     description: 'Not available yet. Workspace settings will appear here.',

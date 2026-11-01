@@ -7,6 +7,7 @@ import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder'
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
 import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred, routingSettingsFixture } from './teamsFixtures';
+import { boardPhasesFixture } from './boardFixtures';
 import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -100,10 +101,18 @@ describe('WorkspaceShell', () => {
       expect(result.getByRole('main')).toBe(main);
       expect(result.getByText(workspace.name)).toBe(name);
       expect(result.getByText(workspace.path)).toBe(path);
-      expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      if (label === 'Teams' || label === 'Agents' || label === 'Roles' || label === 'Skills' || label === 'Routing') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
-      else expect(result.getByText(descriptions[label])).toBeTruthy();
-      expect(currentButtons(result.container)).toEqual([button]);
+      if (label === 'Boards') {
+        expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+        expect(main.querySelector('[data-section="boards/current"]')).toBeTruthy();
+        const current = result.getByRole('button', { name: 'Current Phase' });
+        expect(currentButtons(result.container)).toEqual([current]);
+        expect(current.getAttribute('aria-current')).toBe('page');
+      } else {
+        expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
+        if (label === 'Teams' || label === 'Agents' || label === 'Roles' || label === 'Skills' || label === 'Routing') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
+        else expect(result.getByText(descriptions[label])).toBeTruthy();
+        expect(currentButtons(result.container)).toEqual([button]);
+      }
       expect(document.activeElement).toBe(button);
     }
   });
@@ -112,10 +121,10 @@ describe('WorkspaceShell', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const main = result.getByRole('main');
 
-    for (const label of ['Home', 'Boards', 'Configuration']) {
+    for (const [label, section] of [['Home', 'home'], ['Boards', 'boards/current'], ['Configuration', 'configuration']] as const) {
       fireEvent.click(result.getByRole('button', { name: label }));
       expect(main.querySelectorAll('button, a, input, select, textarea, form')).toHaveLength(0);
-      expect(main.querySelector('[data-section]')?.getAttribute('data-section')).toBe(label.toLowerCase());
+      expect(main.querySelector('[data-section]')?.getAttribute('data-section')).toBe(section);
     }
   });
 
@@ -131,8 +140,8 @@ describe('WorkspaceShell', () => {
     const boards = result.getByRole('button', { name: 'Boards' });
     boards.focus();
     expect(fireEvent.keyDown(boards, { key: ' ' })).toBe(false);
-    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Boards');
-    expect(currentButtons(result.container)).toEqual([boards]);
+    expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+    expect(currentButtons(result.container)).toEqual([result.getByRole('button', { name: 'Current Phase' })]);
     expect(document.activeElement).toBe(boards);
   });
 
@@ -345,10 +354,10 @@ describe('WorkspaceShell', () => {
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(11);
+    expect(buttons).toHaveLength(14);
     expect(buttons[0].className).toContain('workspace-selector');
-    expect(buttons.slice(1, 10).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration']);
-    expect(buttons[10].className).toContain('switch-workspace');
+    expect(buttons.slice(1, 13).map((button) => button.querySelector('.nav-label')?.textContent ?? button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Skills', 'Boards', 'Current Phase', 'Backlog', 'Phases', 'Routing', 'Configuration']);
+    expect(buttons[13].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');
@@ -540,6 +549,118 @@ describe('WorkspaceShell', () => {
   });
 });
 
+describe('T-135 sidebar Boards group and routes', () => {
+  const phases = boardPhasesFixture();
+  phases.phases = phases.phases.map((phase) => phase.slug === phases.currentPhase.slug ? { ...phase, ticketCount: 7 } : phase);
+  const shell = (fake: ReturnType<typeof fakeManagement> = fakeManagement({ boardPhases: [{ ok: true, data: phases }] }), items?: readonly NavItem[]) => (
+    <WorkspaceShellComponent
+      workspace={workspace}
+      dashboard={dashboard}
+      management={fake.api}
+      connection={connection}
+      items={items}
+      onSwitchWorkspace={vi.fn()}
+    />
+  );
+  const settle = () => act(async () => {});
+
+  it('clicking_boards_opens_current_phase_and_shows_the_phase_ticket_count', async () => {
+    const view = render(shell());
+    await settle();
+    expect(view.getByRole('button', { name: 'Current Phase' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Backlog' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Phases' })).toBeTruthy();
+    const count = view.container.querySelector('.boards-nav-count');
+    expect(count?.textContent).toBe('7');
+    expect(count?.getAttribute('aria-hidden')).toBe('true');
+
+    fireEvent.click(view.getByRole('button', { name: 'Boards' }));
+    await settle();
+    const current = view.getByRole('button', { name: 'Current Phase' });
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+    expect(current.getAttribute('aria-current')).toBe('page');
+    expect(current.classList.contains('boards-nav-item-selected')).toBe(true);
+    expect(view.getByRole('button', { name: 'Boards' }).classList.contains('nav-item-open')).toBe(true);
+    expect(view.getByRole('button', { name: 'Boards' }).getAttribute('aria-current')).toBeNull();
+    expect(view.container.querySelector('[data-section="boards/current"]')).toBeTruthy();
+  });
+
+  it('backlog_and_phases_show_the_coming_soon_placeholder', async () => {
+    const view = render(shell());
+    await settle();
+    for (const [label, route] of [['Backlog', 'boards/backlog'], ['Phases', 'boards/phases']] as const) {
+      const child = view.getByRole('button', { name: label });
+      fireEvent.click(child);
+      await settle();
+      expect(view.getByRole('heading', { level: 1 }).textContent).toBe(label);
+      expect(view.getByText('Coming in the next update')).toBeTruthy();
+      expect(view.container.querySelector(`[data-section="${route}"]`)).toBeTruthy();
+      expect(child.getAttribute('aria-current')).toBe('page');
+      expect(child.classList.contains('boards-nav-item-selected')).toBe(true);
+      expect(view.getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBeNull();
+    }
+  });
+
+  it('boards_children_are_reachable_by_tab_and_activate_with_space_and_enter', async () => {
+    const view = render(shell());
+    await settle();
+    const boards = view.getByRole('button', { name: 'Boards' });
+    boards.focus();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Current Phase' }));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Backlog' }));
+    await userEvent.keyboard(' ');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Backlog');
+    expect(view.getByRole('button', { name: 'Backlog' }).getAttribute('aria-current')).toBe('page');
+    await userEvent.tab();
+    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Phases' }));
+    await userEvent.keyboard('{Enter}');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Phases');
+    expect(view.getByRole('button', { name: 'Phases' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('ticket_route_keeps_current_phase_active', async () => {
+    const view = render(
+      <WorkspaceShellComponent
+        workspace={workspace}
+        dashboard={dashboard}
+        management={fakeManagement({ boardPhases: [{ ok: true, data: phases }] }).api}
+        connection={connection}
+        onSwitchWorkspace={vi.fn()}
+        renderSection={(sectionId, navigate) => sectionId === 'home' ? (
+          <button type="button" onClick={() => navigate('boards/ticket/T-134')}>Open ticket</button>
+        ) : sectionId === 'boards/ticket/T-134' ? (
+          <h1>Ticket T-134</h1>
+        ) : undefined}
+      />,
+    );
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Open ticket' }));
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Ticket T-134');
+    expect(view.getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('button', { name: 'Boards' }).classList.contains('nav-item-open')).toBe(true);
+  });
+
+  it('never_renders_or_opens_the_group_when_boards_is_disabled_or_absent', async () => {
+    for (const items of [
+      NAV_ITEMS.map((item) => item.id === 'boards' ? { ...item, disabled: true } : item),
+      NAV_ITEMS.filter((item) => item.id !== 'boards'),
+    ] as Array<readonly NavItem[]>) {
+      const view = render(shell(fakeManagement(), items));
+      await settle();
+      expect(view.container.querySelector('.boards-nav')).toBeNull();
+      const boards = view.queryByRole('button', { name: 'Boards' });
+      if (boards !== null) {
+        fireEvent.click(boards);
+        await settle();
+        expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
+      }
+      view.unmount();
+    }
+  });
+});
+
 describe('Routing screen navigation', () => {
   const shell = (fake: ReturnType<typeof fakeManagement>, ws: Workspace = workspace, conn: ConnectionStatus = connection) => (
     <WorkspaceShellComponent workspace={ws} dashboard={dashboard} management={fake.api} connection={conn} onSwitchWorkspace={vi.fn()} />
@@ -669,7 +790,7 @@ describe('T-084 sidebar team navigation', () => {
   const tabs = (view: ReturnType<typeof render>) => (view.queryByRole('region', { name: 'Overview' }) !== null ? ['Overview'] : []);
   const running = (t: ReturnType<typeof team>) => ({ ...t, runtime: { state: 'running' as const, teamId: 'live', status: 'running' } });
 
-  it('open_board_from_team_overview_navigates_to_boards', async () => {
+  it('open_board_from_team_overview_opens_current_phase', async () => {
     const fake = fakeManagement();
     const view = render(ui(fake));
     await settle();
@@ -677,7 +798,9 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Open board' }));
     await settle();
-    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Boards');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+    expect(view.getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('button', { name: 'Boards' }).getAttribute('aria-current')).toBeNull();
   });
 
   it('open_board_link_is_hidden_when_boards_is_missing_or_disabled', async () => {
@@ -801,7 +924,7 @@ describe('T-084 sidebar team navigation', () => {
     expect(view.container.querySelector('.team-nav-item-selected')).toBeNull();
   });
 
-  it('teams_parent_shows_expanded_chevron_only_on_teams', async () => {
+  it('expandable_parents_show_a_chevron_only_on_teams_and_boards', async () => {
     const view = render(ui(fakeManagement()));
     await settle();
     const teams = teamsButton(view);
@@ -809,7 +932,11 @@ describe('T-084 sidebar team navigation', () => {
     expect(teams.querySelector('svg')?.getAttribute('data-icon')).toBe('teams');
     expect(teams.querySelector('svg[data-icon="chevron"]')).toBeTruthy();
     expect(teams.textContent).toBe('Teams');
-    for (const name of ['Home', 'Agents', 'Roles', 'Skills', 'Boards', 'Configuration']) {
+    const boards = view.getByRole('button', { name: 'Boards' });
+    expect(boards.querySelectorAll('svg')).toHaveLength(2);
+    expect(boards.querySelector('svg')?.getAttribute('data-icon')).toBe('boards');
+    expect(boards.querySelector('svg[data-icon="chevron"]')).toBeTruthy();
+    for (const name of ['Home', 'Agents', 'Roles', 'Skills', 'Configuration']) {
       expect(view.getByRole('button', { name }).querySelectorAll('svg')).toHaveLength(1);
     }
   });

@@ -409,9 +409,10 @@ describe('DashboardHome', () => {
     await act(async () => {});
     fireEvent.click(result.getByRole('button', { name: 'View board' }));
 
-    expect(result.getByRole('heading', { level: 1, name: 'Boards' })).toBeTruthy();
+    expect(result.getByRole('heading', { level: 1, name: 'Current Phase' })).toBeTruthy();
     const nav = result.getByRole('navigation', { name: 'Workspace' });
-    expect(within(nav).getByRole('button', { name: 'Boards' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('button', { name: 'Boards' }).getAttribute('aria-current')).toBeNull();
     expect(within(nav).getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
     expect(onSwitchWorkspace).not.toHaveBeenCalled();
   });
