@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routing — board to team</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+.nav-link:hover{background:#181b20}
+.btn-sec:hover{background:#222831 !important}
+.btn-pri:hover{background:#7cb0ff !important}
+.btn-ghost:hover{background:#1b1f24 !important}
+.rule-row:hover{background:#1a1e24}
+.btn-danger:hover{background:#4a2c2c !important}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #5b9cff;outline-offset:2px}
+input::placeholder{color:#8d949e}
+select{color-scheme:dark}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+  <!-- Sidebar -->
+  <nav aria-label="Primary" style="flex: 1 1 240px; max-width: 260px; min-width: 220px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 2px 8px">
+      <div style="width: 26px; height: 26px; border-radius: 7px; background: #5b9cff; display: flex; align-items: center; justify-content: center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d0f12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6"></path><path d="M12 19h8"></path></svg>
+      </div>
+      <span style="font-weight: 600; font-size: 14px">Agent Studio</span>
+    </div>
+    <button type="button" class="btn-ghost" style="all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #23262c; border-radius: 8px; background: #14171b">
+      <span style="width: 28px; height: 28px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: flex; align-items: center; justify-content: center">AS</span>
+      <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+        <span style="font-weight: 600; font-size: 13px">Agent Studio</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">/mnt/c/Works/Projects/AgentStudio</span>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15l5 5 5-5"></path><path d="M7 9l5-5 5 5"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Home</a>
+      <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"></path></svg>
+        <span style="flex: 1">Teams</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid #23262c">
+        <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent Studio Dev Team</span>
+          <span style="font-size: 11px; color: #a3a9b2">6</span>
+        </a>
+        <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New team</a>
+      </div>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Agents</a>
+      <a class="nav-link" href="Roles.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"></path></svg>Roles</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16M15 4v16"></path></svg>Boards</a>
+      <a class="nav-link" href="#" aria-current="page" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #e7e9ec; background: #181b20; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-7 3-11 6.2"></path></svg>Routing</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>Configuration</a>
+    </div>
+    <div style="margin-top: auto; border-top: 1px solid #23262c; padding-top: 12px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"></path></svg>Switch workspace</a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px">
+
+      <!-- Header -->
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 760px">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Routing</h1>
+          <p style="margin: 0; color: #a3a9b2; font-size: 12.5px">How tickets move on its own. When a ticket reaches a status, the role named here works it in the running team, and the result decides the next status.</p>
+        </div>
+        <sc-if value="{{flash}}" hint-placeholder-val="{{true}}">
+          <span role="status" style="display: inline-flex; align-items: center; gap: 7px; color: #6fd38b; font-size: 12.5px; background: rgba(74,194,107,0.10); padding: 6px 12px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>{{flash}}</span>
+        </sc-if>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ec3ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 8v4M12 16h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+        <span>Routing belongs to the workspace board, not to one team. Changes apply to every team that uses this board. Without routing, teams still work when you give them a task, and you can move tickets by hand.</span>
+      </div>
+
+      <!-- Summary cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: stretch">
+
+        <section aria-labelledby="exec-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <h2 id="exec-h" style="margin: 0; font-size: 14px; font-weight: 600">Autonomous execution</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">The team that works the board.</p>
+          </div>
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; flex: 1">
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span style="width: 34px; height: 34px; border-radius: 8px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none">AS</span>
+              <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                <span style="font-weight: 500">Agent Studio Dev Team</span>
+                <span style="font-size: 12px; color: #a3a9b2">6 members</span>
+              </span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(74,194,107,0.12); color: #6fd38b; font-size: 12px; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4ac26b" aria-hidden="true"></span>Running</span>
+            </div>
+            <a href="Main.dc.html" style="font-size: 12.5px; font-weight: 500; align-self: flex-start">Open team</a>
+          </div>
+        </section>
+
+        <section aria-labelledby="wt-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <div>
+              <h2 id="wt-h" style="margin: 0; font-size: 14px; font-weight: 600">Worktrees</h2>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Where isolated work starts from.</p>
+            </div>
+            <button type="button" class="btn-sec" onClick="{{openWorktrees}}" aria-label="Edit worktrees" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>Edit</button>
+          </div>
+          <dl style="margin: 0; padding: 16px 18px; display: grid; grid-template-columns: 1fr; gap: 14px">
+            <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Base branch</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #e7e9ec">{{baseBranch}}</dd></div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="cov-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <h2 id="cov-h" style="margin: 0; font-size: 14px; font-weight: 600">Role coverage</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Roles the rules use, and who fills them.</p>
+          </div>
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-weight: 500">{{coverageText}}</span>
+            <sc-for list="{{gaps}}" as="g" hint-placeholder-count="1">
+              <span style="display: flex; align-items: flex-start; gap: 8px; color: #f0b453; font-size: 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>{{g.text}}</span>
+            </sc-for>
+            <sc-if value="{{noGaps}}" hint-placeholder-val="{{false}}"><span style="color: #a3a9b2; font-size: 12px">Every role used by a rule has a member.</span></sc-if>
+          </div>
+        </section>
+      </div>
+
+      <!-- Rules -->
+      <section aria-labelledby="rules-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+          <div>
+            <h2 id="rules-h" style="margin: 0; font-size: 14px; font-weight: 600">Rules</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Each status has at most one rule. A ticket in that status is worked as described.</p>
+          </div>
+          <span style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            <sc-if value="{{noFreeStatus}}" hint-placeholder-val="{{false}}"><span id="add-why" style="font-size: 12px; color: #a3a9b2">Every status already has a rule.</span></sc-if>
+            <button type="button" class="btn-sec" onClick="{{openNewRule}}" disabled="{{noFreeStatus}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500; opacity: {{addOpacity}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add rule</button>
+          </span>
+        </div>
+        <div style="overflow-x: auto">
+          <div style="min-width: 1040px">
+            <div aria-hidden="true" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #23262c; color: #8d949e; font-size: 12px; font-weight: 500">
+              <span>#</span><span>When a ticket is in</span><span>Then</span><span>If it passes</span><span>If it fails</span><span>Limits</span><span></span>
+            </div>
+            <ol style="list-style: none; margin: 0; padding: 0">
+              <sc-for list="{{ruleRows}}" as="r" hint-placeholder-count="5">
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">{{r.n}}</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{r.dot}}; flex: none" aria-hidden="true"></span>{{r.statusName}}</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">{{r.statusId}}</span>
+                    <sc-if value="{{r.protected}}" hint-placeholder-val="{{false}}">
+                      <span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #c4cad2; background: #1e2228; border: 1px solid #2a2e35; padding: 1px 7px; border-radius: 5px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Protected</span>
+                    </sc-if>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <sc-if value="{{r.isAgent}}" hint-placeholder-val="{{true}}">
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">{{r.letter}}</span>{{r.role}}</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">{{r.workflow}}</span>
+                      <span style="font-size: 12px; color: {{r.workerColor}}">{{r.worker}}</span>
+                    </sc-if>
+                    <sc-if value="{{r.isAction}}" hint-placeholder-val="{{false}}">
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1e2228; color: #c4cad2; display: inline-flex; align-items: center; justify-content: center; flex: none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12M18 9v12M6 15a6 6 0 0 0 6-6V6"></path></svg></span>Merge</span>
+                      <span style="font-size: 12px; color: #a3a9b2">Built-in action, no agent</span>
+                    </sc-if>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: {{r.passDot}}; flex: none" aria-hidden="true"></span>{{r.passName}}</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: {{r.failDot}}; flex: none" aria-hidden="true"></span>{{r.failName}}</span>
+                    <sc-if value="{{r.hasEscalation}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a3a9b2">After {{r.escCount}} fails → {{r.escName}}</span></sc-if>
+                    <sc-if value="{{r.hasBlocked}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a3a9b2">If blocked → {{r.blockedName}}</span></sc-if>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>{{r.workspace}}</span>
+                    <span>{{r.limits}}</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" onClick="{{r.edit}}" aria-label="Edit rule {{r.n}}, {{r.statusName}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              </sc-for>
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- DIALOGS -->
+  <sc-if value="{{dialogOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 10; background: rgba(6,7,9,0.68); display: flex; align-items: flex-start; justify-content: center; padding: 72px 24px 24px; box-sizing: border-box">
+
+      <!-- Rule dialog -->
+      <sc-if value="{{dRule}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-rule-h" style="width: min(720px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <div>
+              <h2 id="dlg-rule-h" style="margin: 0; font-size: 15px; font-weight: 600">{{dTitle}}</h2>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #a3a9b2">{{dSubtitle}}</p>
+            </div>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 22px">
+
+            <sc-if value="{{dNew}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; flex-direction: column; gap: 12px">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 600">When a ticket is in</h3>
+                <label style="display: flex; flex-direction: column; gap: 6px">
+                  <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Status</span>
+                  <select value="{{dStatus}}" onChange="{{setStatus}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                    <sc-for list="{{freeOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                  </select>
+                  <span style="font-size: 12px; color: #a3a9b2">Only statuses without a rule are listed.</span>
+                </label>
+                <div role="radiogroup" aria-label="What happens" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px">
+                  <button type="button" role="radio" aria-checked="{{typeAgentStr}}" onClick="{{pickAgent}}" style="all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid {{typeAgentBorder}}; background: {{typeAgentBg}}">
+                    <span style="width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid {{typeAgentRing}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: none"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{typeAgentDot}}"></span></span>
+                    <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">An agent works it</span><span style="font-size: 12px; color: #a3a9b2">A member with the chosen role runs a workflow.</span></span>
+                  </button>
+                  <button type="button" role="radio" aria-checked="{{typeActionStr}}" onClick="{{pickAction}}" style="all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 9px; border: 1px solid {{typeActionBorder}}; background: {{typeActionBg}}">
+                    <span style="width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid {{typeActionRing}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: none"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{typeActionDot}}"></span></span>
+                    <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Built-in action: merge</span><span style="font-size: 12px; color: #a3a9b2">The board merges the work. No agent involved.</span></span>
+                  </button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{dProtected}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px; background: #1a1d22; border: 1px solid #2a2e35; color: #c4cad2; font-size: 12px">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 1px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                <span>This is a protected route. Its workflow and workspace are fixed so merge conflicts keep being resolved; you can still change the role and what happens next.</span>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{dIsAgent}}" hint-placeholder-val="{{true}}">
+              <div style="display: flex; flex-direction: column; gap: 12px">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 600">Then</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px">
+                  <label style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Role</span>
+                    <select value="{{dRole}}" onChange="{{setRole}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                      <sc-for list="{{roleOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                    </select>
+                  </label>
+                  <label style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Workflow</span>
+                    <select value="{{dWorkflow}}" onChange="{{setWorkflow}}" disabled="{{dProtected}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit; font-family: 'JetBrains Mono', monospace; font-size: 12.5px">
+                      <sc-for list="{{workflowOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                    </select>
+                  </label>
+                  <label style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Works in</span>
+                    <select value="{{dWorkspace}}" onChange="{{setWorkspace}}" disabled="{{dProtected}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                      <sc-for list="{{workspaceOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                    </select>
+                  </label>
+                </div>
+                <sc-if value="{{dWorktree}}" hint-placeholder-val="{{true}}">
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border: 1px solid #23262c; border-radius: 8px; background: #121418">
+                    <span style="display: flex; flex-direction: column">
+                      <span style="font-weight: 500">Sync the base branch first</span>
+                      <span style="font-size: 12px; color: #a3a9b2">Bring the worktree up to date with {{baseBranch}} before the agent starts.</span>
+                    </span>
+                    <button type="button" role="switch" aria-checked="{{dSyncStr}}" aria-label="Sync the base branch first" onClick="{{toggleSync}}" style="all: unset; cursor: pointer; width: 38px; height: 22px; border-radius: 999px; background: {{syncBg}}; display: flex; align-items: center; padding: 0 3px; box-sizing: border-box; justify-content: {{syncAlign}}; flex: none">
+                      <span style="width: 16px; height: 16px; border-radius: 50%; background: #ffffff" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+            <sc-if value="{{dIsAction}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; flex-direction: column; gap: 6px; border-top: 0">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 600">Then</h3>
+                <p style="margin: 0; color: #a3a9b2">Runs the built-in <strong style="color: #e7e9ec; font-weight: 500">merge</strong> action. No role or workflow to choose.</p>
+              </div>
+            </sc-if>
+
+            <div style="display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #23262c; padding-top: 20px">
+              <h3 style="margin: 0; font-size: 13px; font-weight: 600">Next status</h3>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px">
+                <label style="display: flex; flex-direction: column; gap: 6px">
+                  <span style="font-size: 12px; color: #c4cad2; font-weight: 500">If it passes</span>
+                  <select value="{{dPass}}" onChange="{{setPass}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                    <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                  </select>
+                </label>
+                <label style="display: flex; flex-direction: column; gap: 6px">
+                  <span style="font-size: 12px; color: #c4cad2; font-weight: 500">If it fails</span>
+                  <select value="{{dFail}}" onChange="{{setFail}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                    <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                  </select>
+                </label>
+                <sc-if value="{{dIsAgent}}" hint-placeholder-val="{{true}}">
+                  <label style="display: flex; flex-direction: column; gap: 6px">
+                    <span style="font-size: 12px; color: #c4cad2; font-weight: 500">If it is blocked</span>
+                    <select value="{{dBlocked}}" onChange="{{setBlocked}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                      <sc-for list="{{blockedOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                    </select>
+                  </label>
+                </sc-if>
+              </div>
+            </div>
+
+            <sc-if value="{{dIsAgent}}" hint-placeholder-val="{{true}}">
+              <div style="display: flex; flex-direction: column; gap: 12px; border-top: 1px solid #23262c; padding-top: 20px">
+                <h3 style="margin: 0; font-size: 13px; font-weight: 600">Escalation</h3>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border: 1px solid #23262c; border-radius: 8px; background: #121418">
+                  <span style="display: flex; flex-direction: column">
+                    <span style="font-weight: 500">Escalate after repeated failures</span>
+                    <span style="font-size: 12px; color: #a3a9b2">Send the ticket somewhere else once it keeps failing here.</span>
+                  </span>
+                  <button type="button" role="switch" aria-checked="{{dEscStr}}" aria-label="Escalate after repeated failures" onClick="{{toggleEsc}}" style="all: unset; cursor: pointer; width: 38px; height: 22px; border-radius: 999px; background: {{escBg}}; display: flex; align-items: center; padding: 0 3px; box-sizing: border-box; justify-content: {{escAlign}}; flex: none">
+                    <span style="width: 16px; height: 16px; border-radius: 50%; background: #ffffff" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <sc-if value="{{dEsc}}" hint-placeholder-val="{{false}}">
+                  <div style="display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px">
+                    <label style="display: flex; flex-direction: column; gap: 6px">
+                      <span style="font-size: 12px; color: #c4cad2; font-weight: 500">After this many fails</span>
+                      <input type="text" value="{{dEscCount}}" onChange="{{setEscCount}}" inputmode="numeric" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec">
+                    </label>
+                    <label style="display: flex; flex-direction: column; gap: 6px">
+                      <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Move it to</span>
+                      <select value="{{dEscStatus}}" onChange="{{setEscStatus}}" style="appearance: auto; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit">
+                        <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="3"><option value="{{o.value}}">{{o.label}}</option></sc-for>
+                      </select>
+                    </label>
+                  </div>
+                  <sc-if value="{{escInvalid}}" hint-placeholder-val="{{false}}"><span role="alert" style="font-size: 12px; color: #f0897f">Enter a whole number of 1 or more.</span></sc-if>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+              <sc-if value="{{dEditing}}" hint-placeholder-val="{{true}}">
+                <button type="button" class="btn-danger" onClick="{{openRemove}}" disabled="{{dProtected}}" aria-describedby="rule-foot-note" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #4a2c2c; border-radius: 7px; color: #f0a3a3; font-weight: 500; opacity: {{removeOpacity}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"></path></svg>Remove rule</button>
+              </sc-if>
+              <span id="rule-foot-note" style="font-size: 12px; color: #8d949e">{{footNote}}</span>
+            </span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveRule}}" disabled="{{escInvalid}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: {{ruleOpacity}}">{{saveLabel}}</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Remove rule dialog -->
+      <sc-if value="{{dRemove}}" hint-placeholder-val="{{false}}">
+        <div role="alertdialog" aria-modal="true" aria-labelledby="dlg-rm-h" aria-describedby="dlg-rm-d" style="width: min(480px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="padding: 20px 20px 8px">
+            <h2 id="dlg-rm-h" style="margin: 0 0 8px; font-size: 15px; font-weight: 600">Remove the rule for {{dStatusName}}?</h2>
+            <p id="dlg-rm-d" style="margin: 0; color: #a3a9b2">Tickets in this status will no longer be worked automatically. You can still move them by hand. This applies to every team using this board.</p>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px">
+            <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+            <button type="button" onClick="{{confirmRemove}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #b4413b; color: #ffffff; font-weight: 600">Remove rule</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Worktrees dialog -->
+      <sc-if value="{{dWorktrees}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-wt-h" style="width: min(480px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <h2 id="dlg-wt-h" style="margin: 0; font-size: 15px; font-weight: 600">Edit worktrees</h2>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 6px">
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Base branch</span>
+              <input type="text" value="{{dBranch}}" onChange="{{setBranch}}" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font-family: 'JetBrains Mono', monospace; font-size: 12.5px">
+            </label>
+            <span style="font-size: 12px; color: #a3a9b2">Isolated worktrees branch from here, and finished work is merged back into it.</span>
+            <sc-if value="{{branchInvalid}}" hint-placeholder-val="{{false}}"><span role="alert" style="font-size: 12px; color: #f0897f">Enter a branch name.</span></sc-if>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Applies to every team using this board</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveBranch}}" disabled="{{branchInvalid}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: {{branchOpacity}}">Save</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"openDialog":{"editor":"enum","options":["none","rule","action-rule","new-rule","remove-rule","worktrees"],"default":"none"},"$preview":{"width":1440,"height":1260}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const rules = [
+      { status: 'merge-ready', type: 'action', action: 'merge', pass: 'done', fail: 'merge-conflict', blocked: '', workspace: 'none', sync: false, rounds: null, priority: null, esc: null, protectedRoute: false },
+      { status: 'plan-merge-ready', type: 'action', action: 'merge', pass: 'done', fail: 'plan-merge-conflict', blocked: '', workspace: 'none', sync: false, rounds: null, priority: null, esc: null, protectedRoute: false },
+      { status: 'merge-conflict', type: 'agent', role: 'TeamLead', workflow: 'board-resolve-merge', pass: 'merge-ready', fail: 'merge-conflict', blocked: '', workspace: 'worktree', sync: true, rounds: 3, priority: 0, esc: null, protectedRoute: true },
+      { status: 'plan-merge-conflict', type: 'agent', role: 'TeamLead', workflow: 'board-resolve-merge', pass: 'plan-merge-ready', fail: 'plan-merge-conflict', blocked: '', workspace: 'worktree', sync: true, rounds: 3, priority: 0, esc: null, protectedRoute: true },
+      { status: 'review-ready', type: 'agent', role: 'Reviewer', workflow: 'board-review', pass: 'merge-ready', fail: 'dev-ready', blocked: '', workspace: 'worktree', sync: false, rounds: null, priority: null, esc: { count: 3, status: 'need-escalate' }, protectedRoute: false },
+      { status: 'qa-ready', type: 'agent', role: 'QA', workflow: 'board-qa', pass: 'review-ready', fail: 'dev-ready', blocked: '', workspace: 'worktree', sync: false, rounds: null, priority: null, esc: { count: 3, status: 'need-escalate' }, protectedRoute: false },
+      { status: 'need-escalate', type: 'agent', role: 'SeniorDeveloper', workflow: 'board-senior-develop', pass: 'qa-ready', fail: 'need-escalate', blocked: '', workspace: 'worktree', sync: true, rounds: 3, priority: 0, esc: null, protectedRoute: false },
+      { status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', pass: 'qa-ready', fail: 'dev-ready', blocked: '', workspace: 'worktree', sync: true, rounds: 6, priority: null, esc: null, protectedRoute: false },
+      { status: 'refine-ready', type: 'agent', role: 'TeamLead', workflow: 'board-refine', pass: 'dev-ready', fail: 'backlog', blocked: '', workspace: 'worktree', sync: false, rounds: 2, priority: null, esc: null, protectedRoute: false },
+      { status: 'unpack-ready', type: 'agent', role: 'ProductOwner', workflow: 'board-unpack', pass: 'plan-merge-ready', fail: 'backlog', blocked: '', workspace: 'worktree', sync: false, rounds: 2, priority: null, esc: null, protectedRoute: false }
+    ];
+    const open = props && props.openDialog && props.openDialog !== 'none' ? props.openDialog : null;
+    const idx = open === 'action-rule' ? 0 : open === 'remove-rule' ? 7 : 2;
+    const isNew = open === 'new-rule';
+    this.state = { rules: rules, baseBranch: 'main', flash: '', dialog: open === 'action-rule' || open === 'new-rule' ? 'rule' : open === 'remove-rule' ? 'remove' : open,
+      editing: idx, isNew: isNew, draft: this.mkDraft(rules[idx], 'main') };
+    if (isNew) this.state.draft = this.newDraft(rules);
+  }
+  freeStatuses(rules) {
+    const used = rules.map((r) => r.status);
+    return ['backlog', 'unpack-ready', 'refine-ready', 'dev-ready', 'qa-ready', 'need-escalate', 'review-ready', 'plan-merge-ready', 'plan-merge-conflict', 'merge-ready', 'merge-conflict', 'done', 'close'].filter((x) => used.indexOf(x) === -1);
+  }
+  newDraft(rules) {
+    const free = this.freeStatuses(rules);
+    return { status: free[0] || '', type: 'agent', role: 'Developer', workflow: 'board-develop', workspace: 'worktree', sync: true, pass: 'done', fail: 'backlog', blocked: '', escOn: false, escCount: '3', escStatus: 'need-escalate', branch: this.state ? this.state.baseBranch : 'main' };
+  }
+  mkDraft(r, branch) {
+    return { role: r.role || '', workflow: r.workflow || '', workspace: r.workspace, sync: !!r.sync, pass: r.pass, fail: r.fail, blocked: r.blocked || '',
+      escOn: !!r.esc, escCount: r.esc ? String(r.esc.count) : '3', escStatus: r.esc ? r.esc.status : 'need-escalate', branch: branch };
+  }
+  renderVals() {
+    const s = this.state;
+    const d = s.draft;
+    const statuses = [
+      ['backlog', 'Backlog', '#8d949e'], ['unpack-ready', 'Unpack ready', '#5b9cff'], ['refine-ready', 'Refine ready', '#5b9cff'], ['dev-ready', 'Dev ready', '#5b9cff'],
+      ['qa-ready', 'QA ready', '#5b9cff'], ['need-escalate', 'Needs escalation', '#f0b453'], ['review-ready', 'Review ready', '#5b9cff'],
+      ['plan-merge-ready', 'Plan merge ready', '#5b9cff'], ['plan-merge-conflict', 'Plan merge conflict', '#e5736a'], ['merge-ready', 'Merge ready', '#5b9cff'],
+      ['merge-conflict', 'Merge conflict', '#e5736a'], ['done', 'Done', '#4ac26b'], ['close', 'Closed', '#8d949e']
+    ];
+    const st = {};
+    statuses.forEach((x) => { st[x[0]] = { id: x[0], name: x[1], dot: x[2] }; });
+    const roles = ['TeamLead', 'Developer', 'SeniorDeveloper', 'QA', 'Reviewer', 'ProductOwner'];
+    const members = { TeamLead: 'lead', Developer: 'dev', SeniorDeveloper: 'senior', QA: 'qa', Reviewer: 'reviewer' };
+    const workflows = ['board-unpack', 'board-refine', 'board-develop', 'board-senior-develop', 'board-qa', 'board-review', 'board-resolve-merge'];
+    const wsLabel = { worktree: 'Isolated worktree', main: 'Main workspace', none: 'No workspace' };
+    const wsText = (r) => r.type === 'action' ? 'Runs on the board' : (wsLabel[r.workspace] || 'Isolated worktree') + (r.workspace === 'worktree' && r.sync ? ' · sync base' : '');
+    const limitsText = (r) => {
+      const parts = [];
+      if (r.rounds !== null) parts.push('Max ' + r.rounds + ' rounds');
+      if (r.priority !== null) parts.push('priority ' + r.priority);
+      return parts.length ? parts.join(' · ') : 'No limits';
+    };
+    const close = () => this.setState({ dialog: null });
+    const setD = (patch) => this.setState({ draft: Object.assign({}, this.state.draft, patch) });
+    const openRule = (i) => () => this.setState({ dialog: 'rule', isNew: false, editing: i, draft: this.mkDraft(this.state.rules[i], this.state.baseBranch) });
+    const cur = s.isNew ? { type: d.type, status: d.status, protectedRoute: false } : s.rules[s.editing];
+    const free = this.freeStatuses(s.rules);
+    const isAgent = cur.type === 'agent';
+    const escNum = parseInt(d.escCount, 10);
+    const escInvalid = isAgent && d.escOn && !(String(escNum) === d.escCount.trim() && escNum >= 1);
+    const usedRoles = [];
+    s.rules.forEach((r) => { if (r.type === 'agent' && usedRoles.indexOf(r.role) === -1) usedRoles.push(r.role); });
+    const gaps = usedRoles.filter((r) => !members[r]).map((r) => {
+      const where = s.rules.filter((x) => x.role === r).map((x) => st[x.status].name);
+      return { text: r + ' has no member in the running team, so tickets in ' + where.join(' and ') + ' will wait.' };
+    });
+    const opt = (list) => list.map((x) => ({ value: x[0], label: x[1] }));
+    const dlg = s.dialog;
+    return {
+      flash: s.flash,
+      baseBranch: s.baseBranch,
+      coverageText: (usedRoles.length - gaps.length) + ' of ' + usedRoles.length + ' roles have a member',
+      gaps: gaps,
+      noGaps: gaps.length === 0,
+      ruleRows: s.rules.map((r, i) => {
+        const roleKnown = r.type === 'agent' && !!members[r.role];
+        return {
+          n: i + 1, statusName: st[r.status].name, statusId: r.status, dot: st[r.status].dot, protected: r.protectedRoute,
+          isAgent: r.type === 'agent', isAction: r.type === 'action', role: r.role || '', letter: (r.role || '?').slice(0, 1), workflow: r.workflow || '',
+          worker: roleKnown ? 'Worked by ' + members[r.role] : 'No member in the running team', workerColor: roleKnown ? '#8d949e' : '#f0b453',
+          passName: st[r.pass].name, passDot: st[r.pass].dot, failName: st[r.fail].name, failDot: st[r.fail].dot,
+          hasEscalation: !!r.esc, escCount: r.esc ? r.esc.count : 0, escName: r.esc ? st[r.esc.status].name : '',
+          hasBlocked: !!r.blocked, blockedName: r.blocked ? st[r.blocked].name : '',
+          workspace: wsText(r), limits: limitsText(r), edit: openRule(i)
+        };
+      }),
+      openWorktrees: () => this.setState({ dialog: 'worktrees', draft: this.mkDraft(this.state.rules[this.state.editing], this.state.baseBranch) }),
+      closeDialog: close,
+      dialogOpen: !!dlg,
+      dRule: dlg === 'rule',
+      dRemove: dlg === 'remove',
+      dWorktrees: dlg === 'worktrees',
+      dNew: s.isNew, dEditing: !s.isNew,
+      dTitle: s.isNew ? 'Add rule' : 'Edit rule ' + (s.editing + 1),
+      dSubtitle: s.isNew ? 'Choose the status the rule is for and what happens to tickets in it.' : 'When a ticket is in ' + st[cur.status].name,
+      saveLabel: s.isNew ? 'Add rule' : 'Save rule',
+      footNote: cur.protectedRoute ? 'Protected routes cannot be removed' : 'Applies to every team using this board',
+      removeOpacity: cur.protectedRoute ? '0.45' : '1',
+      noFreeStatus: free.length === 0, addOpacity: free.length === 0 ? '0.45' : '1',
+      freeOptions: free.map((x) => ({ value: x, label: st[x].name })),
+      dStatus: d.status || '',
+      setStatus: (e) => setD({ status: e.target.value }),
+      openNewRule: () => { if (this.freeStatuses(this.state.rules).length === 0) return; this.setState({ dialog: 'rule', isNew: true, draft: this.newDraft(this.state.rules) }); },
+      openRemove: () => { if (this.state.rules[this.state.editing].protectedRoute) return; this.setState({ dialog: 'remove' }); },
+      confirmRemove: () => { const i = this.state.editing; const name = st[this.state.rules[i].status].name; this.setState({ rules: this.state.rules.filter((r, k) => k !== i), dialog: null, flash: 'Removed the rule for ' + name }); },
+      typeAgentStr: d.type === 'action' ? 'false' : 'true', typeActionStr: d.type === 'action' ? 'true' : 'false',
+      typeAgentBorder: d.type === 'action' ? '#262a30' : '#3d6bb3', typeActionBorder: d.type === 'action' ? '#3d6bb3' : '#262a30',
+      typeAgentBg: d.type === 'action' ? '#121418' : 'rgba(91,156,255,0.08)', typeActionBg: d.type === 'action' ? 'rgba(91,156,255,0.08)' : '#121418',
+      typeAgentRing: d.type === 'action' ? '#4a5059' : '#5b9cff', typeActionRing: d.type === 'action' ? '#5b9cff' : '#4a5059',
+      typeAgentDot: d.type === 'action' ? 'transparent' : '#5b9cff', typeActionDot: d.type === 'action' ? '#5b9cff' : 'transparent',
+      pickAgent: () => setD({ type: 'agent' }), pickAction: () => setD({ type: 'action' }),
+      dStatusName: st[cur.status].name,
+      dProtected: cur.protectedRoute,
+      dIsAgent: isAgent,
+      dIsAction: !isAgent,
+      roleOptions: roles.map((r) => ({ value: r, label: r })),
+      workflowOptions: workflows.map((w) => ({ value: w, label: w })),
+      workspaceOptions: [{ value: 'worktree', label: 'Isolated worktree' }, { value: 'main', label: 'Main workspace' }, { value: 'none', label: 'No workspace' }],
+      statusOptions: opt(statuses),
+      blockedOptions: [{ value: '', label: 'Leave as is' }].concat(opt(statuses)),
+      dRole: d.role, dWorkflow: d.workflow, dWorkspace: d.workspace, dPass: d.pass, dFail: d.fail, dBlocked: d.blocked,
+      setRole: (e) => setD({ role: e.target.value }), setWorkflow: (e) => setD({ workflow: e.target.value }), setWorkspace: (e) => setD({ workspace: e.target.value }),
+      setPass: (e) => setD({ pass: e.target.value }), setFail: (e) => setD({ fail: e.target.value }), setBlocked: (e) => setD({ blocked: e.target.value }),
+      dWorktree: d.workspace === 'worktree',
+      dSyncStr: d.sync ? 'true' : 'false', syncBg: d.sync ? '#5b9cff' : '#3a3f47', syncAlign: d.sync ? 'flex-end' : 'flex-start',
+      toggleSync: () => setD({ sync: !this.state.draft.sync }),
+      dEsc: d.escOn, dEscStr: d.escOn ? 'true' : 'false', escBg: d.escOn ? '#5b9cff' : '#3a3f47', escAlign: d.escOn ? 'flex-end' : 'flex-start',
+      toggleEsc: () => setD({ escOn: !this.state.draft.escOn }),
+      dEscCount: d.escCount, dEscStatus: d.escStatus, escInvalid: escInvalid, ruleOpacity: escInvalid ? '0.45' : '1',
+      setEscCount: (e) => setD({ escCount: e.target.value }), setEscStatus: (e) => setD({ escStatus: e.target.value }),
+      saveRule: () => {
+        const dr = this.state.draft;
+        const n = parseInt(dr.escCount, 10);
+        if (this.state.isNew) {
+          if (!dr.status) return;
+          if (dr.type === 'agent' && dr.escOn && !(n >= 1)) return;
+          const created = dr.type === 'action'
+            ? { status: dr.status, type: 'action', action: 'merge', pass: dr.pass, fail: dr.fail, blocked: '', workspace: 'none', sync: false, rounds: null, priority: null, esc: null, protectedRoute: false }
+            : { status: dr.status, type: 'agent', role: dr.role, workflow: dr.workflow, pass: dr.pass, fail: dr.fail, blocked: dr.blocked, workspace: dr.workspace, sync: dr.workspace === 'worktree' ? dr.sync : false, rounds: null, priority: null, esc: dr.escOn ? { count: n, status: dr.escStatus } : null, protectedRoute: false };
+          this.setState({ rules: this.state.rules.concat([created]), isNew: false, dialog: null, flash: 'Added a rule for ' + st[dr.status].name });
+          return;
+        }
+        const i = this.state.editing;
+        const old = this.state.rules[i];
+        if (old.type === 'agent' && dr.escOn && !(n >= 1)) return;
+        const next = Object.assign({}, old, { pass: dr.pass, fail: dr.fail });
+        if (old.type === 'agent') {
+          Object.assign(next, { role: dr.role, workflow: old.protectedRoute ? old.workflow : dr.workflow, workspace: old.protectedRoute ? old.workspace : dr.workspace,
+            sync: dr.workspace === 'worktree' ? dr.sync : false, blocked: dr.blocked, esc: dr.escOn ? { count: n, status: dr.escStatus } : null });
+        }
+        this.setState({ rules: this.state.rules.map((r, k) => k === i ? next : r), dialog: null, flash: 'Saved rule ' + (i + 1) });
+      },
+      dBranch: d.branch, branchInvalid: d.branch.trim() === '', branchOpacity: d.branch.trim() === '' ? '0.45' : '1',
+      setBranch: (e) => setD({ branch: e.target.value }),
+      saveBranch: () => { const b = this.state.draft.branch.trim(); if (b === '') return; this.setState({ baseBranch: b, dialog: null, flash: 'Saved base branch' }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routing — board to team</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+.nav-link:hover{background:#181b20}
+.btn-sec:hover{background:#222831 !important}
+.btn-pri:hover{background:#7cb0ff !important}
+.btn-ghost:hover{background:#1b1f24 !important}
+.rule-row:hover{background:#1a1e24}
+.btn-danger:hover{background:#4a2c2c !important}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #5b9cff;outline-offset:2px}
+input::placeholder{color:#8d949e}
+select{color-scheme:dark}
+</style>
+
+</head>
+<body>
+
+
+<div style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+  
+  <nav aria-label="Primary" style="flex: 1 1 240px; max-width: 260px; min-width: 220px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 2px 8px">
+      <div style="width: 26px; height: 26px; border-radius: 7px; background: #5b9cff; display: flex; align-items: center; justify-content: center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d0f12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6"></path><path d="M12 19h8"></path></svg>
+      </div>
+      <span style="font-weight: 600; font-size: 14px">Agent Studio</span>
+    </div>
+    <button type="button" class="btn-ghost" style="all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #23262c; border-radius: 8px; background: #14171b">
+      <span style="width: 28px; height: 28px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: flex; align-items: center; justify-content: center">AS</span>
+      <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+        <span style="font-weight: 600; font-size: 13px">Agent Studio</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">/mnt/c/Works/Projects/AgentStudio</span>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15l5 5 5-5"></path><path d="M7 9l5-5 5 5"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Home</a>
+      <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"></path></svg>
+        <span style="flex: 1">Teams</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid #23262c">
+        <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent Studio Dev Team</span>
+          <span style="font-size: 11px; color: #a3a9b2">6</span>
+        </a>
+        <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New team</a>
+      </div>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Agents</a>
+      <a class="nav-link" href="Roles.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"></path></svg>Roles</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16M15 4v16"></path></svg>Boards</a>
+      <a class="nav-link" href="#" aria-current="page" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #e7e9ec; background: #181b20; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-7 3-11 6.2"></path></svg>Routing</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>Configuration</a>
+    </div>
+    <div style="margin-top: auto; border-top: 1px solid #23262c; padding-top: 12px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"></path></svg>Switch workspace</a>
+    </div>
+  </nav>
+
+  
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px">
+
+      
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+        <div style="display: flex; flex-direction: column; gap: 4px; max-width: 760px">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Routing</h1>
+          <p style="margin: 0; color: #a3a9b2; font-size: 12.5px">How tickets move on its own. When a ticket reaches a status, the role named here works it in the running team, and the result decides the next status.</p>
+        </div>
+        
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ec3ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M12 8v4M12 16h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+        <span>Routing belongs to the workspace board, not to one team. Changes apply to every team that uses this board. Without routing, teams still work when you give them a task, and you can move tickets by hand.</span>
+      </div>
+
+      
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: stretch">
+
+        <section aria-labelledby="exec-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <h2 id="exec-h" style="margin: 0; font-size: 14px; font-weight: 600">Autonomous execution</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">The team that works the board.</p>
+          </div>
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; flex: 1">
+            <div style="display: flex; align-items: center; gap: 12px">
+              <span style="width: 34px; height: 34px; border-radius: 8px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: none">AS</span>
+              <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                <span style="font-weight: 500">Agent Studio Dev Team</span>
+                <span style="font-size: 12px; color: #a3a9b2">6 members</span>
+              </span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(74,194,107,0.12); color: #6fd38b; font-size: 12px; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 50%; background: #4ac26b" aria-hidden="true"></span>Running</span>
+            </div>
+            <a href="Main.dc.html" style="font-size: 12.5px; font-weight: 500; align-self: flex-start">Open team</a>
+          </div>
+        </section>
+
+        <section aria-labelledby="wt-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <div>
+              <h2 id="wt-h" style="margin: 0; font-size: 14px; font-weight: 600">Worktrees</h2>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Where isolated work starts from.</p>
+            </div>
+            <button type="button" class="btn-sec" aria-label="Edit worktrees" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>Edit</button>
+          </div>
+          <dl style="margin: 0; padding: 16px 18px; display: grid; grid-template-columns: 1fr; gap: 14px">
+            <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Base branch</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #e7e9ec">main</dd></div>
+          </dl>
+        </section>
+
+        <section aria-labelledby="cov-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+          <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+            <h2 id="cov-h" style="margin: 0; font-size: 14px; font-weight: 600">Role coverage</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Roles the rules use, and who fills them.</p>
+          </div>
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-weight: 500">5 of 6 roles have a member</span>
+            
+              <span style="display: flex; align-items: flex-start; gap: 8px; color: #f0b453; font-size: 12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>ProductOwner has no member in the running team, so tickets in Unpack ready will wait.</span>
+            
+            
+          </div>
+        </section>
+      </div>
+
+      
+      <section aria-labelledby="rules-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+          <div>
+            <h2 id="rules-h" style="margin: 0; font-size: 14px; font-weight: 600">Rules</h2>
+            <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Each status has at most one rule. A ticket in that status is worked as described.</p>
+          </div>
+          <span style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            
+            <button type="button" class="btn-sec" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500; opacity: 1"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Add rule</button>
+          </span>
+        </div>
+        <div style="overflow-x: auto">
+          <div style="min-width: 1040px">
+            <div aria-hidden="true" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; padding: 10px 18px; border-bottom: 1px solid #23262c; color: #8d949e; font-size: 12px; font-weight: 500">
+              <span>#</span><span>When a ticket is in</span><span>Then</span><span>If it passes</span><span>If it fails</span><span>Limits</span><span></span>
+            </div>
+            <ol style="list-style: none; margin: 0; padding: 0">
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">1</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Merge ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">merge-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1e2228; color: #c4cad2; display: inline-flex; align-items: center; justify-content: center; flex: none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12M18 9v12M6 15a6 6 0 0 0 6-6V6"></path></svg></span>Merge</span>
+                      <span style="font-size: 12px; color: #a3a9b2">Built-in action, no agent</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>Done</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Merge conflict</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Runs on the board</span>
+                    <span>No limits</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 1, Merge ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">2</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Plan merge ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">plan-merge-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1e2228; color: #c4cad2; display: inline-flex; align-items: center; justify-content: center; flex: none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v12M18 9v12M6 15a6 6 0 0 0 6-6V6"></path></svg></span>Merge</span>
+                      <span style="font-size: 12px; color: #a3a9b2">Built-in action, no agent</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>Done</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Plan merge conflict</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Runs on the board</span>
+                    <span>No limits</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 2, Plan merge ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">3</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Merge conflict</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">merge-conflict</span>
+                    
+                      <span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #c4cad2; background: #1e2228; border: 1px solid #2a2e35; padding: 1px 7px; border-radius: 5px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Protected</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">T</span>TeamLead</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-resolve-merge</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by lead</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Merge ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Merge conflict</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree · sync base</span>
+                    <span>Max 3 rounds · priority 0</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 3, Merge conflict" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">4</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Plan merge conflict</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">plan-merge-conflict</span>
+                    
+                      <span style="align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #c4cad2; background: #1e2228; border: 1px solid #2a2e35; padding: 1px 7px; border-radius: 5px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Protected</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">T</span>TeamLead</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-resolve-merge</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by lead</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Plan merge ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #e5736a; flex: none" aria-hidden="true"></span>Plan merge conflict</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree · sync base</span>
+                    <span>Max 3 rounds · priority 0</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 4, Plan merge conflict" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">5</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Review ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">review-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">R</span>Reviewer</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-review</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by reviewer</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Merge ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Dev ready</span>
+                    <span style="font-size: 12px; color: #a3a9b2">After 3 fails → Needs escalation</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree</span>
+                    <span>No limits</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 5, Review ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">6</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>QA ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">qa-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">Q</span>QA</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-qa</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by qa</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Review ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Dev ready</span>
+                    <span style="font-size: 12px; color: #a3a9b2">After 3 fails → Needs escalation</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree</span>
+                    <span>No limits</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 6, QA ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">7</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453; flex: none" aria-hidden="true"></span>Needs escalation</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">need-escalate</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">S</span>SeniorDeveloper</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-senior-develop</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by senior</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>QA ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453; flex: none" aria-hidden="true"></span>Needs escalation</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree · sync base</span>
+                    <span>Max 3 rounds · priority 0</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 7, Needs escalation" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">8</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Dev ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">dev-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">D</span>Developer</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-develop</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by dev</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>QA ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Dev ready</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree · sync base</span>
+                    <span>Max 6 rounds</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 8, Dev ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">9</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Refine ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">refine-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">T</span>TeamLead</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-refine</span>
+                      <span style="font-size: 12px; color: #8d949e">Worked by lead</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Dev ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #8d949e; flex: none" aria-hidden="true"></span>Backlog</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree</span>
+                    <span>Max 2 rounds</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 9, Refine ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+                <li class="rule-row" style="display: grid; grid-template-columns: 34px minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.6fr) minmax(0, 1.5fr) 68px; gap: 14px; align-items: start; padding: 14px 18px; border-bottom: 1px solid #1f2328">
+                  <span style="color: #8d949e; font-variant-numeric: tabular-nums; padding-top: 2px">10</span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Unpack ready</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">unpack-ready</span>
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    
+                      <span style="display: inline-flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 22px; height: 22px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; flex: none">P</span>ProductOwner</span>
+                      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #a3a9b2">board-unpack</span>
+                      <span style="font-size: 12px; color: #f0b453">No member in the running team</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff; flex: none" aria-hidden="true"></span>Plan merge ready</span>
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0">
+                    <span style="display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; padding: 2px 9px; border-radius: 6px; background: #1e2228; border: 1px solid #2a2e35"><span style="color: #8d949e" aria-hidden="true">→</span><span style="width: 7px; height: 7px; border-radius: 50%; background: #8d949e; flex: none" aria-hidden="true"></span>Backlog</span>
+                    
+                    
+                  </span>
+
+                  <span style="display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #a3a9b2; min-width: 0">
+                    <span>Isolated worktree</span>
+                    <span>Max 2 rounds</span>
+                  </span>
+
+                  <span style="display: flex; justify-content: flex-end">
+                    <button type="button" class="btn-sec" aria-label="Edit rule 10, Unpack ready" style="all: unset; cursor: pointer; box-sizing: border-box; height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Edit</button>
+                  </span>
+                </li>
+              
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  
+  
+    <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 10; background: rgba(6,7,9,0.68); display: flex; align-items: flex-start; justify-content: center; padding: 72px 24px 24px; box-sizing: border-box">
+
+      
+      
+
+      
+      
+
+      
+      
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-wt-h" style="width: min(480px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <h2 id="dlg-wt-h" style="margin: 0; font-size: 15px; font-weight: 600">Edit worktrees</h2>
+            <button type="button" class="btn-ghost" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 6px">
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Base branch</span>
+              <input type="text" value="main" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font-family: 'JetBrains Mono', monospace; font-size: 12.5px">
+            </label>
+            <span style="font-size: 12px; color: #a3a9b2">Isolated worktrees branch from here, and finished work is merged back into it.</span>
+            
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Applies to every team using this board</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: 1">Save</button>
+            </span>
+          </div>
+        </div>
+      
+
+    </div>
+  
+</div>
+
+</body>
+</html>
