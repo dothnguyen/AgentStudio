@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 
-export type ShellIconName = 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'routing' | 'configuration' | 'switch' | 'chevron' | 'chevrons-up-down' | 'plus' | 'terminal' | 'refresh' | 'item';
+export type ShellIconName = 'home' | 'teams' | 'agents' | 'roles' | 'skills' | 'boards' | 'routing' | 'configuration' | 'switch' | 'chevron' | 'chevrons-up-down' | 'plus' | 'terminal' | 'refresh' | 'item';
 
 const SHAPES: Record<ShellIconName, JSX.Element> = {
   home: <path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
@@ -19,6 +19,12 @@ const SHAPES: Record<ShellIconName, JSX.Element> = {
     </>
   ),
   roles: <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" />,
+  skills: (
+    <>
+      <path d="M12 3l9 5-9 5-9-5z" />
+      <path d="M3 13l9 5 9-5" />
+    </>
+  ),
   boards: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />

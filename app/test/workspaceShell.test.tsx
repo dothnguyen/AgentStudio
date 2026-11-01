@@ -71,7 +71,7 @@ describe('WorkspaceShell', () => {
     expect(name.getAttribute('title')).toBe(workspace.name);
     expect(path.getAttribute('title')).toBe(workspace.path);
     expect(Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent)).toEqual([
-      'Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration',
+      'Home', 'Teams', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
     const agents = within(nav).getAllByRole('button', { name: 'Agents' });
@@ -93,7 +93,7 @@ describe('WorkspaceShell', () => {
     const name = result.getByText(workspace.name);
     const path = result.getByText(workspace.path);
 
-    for (const label of ['Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration'] as const) {
+    for (const label of ['Teams', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration'] as const) {
       const button = result.getByRole('button', { name: label });
       button.focus();
       fireEvent.click(button);
@@ -101,7 +101,7 @@ describe('WorkspaceShell', () => {
       expect(result.getByText(workspace.name)).toBe(name);
       expect(result.getByText(workspace.path)).toBe(path);
       expect(result.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      if (label === 'Teams' || label === 'Agents' || label === 'Roles' || label === 'Routing') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
+      if (label === 'Teams' || label === 'Agents' || label === 'Roles' || label === 'Skills' || label === 'Routing') expect(main.querySelector(`[data-section="${label.toLowerCase()}"]`)).toBeTruthy();
       else expect(result.getByText(descriptions[label])).toBeTruthy();
       expect(currentButtons(result.container)).toEqual([button]);
       expect(document.activeElement).toBe(button);
@@ -335,7 +335,7 @@ describe('WorkspaceShell', () => {
     const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
     const buttons = result.container.querySelectorAll('nav button.nav-item');
-    expect(buttons).toHaveLength(8);
+    expect(buttons).toHaveLength(9);
     buttons.forEach((button, index) => {
       expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
       expect(button.textContent).toBe(items[index].label);
@@ -345,10 +345,10 @@ describe('WorkspaceShell', () => {
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(10);
+    expect(buttons).toHaveLength(11);
     expect(buttons[0].className).toContain('workspace-selector');
-    expect(buttons.slice(1, 9).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration']);
-    expect(buttons[9].className).toContain('switch-workspace');
+    expect(buttons.slice(1, 10).map((button) => button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration']);
+    expect(buttons[10].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');
@@ -552,7 +552,7 @@ describe('Routing screen navigation', () => {
     await settle();
     const nav = view.getByRole('navigation', { name: 'Workspace' });
     const labels = Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent);
-    expect(labels).toEqual(['Home', 'Teams', 'Agents', 'Roles', 'Boards', 'Routing', 'Configuration']);
+    expect(labels).toEqual(['Home', 'Teams', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration']);
     const routing = within(nav).getByRole('button', { name: 'Routing' });
     const icon = routing.querySelector('svg')!;
     expect(icon.getAttribute('data-icon')).toBe('routing');
@@ -809,7 +809,7 @@ describe('T-084 sidebar team navigation', () => {
     expect(teams.querySelector('svg')?.getAttribute('data-icon')).toBe('teams');
     expect(teams.querySelector('svg[data-icon="chevron"]')).toBeTruthy();
     expect(teams.textContent).toBe('Teams');
-    for (const name of ['Home', 'Agents', 'Roles', 'Boards', 'Configuration']) {
+    for (const name of ['Home', 'Agents', 'Roles', 'Skills', 'Boards', 'Configuration']) {
       expect(view.getByRole('button', { name }).querySelectorAll('svg')).toHaveLength(1);
     }
   });

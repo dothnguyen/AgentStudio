@@ -4,6 +4,7 @@ import { DashboardHome } from '../dashboard/DashboardHome';
 import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceholder';
 import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
+import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
@@ -115,6 +116,12 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       connection={props.connection}
       requestedRoleId={requestedRoleId}
       onOpenMember={(teamId, memberId) => navigate('teams', { member: { teamId, memberId } })}
+    />
+  ) : sectionId === 'skills' ? (
+    <SkillsScreen
+      workspace={props.workspace}
+      management={props.management}
+      connection={props.connection}
     />
   ) : sectionId === 'routing' ? (
     <RoutingScreen
