@@ -95,6 +95,15 @@ def render(template: str, *, kind: str, task: str, diff: Optional[str] = None, v
     return out
 
 
+def resume_message(delegated: str) -> str:
+    """The whole message sent to a RESUMED provider session after delegated commands ran (P06): only their results.
+    The session already holds the task, the agent's own turns and its summary, so nothing else is repeated."""
+    return ("Agent Studio coordinator: the delegated commands you asked for have finished; their results follow. "
+            "The workspace is as the commands left it and may differ from what you last read, so re-read a file before "
+            "you edit it. Continue from where you stopped and do not repeat finished work.\n"
+            + section("DELEGATED", delegated, PROMPT_LIMITS["delegated"]))
+
+
 def resume_prompt(original: str, delegated: str, summary: Optional[str]) -> str:
     """The prompt of a stage re-dispatched after delegated commands ran (P06): the attempt's original prompt, the
     summary the agent left, and the commands' results. Appended as data sections, never expanded."""

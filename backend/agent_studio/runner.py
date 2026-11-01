@@ -343,8 +343,16 @@ def run(agent_id: str, assignment_id: str) -> int:
                 prompt = f.read(2 * 1024 * 1024)
     if prompt is None:
         prompt = ("===== TASK =====\n" + str(req.get("goal", "")) + "\n===== END TASK =====\n").encode("utf-8")
-    role_text = ((r.get("roleContext") or {}).get("text") or "")
-    if not role_text and role:
+    resume_id = r.get("resumeSessionId") if isinstance(r.get("resumeSessionId"), str) else None
+    resuming = bool(resume_id) and getattr(adapter, "supports_session_resume", False)
+    if resume_id and not resuming and r.get("fallbackPromptFile"):
+        # the provider cannot resume: start fresh with the full prompt the coordinator kept for this case
+        src = os.path.realpath(str(r["fallbackPromptFile"]))
+        if src.startswith(os.path.realpath(os.path.join(sd, "workflows")) + os.sep):
+            with open(src, "rb") as f:
+                prompt = f.read(2 * 1024 * 1024)
+    role_text = "" if resuming else ((r.get("roleContext") or {}).get("text") or "")   # the session already has it
+    if not role_text and role and not resuming:
         role_text = f"===== AGENT STUDIO ROLE: {role} =====\n(no role configuration)\n===== END ROLE =====\n"
     _write_private(prompt_path, role_text.encode("utf-8") + (b"\n" if role_text else b"") + prompt)
     inp = AssignmentInput(
@@ -354,6 +362,7 @@ def run(agent_id: str, assignment_id: str) -> int:
                                                           MAX_DEADLINE_MS) / 1000.0,
         output_budget_bytes=_clamp(r.get("outputBudgetBytes"), DEFAULT_BUDGET, 1024, MAX_BUDGET),
         model=r.get("model"), reasoning=r.get("reasoning"), options=r.get("providerOptions") or {},
+        provider_session_id=resume_id if resuming else None,
         expects_verdict=bool(r.get("expectsVerdict")) or r.get("stage") in ("reviewer", "reviewer_recheck"),
         mcp_tickets=bool(r.get("mcpTickets")), mcp_workspace=r.get("mcpWorkspace"),
         mcp_delegation=bool(r.get("mcpDelegation")))

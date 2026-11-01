@@ -172,7 +172,7 @@ def parse_config(raw) -> dict:
     if not isinstance(raw, dict) or raw.get("version") != 1:
         raise _bad("$", 'must be an object with "version": 1')
     for key in raw:
-        if key not in ("version", "defaults", "commands", "onDenialWithRequest"):
+        if key not in ("version", "defaults", "commands", "onDenialWithRequest", "resumeSession"):
             raise _bad(key, "unknown key")
     draw = raw.get("defaults", {})
     if not isinstance(draw, dict) or set(draw) - set(DEFAULTS):
@@ -182,7 +182,10 @@ def parse_config(raw) -> dict:
     if not isinstance(craw, dict) or len(craw) > MAX_COMMANDS:
         raise _bad("commands", f"is required: an object of at most {MAX_COMMANDS} commands")
     commands = {cid: _command(cid, spec, defaults) for cid, spec in craw.items()}
-    return {"version": 1, "commands": commands,
+    resume = raw.get("resumeSession", True)
+    if not isinstance(resume, bool):
+        raise _bad("resumeSession", "must be true or false")
+    return {"version": 1, "commands": commands, "resumeSession": resume,
             "onDenialWithRequest": _choice(raw, "onDenialWithRequest", "$", DENIAL_MODES, "delegate")}
 
 

@@ -345,3 +345,48 @@ class PassNeedsTheSuiteForTheChange(DelegationCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionResumeAfterDelegation(DelegationCase):
+    """The stage's provider session is resumed with only the command results; without resume support, as before."""
+
+    extra_env = {"AGENT_STUDIO_FAKE_RESUME": "1"}
+
+    def test_the_resumed_session_receives_only_the_delegated_results(self):
+        wf, d = self.run_def({"develop": asks("deps-setup", "feature.txt"), "qa": fake("verdict_pass")})
+        self.assertEqual(d["workflowRun"]["status"], "succeeded", d["workflowRun"])
+        first, resumed = self.prompt(d, 0), self.prompt(d, 1)
+        self.assertIn("===== DELEGATED_COMMANDS =====", first)
+        self.assertTrue(resumed.startswith("Agent Studio coordinator: the delegated commands you asked for"), resumed)
+        self.assertIn("===== DELEGATED =====", resumed)
+        self.assertIn("installed all", resumed)
+        for repeated in ("Implement.", "DELEGATED_COMMANDS", "PREVIOUS_SUMMARY"):
+            self.assertNotIn(repeated, resumed)
+        event = self.events(d, "workflow_run.delegation_resumed")[0]["data"]
+        self.assertTrue(event["resumedSession"])
+        # the full prompt is kept beside it for a provider that cannot resume
+        full = open(os.path.join(os.path.dirname(d["stageAttempts"][1]["promptPath"]), "prompt-full.txt")).read()
+        self.assertTrue(full.startswith(first))
+        self.assertIn("===== PREVIOUS_SUMMARY =====", full)
+        # the second assignment really resumed the first one's session, and role text was not sent again
+        a0, a1 = d["assignments"][:2]
+        self.assertTrue(a0["result"]["providerSessionId"])
+        self.assertEqual(a1["result"]["providerSessionId"], a0["result"]["providerSessionId"])
+
+    def test_resumeSession_false_keeps_the_full_prompt(self):
+        with open(os.path.join(self.ws, ".agent-studio", "commands.json"), "w") as f:
+            json.dump(dict(CATALOG, resumeSession=False), f)
+        self.commit("no resume")
+        wf, d = self.run_def({"develop": asks("deps-setup", "feature.txt"), "qa": fake("verdict_pass")})
+        self.assertEqual(d["workflowRun"]["status"], "succeeded", d["workflowRun"])
+        self.assertTrue(self.prompt(d, 1).startswith(self.prompt(d, 0)))
+        self.assertFalse(self.events(d, "workflow_run.delegation_resumed")[0]["data"]["resumedSession"])
+        self.assertNotEqual(d["assignments"][1]["result"]["providerSessionId"],
+                            d["assignments"][0]["result"]["providerSessionId"])
+
+
+class NoSessionResumeWithoutProviderSupport(DelegationCase):
+    def test_a_provider_that_cannot_resume_gets_the_full_prompt(self):
+        wf, d = self.run_def({"develop": asks("deps-setup", "feature.txt"), "qa": fake("verdict_pass")})
+        self.assertTrue(self.prompt(d, 1).startswith(self.prompt(d, 0)))
+        self.assertFalse(self.events(d, "workflow_run.delegation_resumed")[0]["data"]["resumedSession"])

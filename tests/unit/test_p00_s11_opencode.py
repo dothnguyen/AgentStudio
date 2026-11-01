@@ -134,6 +134,22 @@ class Argv(Fixture):
     def rules(self, prep):
         return json.loads(prep.extra_env["OPENCODE_CONFIG_CONTENT"])["permissions"]
 
+    def test_no_session_flag_unless_resuming(self):
+        self.assertNotIn("--session", self.argv().argv)
+
+    def test_a_resumed_session_adds_session_and_keeps_the_permission_rules(self):
+        p = self.argv(provider_session_id="ses_e6b33f345ffeRnd1PiGTozQm3R")
+        self.assertEqual(p.argv[p.argv.index("--session") + 1], "ses_e6b33f345ffeRnd1PiGTozQm3R")
+        self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, self.rules(p))
+        self.assertTrue(OPENCODE.supports_session_resume)
+
+    def test_a_session_id_of_an_odd_shape_is_refused(self):
+        for bad in ("--continue", "a b", "x;y", "", "s" * 101):
+            if not bad:
+                continue
+            with self.assertRaises(AsError):
+                self.argv(provider_session_id=bad)
+
     def test_shape_and_permission_injection(self):
         p = self.argv()
         self.assertEqual(p.argv[0], os.path.join(self.bin, "opencode"))

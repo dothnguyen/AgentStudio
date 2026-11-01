@@ -280,7 +280,7 @@ def _enter_validation(tx: Tx, wf_id: str, st: "workflowdef.Stage", ctx: dict, fr
 
 def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, from_assignment: Optional[str],
               provider_options: Optional[dict] = None, data: Optional[dict] = None,
-              new_visit: bool = False) -> str:
+              new_visit: bool = False, resume: Optional[dict] = None) -> str:
     """Create the stage attempt and its assignment. Routing passes prompt=None and `data` (diff, validation, findings,
     summary) and the frozen template is rendered here; a resolve-retry passes the earlier prompt text."""
     wf = tx.get("workflow_run", wf_id)
@@ -299,6 +299,11 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
     sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{stage}")
     prompt_path = os.path.join(sdir, "prompt.txt")
     _write_private(prompt_path, prompt)
+    resume_keys = {}
+    if resume:   # P06: the runner resumes the provider session with `prompt` (results only); `fullPrompt` is the fallback
+        full_path = os.path.join(sdir, "prompt-full.txt")
+        _write_private(full_path, resume["fullPrompt"])
+        resume_keys = {"resumeSessionId": resume["sessionId"], "fallbackPromptFile": full_path}
     sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": stage,
                                      "attempt": attempt, "agent_id": agent_id, "phase": "assignment",
                                      "prompt_path": prompt_path, "stage_type": "agent", "visit": visit})
@@ -308,7 +313,7 @@ def _dispatch(tx: Tx, wf_id: str, stage: str, prompt: Optional[str], ctx: dict, 
                                    "workflowRunId": wf_id, "stage": stage,
                                    "expectsVerdict": st.kind == "verdict",
                                    "mcpWorkspace": tx.get("team", wf["team_id"])["workspace"],
-                                   **({"mcpDelegation": True} if allowed else {})})
+                                   **({"mcpDelegation": True} if allowed else {}), **resume_keys})
     stage_opts = provider_options or (config.get("debugStageOptions") or {}).get(stage)
     if isinstance(stage_opts, list):   # debug only: one option set per visit, the last one repeats
         stage_opts = stage_opts[min(visit, len(stage_opts)) - 1] if stage_opts else None
@@ -450,8 +455,11 @@ def _maybe_delegate(tx: Tx, wf: dict, sa: dict, a: dict, result: dict) -> bool:
         from . import resolve
         resolve._close(tx, a, "failed", "DELEGATED", "permission denied; the coordinator runs the requested commands")
     summary = str(result.get("finalText") or result.get("summary") or "")[:16 * 1024]
+    artifacts = {"summary": summary}
+    if isinstance(result.get("providerSessionId"), str) and result["providerSessionId"]:
+        artifacts.update(providerSessionId=result["providerSessionId"], providerId=a.get("provider_id"))
     tx.update("stage_attempt", sa["id"], {"phase": "delegating", "outcome": "delegating",
-                                          "artifacts_json": {"summary": summary}},
+                                          "artifacts_json": artifacts},
               "stage_attempt.delegating",
               {"stage": sa["stage"], "sourceAssignmentId": a["id"], "afterDenial": denied,
                "requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]} for r in reqs]})
@@ -513,6 +521,23 @@ def _advance_delegation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
     return _resume_after_delegation(tx, wf, sa, reqs, ctx)
 
 
+def _session_resume(tx: Tx, wf: dict, sa: dict, st, ctx: dict) -> Optional[dict]:
+    """The provider session to resume after delegated commands, or None to start a fresh one with the full prompt.
+    Needs the session id recorded when the stage delegated, the same provider on the same bound agent, a provider
+    whose adapter can resume, and `resumeSession` not switched off in the catalog."""
+    art = _loads(sa["artifacts_json"], {}) or {}
+    sid = art.get("providerSessionId")
+    if not sid or (delegation.run_config(wf) or {}).get("resumeSession", True) is not True:
+        return None
+    agent = tx.get("agent", _loads(wf["bindings_json"], {})[st.role])
+    if agent["provider_id"] != art.get("providerId"):
+        return None
+    adapter, _alias = tasks.adapter_for(agent, ctx)
+    if not getattr(adapter, "supports_session_resume", False):
+        return None
+    return {"sessionId": sid}
+
+
 def _resume_after_delegation(tx: Tx, wf: dict, sa: dict, reqs: list, ctx: dict) -> bool:
     st = _stage_of(wf, sa["stage"])
     tx.transition("stage_attempt", sa["id"], "completed", set_values={"outcome": "delegated"},
@@ -524,9 +549,16 @@ def _resume_after_delegation(tx: Tx, wf: dict, sa: dict, reqs: list, ctx: dict) 
     prompt = prompts.resume_prompt(original, delegation.result_text(reqs), summary)
     if st.kind == "verdict":
         prompt += "\n" + prompts.VERDICT_FOOTER
-    new = _dispatch(tx, wf["id"], sa["stage"], prompt, ctx, from_assignment=sa["assignment_id"])
+    resume = _session_resume(tx, wf, sa, st, ctx)
+    if resume:   # send only the results into the agent's own session; the full prompt stays as the fallback
+        resume["fullPrompt"] = prompt
+        prompt = prompts.resume_message(delegation.result_text(reqs))
+        if st.kind == "verdict":
+            prompt += "\n" + prompts.VERDICT_FOOTER
+    new = _dispatch(tx, wf["id"], sa["stage"], prompt, ctx, from_assignment=sa["assignment_id"], resume=resume)
     tx.note("workflow_run", wf["id"], "workflow_run.delegation_resumed",
             {"stage": sa["stage"], "fromAssignmentId": sa["assignment_id"], "toAssignmentId": new,
+             "resumedSession": bool(resume),
              "requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]} for r in reqs]})
     delegation.ticket_note(tx, wf["id"], "ticket.delegation_resumed", {"stage": sa["stage"], "assignmentId": new})
     return True

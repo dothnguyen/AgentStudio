@@ -41,8 +41,10 @@ def git(ws, *a):
 class StartCase(unittest.TestCase):
     roster = [("codex", "Developer"), ("claude", "QA")]
 
+    extra_env = {}   # a subclass adds environment values the coordinator must start with
+
     def setUp(self):
-        self.sb = Sandbox(extra_env=ALIASES)
+        self.sb = Sandbox(extra_env=dict(ALIASES, **self.extra_env))
         rc, r, p = self.sb.run("coordinator", "start", "--enable-debug")
         self.assertTrue(r["ok"], p.stderr)
         self.ws = make_repo()

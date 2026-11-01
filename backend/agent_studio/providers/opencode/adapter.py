@@ -27,6 +27,7 @@ REQUIRED_FLAGS = ("--format", "--model", "--agent", "--session", "--standalone",
 # `--auto` auto-approves every permission that is not explicitly denied: the bypass analog. `--continue` /
 # `--session` reuse another session; the runner never resumes.
 NEVER = ("--auto", "--continue", "-c")
+SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$")
 CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
 PROJECT_CONFIG_ENV = "OPENCODE_DISABLE_PROJECT_CONFIG"  # never let a workspace config widen the run's rules
 CANARY_ACTION = "agent-studio-probe"
@@ -112,6 +113,7 @@ def _usage(part: dict) -> Optional[dict]:
 
 class OpenCodeAdapter(Adapter):
     provider_id = "opencode"
+    supports_session_resume = True   # `opencode run --session <id>`; used only after delegated commands (P06)
 
     # ---- declaration -------------------------------------------------------------------------
     def capabilities(self) -> dict:
@@ -256,6 +258,10 @@ class OpenCodeAdapter(Adapter):
             raise AsError("BAD_ADAPTER", "refusing an auto-approval or session-reuse flag")
         if inp.model:
             argv += ["--model", inp.model]
+        if inp.provider_session_id:
+            if not SESSION_ID.match(inp.provider_session_id):
+                raise AsError("BAD_ADAPTER", "refusing a provider session id of an unexpected form")
+            argv += ["--session", inp.provider_session_id]
         extra_env = {CONFIG_ENV: json.dumps(self._config(inp), separators=(",", ":")),
                      PROJECT_CONFIG_ENV: "1"}
         # no message argument: the prompt comes from stdin (the private prompt file), never the command line

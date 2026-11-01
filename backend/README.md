@@ -412,6 +412,13 @@ agent-studio command requests --workflow RUN_ID          # what a run asked for,
 agent-studio command approve --request ID                # or: reject --request ID --reason TEXT, cancel --request ID
 ```
 
+
+**Session resume.** When a stage that delegated commands is re-dispatched, a provider that can resume (opencode:
+`opencode run --session <id>`) gets its own session back and is sent only the commands' results (the
+`DELEGATED` section plus a short note), not the task again. The session id is recorded in the stage attempt when the
+stage delegates. The full prompt is kept as `prompt-full.txt` beside the short one and is used as-is for any provider
+that cannot resume. Set `"resumeSession": false` in `.agent-studio/commands.json` to turn it off.
+
 ## Windows boundary checks (PowerShell, from `scripts\windows`)
 
 ```powershell

@@ -40,6 +40,7 @@ def main():
     p.add_argument("--write")
     p.add_argument("--final-text")
     p.add_argument("--model")
+    p.add_argument("--session", help="resume this session (test-only, P06): the init event keeps its id")
     p.add_argument("--reasoning", choices=("low", "medium", "high"))
     p.add_argument("--mcp", action="store_true",
                    help="launch the agent-studio board MCP server per AGENT_STUDIO_MCP_COMMAND (test-only)")
@@ -48,7 +49,7 @@ def main():
     a = p.parse_args()
     prompt = sys.stdin.buffer.read()
     sha = hashlib.sha256(prompt).hexdigest()
-    emit({"type": "init", "session": "fake-" + uuid.uuid4().hex[:12], "promptSha256": sha, "promptBytes": len(prompt),
+    emit({"type": "init", "session": a.session or "fake-" + uuid.uuid4().hex[:12], "resumed": bool(a.session), "promptSha256": sha, "promptBytes": len(prompt),
           "sandbox": a.sandbox, "cwd": os.getcwd(), "model": a.model, "reasoning": a.reasoning})
     session = None
     if a.mcp:  # the runner started us with the board MCP server available (P04-S12)

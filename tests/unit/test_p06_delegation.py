@@ -530,3 +530,20 @@ class VerifyPassBySuite(VerifyPass):
         with mock.patch.object(delegation, "workspace_fingerprint", return_value="F2"), \
                 mock.patch.object(delegation, "changed_paths", side_effect=AssertionError("not consulted")):
             self.assertIsNone(delegation.verify_pass(self.tx, {"id": "w1"}, ("test-all",), "/ws"))
+
+
+class ResumeMessageAndFlag(unittest.TestCase):
+    def test_the_resume_message_holds_only_the_results(self):
+        from agent_studio import prompts
+        text = prompts.resume_message("deps-setup SUCCEEDED\ninstalled all")
+        self.assertIn("===== DELEGATED =====\ndeps-setup SUCCEEDED", text)
+        self.assertNotIn("PREVIOUS_SUMMARY", text)
+        self.assertNotIn("TASK", text)
+
+    def test_resumeSession_must_be_a_bool(self):
+        from agent_studio import delegation
+        base = {"version": 1, "commands": {}}
+        self.assertTrue(delegation.parse_config(base)["resumeSession"])
+        self.assertFalse(delegation.parse_config(dict(base, resumeSession=False))["resumeSession"])
+        with self.assertRaises(Exception):
+            delegation.parse_config(dict(base, resumeSession="no"))

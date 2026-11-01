@@ -20,6 +20,10 @@ class FakeAdapter(Adapter):
     provider_id = "fake"
     test_only = True
 
+    @property
+    def supports_session_resume(self) -> bool:   # tests opt in (AGENT_STUDIO_FAKE_RESUME=1): P06 session resume
+        return os.environ.get("AGENT_STUDIO_FAKE_RESUME") == "1"
+
     def capabilities(self) -> dict:
         return {"headless": True, "structuredProgress": True, "structuredFinal": True, "resume": UNSUPPORTED,
                 "interactiveInput": UNSUPPORTED}
@@ -58,6 +62,8 @@ class FakeAdapter(Adapter):
             argv += ["--model", inp.model]
         if inp.reasoning:
             argv += ["--reasoning", inp.reasoning]
+        if inp.provider_session_id:
+            argv += ["--session", inp.provider_session_id]
         write = o.get("writeFile")
         if write is not None:
             if not isinstance(write, str) or not SAFE_REL.match(write):
