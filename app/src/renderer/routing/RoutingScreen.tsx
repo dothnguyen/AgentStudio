@@ -117,6 +117,7 @@ function RoutingBrowser(props: RoutingScreenProps & { navigation: TeamsNavigatio
           <h1 id="routing-heading" ref={heading} tabIndex={-1}>Routing</h1>
           <p className="routing-subtitle">How tickets move on its own. When a ticket reaches a status, the role named here works it in the running team, and the result decides the next status.</p>
         </div>
+        <button type="button" className="routing-refresh" aria-busy={refreshing} ref={refreshRef} onClick={() => { void refresh(); }}>Refresh</button>
       </header>
       <div className="routing-notice">
         <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -161,9 +162,6 @@ function RoutingBrowser(props: RoutingScreenProps & { navigation: TeamsNavigatio
         teamsState={navigation.data !== null ? 'ready' : navigation.overview.state}
         onOpenTeam={props.onOpenTeam}
         onOpenTeams={props.onOpenTeams}
-        refreshing={refreshing}
-        refreshRef={refreshRef}
-        onRefresh={() => { void refresh(); }}
       />
       {roleCatalogMessage !== null && roleItems === null && roleCatalog.error === null && !rolesPending && (
         <p className="panel-note routing-role-catalog-note">{roleCatalogMessage}</p>

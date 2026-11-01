@@ -170,7 +170,6 @@ export function RoutingReadView({ settings, roleItems, teams = null, teamsState,
               const protection = protectedState(settings, rule.status);
               const route = settings.protectedRoutes.find(candidate => candidate.status === rule.status);
               const member = roleMember(teams, rule.role);
-              const actionRule = rule.type === 'action' ? settings.actionRules.find(candidate => candidate.status === rule.status) ?? null : null;
               const missingEscalationHandler = rule.onFailureLimit !== null && !settings.rules.some(candidate => candidate.status === rule.onFailureLimit!.status);
               return <li className="routing-rule-row" key={rule.index} data-rule-index={rule.index}>
                 <span className="routing-rule-index">{rule.index + 1}</span>
@@ -195,7 +194,6 @@ export function RoutingReadView({ settings, roleItems, teams = null, teamsState,
                   </> : <>
                     <span className="routing-action-name"><Icon name="git-branch" size={12} />{actionTitle(rule.action)}</span>
                     <span className="routing-rule-meta">Built-in action, no agent</span>
-                    {actionRule !== null && <span className="routing-rule-meta">{`tickets created on pass: ${actionRule.onPassCreatedTickets === null ? 'none' : statusName(settings.statuses, actionRule.onPassCreatedTickets)}`}</span>}
                   </>}
                 </span>
                 <span className="routing-rule-cell"><StatusChip settings={settings} status={rule.onPass} /></span>

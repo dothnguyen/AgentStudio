@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import type { BoardSettings, ManagementApi, ManagementError, Problem, RoleCatalogItem, TeamOverview } from '../../shared/management';
 import { RoutingReadView, type RoutingTeamsState } from './RoutingReadView';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
@@ -20,7 +20,7 @@ import { RoutingRuleDialog } from './RoutingRuleDialog';
 import { RoutingRemoveRuleDialog } from './RoutingRemoveRuleDialog';
 import { RoutingWorktreesDialog } from './RoutingWorktreesDialog';
 
-export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; alert?: boolean; announce?: boolean; onLocalErrorChange?(active: boolean): void; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void; teams?: TeamOverview | null; teamsState?: RoutingTeamsState; onOpenTeam?(teamId: string | null): void; onOpenTeams?(): void; refreshing?: boolean; refreshRef?: RefObject<HTMLButtonElement | null>; onRefresh?(): void }
+export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; alert?: boolean; announce?: boolean; onLocalErrorChange?(active: boolean): void; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void; teams?: TeamOverview | null; teamsState?: RoutingTeamsState; onOpenTeam?(teamId: string | null): void; onOpenTeams?(): void }
 
 type DialogState =
   | { kind: 'edit' | 'add'; settings: BoardSettings; index: number; draft: RoutingDraft }
@@ -29,9 +29,8 @@ type DialogState =
 
 type FocusTarget = { kind: 'rule'; index: number } | { kind: 'add' } | { kind: 'worktrees' };
 
-export function RoutingSettingsPanel({ workspaceId, management, section, connected, alert = true, announce = true, onLocalErrorChange, roleItems = null, onViewRole, teams = null, teamsState, onOpenTeam, onOpenTeams, refreshing = false, refreshRef, onRefresh }: RoutingSettingsPanelProps): JSX.Element {
+export function RoutingSettingsPanel({ workspaceId, management, section, connected, alert = true, announce = true, onLocalErrorChange, roleItems = null, onViewRole, teams = null, teamsState, onOpenTeam, onOpenTeams }: RoutingSettingsPanelProps): JSX.Element {
   const rootRef = useRef<HTMLElement>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [pending, setPending] = useState(false); const lock = useRef(false);
   const [saved, setSaved] = useState(false);
@@ -228,11 +227,9 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
   }
 
   const failureAlert = alert;
-  return <section ref={rootRef} className="dashboard-panel routing-settings" aria-label="Workspace board routing"><div className="routing-panel-header"><h2 ref={headingRef} tabIndex={-1}>Workspace board routing</h2>
-    {onRefresh && <button type="button" className="routing-refresh" aria-busy={refreshing} ref={refreshRef} onClick={onRefresh}>Refresh</button>}</div>
-    <p className="routing-scope">Routing belongs to the workspace board. Changes affect every team that uses this workspace board, not only the selected team.</p>
+  return <section ref={rootRef} tabIndex={-1} className="routing-settings" aria-label="Workspace board routing">
     {section.loading && <p className="panel-loading" role={announce ? 'status' : undefined}>{settings ? 'Refreshing routing settings… Showing previously loaded data.' : 'Loading settings…'}</p>}
-    {section.error && <div className="panel-error" role={alert && !localAlert ? 'alert' : undefined}>{settings && <p>Showing previously loaded data.</p>}<p>{section.error.code}: {section.error.message}</p><p>{section.error.remediation || 'Retry loading routing settings; if it keeps failing, check the Agent Studio connection.'}</p><button type="button" data-focus="section-retry" onClick={() => void (async () => { const result = section.reloadFresh ? await section.reloadFresh() : (await section.reload(), null); if (result?.ok === false) { rootRef.current?.querySelector<HTMLElement>('[data-focus="section-retry"]')?.focus(); } else { headingRef.current?.focus(); } })()}>Retry</button></div>}
+    {section.error && <div className="panel-error" role={alert && !localAlert ? 'alert' : undefined}>{settings && <p>Showing previously loaded data.</p>}<p>{section.error.code}: {section.error.message}</p><p>{section.error.remediation || 'Retry loading routing settings; if it keeps failing, check the Agent Studio connection.'}</p><button type="button" data-focus="section-retry" onClick={() => void (async () => { const result = section.reloadFresh ? await section.reloadFresh() : (await section.reload(), null); if (result?.ok === false) { rootRef.current?.querySelector<HTMLElement>('[data-focus="section-retry"]')?.focus(); } else { rootRef.current?.focus(); } })()}>Retry</button></div>}
     {!connected && settings && <p className="panel-note">Disconnected from the backend. Routing is read-only until the connection returns.</p>}
     {settings && (section.error !== null || section.data === null) && <p className="panel-note">Showing the last loaded routing; it may be out of date.</p>}
     {settings && <>

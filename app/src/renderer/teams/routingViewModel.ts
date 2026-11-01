@@ -1,4 +1,4 @@
-import type { BoardRuleView, BoardSettings, OverviewMember, OverviewTeam, RoleCatalogItem, TeamOverview } from '../../shared/management';
+import type { BoardSettings, OverviewMember, OverviewTeam, RoleCatalogItem, TeamOverview } from '../../shared/management';
 
 export type RoleRef = { kind: 'catalog'; id: string; label: string } | { kind: 'missing'; id: string } | { kind: 'catalog-unavailable'; id: string } | { kind: 'none' };
 export function statusLabel(statuses: BoardSettings['statuses'], id: string): string {
@@ -12,17 +12,18 @@ export function statusName(statuses: BoardSettings['statuses'], id: string): str
   return s.name?.trim() ? s.name : id;
 }
 export type StatusTone = 'grey' | 'blue' | 'amber' | 'red' | 'green' | 'neutral';
-/** The dot colour for a status, mapped by its id and kind with a neutral default for custom statuses. */
+/** The design's id colours first, then the status kind, with a neutral default for custom statuses. */
 export function statusTone(statuses: BoardSettings['statuses'], id: string): StatusTone {
   const status = statuses.find(s => s.id === id);
-  if (status?.kind === 'initial' || status?.kind === 'closed') return 'grey';
-  if (status?.kind === 'done') return 'green';
+  if (status?.kind === 'closed') return 'grey';
   const key = id.toLocaleLowerCase();
   if (key === 'backlog' || key === 'closed') return 'grey';
   if (key === 'done') return 'green';
   if (key.includes('conflict')) return 'red';
   if (key.includes('escalat')) return 'amber';
   if (key.includes('ready')) return 'blue';
+  if (status?.kind === 'initial') return 'grey';
+  if (status?.kind === 'done') return 'green';
   return 'neutral';
 }
 export function roleRef(roleId: string | null, roleItems: RoleCatalogItem[] | null): RoleRef {
@@ -48,11 +49,6 @@ export function workspaceLabel(mode: string | null): string {
 export function protectedState(settings: Pick<BoardSettings, 'protectedRoutes'>, status: string): 'protected' | 'needs-repair' | null {
   const route = settings.protectedRoutes.find(r => r.status === status);
   return route ? route.satisfied ? 'protected' : 'needs-repair' : null;
-}
-export interface EscalationHandler { ruleIndex: number; type: 'agent' | 'action'; role: string | null; workflow: string | null; action: string | null }
-export interface EscalationChain { ruleIndex: number; source: string; role: string | null; count: number; target: string; handlers: EscalationHandler[] }
-export function escalationChains(settings: Pick<BoardSettings, 'rules'>): EscalationChain[] {
-  return settings.rules.flatMap((rule: BoardRuleView) => rule.onFailureLimit ? [{ ruleIndex: rule.index, source: rule.status, role: rule.role, count: rule.onFailureLimit.count, target: rule.onFailureLimit.status, handlers: settings.rules.filter(r => r.status === rule.onFailureLimit!.status).map(r => ({ ruleIndex: r.index, type: r.type, role: r.role, workflow: r.workflow, action: r.action })) }] : []);
 }
 export function workflowErrorText(error: unknown): string {
   if (typeof error === 'string') return error;
@@ -84,10 +80,6 @@ export function roleMember(overview: TeamOverview | null, roleId: string | null)
   }
   if (teams.length === 0) return { member: null, known: true };
   return { member: null, known: !teams.some(team => team.membersTruncated) };
-}
-/** The first member of a running team that fills the role, if one is known to fill it. */
-export function memberForRole(overview: TeamOverview | null, roleId: string | null): OverviewMember | null {
-  return roleMember(overview, roleId).member;
 }
 /** Distinct role ids used by agent rules, in rule order. */
 export function rolesUsedByRules(settings: Pick<BoardSettings, 'rules'>): string[] {

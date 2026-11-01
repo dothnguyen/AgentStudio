@@ -189,12 +189,15 @@ it('describes an action rule without a role, workflow or member', async () => {
   expect(within(row).queryByRole('button', { name: /in Roles/ })).toBeNull();
 });
 
-it('shows the created-on-pass status on action rule rows', async () => {
+it('shows built-in action rows without a role or created-on-pass detail', async () => {
   const { view } = await renderRouting(escalationRoutingFixture());
   const rows = ruleRows(view);
-  expect(rows[1]!.textContent).toContain('Merge');
-  expect(rows[1]!.textContent).toContain('tickets created on pass: backlog');
-  expect(rows[2]!.textContent).toContain('tickets created on pass: none');
+  for (const row of [rows[1]!, rows[2]!]) {
+    expect(row.textContent).toContain('Merge');
+    expect(row.textContent).toContain('Built-in action, no agent');
+    expect(row.textContent).not.toContain('tickets created on pass');
+    expect(within(row).queryByRole('button', { name: /in Roles/ })).toBeNull();
+  }
 });
 
 it('marks protected rules and explains a needs-repair route in the row', async () => {
@@ -225,16 +228,6 @@ it('uses singular wording when a failure limit is one run', async () => {
   const row = ruleRows(view)[5]!;
   expect(row.textContent).toContain('After 1 fail → Escalate');
   expect(row.textContent).not.toContain('After 1 fails');
-});
-
-it('omits the created-on-pass line when the action rule detail is not returned', async () => {
-  const s = routingSettingsFixture();
-  s.actionRules = [];
-  const { view } = await renderRouting(s);
-  const row = ruleRows(view)[1]!;
-  expect(row.textContent).toContain('Merge');
-  expect(row.textContent).toContain('Built-in action, no agent');
-  expect(row.textContent).not.toContain('tickets created on pass');
 });
 
 it('shows board and role problems in amber notes above the rules table', async () => {

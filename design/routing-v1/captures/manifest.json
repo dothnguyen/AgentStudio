@@ -1,0 +1,12 @@
+{
+  "width": 1440,
+  "height": 1447,
+  "files": {
+    "overview.png": "fa0b184094bd809e8e78b1bd3aa331c42c0e9ee5f5ed87f87b6de55e6bd70f37",
+    "edit-rule.png": "7c550c79a5673a98569e0200fa0b9b43440b2e91cc5ef6776e2a668b460a62ec",
+    "edit-action-rule.png": "b3d2bb38f00d49185cc4b09004be0f84336184d136e142ce8911d6523cd44c64",
+    "new-rule.png": "db2a74ea7c7c73abb8d2f17ce9e8775f418afbc65f4a42dc852ae26c62d8b676",
+    "remove-rule.png": "e3e9c85a06e25e966001ab5b4f175c68f3c8d9bb3af9e365eac374ec5de2c622",
+    "worktrees.png": "db6e2a66662faef9eafcd4d92cd7fa58b51c8539988622f772f45b116fda3921"
+  }
+}

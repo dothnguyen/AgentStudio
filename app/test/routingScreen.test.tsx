@@ -23,7 +23,7 @@ it('renders the design header and notice above the existing routing panel with o
   const panel = view.getByRole('region', { name: 'Workspace board routing' });
   expect(header.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(notice.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(view.getByRole('heading', { level: 2, name: 'Workspace board routing' })).toBeTruthy();
+  expect(panel.getAttribute('aria-label')).toBe('Workspace board routing');
   expect(fake.boardSettings).toHaveBeenCalledTimes(1);
   expect(fake.roles).toHaveBeenCalledTimes(1);
   expect(fake.overview).toHaveBeenCalledTimes(1);
@@ -35,12 +35,12 @@ it('keeps the page header to the heading and subtitle from the design', async ()
   await act(async () => {});
   const header = view.container.querySelector<HTMLElement>('.routing-header')!;
   expect(within(header).getByRole('heading', { level: 1 }).textContent).toBe('Routing');
-  expect(within(header).queryByRole('button')).toBeNull();
+  expect(within(header).getAllByRole('button').map(button => button.textContent)).toEqual(['Refresh']);
   expect(header.querySelectorAll('h1')).toHaveLength(1);
   expect(view.container.querySelector('.routing-notice svg path')?.getAttribute('d')).toBe('M12 8v4M12 16h.01');
 });
 
-it('announces loading once and retries a failed board read with focus on the panel heading', async () => {
+it('announces loading once and retries a failed board read with focus on the panel', async () => {
   const gate = deferred<ReturnType<typeof okR<ReturnType<typeof routingSettingsFixture>>>>();
   const loading = render(<RoutingScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [gate.promise] }).api} />);
   await act(async () => {});
@@ -59,7 +59,7 @@ it('announces loading once and retries a failed board read with focus on the pan
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
   expect(fake.roles).toHaveBeenCalledTimes(1);
   expect(within(panel.getByRole('region', { name: 'Worktrees' })).getByText('main')).toBeTruthy();
-  expect(document.activeElement).toBe(panel.getByRole('heading', { level: 2, name: 'Workspace board routing' }));
+  expect(document.activeElement).toBe(view.getByRole('region', { name: 'Workspace board routing' }));
 });
 
 it('refreshes board settings and roles and announces the result once', async () => {
@@ -73,13 +73,12 @@ it('refreshes board settings and roles and announces the result once', async () 
   expect(view.getByRole('status').textContent).toContain('Routing data refreshed.');
 });
 
-it('returns focus to the panel refresh button after a successful refresh', async () => {
+it('returns focus to the header refresh button after a successful refresh', async () => {
   const fake = fakeManagement({ boardSettings: [okR(routingSettingsFixture()), okR(routingSettingsFixture())], roles: [okR(rolesFixture()), okR(rolesFixture())] });
   const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  const refresh = panel.getByRole('button', { name: 'Refresh' });
-  expect(refresh.closest('.routing-panel-header')).not.toBeNull();
+  const refresh = view.getByRole('button', { name: 'Refresh' });
+  expect(refresh.closest('.routing-header')).not.toBeNull();
   fireEvent.click(refresh);
   await act(async () => {});
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
@@ -95,7 +94,7 @@ it('a failed refresh shows the panel error instead of announcing a refresh', asy
   const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  fireEvent.click(panel.getByRole('button', { name: 'Refresh' }));
+  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
   await act(async () => {});
   expect(fake.boardSettings).toHaveBeenCalledTimes(2);
   expect(view.queryByText('Routing data refreshed.')).toBeNull();

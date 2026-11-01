@@ -18,6 +18,7 @@ describe('Electron project wiring', () => {
       'capture:teams': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureTeams.js',
       'capture:member': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureMember.js',
       'capture:roles': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureRoles.js',
+      'capture:routing': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureRouting.js',
     });
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(fs.existsSync(path.join(appDir, 'package-lock.json'))).toBe(true);

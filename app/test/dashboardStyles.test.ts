@@ -390,10 +390,9 @@ describe('routing screen', () => {
     expect(flat).toContain('.routing-heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 760px; }');
     expect(flat).toContain('.routing-notice { display: flex; align-items: center; gap: 10px;');
     expect(flat).toContain('.routing-notice svg { flex: none; color: #9ec3ff; }');
-    expect(flat).toContain('.routing-panel-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;');
     expect(flat).toContain('.routing-screen .routing-refresh { display: inline-flex;');
     expect(flat).toContain('.teams-routing-link { margin: 4px 0 0; color: var(--text-muted); font-size: 12.5px; }');
-    expect(flat).toContain('.routing-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }');
+    expect(flat).toContain('.routing-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
     expect(flat).toContain('.teams-view-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
   });
 });

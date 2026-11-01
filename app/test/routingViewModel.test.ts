@@ -1,7 +1,5 @@
 import { expect, it } from 'vitest';
 import {
-  escalationChains,
-  memberForRole,
   protectedState,
   roleCoverage,
   roleMember,
@@ -15,7 +13,7 @@ import {
   workflowLabel,
   workspaceLabel,
 } from '../src/renderer/teams/routingViewModel';
-import { escalationSettingsFixture, member, overviewFixture, routingSettingsFixture, team } from './teamsFixtures';
+import { member, overviewFixture, routingSettingsFixture, team } from './teamsFixtures';
 import { roleItem } from './rolesFixtures';
 
 it('statusLabel_uses_name_id_and_unknown', () => {
@@ -40,14 +38,6 @@ it('protectedState_uses_returned_routes', () => {
   const s = { protectedRoutes: [{ status: 'a', role: 'r', satisfied: true }, { status: 'b', role: 'r', satisfied: false }] };
   expect(['a', 'b', 'c'].map(id => protectedState(s, id))).toEqual(['protected', 'needs-repair', null]);
 });
-it('escalationChains_follow_returned_ids', () => {
-  const s = escalationSettingsFixture();
-  expect(escalationChains(s).map(c => [c.count, c.target, c.handlers[0].role])).toEqual([[3, 'need-escalate', 'SeniorDeveloper'], [3, 'need-escalate', 'SeniorDeveloper']]);
-  s.rules = s.rules.map(r => ({ ...r, status: r.status === 'need-escalate' ? 'triage' : r.status, role: r.role === 'SeniorDeveloper' ? 'Expert' : r.role, onFailureLimit: r.onFailureLimit && { ...r.onFailureLimit, status: 'triage' } }));
-  expect(escalationChains(s).map(c => [c.target, c.handlers[0].role])).toEqual([['triage', 'Expert'], ['triage', 'Expert']]);
-  s.rules = s.rules.filter(r => r.status !== 'triage');
-  expect(escalationChains(s)[0].handlers).toEqual([]);
-});
 it('statusName_and_tone_map_the_design_colours', () => {
   const statuses = [
     { id: 'backlog', name: 'Backlog', kind: 'initial' },
@@ -60,14 +50,14 @@ it('statusName_and_tone_map_the_design_colours', () => {
   expect(['backlog', 'ready', 'need-escalate', 'merge-conflict', 'done', 'custom', 'zzz'].map(id => statusName(statuses, id))).toEqual(['Backlog', 'Ready', 'Needs escalation', 'Merge conflict', 'Done', 'custom', 'zzz (unknown status)']);
   expect(['backlog', 'ready', 'need-escalate', 'merge-conflict', 'done', 'custom', 'closed'].map(id => statusTone(statuses, id))).toEqual(['grey', 'blue', 'amber', 'red', 'green', 'neutral', 'grey']);
 });
-it('runningTeams_and_memberForRole_use_only_running_teams', () => {
+it('runningTeams_and_roleMember_use_only_running_teams', () => {
   const stopped = team({ id: 'stopped', runtime: { state: 'stopped', teamId: 'old', status: 'stopped' }, members: [member({ memberId: 'old', role: 'Developer' })] });
   const running = team({ id: 'running', runtime: { state: 'running', teamId: 'live', status: 'running' }, members: [member({ memberId: 'dev', role: 'Developer' })] });
   const overview = overviewFixture([stopped, running]);
   expect(runningTeams(overview).map(t => t.id)).toEqual(['running']);
-  expect(memberForRole(overview, 'Developer')?.memberId).toBe('dev');
-  expect(memberForRole(overview, 'QA')).toBeNull();
-  expect(memberForRole(null, 'Developer')).toBeNull();
+  expect(roleMember(overview, 'Developer').member?.memberId).toBe('dev');
+  expect(roleMember(overview, 'QA').member).toBeNull();
+  expect(roleMember(null, 'Developer')).toEqual({ member: null, known: false });
   const stale = team({ id: 'stale', runtime: { state: 'stopped', teamId: 'old', status: 'running' }, members: [member({ memberId: 'stale-dev', role: 'Developer' })] });
   expect(runningTeams(overviewFixture([stale])).map(t => t.id)).toEqual([]);
 });
@@ -132,15 +122,15 @@ it('roleCoverage_never_claims_a_gap_when_a_running_team_is_truncated', () => {
     truncated: true,
   });
 });
-it('roleCoverage_and_memberForRole_combine_every_running_team_and_ignore_stopped_ones', () => {
+it('roleCoverage_and_roleMember_combine_every_running_team_and_ignore_stopped_ones', () => {
   const settings = routingSettingsFixture();
   const overview = overviewFixture([
     team({ id: 'stopped', runtime: { state: 'stopped', teamId: 'old', status: 'stopped' }, members: [member({ memberId: 'old-lead', role: 'TeamLead' })] }),
     team({ id: 'one', runtime: { state: 'running', teamId: 'live-1', status: 'running' }, members: [member({ memberId: 'dev', role: 'Developer' })] }),
     team({ id: 'two', runtime: { state: 'running', teamId: 'live-2', status: 'running' }, members: [member({ memberId: 'lead', role: 'TeamLead' })] }),
   ]);
-  expect(memberForRole(overview, 'Developer')?.memberId).toBe('dev');
-  expect(memberForRole(overview, 'TeamLead')?.memberId).toBe('lead');
+  expect(roleMember(overview, 'Developer').member?.memberId).toBe('dev');
+  expect(roleMember(overview, 'TeamLead').member?.memberId).toBe('lead');
   expect(roleCoverage(settings, overview, null)).toMatchObject({ total: 2, filled: 2, gaps: [], running: true, known: true });
 });
 it('roleCoverage_gap_labels_use_the_catalog_name_or_the_stable_role_id', () => {
@@ -158,13 +148,16 @@ it('roleCoverage_gap_labels_use_the_catalog_name_or_the_stable_role_id', () => {
     { role: 'TeamLead', label: 'TeamLead', statuses: ['merge-conflict', 'plan-merge-conflict'] },
   ]);
 });
-it('statusTone_honours_the_status_kind_before_id_guesses', () => {
+it('statusTone_uses_the_design_ids_then_the_status_kind', () => {
   const statuses = [
     { id: 'somewhere', name: null, kind: 'initial' },
+    { id: 'merge-ready', name: null, kind: 'initial' },
+    { id: 'closed-ready', name: null, kind: 'closed' },
     { id: 'done-ish', name: null, kind: 'done' },
     { id: 'archived', name: null, kind: 'closed' },
   ];
-  expect(['somewhere', 'done-ish', 'archived'].map(id => statusTone(statuses, id))).toEqual(['grey', 'green', 'grey']);
+  expect(['somewhere', 'merge-ready', 'closed-ready', 'done-ish', 'archived'].map(id => statusTone(statuses, id)))
+    .toEqual(['grey', 'blue', 'grey', 'green', 'grey']);
   expect(['backlog', 'closed', 'some-ready', 'needs-escalation', 'merge-conflict', 'custom'].map(id => statusTone(statuses, id)))
     .toEqual(['grey', 'grey', 'blue', 'amber', 'red', 'neutral']);
 });

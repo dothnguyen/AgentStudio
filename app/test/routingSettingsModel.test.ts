@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addRule, boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, isActionRule, isRuleFieldProblem, removeRule, removeRuleFailureLimit, ruleStatus, setRuleFailureLimit, setRuleSyncBase, unusedStatuses, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
+import { addRule, boardSettingsChanges, createRoutingDraft, errorProblems, isActionRule, isRuleFieldProblem, removeRule, removeRuleFailureLimit, ruleStatus, setRuleFailureLimit, setRuleSyncBase, unusedStatuses, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
 import { escalationSettingsFixture, routingSettingsFixture } from './teamsFixtures';
 
 describe('routing settings model', () => {
@@ -92,7 +92,7 @@ describe('failure escalation', () => {
     expect(s.rules[5].onFailureLimit).toEqual(policy); expect(s.rules[6].onFailureLimit).toEqual(policy);
     expect(s.rules[7].onFailureLimit).toBeNull(); expect(s.rules[7].role).toBe('SeniorDeveloper');
     expect(routingSettingsFixture().rules.every(r => r.onFailureLimit === null)).toBe(true);
-    expect(failureLimitOf(d.rules[5])).toEqual(policy);
+    expect(d.rules[5]!.onFailureLimit).toEqual(policy);
     expect(validateRoutingDraft(d, s)).toEqual([]);
   });
   it('adds a policy without touching other raw fields', () => {
@@ -168,15 +168,6 @@ describe('failure escalation', () => {
     const { d } = setup(); const rules = structuredClone(d.rules); rules[5].futureKey = { a: 1 };
     const x = { ...d, rules };
     for (const out of [setFailureLimit(x, 5, { count: 9, status: 'dev-ready' }), updateFailureLimit(x, 5, 'count', 4), removeRuleFailureLimit(x, 5)]) expect(out.rules[5].futureKey).toEqual({ a: 1 });
-  });
-  it('reads only object policies with numeric count and string status and returns a copy', () => {
-    expect(failureLimitOf(undefined)).toBeNull();
-    for (const value of [null, [], 'policy', { count: '3', status: 'need-escalate' }, { count: 3, status: 1 }]) {
-      expect(failureLimitOf({ onFailureLimit: value })).toBeNull();
-    }
-    const original = { count: 3, status: 'need-escalate', extra: true };
-    const result = failureLimitOf({ onFailureLimit: original });
-    expect(result).toEqual(policy); expect(result).not.toBe(original);
   });
   it('preserves policy key order on no-op and update, and replaces changed policies exactly', () => {
     const { d } = setup(); const rules = structuredClone(d.rules);

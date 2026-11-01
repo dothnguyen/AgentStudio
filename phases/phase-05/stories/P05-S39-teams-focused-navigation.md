@@ -16,7 +16,7 @@ Refactor the Teams screen into a stable selected-team shell with focused Overvie
 6. Update `app/test/teamsScreen.test.tsx` and `workspaceShell.test.tsx` with fixtures for multiple teams, refresh reorder/removal, workspace switching, empty results, tab keyboard movement, and proof that tab/team selection does not issue extra management reads.
 
 ## Done when
-- [ ] Teams exposes exactly one selected team's Overview, Members, or Routing panel at a time, preserves a valid stable-id selection across refresh, and resets team/member/view state safely when the selected team or workspace changes. Test: `app/test/teamsScreen.test.tsx` and `app/test/workspaceShell.test.tsx`.
+- [ ] Teams exposes exactly one selected team's Overview or Members view at a time and links to the standalone Routing screen, preserves a valid stable-id selection across refresh, and resets team/member/view state safely when the selected team or workspace changes. Test: `app/test/teamsScreen.test.tsx` and `app/test/workspaceShell.test.tsx`.
 - [ ] The team chooser and child tabs have accessible names, selected state, roving focus, arrow/Home/End behavior, and visible `:focus-visible` treatment. Test: keyboard-focused React tests plus CSS assertions/build.
 - [ ] Existing management reads, partial notices, reconnect refresh, global feedback, create-team, and refresh behavior remain wired once and no tab change triggers a backend call. Test: `app/test/teamsScreen.test.tsx` call-count regressions.
 - [ ] `npm --prefix app test`, `npm --prefix app run typecheck`, and `npm --prefix app run build` pass.

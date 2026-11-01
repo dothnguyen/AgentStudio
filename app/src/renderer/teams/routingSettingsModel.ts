@@ -1,6 +1,5 @@
-import type { BoardSettings, BoardSettingsChanges, FailureLimitPolicy, ManagementError, Problem } from '../../shared/management';
+import type { BoardSettings, BoardSettingsChanges, ManagementError, Problem } from '../../shared/management';
 
-export type WorkspaceMode = '' | 'main' | 'worktree' | 'none';
 export type EditableRuleField = 'status' | 'role' | 'workflow' | 'workspace' | 'onPass' | 'onFail' | 'onBlocked';
 export type NewRuleKind = 'agent' | 'action';
 export interface RoutingDraft { baseBranch: string; rules: Array<Record<string, unknown>> }
@@ -82,10 +81,6 @@ export function isRuleFieldProblem(path: string, index: number, agent: boolean, 
   if (rest === 'onPass' || rest === 'onFail') return true;
   if (rest === 'role' || rest === 'workflow' || rest === 'workspace') return agent;
   return agent && (rest === 'onBlocked' || rest === 'onFailureLimit.count' || rest === 'onFailureLimit.status');
-}
-export function failureLimitOf(rule: Record<string, unknown> | undefined): FailureLimitPolicy | null {
-  const policy = rule?.onFailureLimit;
-  return object(policy) && typeof policy.count === 'number' && typeof policy.status === 'string' ? { count: policy.count, status: policy.status } : null;
 }
 export function setRuleFailureLimit(draft: RoutingDraft, index: number, count: number, status: string): RoutingDraft {
   const rules = clone(draft.rules); const rule = rules[index];

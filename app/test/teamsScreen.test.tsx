@@ -201,7 +201,7 @@ describe('compact team overview', () => {
     const result = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
     await act(async () => {});
     expect(result.getByRole('heading', { level: 1, name: 'Routing' })).toBeTruthy();
-    expect(result.getByText('Workspace board routing')).toBeTruthy();
+    expect(result.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
     expect(fake.roles).toHaveBeenCalledTimes(1);
   });
@@ -1154,7 +1154,7 @@ it('routing screen shows workspace routing with role links without extra reads',
   const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
   await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  expect(panel.getByText(/Changes affect every team/)).toBeTruthy();
+  expect(view.getByText(/Changes apply to every team/)).toBeTruthy();
   fireEvent.click(panel.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
   expect(onViewRole).toHaveBeenCalledOnce(); expect(onViewRole).toHaveBeenCalledWith('Developer');
   expect(fake.boardSettings).toHaveBeenCalledTimes(1); expect(fake.roles).toHaveBeenCalledTimes(1);
