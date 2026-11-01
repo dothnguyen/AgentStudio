@@ -17,6 +17,9 @@ export const PRELOAD_CHANNELS = {
   managementTeam: 'management:team',
   managementValidateTeam: 'management:validateTeam',
   managementBoardSettings: 'management:boardSettings',
+  managementBoardPhases: 'management:boardPhases',
+  managementBoardTickets: 'management:boardTickets',
+  managementBoardTicket: 'management:boardTicket',
   managementCreateAgent: 'management:createAgent',
   managementUpdateAgent: 'management:updateAgent',
   managementDeleteAgent: 'management:deleteAgent',
@@ -75,6 +78,10 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       team: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementTeam, w, { teamDefId }),
       validateTeam: (w, teamDefId) => ipc.invoke(PRELOAD_CHANNELS.managementValidateTeam, w, { teamDefId }),
       boardSettings: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardSettings, w, {}),
+      boardPhases: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardPhases, w, {}),
+      boardTickets: (w, input) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementBoardTickets, w, input.phase === undefined ? {} : { phase: input.phase }),
+      boardTicket: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementBoardTicket, w, { key: input.key }),
       createAgent: (w, agent) => ipc.invoke(PRELOAD_CHANNELS.managementCreateAgent, w, { agent }),
       updateAgent: (w, agentDefId, changes) =>
         ipc.invoke(PRELOAD_CHANNELS.managementUpdateAgent, w, { agentDefId, changes }),

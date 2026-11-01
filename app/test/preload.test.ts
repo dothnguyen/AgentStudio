@@ -19,7 +19,8 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 }
 
 const METHODS = [
-  'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
+  'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket',
+  'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
   'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
   'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
@@ -64,6 +65,10 @@ describe('preload', () => {
     m.team('ws', 'core', x);
     m.validateTeam('ws', 'core', x);
     m.boardSettings('ws', x);
+    m.boardPhases('ws', x);
+    m.boardTickets('ws', {}, x);
+    m.boardTickets('ws', { phase: 'phase-05' }, x);
+    m.boardTicket('ws', { key: 'T-134' }, x);
     m.createAgent('ws', { name: 'Ada', provider: 'claude' }, x);
     m.updateAgent('ws', 'ada', { model: null }, x);
     m.deleteAgent('ws', 'ada', x);
@@ -115,6 +120,10 @@ describe('preload', () => {
       [P.managementTeam, 'ws', { teamDefId: 'core' }],
       [P.managementValidateTeam, 'ws', { teamDefId: 'core' }],
       [P.managementBoardSettings, 'ws', {}],
+      [P.managementBoardPhases, 'ws', {}],
+      [P.managementBoardTickets, 'ws', {}],
+      [P.managementBoardTickets, 'ws', { phase: 'phase-05' }],
+      [P.managementBoardTicket, 'ws', { key: 'T-134' }],
       [P.managementCreateAgent, 'ws', { agent: { name: 'Ada', provider: 'claude' } }],
       [P.managementUpdateAgent, 'ws', { agentDefId: 'ada', changes: { model: null } }],
       [P.managementDeleteAgent, 'ws', { agentDefId: 'ada' }],

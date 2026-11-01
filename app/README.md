@@ -175,7 +175,11 @@ commands with fresh idempotency keys. Switching an active assignment requires it
 an explicit cancellation confirmation; backend errors and cancellation results are passed through.
 The same API carries the read-only skill catalog and one skill detail, plus skill create, update,
 delete and role-assignment writes. Skill writes send no generated idempotency key, matching role
-writes, and rely on the catalog SHA tokens to reject stale edits.
+writes, and rely on the catalog SHA tokens to reject stale edits. It also exposes the board reads the
+Current Phase board and ticket page need: `management.boardPhases(workspaceId)` for
+`phase.list`, `management.boardTickets(workspaceId, { phase? })` for `ticket.list` with
+`summary: true` (no bodies, dependency keys included), and `management.boardTicket(workspaceId, { key })`
+for `ticket.show` (body, links, events and `eventsTruncated`).
 
 Member detail shows identity, shared role, ticket permission, saved options, and live state separately. Ticket permission is loaded from the saved team definition and can be edited when available. Team member editing shows saved catalog options in order, with the first as the default for the next team start. Inline members can be explicitly converted to catalog options. Live agent details and switch and resume controls use the options frozen at team start, separately from saved configuration. Resuming a hold does not verify quota.
 

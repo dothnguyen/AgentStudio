@@ -1,4 +1,5 @@
 import { catalogFixture } from './teamsFixtures';
+import { boardPhasesFixture, boardTicketDetailFixture, boardTicketListFixture } from './boardFixtures';
 import { roleCatalogFixture } from './roleFixtures';
 import { SKILLS_SHA, SKILL_TEXT, skillCatalog, skillDetail } from './skillFixtures';
 import { readFileSync } from 'node:fs';
@@ -57,6 +58,9 @@ const LABELS: Record<string, string> = {
   [C.managementTeam]: 'team',
   [C.managementValidateTeam]: 'validateTeam',
   [C.managementBoardSettings]: 'boardSettings',
+  [C.managementBoardPhases]: 'boardPhases',
+  [C.managementBoardTickets]: 'boardTickets',
+  [C.managementBoardTicket]: 'boardTicket',
   [C.managementCreateAgent]: 'createAgent',
   [C.managementUpdateAgent]: 'updateAgent',
   [C.managementDeleteAgent]: 'deleteAgent',
@@ -101,6 +105,10 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementTeam, { teamDefId: 'core' }, 'teamdef.show', { teamDefId: 'core' }],
   [C.managementValidateTeam, { teamDefId: 'core' }, 'teamdef.validate', { teamDefId: 'core' }],
   [C.managementBoardSettings, {}, 'board.settings', {}],
+  [C.managementBoardPhases, {}, 'phase.list', {}],
+  [C.managementBoardTickets, {}, 'ticket.list', { summary: true }],
+  [C.managementBoardTickets, { phase: 'phase-05' }, 'ticket.list', { summary: true, phase: 'phase-05' }],
+  [C.managementBoardTicket, { key: 'T-134' }, 'ticket.show', { key: 'T-134' }],
   [C.managementCreateAgent, { agent: { id: 'ada', name: 'Ada', provider: 'claude' } }, 'agentdef.create', { agent: { id: 'ada', name: 'Ada', provider: 'claude' } }],
   [C.managementUpdateAgent, { agentDefId: 'ada', changes: { model: null } }, 'agentdef.update', { agentDefId: 'ada', changes: { model: null } }],
   [C.managementDeleteAgent, { agentDefId: 'ada' }, 'agentdef.delete', { agentDefId: 'ada' }],
@@ -159,6 +167,30 @@ describe('management IPC', () => {
     expect(calls).toEqual([['workspace.list', {}], ['agentdef.list', { workspace: '/work/a' }]]);
   });
 
+  it('forwards phases, summary tickets and one ticket detail unchanged', async () => {
+    const phases = boardPhasesFixture();
+    const tickets = boardTicketListFixture({ phase: 'phase-06' });
+    const detail = boardTicketDetailFixture('T-114');
+    const { call, calls } = setup({
+      replies: { 'phase.list': ok(phases), 'ticket.list': ok(tickets), 'ticket.show': ok(detail) },
+    });
+    expect(await call(C.managementBoardPhases, 'workspace-a', {})).toEqual({ ok: true, data: phases });
+    expect(await call(C.managementBoardTickets, 'workspace-a', { phase: 'phase-06' })).toEqual({ ok: true, data: tickets });
+    expect(await call(C.managementBoardTicket, 'workspace-a', { key: 'T-114' })).toEqual({ ok: true, data: detail });
+    expect(calls.filter(([command]) => command !== 'workspace.list')).toEqual([
+      ['phase.list', { workspace: '/work/a' }],
+      ['ticket.list', { workspace: '/work/a', summary: true, phase: 'phase-06' }],
+      ['ticket.show', { workspace: '/work/a', key: 'T-114' }],
+    ]);
+  });
+
+  it('always requests ticket summaries and omits an absent phase', async () => {
+    const { call, calls } = setup();
+    await call(C.managementBoardTickets, 'workspace-a', {});
+    expect(calls[1]).toEqual(['ticket.list', { workspace: '/work/a', summary: true }]);
+    expect('phase' in (calls[1][1] as object)).toBe(false);
+  });
+
   it('optional keys are omitted when absent', async () => {
     const { call, calls } = setup();
     await call(C.managementCreateTeam, 'workspace-a', { name: 'Core' });
@@ -208,6 +240,9 @@ describe('management IPC', () => {
     await bad(C.managementStartTeam, { teamDefId: 'Bad Id' }, `management.startTeam: ${SLUG_MSG('teamDefId')}`);
     await bad(C.managementStopTeam, { teamId: 'abc' }, 'management.stopTeam: teamId must be a lowercase UUID v4.');
     await bad(C.managementRetryTicket, { key: 'T-1' }, 'management.retryTicket: key must be a ticket key (T- followed by at least three digits).');
+    await bad(C.managementBoardTicket, { key: 'T-1' }, 'management.boardTicket: key must be a ticket key (T- followed by at least three digits).');
+    await bad(C.managementBoardTicket, { key: '../T-134' }, 'management.boardTicket: key must be a ticket key (T- followed by at least three digits).');
+    await bad(C.managementBoardTicket, {}, 'management.boardTicket: key is required.');
     await bad(C.managementRetryRun, { workflowRunId: 'abc' }, 'management.retryRun: workflowRunId must be a lowercase UUID v4.');
     await bad(C.managementApproveCommand, { requestId: UUID, command: 'ticket.retry' }, 'management.approveCommand: unknown field(s): command.');
     await bad(C.managementRejectCommand, { requestId: UUID, reason: 'x'.repeat(501) }, 'management.rejectCommand: reason must be at most 500 characters.');
@@ -550,13 +585,15 @@ describe('management IPC', () => {
     expect([...new Set(calls.map(([c]) => c))].sort()).toEqual([
       'agentdef.create', 'agentdef.delete', 'agentdef.list', 'agentdef.update', 'board.run', 'board.settings',
       'board.settings.update', 'board.stop', 'command.approve', 'command.cancel', 'command.reject',
+      'phase.list',
       'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update',
       'skill.create', 'skill.delete', 'skill.list', 'skill.roles.update', 'skill.show', 'skill.update',
       'team.attach', 'team.member.resume', 'team.member.switch', 'team.overview', 'team.start', 'team.stop',
       'team.usage.reset',
       'teamdef.create',
       'teamdef.delete', 'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename',
-      'teamdef.show', 'teamdef.validate', 'ticket.retry', 'ticket.unblock', 'workflow.cancel', 'workflow.retry',
+      'teamdef.show', 'teamdef.validate', 'ticket.list', 'ticket.retry', 'ticket.show', 'ticket.unblock',
+      'workflow.cancel', 'workflow.retry',
       'workspace.list',
     ]);
   });

@@ -9,6 +9,7 @@ import {
   type CreateArgs,
   type DashboardActivity,
 } from '../src/renderer/api';
+import { boardPhasesFixture, boardTicketDetailFixture, fakeBoardManagement } from './boardFixtures';
 
 describe('getConnectionApi', () => {
   it('getConnectionApi throws when the preload API is missing', () => {
@@ -131,7 +132,8 @@ describe('getDashboardApi', () => {
 
 describe('getManagementApi', () => {
   const METHODS = [
-    'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
+    'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket',
+    'createAgent', 'updateAgent', 'deleteAgent',
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
     'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
     'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
@@ -159,6 +161,28 @@ describe('getManagementApi', () => {
       expect(await api[m](...args)).toEqual({ ok: true, data: { m } });
       expect(fns[m]).toHaveBeenCalledWith(...args);
     }
+  });
+
+  it('renderer can read phases, tickets and one ticket from the fake board', async () => {
+    const board = fakeBoardManagement();
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: { ...fakes(), ...board.api } as never };
+    const api = getManagementApi();
+    expect(await api.boardPhases('ws')).toEqual({ ok: true, data: boardPhasesFixture() });
+    const list = await api.boardTickets('ws', { phase: 'phase-06' });
+    expect(list.ok).toBe(true);
+    if (list.ok) {
+      expect(list.data.tickets).toHaveLength(12);
+      expect(list.data.tickets.filter((ticket) => ticket.status === 'blocked')).toHaveLength(1);
+      expect(list.data.tickets.some((ticket) => ticket.activity.state === 'not started' && ticket.activity.waitingFor)).toBe(true);
+      expect(list.data.tickets.every((ticket) => !('body' in ticket))).toBe(true);
+    }
+    const detail = await api.boardTicket('ws', { key: 'T-114' });
+    expect(detail.ok).toBe(true);
+    if (detail.ok) expect(detail.data.ticket.body).toContain('#');
+    expect(detail.ok ? detail.data : null).toEqual(boardTicketDetailFixture('T-114'));
+    expect(board.phases).toHaveBeenCalledWith('ws');
+    expect(board.tickets).toHaveBeenCalledWith('ws', { phase: 'phase-06' });
+    expect(board.ticket).toHaveBeenCalledWith('ws', { key: 'T-114' });
   });
 
   it('forwards role methods with their arguments and returns success and error results unchanged', async () => {

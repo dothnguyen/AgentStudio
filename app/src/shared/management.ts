@@ -343,6 +343,103 @@ export type BoardSettingsKey =
   | 'leaseSeconds'
   | 'baseBranch'
   | 'agentTicketStatus';
+
+// board reads (phase.list, ticket.list summary mode, ticket.show)
+export interface BoardPhaseRef {
+  id: string | null;
+  slug: string;
+  name: string;
+  description: string | null;
+  position: number;
+  status: 'open' | 'closed';
+}
+export interface BoardPhase extends BoardPhaseRef {
+  current: boolean;
+  ticketCount: number;
+  counts: Record<string, number>;
+}
+export interface BoardPhases {
+  workspace: string;
+  currentPhase: BoardPhaseRef;
+  phases: BoardPhase[];
+}
+export type BoardTicketActivityState = 'working' | 'not started' | 'finished' | 'blocked';
+export interface BoardTicketActivity {
+  state: BoardTicketActivityState;
+  agent?: string | null;
+  role?: string | null;
+  run?: string | null;
+  leaseUntil?: string | null;
+  workflow?: string | null;
+  waitingFor?: string;
+  note?: string | null;
+}
+export interface BoardTicket {
+  id: string;
+  workspace: string;
+  key: string;
+  title: string;
+  body: string | null;
+  phase: string | null;
+  phaseName: string | null;
+  status: string;
+  priority: number;
+  assignee: string | null;
+  leaseUntil: string | null;
+  createdByMember: string | null;
+  createdByAssignment: string | null;
+  createdAt: string;
+  updatedAt: string;
+  runId: string | null;
+  activeRunId: string | null;
+  branch: string | null;
+  worktreePath: string | null;
+  preferredAgentId: string | null;
+  rounds: Record<string, number> | null;
+  returnStatus: string | null;
+  blockedReason: string | null;
+  activity: BoardTicketActivity;
+}
+export interface BoardTicketSummary extends Omit<BoardTicket, 'body'> {
+  dependsOn: string[];
+  openDependsOn: string[];
+}
+export interface BoardTicketList {
+  workspace: string;
+  statuses: string[];
+  status: string | null;
+  phase: string | null;
+  tickets: BoardTicketSummary[];
+}
+export interface BoardTicketLink {
+  key: string;
+  title: string | null;
+  status: string | null;
+  phase: string | null;
+}
+export interface BoardTicketLinks {
+  dependsOn: BoardTicketLink[];
+  dependents: BoardTicketLink[];
+}
+export interface BoardTicketEvent {
+  id: number;
+  at: string;
+  actor: string;
+  name: string;
+  from: string | null;
+  to: string | null;
+  payload: unknown;
+}
+export interface BoardTicketDetail {
+  workspace: string;
+  ticket: BoardTicket;
+  dependsOn: string[];
+  dependents: string[];
+  links: BoardTicketLinks;
+  events: BoardTicketEvent[];
+  eventsTruncated: boolean;
+  statuses: string[];
+}
 export type BoardSettingsChanges = Partial<Record<BoardSettingsKey, unknown>>;
 export interface ConfigWriteResult {
   workspace: string;
@@ -551,6 +648,9 @@ export interface ManagementApi {
   team(workspaceId: string, teamDefId: string): R<TeamDefinitionDetail>;
   validateTeam(workspaceId: string, teamDefId: string): R<TeamValidation>;
   boardSettings(workspaceId: string): R<BoardSettings>;
+  boardPhases(workspaceId: string): R<BoardPhases>;
+  boardTickets(workspaceId: string, input: { phase?: string }): R<BoardTicketList>;
+  boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;
   createAgent(workspaceId: string, agent: AgentDefInput): R<AgentDefResult>;
   updateAgent(workspaceId: string, agentDefId: string, changes: AgentDefChanges): R<AgentDefResult>;
   deleteAgent(workspaceId: string, agentDefId: string): R<AgentDefDeleted>;

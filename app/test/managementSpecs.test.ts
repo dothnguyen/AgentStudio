@@ -6,7 +6,7 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(41);
+    expect(MANAGEMENT_SPECS).toHaveLength(44);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
@@ -60,6 +60,31 @@ describe('managementSpecs', () => {
     expect(parse('updateBoardSettings', { changes: {} })).toBe('management.updateBoardSettings: changes must have at least one field.');
     expect(parse('updateBoardSettings', { changes: { rules: [{ a: 1 }], baseBranch: null } })).toEqual({ changes: { rules: [{ a: 1 }], baseBranch: null } });
     expect(parse('updateBoardSettings', {})).toBe('management.updateBoardSettings: changes is required.');
+  });
+
+  it('maps the board reads to phase.list and ticket.list/show in summary mode', () => {
+    const rows: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
+      ['boardPhases', {}, 'phase.list', {}],
+      ['boardTickets', {}, 'ticket.list', { summary: true }],
+      ['boardTickets', { phase: 'phase-05' }, 'ticket.list', { summary: true, phase: 'phase-05' }],
+      ['boardTicket', { key: 'T-134' }, 'ticket.show', { key: 'T-134' }],
+    ];
+    for (const [method, request, command, args] of rows) {
+      expect(byLabel(method).command).toBe(command);
+      expect(byLabel(method).mutating).toBe(false);
+      expect(parse(method, request)).toEqual(args);
+    }
+  });
+
+  it('rejects malformed board arguments, including a bad ticket key', () => {
+    expect(parse('boardTicket', {})).toBe('management.boardTicket: key is required.');
+    expect(parse('boardTicket', { key: 'T-12' })).toBe('management.boardTicket: key must be a ticket key (T- followed by at least three digits).');
+    expect(parse('boardTicket', { key: 't-134' })).toContain('key must be a ticket key');
+    expect(parse('boardTicket', { key: 'T-134', body: 'x' })).toBe('management.boardTicket: unknown field(s): body.');
+    expect(parse('boardTickets', { phase: 'Bad Phase' })).toBe("management.boardTickets: phase must be a slug (lowercase letters, digits, '-'; at most 64 characters).");
+    expect(parse('boardTickets', { phase: 'T-134' })).toContain('phase must be a slug');
+    expect(parse('boardTickets', { status: 'done' })).toBe('management.boardTickets: unknown field(s): status.');
+    expect(parse('boardPhases', { workspace: '/etc' })).toBe('management.boardPhases: unknown field(s): workspace.');
   });
 
   const SHA = 'a'.repeat(64);

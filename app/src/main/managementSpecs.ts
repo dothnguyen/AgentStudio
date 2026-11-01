@@ -7,6 +7,9 @@ export const MANAGEMENT_CHANNELS = {
   managementTeam: 'management:team',
   managementValidateTeam: 'management:validateTeam',
   managementBoardSettings: 'management:boardSettings',
+  managementBoardPhases: 'management:boardPhases',
+  managementBoardTickets: 'management:boardTickets',
+  managementBoardTicket: 'management:boardTicket',
   managementCreateAgent: 'management:createAgent',
   managementUpdateAgent: 'management:updateAgent',
   managementDeleteAgent: 'management:deleteAgent',
@@ -248,6 +251,15 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementTeam, 'team', 'teamdef.show', { teamDefId }),
   spec(C.managementValidateTeam, 'validateTeam', 'teamdef.validate', { teamDefId }),
   spec(C.managementBoardSettings, 'boardSettings', 'board.settings', {}),
+  spec(C.managementBoardPhases, 'boardPhases', 'phase.list', {}),
+  spec(C.managementBoardTickets, 'boardTickets', 'ticket.list', {
+    phase: { kind: 'slug' },
+  }, {
+    map: ({ phase }) => phase === undefined ? { summary: true } : { summary: true, phase },
+  }),
+  spec(C.managementBoardTicket, 'boardTicket', 'ticket.show', {
+    key: { kind: 'ticketKey', required: true },
+  }),
   spec(C.managementCreateAgent, 'createAgent', 'agentdef.create', {
     agent: {
       required: true,
