@@ -437,6 +437,17 @@ def _delete_conflict(message: str, roles_data, skill_data) -> AsError:
                    data={"rolesSha256": roles._sha(roles_data), "skillSha256": roles._sha(skill_data)})
 
 
+def _file_token_is_unstable(base: str, skill: str) -> bool:
+    """True when the catalog cannot publish a full-file hash for this SKILL.md.
+
+    An unreadable file has no hash at all and a truncated file's catalog hash covers
+    only the first limit bytes, so neither can be compared with the full file that
+    delete reads. The app sends null for these states and delete skips that check.
+    """
+    item, _ = _read_skill(base, skill)
+    return item["state"] in ("unreadable", "truncated")
+
+
 def _read_skill_bytes(real_base: str, skill: str, target: str):
     """The bytes of one regular SKILL.md, or None when it is missing; a link is a bad request."""
     try:
@@ -480,7 +491,13 @@ def delete_skill(workspace: str, skill, expected_roles_sha256, expected_sha256) 
     if roles_sha != expected_roles_sha256:
         raise _delete_conflict(f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.",
                                roles_data, skill_data)
-    if skill_sha != expected_sha256:
+    if expected_sha256 is None:
+        # No stable file token exists for an unreadable or truncated file; a readable
+        # file must always carry its full-file hash.
+        if not _file_token_is_unstable(base, skill):
+            raise _delete_conflict(f"Skill '{skill}' changed since it was read; reload and retry.",
+                                   roles_data, skill_data)
+    elif skill_sha != expected_sha256:
         raise _delete_conflict(f"Skill '{skill}' changed since it was read; reload and retry.",
                                roles_data, skill_data)
     if roles_data is not None:

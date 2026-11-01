@@ -5,6 +5,7 @@ import type {
   ManagementResult,
   RoleCatalogList,
   SkillCatalogList,
+  SkillDeleteResult,
   SkillDetail,
   SkillItem,
   SkillRolesResult,
@@ -13,6 +14,11 @@ import { Icon } from '../icons/Icon';
 import { ShellIcon } from '../shell/ShellIcon';
 import { SectionCard } from '../teams/SectionCard';
 import { SkillContentDialog } from './SkillContentDialog';
+import {
+  SKILL_DELETE_REASON_ID,
+  SkillDeleteDialog,
+  skillDeleteActionState,
+} from './SkillDeleteDialog';
 import {
   SKILL_ROLES_REASON_ID,
   SkillRolesDialog,
@@ -57,6 +63,14 @@ export interface SkillPageProps {
   rolesSha256?: string | null;
   /** Re-reads the skills list and roles catalog after a roles write or conflict. */
   onReloadRolesCatalogs?(): Promise<SkillCatalogsReload>;
+  /** Called after a successful delete (or a SKILL_NOT_FOUND that was already gone). */
+  onDeleted?(result: SkillDeleteResult): void;
+  /** Called when the backend says the file was already gone, so the list can refresh. */
+  onAlreadyDeleted?(skillId: string): void;
+  /** True while a previous delete succeeded but the list has not been refreshed. */
+  refreshRequired?: boolean;
+  /** Reports the delete write so the list can block its own actions. */
+  onDeletePendingChange?(pending: boolean): void;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 }
 
@@ -89,12 +103,29 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
   const [rolesOpen, setRolesOpen] = useState(false);
   const [savingRoles, setSavingRoles] = useState(false);
   const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<ManagementError | null>(null);
+  const [deleteReloadFailure, setDeleteReloadFailure] = useState<string | null>(null);
+  const [deleteReloading, setDeleteReloading] = useState(false);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const rolesCardButtonRef = useRef<HTMLButtonElement>(null);
   const rolesRowButtonRef = useRef<HTMLButtonElement>(null);
   const rolesTrigger = useRef<'card' | 'row'>('card');
   const refocusEdit = useRef(false);
   const refocusRoles = useRef(false);
+  const deleteLock = useRef(false);
+  const deleteLive = useRef(true);
+
+  useEffect(() => {
+    deleteLive.current = true;
+    return () => {
+      deleteLive.current = false;
+      props.onDeletePendingChange?.(false);
+    };
+    // The callback only reports the delete state to the screen that owns the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -132,7 +163,7 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
   // the Edit button for a moment. Return focus once both are current again.
   const rolesReason = skillRolesEditReason({
     connected: props.connected !== false,
-    pending: saving || savingRoles,
+    pending: saving || savingRoles || deletePending,
     skillsReady: props.skillsReady !== false,
     rolesReady: props.rolesReady !== false,
     roles: props.rolesCatalog ?? null,
@@ -152,6 +183,7 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     : skill.state === 'truncated' || skill.state === 'unreadable' ? 'Shorten the file outside the app first.'
     : saving ? 'Saving the file; wait for it to finish.'
     : savingRoles ? 'Saving the roles; wait for it to finish.'
+    : deletePending ? 'Deleting the skill; wait for it to finish.'
     : props.connected === false ? 'Connect to the backend to edit this skill.'
     : detail.kind === 'loading' ? 'The content is still loading.'
     : detail.kind === 'error' || detail.text === null || skill.sha256 === null ? 'The content could not be loaded.' : null;
@@ -159,6 +191,16 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     : props.createPending ? 'A skill is being created; wait for it to finish.'
     : props.connected === false ? 'Connect to the backend to create this skill.'
     : null;
+  const deleteState = missing ? null : skillDeleteActionState({
+    skill,
+    connected: props.connected !== false,
+    pending: saving || savingRoles || deletePending || props.createPending === true,
+    refreshRequired: props.refreshRequired === true,
+  });
+  // The backend error carries role ids; the catalog knows their display names.
+  const roleNames = Object.fromEntries(
+    (props.rolesCatalog?.items ?? []).map(role => [role.id, role.name.trim() || role.id]),
+  );
 
   function openContent(): void {
     if (editReason !== null) return;
@@ -171,6 +213,106 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     rolesTrigger.current = source;
     setAnnouncement(null);
     setRolesOpen(true);
+  }
+
+  function openDelete(): void {
+    if (deleteState === null || deleteState.disabled) return;
+    setAnnouncement(null);
+    setDeleteError(null);
+    setDeleteReloadFailure(null);
+    setDeleteOpen(true);
+  }
+
+  function setDeleteBusy(next: boolean): void {
+    if (!deleteLive.current) return;
+    setDeletePending(next);
+    props.onDeletePendingChange?.(next);
+  }
+
+  async function confirmDelete(): Promise<void> {
+    if (deleteLock.current || deletePending || deleteState === null || deleteState.disabled) return;
+    const target = props.skill;
+    deleteLock.current = true;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    setDeleteReloadFailure(null);
+    let result: ManagementResult<SkillDeleteResult>;
+    try {
+      // An unreadable or truncated file has no stable full-file token; null tells
+      // the backend that its content cannot be checked before deleting.
+      const fileToken = target.state === 'ok' ? target.sha256 ?? null : null;
+      result = await props.management.deleteSkill(
+        props.workspaceId, target.id, props.rolesSha256 ?? null, fileToken,
+      );
+    } catch (reason) {
+      result = { ok: false, error: detailError(reason) };
+    }
+    if (!deleteLive.current) return;
+    deleteLock.current = false;
+    setDeleteBusy(false);
+    if (result.ok) {
+      setDeleteOpen(false);
+      props.onDeleted?.(result.data);
+      return;
+    }
+    if (result.error.code === 'SKILL_NOT_FOUND') {
+      setDeleteOpen(false);
+      props.onAlreadyDeleted?.(target.id);
+      return;
+    }
+    setDeleteError(result.error);
+  }
+
+  function retryDelete(): void {
+    setDeleteError(null);
+    void confirmDelete();
+  }
+
+  async function reloadLatest(): Promise<void> {
+    if (deletePending || deleteReloading) return;
+    setDeleteError(null);
+    setDeleteReloadFailure(null);
+    setDeleteReloading(true);
+    let result: SkillCatalogsReload | undefined;
+    try {
+      result = await props.onReloadRolesCatalogs?.();
+    } catch (reason) {
+      if (!deleteLive.current) return;
+      setDeleteReloading(false);
+      setDeleteReloadFailure(`Could not reload: ${detailError(reason).message}`);
+      return;
+    }
+    if (!deleteLive.current) return;
+    if (result === undefined) {
+      setDeleteReloading(false);
+      setDeleteReloadFailure('Could not reload the latest skill and roles.');
+      return;
+    }
+    if (!result.skills.ok) {
+      setDeleteReloading(false);
+      setDeleteReloadFailure(`Could not reload the skills list: ${result.skills.error.message}`);
+      return;
+    }
+    const fresh = result.skills.data.skills.find(item => item.id === skill.id);
+    if (fresh === undefined || fresh.state === 'missing') {
+      setDeleteReloading(false);
+      setDeleteOpen(false);
+      props.onAlreadyDeleted?.(skill.id);
+      return;
+    }
+    if (!result.roles.ok) {
+      setDeleteReloading(false);
+      setDeleteReloadFailure(`Could not reload the roles catalog: ${result.roles.error.message}`);
+      return;
+    }
+    setDeleteReloading(false);
+    setDeleteError(null);
+  }
+
+  function editRolesFromDelete(): void {
+    setDeleteOpen(false);
+    setDeleteError(null);
+    openRoles('card');
   }
 
   async function savedRoles(_result: SkillRolesResult): Promise<void> {
@@ -234,7 +376,20 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
             >Create this skill</button>
             {createReason !== null && <span id={CREATE_REASON_ID} className="skills-create-reason">{createReason}</span>}
           </div>}
+          {!missing && deleteState !== null && <div className="skills-page-actions">
+            <button
+              type="button"
+              className="skills-delete-button"
+              disabled={deleteState.disabled}
+              aria-describedby={SKILL_DELETE_REASON_ID}
+              onClick={openDelete}
+            >
+              <Icon name="trash" size={14} />
+              Delete skill
+            </button>
+          </div>}
         </div>
+        {!missing && deleteState !== null && <p id={SKILL_DELETE_REASON_ID} className={`skills-delete-reason is-${deleteState.tone}`}>{deleteState.text}</p>}
         {missing && <div className="skills-missing-note">
           <Icon name="warning" size={14} tone="warning" />
           <span>Roles refer to this skill but <code>{skill.path}</code> does not exist, so it is skipped when assignments start. Create it, or remove it from the roles that list it.</span>
@@ -338,6 +493,19 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
       onSaved={(result) => { void savedRoles(result); }}
       onPendingChange={setSavingRoles}
       reloadCatalogs={() => props.onReloadRolesCatalogs?.() ?? Promise.reject(new Error('The catalogs cannot be reloaded.'))}
+    />}
+    {deleteOpen && !missing && <SkillDeleteDialog
+      skill={skill}
+      pending={deletePending}
+      error={deleteError}
+      roleNames={roleNames}
+      reloadFailure={deleteReloadFailure}
+      reloading={deleteReloading}
+      onCancel={() => { setDeleteOpen(false); setDeleteError(null); setDeleteReloadFailure(null); }}
+      onConfirm={() => { void confirmDelete(); }}
+      onReloadLatest={() => { void reloadLatest(); }}
+      onRetry={retryDelete}
+      onEditRoles={editRolesFromDelete}
     />}
   </div>;
 }

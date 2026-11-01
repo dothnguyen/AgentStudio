@@ -168,6 +168,27 @@ class SkillDeleteTests(unittest.TestCase):
         self.assertEqual(response["data"]["skillSha256"], sha(b"# Unused\n"))
         self.assertTrue(self.target("unused").exists())
 
+    def test_null_file_token_deletes_an_unreadable_file(self):
+        self.put("skills/unreadable/SKILL.md", b"\xff\xfe not utf-8")
+        item = next(entry for entry in skills.list_skills(self.ws)["skills"]
+                    if entry["id"] == "unreadable")
+        self.assertEqual((item["state"], item["sha256"]), ("unreadable", None))
+        data = self.ok(skill="unreadable", file_sha=None)
+        self.assertEqual(data["deleted"], {"id": "unreadable", "folder": "removed"})
+        self.assertFalse(self.target("unreadable").exists())
+
+    def test_null_file_token_deletes_a_truncated_file(self):
+        self.put("skills/truncated/SKILL.md", b"x" * (roles.LIMITS["skill"] + 1))
+        item = next(entry for entry in skills.list_skills(self.ws)["skills"]
+                    if entry["id"] == "truncated")
+        self.assertEqual(item["state"], "truncated")
+        # The catalog hash covers only the kept prefix, so it can never match the
+        # full file delete reads; the app sends null for such files.
+        self.assertNotEqual(item["sha256"], sha(b"x" * (roles.LIMITS["skill"] + 1)))
+        data = self.ok(skill="truncated", file_sha=None)
+        self.assertEqual(data["deleted"], {"id": "truncated", "folder": "removed"})
+        self.assertFalse(self.target("truncated").exists())
+
     def test_non_null_roles_token_is_rejected_when_roles_json_is_missing(self):
         self.roles_path.unlink()
         response = self.rejected("CONFIG_CHANGED", roles_sha="1" * 64)

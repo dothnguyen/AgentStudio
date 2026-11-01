@@ -120,6 +120,8 @@ interface FakeSkill {
   id: string;
   text: string | null;
   folder: 'removed' | 'kept';
+  /** Explicit catalog state; omitted means readable text is ok and null text is missing. */
+  state?: SkillState;
 }
 
 interface FakeRole {
@@ -132,7 +134,7 @@ interface FakeRole {
 export interface FakeSkillInitial {
   workspace?: string;
   rolesSha256?: string | null;
-  skills?: Array<{ id: string; text: string | null; folder?: 'removed' | 'kept' }>;
+  skills?: Array<{ id: string; text: string | null; folder?: 'removed' | 'kept'; state?: SkillState }>;
   roles?: Array<{ id: string; name?: string | null; contextBaseBytes?: number; skills?: string[] }>;
   problems?: Problem[];
 }
@@ -152,7 +154,7 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
   const calls: SkillCall[] = [];
   const skills = new Map<string, FakeSkill>();
   for (const skill of initial.skills ?? SAMPLE_SKILL_IDS.map((id) => ({ id, text: SKILL_TEXT[id] ?? null }))) {
-    skills.set(skill.id, { id: skill.id, text: skill.text, folder: skill.folder ?? 'removed' });
+    skills.set(skill.id, { id: skill.id, text: skill.text, folder: skill.folder ?? 'removed', state: skill.state });
   }
   const roles = new Map<string, FakeRole>();
   for (const role of initial.roles ?? SAMPLE_ROLES) {
@@ -167,12 +169,15 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
   const extraProblems = initial.problems ?? [];
   const log = (method: SkillMethod, args: unknown[]) => { calls.push({ method, args }); };
 
+  const stateOf = (skill: FakeSkill): SkillState => skill.state ?? (skill.text !== null ? 'ok' : 'missing');
+
   const itemFor = (skill: FakeSkill): SkillItem => {
-    const readable = skill.text !== null;
+    const state = stateOf(skill);
+    const readable = (state === 'ok' || state === 'truncated') && skill.text !== null;
     return {
       id: skill.id,
       path: `skills/${skill.id}/SKILL.md`,
-      state: readable ? 'ok' : 'missing',
+      state,
       title: readable ? titleOf(skill.text!) : null,
       bytes: readable ? utf8Bytes(skill.text!) : null,
       sha256: readable ? sha256Hex(skill.text!) : null,
@@ -200,17 +205,21 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
     for (const id of listed) {
       if (!entries.has(id)) entries.set(id, { id, text: null, folder: 'removed' });
     }
-    // A folder without SKILL.md that no role lists is not shown.
+    // A folder without SKILL.md that no role lists is not shown; an unreadable or
+    // truncated folder still exists and stays in the catalog.
     const items = [...entries.values()]
-      .filter((skill) => skill.text !== null || listed.has(skill.id))
+      .filter((skill) => stateOf(skill) !== 'missing' || listed.has(skill.id))
       .sort((a, b) => a.id.localeCompare(b.id))
       .map(itemFor);
     const missing = items
       .filter((item) => item.state === 'missing')
       .map((item) => ({ path: item.path, message: `Skill '${item.id}' has no readable SKILL.md.` }));
+    const unreadable = items
+      .filter((item) => item.state === 'unreadable')
+      .map((item) => ({ path: item.path, message: `Skill '${item.id}' could not be read as regular UTF-8 text.` }));
     const problems: Problem[] = [];
     const seen = new Set<string>();
-    for (const problem of [...extraProblems, ...missing]) {
+    for (const problem of [...extraProblems, ...missing, ...unreadable]) {
       const key = `${problem.path}\n${problem.message}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -287,19 +296,22 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
     _workspaceId: string,
     skillId: string,
     expectedRolesSha256: string | null,
-    expectedSha256: string,
+    expectedSha256: string | null,
   ): Promise<ManagementResult<SkillDeleteResult>> => {
     log('deleteSkill', [_workspaceId, skillId, expectedRolesSha256, expectedSha256]);
     const skill = skillOrMissing(skillId);
-    if (skill === null || skill.text === null) {
+    if (skill === null || stateOf(skill) === 'missing') {
       return fail('SKILL_NOT_FOUND', `Skill '${skillId}' has no skills/${skillId}/SKILL.md to delete; a missing skill has nothing to delete.`);
     }
-    const skillSha256 = sha256Hex(skill.text);
+    const state = stateOf(skill);
+    const skillSha256 = skill.text === null ? null : sha256Hex(skill.text);
     if (rolesSha256 !== expectedRolesSha256) {
       return fail('CONFIG_CHANGED', '.agent-studio/roles.json changed since it was read; reload and retry.',
         { rolesSha256, skillSha256 });
     }
-    if (skillSha256 !== expectedSha256) {
+    // An unreadable or truncated file has no stable catalog token, so null skips
+    // the content check; a readable file still has to match its full hash.
+    if (expectedSha256 === null ? state === 'ok' : skillSha256 !== expectedSha256) {
       return fail('CONFIG_CHANGED', `Skill '${skillId}' changed since it was read; reload and retry.`,
         { rolesSha256, skillSha256 });
     }

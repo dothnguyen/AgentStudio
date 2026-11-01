@@ -426,7 +426,7 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementDeleteSkill, 'deleteSkill', 'skill.delete', {
     skillId: { kind: 'skillId', required: true },
     expectedRolesSha256: { kind: 'shaOrNull', required: true },
-    expectedSha256: { kind: 'sha', required: true },
+    expectedSha256: { kind: 'shaOrNull', required: true },
   }, {
     map: ({ skillId, ...rest }) => ({ skill: skillId, ...rest }),
   }),

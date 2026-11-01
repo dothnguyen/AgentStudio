@@ -337,6 +337,7 @@ describe('management IPC', () => {
     await call(C.managementCreateSkill, 'workspace-a', { skill: { id: 'new-skill', text: '' } });
     await call(C.managementUpdateSkill, 'workspace-a', { skillId: 'code-search', text: '  x\n', expectedSha256: SHA });
     await call(C.managementDeleteSkill, 'workspace-a', { skillId: 'ts-testing', expectedRolesSha256: SHA, expectedSha256: 'b'.repeat(64) });
+    await call(C.managementDeleteSkill, 'workspace-a', { skillId: 'broken', expectedRolesSha256: SHA, expectedSha256: null });
     await call(C.managementUpdateSkillRoles, 'workspace-a', { skillId: 'code-search', roles: ['TeamLead', 'Developer'], expectedRolesSha256: SHA });
     const targets = calls.filter(([c]) => c !== 'workspace.list');
     expect(targets).toEqual([
@@ -344,6 +345,7 @@ describe('management IPC', () => {
       ['skill.create', { workspace: '/work/a', skill: { id: 'new-skill', text: '' } }],
       ['skill.update', { workspace: '/work/a', skill: 'code-search', text: '  x\n', expectedSha256: SHA }],
       ['skill.delete', { workspace: '/work/a', skill: 'ts-testing', expectedRolesSha256: SHA, expectedSha256: 'b'.repeat(64) }],
+      ['skill.delete', { workspace: '/work/a', skill: 'broken', expectedRolesSha256: SHA, expectedSha256: null }],
       ['skill.roles.update', { workspace: '/work/a', skill: 'code-search', roles: ['TeamLead', 'Developer'], expectedRolesSha256: SHA }],
     ]);
     for (const [, args] of targets) {

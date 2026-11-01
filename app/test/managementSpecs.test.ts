@@ -328,7 +328,8 @@ describe('managementSpecs', () => {
     expect(parse('updateSkill', { skillId: 'ok', text: '' })).toBe('management.updateSkill: expectedSha256 is required.');
     expect(parse('updateSkill', { skillId: 'ok', text: '', expectedSha256: 'A'.repeat(64) })).toBe('management.updateSkill: expectedSha256 must be a lowercase hex sha256.');
     expect(parse('deleteSkill', { skillId: 'ok', expectedSha256: SHA })).toBe('management.deleteSkill: expectedRolesSha256 is required.');
-    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: SHA, expectedSha256: null as never })).toContain('expectedSha256 must be a lowercase hex sha256');
+    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: SHA, expectedSha256: null })).toEqual({ skill: 'ok', expectedRolesSha256: SHA, expectedSha256: null });
+    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: SHA, expectedSha256: 'ABC' })).toBe('management.deleteSkill: expectedSha256 must be a lowercase hex sha256 or null.');
     expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: 'x', expectedSha256: SHA })).toBe('management.deleteSkill: expectedRolesSha256 must be a lowercase hex sha256 or null.');
     expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: null, expectedSha256: SHA, count: 1 })).toBe('management.deleteSkill: unknown field(s): count.');
     const roles = ['Developer', 'TeamLead'];

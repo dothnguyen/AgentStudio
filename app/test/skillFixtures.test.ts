@@ -229,6 +229,32 @@ describe('skillFixtures', () => {
     });
   });
 
+  it('represents unreadable and truncated skills and deletes them with a null file token', async () => {
+    const fake = fakeSkillManagement({
+      skills: [
+        { id: 'broken', text: null, state: 'unreadable' },
+        { id: 'huge', text: `# Huge\n${'x'.repeat(40000)}`, state: 'truncated' },
+      ],
+      roles: [],
+    });
+    const catalog = await fake.skills('ws');
+    expect(catalog).toMatchObject({
+      ok: true,
+      data: {
+        skills: [
+          expect.objectContaining({ id: 'broken', state: 'unreadable', bytes: null, sha256: null }),
+          expect.objectContaining({ id: 'huge', state: 'truncated', bytes: 40007 }),
+        ],
+      },
+    });
+    expect(await fake.deleteSkill('ws', 'broken', SKILLS_SHA, null)).toMatchObject({
+      ok: true, data: { deleted: { id: 'broken', folder: 'removed' } },
+    });
+    expect(await fake.deleteSkill('ws', 'huge', SKILLS_SHA, null)).toMatchObject({
+      ok: true, data: { deleted: { id: 'huge', folder: 'removed' } },
+    });
+  });
+
   it('refuses to add a role to a skill with no folder but allows the empty no-op', async () => {
     const fake = fakeSkillManagement();
     expect(await fake.updateSkillRoles('ws', 'never-existed', ['Developer'], SKILLS_SHA)).toMatchObject({

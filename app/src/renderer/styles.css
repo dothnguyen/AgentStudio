@@ -2087,7 +2087,28 @@ ul[aria-label="Workspaces"] {
 .skills-screen .skills-create-button.is-small { height: 32px; min-height: 32px; padding: 0 13px; font-size: 12.5px; }
 .skills-create-reason { color: var(--warning); font-size: 12px; overflow-wrap: anywhere; }
 .skills-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
-.skills-announcement { margin: 0; color: var(--success); font-size: 12.5px; }
+.skills-screen .skills-delete-button { display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 14px; border: 1px solid #4a2c2c; border-radius: 7px; background: transparent; color: #f0a3a3; font-weight: 500; }
+.skills-screen .skills-delete-button:hover:not(:disabled) { background: #4a2c2c; color: #ffd0d0; }
+.skills-screen .skills-delete-button:disabled { opacity: 0.45; cursor: default; }
+.skills-delete-reason { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.skills-delete-reason.is-warning { color: var(--warning); }
+.skills-delete-reason.is-muted { color: #a3a9b2; }
+.skills-announcement { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin: 0; padding: 3px 9px; border-radius: 999px; background: rgba(111, 211, 139, 0.12); color: var(--success); font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.skills-announcement .icon { flex: none; }
+.skills-refresh-failure { margin: 0; }
+.skill-delete-dialog .dialog-header { align-items: flex-start; padding: 20px 20px 0; border-bottom: 0; }
+.skill-delete-dialog .dialog-body { padding: 8px 20px 8px; color: #a3a9b2; }
+.skill-delete-dialog .dialog-footer { justify-content: flex-end; padding: 16px 20px; border-top: 0; background: transparent; }
+.skill-delete-dialog .dialog-footer-actions { margin: 0; }
+.skill-delete-dialog .dialog-action-danger { border-color: #b4413b; background: #b4413b; color: #ffffff; }
+.skill-delete-dialog .dialog-action-danger:hover:not(:disabled) { border-color: #c34e47; background: #c34e47; color: #ffffff; }
+.skill-delete-dialog :is(button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.skill-delete-copy { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.skill-delete-copy code { color: #c4cad2; font-family: var(--font-mono); }
+.skill-delete-error { margin-top: 12px; padding: 10px 12px; border: 1px solid #5a2e2e; border-radius: 8px; background: rgba(180, 60, 60, 0.08); color: #f0c7c0; font-size: 12.5px; overflow-wrap: anywhere; }
+.skill-delete-error p { margin: 0; }
+.skill-delete-error button { margin-top: 8px; }
+.skill-delete-error:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .skill-create-dialog .dialog-body { display: flex; flex-direction: column; gap: 16px; }
 .skill-create-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .skill-create-field > label, .skill-create-content-head label { color: #c4cad2; font-size: 12px; font-weight: 500; }

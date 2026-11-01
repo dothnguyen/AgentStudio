@@ -110,6 +110,19 @@ class SkillDeleteDispatch(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(Path(self.base, "roles.json").read_bytes(), self.roles_before)
 
+    def test_unreadable_and_truncated_files_delete_with_a_null_file_token(self):
+        self.put("skills/broken/SKILL.md", b"\xff\xfe not utf-8")
+        self.put("skills/huge/SKILL.md", b"x" * 32769)
+        for skill in ("broken", "huge"):
+            with self.subTest(skill=skill):
+                rc, response, proc = self.delete(skill, file_sha=None)
+                self.assertEqual(rc, 0, proc.stderr)
+                self.assertTrue(response["ok"], response)
+                self.assertEqual(response["data"]["deleted"], {"id": skill, "folder": "removed"})
+                self.assertFalse(Path(self.base, "skills", skill).exists())
+        after = self.listed()
+        self.assertEqual([item["id"] for item in after["skills"]], ["house-style", "legacy-notes", "spare"])
+
     def test_delete_writes_are_serialized_by_the_tokens(self):
         data = self.listed()
         spare = next(item for item in data["skills"] if item["id"] == "spare")

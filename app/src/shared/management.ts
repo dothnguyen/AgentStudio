@@ -571,7 +571,7 @@ export interface ManagementApi {
   skill(workspaceId: string, skillId: string): R<SkillDetail>;
   createSkill(workspaceId: string, input: { id: string; text: string }): R<SkillDetail>;
   updateSkill(workspaceId: string, skillId: string, text: string, expectedSha256: string): R<SkillDetail>;
-  deleteSkill(workspaceId: string, skillId: string, expectedRolesSha256: string | null, expectedSha256: string): R<SkillDeleteResult>;
+  deleteSkill(workspaceId: string, skillId: string, expectedRolesSha256: string | null, expectedSha256: string | null): R<SkillDeleteResult>;
   updateSkillRoles(workspaceId: string, skillId: string, roles: string[], expectedRolesSha256: string | null): R<SkillRolesResult>;
   runBoard(workspaceId: string, teamId: string): R<BoardRunResult>;
   switchMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string, confirmation?: { cancelActive: true; assignmentId: string }): R<MemberSwitchResult>;

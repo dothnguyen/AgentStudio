@@ -181,7 +181,9 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   and then the skill folder only when it is empty, returning `{workspace, deleted: {id, folder}, rolesSha256}` with
   `folder` `removed|kept`; other files in the folder are never touched. A role that lists the skill blocks the
   delete with `SKILL_IN_USE` and `data.roles` (the role ids). `expectedRolesSha256` is the `roles.json` SHA from
-  `skill.list` (null only when the file is absent) and `expectedSha256` is the `SKILL.md` SHA; either stale token,
+  `skill.list` (null only when the file is absent) and `expectedSha256` is the full `SKILL.md` SHA, or null when
+  `skill.list` reports the file as `unreadable` or `truncated` (its catalog hash is absent or covers only the
+  kept prefix, so it cannot be compared with the full file); either stale token,
   or a change found on the recheck immediately before removal, is `CONFIG_CHANGED` with
   `data.rolesSha256|skillSha256` and deletes nothing. A missing file is `SKILL_NOT_FOUND` (nothing to delete); a
   symlinked skills folder, skill folder or `SKILL.md` is `BAD_REQUEST`. The command never edits `roles.json`.

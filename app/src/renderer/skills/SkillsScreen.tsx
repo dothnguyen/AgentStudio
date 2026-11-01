@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { ConnectionStatus, ManagementApi, ManagementResult, RoleCatalogList, SkillCatalogList, SkillDetail, Workspace } from '../api';
+import type { ConnectionStatus, ManagementApi, ManagementResult, RoleCatalogList, SkillCatalogList, SkillDeleteResult, SkillDetail, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
+import { Icon } from '../icons/Icon';
 import { ShellIcon } from '../shell/ShellIcon';
 import { SkillCreateDialog } from './SkillCreateDialog';
 import { SkillPage } from './SkillPage';
+import { SKILL_DELETE_REFRESH_FAILED, skillDeleteAnnouncement } from './SkillDeleteDialog';
 import type { SkillCatalogsReload } from './SkillRolesDialog';
 import { filterSkills, skillRoleNames, skillSize, skillSummary } from './skillsModel';
 
@@ -28,6 +30,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const rolesSection = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const connected = !props.connection || props.connection.state === 'connected';
   const heading = useRef<HTMLHeadingElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const retried = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -42,13 +45,26 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const [createPending, setCreatePending] = useState(false);
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [deletePending, setDeletePending] = useState(false);
+  const [refreshRequired, setRefreshRequired] = useState(false);
+  const [deleteRefreshFailure, setDeleteRefreshFailure] = useState(false);
+  const [focusAfterDelete, setFocusAfterDelete] = useState(false);
+  const committedDelete = useRef<{ id: string; folder: 'removed' | 'kept'; already: boolean } | null>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
 
   if (catalog.data) lastData.current = catalog.data;
   if (rolesSection.data) lastRoles.current = rolesSection.data;
   const data = catalog.data ?? (catalog.loading ? lastData.current : null);
-  const shown = data;
+  // A failed refresh after a delete, or a failed reload while a skill page (and
+  // its delete dialog) is open, keeps the last list visible so the person can
+  // see what is there while the alert asks them to retry.
+  const shown = data ?? ((refreshRequired || view.kind === 'skill') ? lastData.current : null);
   const rolesData = rolesSection.data ?? (rolesSection.loading ? lastRoles.current : null);
   const skills = shown?.skills ?? [];
   const visible = filterSkills(skills, query);
@@ -60,6 +76,8 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const limit = shown?.limits.skillBytes ?? 0;
   const createBlock = !connected ? 'Skill changes are unavailable while the backend is disconnected.'
     : shown === null ? 'Skill changes are unavailable until the catalog loads.'
+    : deletePending ? 'A skill deletion is in progress.'
+    : refreshRequired ? 'A skill was deleted but Skills has not been refreshed. Retry Skills before making another change.'
     : createPending ? 'A skill is being created; wait for it to finish.'
     : null;
 
@@ -96,6 +114,51 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     return { skills, roles } as SkillCatalogsReload;
   };
 
+  const finishDeleteRefresh = async (): Promise<void> => {
+    const committed = committedDelete.current;
+    if (committed === null) return;
+    const result = await refreshCatalogs();
+    if (!active.current) return;
+    setFocusAfterDelete(true);
+    if (!result.skills.ok || !result.roles.ok) {
+      setRefreshRequired(true);
+      setDeleteRefreshFailure(true);
+      return;
+    }
+    committedDelete.current = null;
+    setRefreshRequired(false);
+    setDeleteRefreshFailure(false);
+    setAnnouncement(committed.already
+      ? `${committed.id} was already deleted.`
+      : skillDeleteAnnouncement({ deleted: { id: committed.id, folder: committed.folder } }));
+  };
+
+  const commitDelete = (id: string, folder: 'removed' | 'kept', already: boolean): void => {
+    committedDelete.current = { id, folder, already };
+    setAnnouncement('');
+    setView({ kind: 'list' });
+    setFocusRowId(null);
+    setRefreshRequired(true);
+    setDeleteRefreshFailure(false);
+    void finishDeleteRefresh();
+  };
+
+  const retryDeleteRefresh = (): void => {
+    if (committedDelete.current === null) return;
+    setDeleteRefreshFailure(false);
+    void finishDeleteRefresh();
+  };
+
+  const deletedSkill = (result: SkillDeleteResult): void => {
+    setDeletePending(false);
+    commitDelete(result.deleted.id, result.deleted.folder, false);
+  };
+
+  const alreadyDeletedSkill = (skillId: string): void => {
+    setDeletePending(false);
+    commitDelete(skillId, 'removed', true);
+  };
+
   const openCreate = (initialId: string | null = null) => {
     if (createBlock !== null || shown === null) return;
     setAnnouncement('');
@@ -129,6 +192,13 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   }, [focusSkillPage, view, data]);
 
   useEffect(() => {
+    if (!focusAfterDelete || view.kind !== 'list') return;
+    setFocusAfterDelete(false);
+    const target = heading.current ?? title.current;
+    target?.focus();
+  }, [focusAfterDelete, view, shown]);
+
+  useEffect(() => {
     if (pendingOpenId === null || shown === null) return;
     if (!shown.skills.some(skill => skill.id === pendingOpenId)) return;
     const openId = pendingOpenId;
@@ -149,7 +219,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   return <div className="skills-screen" data-section="skills">
     {view.kind === 'list' && <header className="skills-header">
       <div className="skills-heading">
-        <h1>Skills</h1>
+        <h1 tabIndex={-1} ref={title}>Skills</h1>
         <p className="skills-subtitle">Reusable instructions that roles load. Each skill is a folder with a SKILL.md file; a role lists the skills it uses.</p>
       </div>
       <div className="skills-header-actions">
@@ -166,15 +236,19 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
         {createBlock !== null && <span id="skills-create-reason" className="skills-create-reason">{createBlock}</span>}
       </div>
     </header>}
-    {announcement !== '' && <p role="status" className="skills-announcement">{announcement}</p>}
+    {announcement !== '' && <p role="status" className="skills-announcement">
+      <Icon name="check-circle" size={13} tone="success" />
+      {announcement}
+    </p>}
     {view.kind === 'list' && <div className="skills-notice">
       <ShellIcon name="refresh" size={14} strokeWidth={2.2} />
       <span>Saved changes apply to new assignments. Assignments already running keep the skills they started with.</span>
     </div>}
     {!connected && <p role="status">{props.connection?.state === 'lost' ? 'Connection to the backend was lost. Saved skill data stays visible but may be out of date.' : 'Connecting to the backend… Saved skill data may be out of date.'}</p>}
     {catalog.loading && <p role="status">Loading skills…</p>}
-    {error && <div className="panel-error skills-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; void catalog.reload(); }}>Retry loading skills</button></div>}
-    {rolesSection.error && <div className="panel-error skills-roles-error" role="alert"><p>Roles catalog: <code>{rolesSection.error.code}</code>: {rolesSection.error.message}</p>{rolesSection.error.remediation && <p>{rolesSection.error.remediation}</p>}<button type="button" onClick={() => { void rolesSection.reload(); }}>Retry loading roles</button></div>}
+    {deleteRefreshFailure && <p role="alert" className="skills-refresh-failure">{SKILL_DELETE_REFRESH_FAILED}</p>}
+    {error && <div className="panel-error skills-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; if (refreshRequired) retryDeleteRefresh(); else void catalog.reload(); }}>Retry loading skills</button></div>}
+    {rolesSection.error && <div className="panel-error skills-roles-error" role="alert"><p>Roles catalog: <code>{rolesSection.error.code}</code>: {rolesSection.error.message}</p>{rolesSection.error.remediation && <p>{rolesSection.error.remediation}</p>}<button type="button" onClick={() => { if (refreshRequired) retryDeleteRefresh(); else void rolesSection.reload(); }}>Retry loading roles</button></div>}
     {view.kind === 'list' && shown && <>
       {shown.problems.length > 0 && <div className="panel-note skills-problems"><p>Skill catalog problems</p><ul>{shown.problems.map((problem, index) => <li key={index}>{problem.path ? `${problem.path}: ` : ''}{problem.message}</li>)}</ul></div>}
       {skills.length === 0 && <p className="skills-empty">No skills yet. A skill is a folder <code>.agent-studio/skills/&lt;id&gt;/SKILL.md</code>.</p>}
@@ -249,6 +323,10 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
       rolesError={rolesSection.error}
       rolesSha256={shown.rolesSha256}
       onReloadRolesCatalogs={refreshCatalogs}
+      onDeleted={deletedSkill}
+      onAlreadyDeleted={alreadyDeletedSkill}
+      refreshRequired={refreshRequired}
+      onDeletePendingChange={setDeletePending}
       headingRef={skillHeading}
     />}
     {view.kind === 'skill' && skillRemoved && <div className="skills-page skills-removed" role="region" aria-label="Skill details">
