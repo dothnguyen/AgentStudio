@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, requestedRoleSelection, roleRows, selectedRoleId } from '../src/renderer/roles/rolesModel';
+import { assignedMemberLabels, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRunningAssignments, roleRuntimeState, requestedRoleSelection, roleRows, roleUsageSummary, selectedRoleId } from '../src/renderer/roles/rolesModel';
 import { MEMBERS, roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 describe('rolesModel', () => {
@@ -54,6 +54,43 @@ describe('rolesModel', () => {
     expect(labels.map(l => l.memberId)).toEqual(['dev-1', 'dev-2', 'dev-3', null]);
     const idOnly = assignedMemberLabels(roleItem('a', { usage: usageOf({}, [{ teamDefId: 't', teamName: null, memberId: 'm', memberName: null, saved: true, live: null }]) }));
     expect([idOnly[0].team, idOnly[0].member]).toEqual(['t', 'm']);
+  });
+
+  it('summarises_members_running_assignments_and_incomplete_usage_truthfully', () => {
+    const used = roleItem('a', { usage: usageOf({}, MEMBERS) });
+    expect(roleRunningAssignments(used)).toBe(1);
+    expect(roleUsageSummary(used)).toEqual({ members: '4 members', running: '1 running', incomplete: false });
+
+    const active = roleItem('a', { usage: usageOf({}, [
+      { teamDefId: 't', teamName: 'T', memberId: 'm1', memberName: 'M', saved: true, live: null },
+      { teamDefId: 't', teamName: 'T', memberId: 'm2', memberName: 'M', saved: null, live: { assignment: { id: 'x', status: 'queued' } } },
+    ]) });
+    expect(roleRunningAssignments(active)).toBe(1);
+    expect(roleUsageSummary(active)).toEqual({ members: '2 members', running: '1 running', incomplete: false });
+
+    // The backend may put the assignment on the member or inside its live record; finished statuses do not count.
+    const direct = roleItem('a', { usage: usageOf({}, [
+      { teamDefId: 't', teamName: 'T', memberId: 'm1', memberName: 'M', saved: true, live: false, assignment: { id: 'y', status: 'waiting_input' } },
+      { teamDefId: 't', teamName: 'T', memberId: 'm2', memberName: 'M', saved: true, live: false, assignmentStatus: 'reconciling' },
+      { teamDefId: 't', teamName: 'T', memberId: 'm3', memberName: 'M', saved: true, live: false, assignmentStatus: 'done' },
+    ]) });
+    expect(roleRunningAssignments(direct)).toBe(2);
+
+    expect(roleUsageSummary(roleItem('a'))).toEqual({ members: 'Unused', running: 'No running assignments', incomplete: false });
+
+    const partial = roleItem('a', { usage: usageOf({ partial: true, liveRuntime: { state: 'unavailable', error: null } }) });
+    expect(roleUsageSummary(partial)).toEqual({ members: 'Usage incomplete', running: null, incomplete: true });
+    const disconnected = roleItem('a', { usage: usageOf({ liveRuntime: { state: 'disconnected', error: null } }, MEMBERS.slice(0, 1)) });
+    expect(roleUsageSummary(disconnected)).toEqual({ members: '1 member', running: 'Usage incomplete', incomplete: true });
+  });
+
+  it('treats_an_unknown_runtime_state_as_incomplete_usage', () => {
+    const unknown = roleItem('a', { usage: usageOf({ liveRuntime: { state: 'booting', error: null } }, MEMBERS.slice(0, 1)) });
+    expect(roleRuntimeState(unknown)).toBe('unknown');
+    expect(roleUsageSummary(unknown)).toEqual({ members: '1 member', running: 'Usage incomplete', incomplete: true });
+    const noRuntime = roleItem('a', { usage: usageOf({ liveRuntime: null }, MEMBERS.slice(0, 1)) });
+    expect(roleRuntimeState(noRuntime)).toBe('unknown');
+    expect(roleUsageSummary(noRuntime)).toEqual({ members: '1 member', running: 'Usage incomplete', incomplete: true });
   });
 
   it('requested_role_selection_is_exact_id_only', () => {

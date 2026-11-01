@@ -52,8 +52,13 @@ type View = ReturnType<typeof setup>['view'];
 const dialog = (view: View) => within(view.getByRole('dialog'));
 const field = (view: View, label: string) => dialog(view).getByLabelText(label) as HTMLInputElement | HTMLTextAreaElement;
 const type = (view: View, label: string, value: string) => fireEvent.change(field(view, label), { target: { value } });
-const pickRole = (view: View, id: string) => fireEvent.click([...within(view.getByRole('list', { name: 'Saved roles' })).getAllByRole('button')].find(b => b.lastElementChild!.textContent === id)!);
+const pickRole = (view: View, id: string) => fireEvent.click(within(view.getByRole('list', { name: 'Saved roles' })).getAllByRole('button').find(b => b.getAttribute('data-role-id') === id)!);
+function backToRoles(view: View) {
+  const back = view.queryByRole('button', { name: 'Roles' });
+  if (back) fireEvent.click(back);
+}
 async function openEdit(view: View, id = 'Developer') {
+  backToRoles(view);
   await view.findByRole('list', { name: 'Saved roles' });
   pickRole(view, id);
   fireEvent.click(view.getByRole('button', { name: 'Edit role' }));
@@ -61,10 +66,9 @@ async function openEdit(view: View, id = 'Developer') {
 }
 async function openCreate(view: View) { fireEvent.click(await view.findByRole('button', { name: 'New role' })); return view.getByRole('dialog'); }
 const submit = (view: View) => fireEvent.click(dialog(view).getByRole('button', { name: /^(Create role|Save changes)$/ }));
-const selectedRow = (view: View) => within(view.getByRole('list', { name: 'Saved roles' })).getAllByRole('button').find(b => b.getAttribute('aria-current') === 'true')!;
 
 describe('Role create and edit', () => {
-  it('creates_role_then_selects_returned_id_after_verified_reload', async () => {
+  it('creates_role_then_opens_the_returned_role_page_after_verified_reload', async () => {
     const after = catalogOf([developer(), reviewer(), pathless(), created()], { sha256: NEW_SHA });
     const s = setup([ok(catalogOf()), ok(after)], { createRole: [mutation(created())] });
     await openCreate(s.view);
@@ -79,8 +83,11 @@ describe('Role create and edit', () => {
     expect(s.updateRoleInstructions).not.toHaveBeenCalled();
     expect(s.roles).toHaveBeenCalledTimes(2);
     expect(s.view.getByRole('status').textContent).toBe(`Created role "QA Lead" (qa-lead). ${ASSIGN}`);
-    await waitFor(() => expect(selectedRow(s.view).lastElementChild!.textContent).toBe('qa-lead'));
-    expect(document.activeElement).toBe(selectedRow(s.view));
+    await waitFor(() => expect(within(s.view.getByRole('region', { name: 'Role details' })).getByRole('heading', { level: 3, name: 'QA Lead' })).toBeTruthy());
+    await waitFor(() => expect(document.activeElement).toBe(s.view.getByRole('heading', { name: 'Role details' })));
+    backToRoles(s.view);
+    await s.view.findByRole('list', { name: 'Saved roles' });
+    expect(s.view.getByRole('button', { name: 'Open role QA Lead' })).toBeTruthy();
   });
 
   it('creates_role_then_saves_nonblank_instructions_with_fresh_tokens', async () => {
@@ -462,8 +469,9 @@ describe('Role create and edit', () => {
     const p = setup([ok(catalogOf(undefined, { problems: [{ path: 'roles', message: 'bad' }] }))]);
     await p.view.findByRole('list', { name: 'Saved roles' });
     expect((p.view.getByRole('button', { name: 'New role' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((p.view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement).disabled).toBe(true);
     expect(p.view.getByText(/Role changes are unavailable/)).toBeTruthy();
+    pickRole(p.view, 'Developer');
+    expect((p.view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement).disabled).toBe(true);
     cleanup();
     const lost = setup([ok(catalogOf())], {}, { state: 'lost', error: null, distro: null, command: null } as ConnectionStatus);
     await lost.view.findByRole('list', { name: 'Saved roles' });
@@ -489,8 +497,8 @@ describe('Role create and edit', () => {
     const form = s.view.getByRole('dialog');
     for (const cls of ['roles-form', 'roles-skill-row', 'roles-form-actions']) expect(form.classList.contains(cls) || form.querySelector(`.${cls}`)).toBeTruthy();
     const roleCss = css.slice(css.indexOf('.roles-toolbar'), css.indexOf('/* Teams v4 Members card'));
-    expect(roleCss).not.toMatch(/overflow-x: ?scroll/);
-    expect(roleCss).not.toMatch(/(?<!max-)width: ?\d{3,}px/);
+    expect(roleCss).toMatch(/\.roles-table-scroll \{ overflow-x: auto/);
+    expect(roleCss).not.toMatch(/(?<!max-)(?<!min-)width: ?\d{3,}px/);
   });
 
   it('uses_one_dialog_name_associated_errors_restrained_live_regions_and_keyboard_skill_controls', async () => {

@@ -59,6 +59,42 @@ export function roleIssueSummary(role: RoleCatalogItem): string {
   const n = (role.warnings?.length ?? 0) + (role.problems?.length ?? 0) + roleUsageProblems(role).length;
   return n === 0 ? 'No warnings' : n === 1 ? '1 warning' : `${n} warnings`;
 }
+
+// The backend treats these assignment statuses as active; anything else is finished.
+const ACTIVE_ASSIGNMENT_STATUSES = new Set(['queued', 'claimed', 'running', 'waiting_input', 'reconciling']);
+
+export function roleRunningAssignments(role: RoleCatalogItem): number {
+  const members = Array.isArray(role.usage?.members) ? role.usage.members : [];
+  return members.filter(raw => {
+    const m = loose(raw);
+    if (!m) return false;
+    const live = loose(m.live);
+    const assignment = loose(m.assignment) ?? loose(live?.assignment);
+    const status = text(assignment?.status) ?? text(m.assignmentStatus);
+    return status !== null && ACTIVE_ASSIGNMENT_STATUSES.has(status.toLocaleLowerCase());
+  }).length;
+}
+
+export interface RoleUsageSummary {
+  members: string;
+  running: string | null;
+  incomplete: boolean;
+}
+
+/**
+ * The list must never claim "Unused" or a running count it cannot support:
+ * a partial usage scan or a runtime that is not connected makes both unknown.
+ */
+export function roleUsageSummary(role: RoleCatalogItem): RoleUsageSummary {
+  const count = Array.isArray(role.usage?.members) ? role.usage.members.length : 0;
+  const incomplete = role.usage?.partial === true || roleRuntimeState(role) !== 'connected';
+  const members = count > 0 ? `${count} member${count === 1 ? '' : 's'}` : incomplete ? 'Usage incomplete' : 'Unused';
+  const runningCount = roleRunningAssignments(role);
+  const running = incomplete
+    ? (count > 0 ? 'Usage incomplete' : null)
+    : runningCount > 0 ? `${runningCount} running` : 'No running assignments';
+  return { members, running, incomplete };
+}
 export function assignedMemberLabels(role: RoleCatalogItem): RoleMemberLabel[] {
   const members = Array.isArray(role.usage?.members) ? role.usage.members : [];
   return members.map((raw, index) => {

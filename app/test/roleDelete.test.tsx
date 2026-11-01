@@ -39,8 +39,9 @@ function setup(catalogs: Array<RoleCatalogList | ManagementError>, deleteRole = 
 type View = ReturnType<typeof render>;
 const trigger = (v: View) => within(v.getByRole('region', { name: 'Role details' })).getByRole('button', { name: 'Delete role' });
 const confirm = (v: View) => within(v.getByRole('dialog')).getByRole('button', { name: 'Delete role' });
-const pick = (v: View, id: string) => fireEvent.click([...within(v.getByRole('list', { name: 'Saved roles' })).getAllByRole('button')].find(b => b.lastElementChild!.textContent === id)!);
-const ids = (v: View) => within(v.getByRole('list', { name: 'Saved roles' })).getAllByRole('listitem').map(li => li.querySelector('strong')!.textContent);
+const pick = (v: View, id: string) => fireEvent.click(within(v.getByRole('list', { name: 'Saved roles' })).getAllByRole('button').find(b => b.getAttribute('data-role-id') === id)!);
+const backToRoles = (v: View) => fireEvent.click(v.getByRole('button', { name: 'Roles' }));
+const ids = (v: View) => within(v.getByRole('list', { name: 'Saved roles' })).getAllByRole('button').map(b => b.getAttribute('data-role-id'));
 
 describe('role delete model', () => {
   it('delete_is_enabled_only_for_complete_unused_role_with_required_tokens', () => {
@@ -121,24 +122,29 @@ describe('RolesScreen delete flow', () => {
     const deleteRole = vi.fn(() => new Promise<ReturnType<typeof okDeleted>>(r => { release = r; }));
     const { view } = setup([catalog([role('a'), role('b')]), catalog([role('b')])], deleteRole as never);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     const button = confirm(view);
     fireEvent.click(button); fireEvent.click(button); fireEvent.keyDown(button, { key: 'Enter' });
     expect(deleteRole).toHaveBeenCalledTimes(1);
     expect(deleteRole).toHaveBeenCalledWith('a', 'a', { expectedRolesSha256: SHA, expectedInstructionsSha256: ISHA });
-    expect(ids(view)).toEqual(['a', 'b']);
+    expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('a');
     release(okDeleted());
-    await waitFor(() => expect(ids(view)).toEqual(['b']));
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('b'));
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(ids(view)).toEqual(['b']);
     expect(deleteRole).toHaveBeenCalledTimes(1);
   });
 
   it('changed_tokens_disable_stale_open_confirmation_without_calling_backend', async () => {
     const { view, roles, deleteRole } = setup([catalog([role('a'), role('b')])]);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     expect((confirm(view) as HTMLButtonElement).disabled).toBe(false);
-    pick(view, 'b');
-    expect((confirm(view) as HTMLButtonElement).disabled).toBe(true);
+    view.rerender(<main><RolesScreen workspace={workspace} management={fakeManagement({ calls: { roles } }).api} requestedRoleId="b" /></main>);
+    await waitFor(() => expect((confirm(view) as HTMLButtonElement).disabled).toBe(true));
     expect(view.getByText('Role data changed. Close and reopen Delete to confirm the latest version.')).toBeTruthy();
     fireEvent.click(confirm(view));
     expect(deleteRole).not.toHaveBeenCalled();
@@ -148,6 +154,7 @@ describe('RolesScreen delete flow', () => {
   it('cancel_closes_without_call_and_restores_trigger_focus', async () => {
     const { view, deleteRole } = setup([catalog([role('a')])]);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     trigger(view).focus();
     fireEvent.click(trigger(view));
     fireEvent.keyDown(view.getByRole('dialog'), { key: 'Escape' });
@@ -159,10 +166,13 @@ describe('RolesScreen delete flow', () => {
   it('blocked_roles_open_no_dialog_and_explain_why_while_browsing_continues', async () => {
     const { view, deleteRole } = setup([catalog([role('a', { usage: usageOf({ blocking: true, count: 1 }) }), role('b')])]);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     expect(view.queryByRole('dialog')).toBeNull();
     expect(trigger(view).getAttribute('aria-describedby')).toBe('roles-delete-reason');
     expect(view.getByText(/still referenced/)).toBeTruthy();
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
     pick(view, 'b');
     expect(view.queryByText(/still referenced/)).toBeNull();
     expect(deleteRole).not.toHaveBeenCalled();
@@ -178,6 +188,7 @@ describe('RolesScreen delete flow', () => {
     const deleteRole = vi.fn(async () => fail('ROLE_IN_USE', { roleId: 'a', usage }));
     const { view } = setup([catalog([role('a')])], deleteRole as never);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     trigger(view).focus();
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
@@ -193,6 +204,8 @@ describe('RolesScreen delete flow', () => {
     expect(within(alert).queryByRole('button')).toBeNull();
     expect(view.queryByRole('button', { name: /force|rewrite|migrate|repair/i })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(trigger(view)));
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
     expect(ids(view)).toEqual(['a']);
   });
 
@@ -205,6 +218,7 @@ describe('RolesScreen delete flow', () => {
     const deleteRole = vi.fn(async () => results[i++]!);
     const { view } = setup([catalog([role('a')])], deleteRole as never);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
     const alert = await view.findByRole('alert');
@@ -226,10 +240,12 @@ describe('RolesScreen delete flow', () => {
       pick(view, 'b');
       fireEvent.click(trigger(view));
       fireEvent.click(confirm(view));
-      await waitFor(() => expect(ids(view)).toEqual(['a', 'c']));
-      expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('c');
+      await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('c'));
       expect(view.getByRole('status').textContent).toContain(copy);
       expect(view.queryByRole('dialog')).toBeNull();
+      backToRoles(view);
+      await view.findByRole('list', { name: 'Saved roles' });
+      expect(ids(view)).toEqual(['a', 'c']);
     }
   });
 
@@ -240,13 +256,16 @@ describe('RolesScreen delete flow', () => {
     pick(view, 'a2');
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
-    await waitFor(() => expect(ids(view)).toEqual(['a1']));
-    expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('a1');
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('a1'));
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(ids(view)).toEqual(['a1']);
   });
 
   it('deleting_final_role_renders_catalog_empty_state', async () => {
     const { view } = setup([catalog([role('a')]), catalog([])]);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
     await view.findByText('No roles are configured yet.');
@@ -258,17 +277,21 @@ describe('RolesScreen delete flow', () => {
   it('committed_delete_with_failed_reload_blocks_mutations_until_retry_succeeds', async () => {
     const { view, deleteRole } = setup([catalog([role('a'), role('b')]), { code: 'BACKEND_UNAVAILABLE', message: 'down', retryable: true }, catalog([role('b')])]);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
     await waitFor(() => expect(view.getByText(REFRESH_FAILED)).toBeTruthy());
     expect(view.queryByRole('dialog')).toBeNull();
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
     expect(ids(view)).toEqual(['a', 'b']);
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     expect(view.queryByRole('dialog')).toBeNull();
     expect(trigger(view).getAttribute('aria-describedby')).toBe('roles-delete-reason');
     expect(deleteRole).toHaveBeenCalledTimes(1);
     fireEvent.click(view.getByRole('button', { name: 'Retry loading roles' }));
-    await waitFor(() => expect(ids(view)).toEqual(['b']));
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getAllByRole('heading', { level: 3 })[0].textContent).toBe('b'));
     await waitFor(() => expect(view.queryByText(REFRESH_FAILED)).toBeNull());
     expect(view.getByRole('status').textContent).toMatch(/Role a was deleted/);
     expect(deleteRole).toHaveBeenCalledTimes(1);
@@ -283,6 +306,7 @@ describe('RolesScreen delete flow', () => {
     const fake = fakeManagement({ calls: { roles, deleteRole } });
     const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
     await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
     fireEvent.click(trigger(view));
     fireEvent.click(confirm(view));
     view.rerender(<main><RolesScreen workspace={{ ...workspace, id: 'b' }} management={fake.api} /></main>);

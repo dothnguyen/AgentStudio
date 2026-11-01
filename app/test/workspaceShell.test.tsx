@@ -391,7 +391,7 @@ describe('WorkspaceShell', () => {
     await view.findByRole('region', { name: 'Role instructions' });
     fireEvent.click(view.getByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
-    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getByText('qa-b')).toBeTruthy());
   });
 
   it('direct_roles_navigation_clears_requested_role', async () => {
@@ -401,10 +401,12 @@ describe('WorkspaceShell', () => {
     fireEvent.click(view.container.querySelector<HTMLButtonElement>('.teams-member-row')!);
     fireEvent.click(await view.findByRole('button', { name: 'View QA in Roles' }));
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy());
-    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-b'));
+    await waitFor(() => expect(within(view.getByRole('region', { name: 'Role details' })).getByText('qa-b')).toBeTruthy());
     fireEvent.click(view.getByRole('button', { name: 'Teams' }));
     fireEvent.click(view.getByRole('button', { name: 'Roles' }));
-    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-a'));
+    const list = await view.findByRole('list', { name: 'Saved roles' });
+    expect(within(list).getAllByRole('button')).toHaveLength(2);
+    expect(view.queryByRole('region', { name: 'Role details' })).toBeNull();
     expect(view.queryByText(/is unavailable in this workspace/)).toBeNull();
   });
 
@@ -419,7 +421,9 @@ describe('WorkspaceShell', () => {
     await waitFor(() => expect(view.container.querySelector('[data-section="roles"]')).toBeNull());
     expect(view.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
     fireEvent.click(view.getByRole('button', { name: 'Roles' }));
-    await waitFor(() => expect(view.container.querySelector('[aria-current="true"]')?.lastElementChild?.textContent).toBe('qa-a'));
+    const list = await view.findByRole('list', { name: 'Saved roles' });
+    expect(within(list).getAllByRole('button').map(b => b.getAttribute('data-role-id'))).toEqual(['qa-a', 'qa-b']);
+    expect(view.queryByRole('region', { name: 'Role details' })).toBeNull();
   });
   it('teams_view_state_resets_when_section_or_workspace_changes', async () => {
     const fake = fakeManagement({ overview: [{ ok: true, data: twoTeams() }] });
