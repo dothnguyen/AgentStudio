@@ -46,9 +46,11 @@ TOOLS = [
          "mode": {"type": "string", "enum": ["replace", "append"], "description": "default replace"}},
          "required": ["key", "body"]}},
     {"name": "ticket_list",
-     "description": "List the workspace's tickets, optionally by status or phase.",
+     "description": "List the workspace's tickets, optionally by status or phase. Summary omits bodies and adds "
+                    "dependency keys.",
      "inputSchema": {"type": "object", "properties": {
-         "status": {"type": "string"}, "phase": {"type": "string"}}}},
+         "status": {"type": "string"}, "phase": {"type": "string"},
+         "summary": {"type": "boolean", "description": "omit body and add dependsOn/openDependsOn"}}}},
     {"name": "ticket_show",
      "description": "One ticket with its status, phase, dependencies and event history.",
      "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
@@ -219,8 +221,11 @@ OPERATOR_READ_TOOLS = [
      "inputSchema": _op_schema()},
     {"name": "phase_list", "description": "The board's phases with the current one marked.",
      "inputSchema": _op_schema()},
-    {"name": "ticket_list", "description": "The workspace's tickets, optionally by status or phase.",
-     "inputSchema": _op_schema({"status": {"type": "string"}, "phase": {"type": "string"}})},
+    {"name": "ticket_list", "description": "The workspace's tickets, optionally by status or phase; summary omits "
+                                             "bodies and adds dependency keys.",
+     "inputSchema": _op_schema({"status": {"type": "string"}, "phase": {"type": "string"},
+                                "summary": {"type": "boolean", "description": "omit body and add "
+                                                                              "dependsOn/openDependsOn"}})},
     {"name": "ticket_show", "description": "One ticket with status, phase, body and event history.",
      "inputSchema": _op_schema(_KEY, ["key"])},
     {"name": "team_overview",
@@ -328,7 +333,10 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         return text("\n".join(f"{p['slug']}{' (current)' if p['current'] else ''}: {p['name']} [{p['status']}] "
                               f"tickets {p['ticketCount']}" for p in data["phases"]), phases=data["phases"])
     if name == "ticket_list":
-        data = call("ticket.list", _optional(args, "status", "phase"))
+        payload = _optional(args, "status", "phase")
+        if isinstance(args.get("summary"), bool):
+            payload["summary"] = args["summary"]
+        data = call("ticket.list", payload)
         return text("\n".join(f"{t['key']} [{t['status']}] {t['phase']}: {t['title']}" for t in data["tickets"])
                     or "(no tickets)", tickets=data["tickets"])
     if name == "ticket_show":

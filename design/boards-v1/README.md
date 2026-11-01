@@ -28,5 +28,5 @@ Design export for the Boards section. Phase A covers the sidebar group, the Curr
 
 - Blocked tickets have status `blocked`, `blockedReason` and `returnStatus`. Place them in the column of `returnStatus`; fall back to a "Blocked" column when unknown.
 - `activity` is derived: `working` (agent, role, run, workflow), `not started` (`waitingFor`, `note`), `finished`, `blocked` (`note`).
-- `ticket.list` returns full bodies today; the board needs a summary mode (see tickets).
+- `ticket.list` supports a summary mode (`summary: true`): it omits bodies and adds `dependsOn` and `openDependsOn` for the board cards.
 - Timeline comes from `ticket.show` `events`; unknown event names use a generic fallback label.

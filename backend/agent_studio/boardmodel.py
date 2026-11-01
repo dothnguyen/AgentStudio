@@ -1091,7 +1091,15 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
         "statuses": config_status_ids(config)}
 
 
-def ticket_list(conn, workspace: str, status=None, phase=None) -> dict:
+def _dependency_keys(conn, ticket_id: str, terminal) -> tuple:
+    """The ticket's dependency keys, plus those whose status is not done/closed (in key order)."""
+    rows = conn.execute("SELECT t.key, t.status FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+                        "WHERE d.ticket_id = ? ORDER BY t.key", (ticket_id,)).fetchall()
+    keys = [r["key"] for r in rows]
+    return keys, [r["key"] for r in rows if r["status"] not in terminal]
+
+
+def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = False) -> dict:
     config = load_config(workspace)
     if status is not None and status not in config["byId"] and status != BLOCKED_STATUS:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {status!r} is not on this board.",
@@ -1105,8 +1113,15 @@ def ticket_list(conn, workspace: str, status=None, phase=None) -> dict:
         params.append(get_phase(conn, workspace, phase)["id"])
     rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
                         " ORDER BY priority, created_at, key", params).fetchall()
+    tickets = []
+    for row in rows:
+        ticket = _ticket_json(conn, row, config)
+        if summary:
+            ticket.pop("body", None)
+            ticket["dependsOn"], ticket["openDependsOn"] = _dependency_keys(conn, row["id"], config["terminal"])
+        tickets.append(ticket)
     return {"workspace": workspace, "statuses": config_status_ids(config), "status": status, "phase": phase,
-            "tickets": [_ticket_json(conn, r, config) for r in rows]}
+            "tickets": tickets}
 
 
 def board_show(conn, workspace: str) -> dict:

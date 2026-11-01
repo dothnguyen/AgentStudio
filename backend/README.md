@@ -373,7 +373,14 @@ agent-studio ticket add --workspace ~/work/project --title "Fix the flake" --pri
 agent-studio team run-board --team <teamId>                    # bind the running team and start claiming
 agent-studio team stop-board --team <teamId>                   # stop claiming; running work finishes
 agent-studio board show --workspace ~/work/project --pretty    # phases (current marked) with status columns
+agent-studio ticket list --workspace ~/work/project --summary  # no bodies; dependsOn + openDependsOn per ticket
 ```
+
+`ticket.list` takes an optional boolean `summary` (default `false`; CLI `--summary`). With `summary: true` every
+ticket keeps its usual fields (`key`, `title`, `status`, `priority`, `phase`, `phaseName`, `assignee`, `branch`,
+`rounds`, `blockedReason`, `returnStatus`, `activity`, `updatedAt`) but has no `body`, and gains `dependsOn` (all
+dependency keys) and `openDependsOn` (the dependency keys whose status is not a done/closed kind). The default
+output is unchanged. `status`, `phase` and `summary` combine.
 
 The rules decide who works which status and what happens on pass/fail/blocked; agent rules may set
 `createdTicketStatus`, while action rules may set `onPassCreatedTickets: {from, to}` to hold tickets created by a

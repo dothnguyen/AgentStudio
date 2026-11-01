@@ -87,6 +87,7 @@ def _parser(action, group="ticket"):
     elif action == "list":
         p.add_argument("--status")
         p.add_argument("--phase")
+        p.add_argument("--summary", action="store_true")
     return p
 
 
@@ -152,6 +153,8 @@ def _list(ns):
         args["status"] = ns.status
     if ns.phase is not None:
         args["phase"] = ns.phase
+    if getattr(ns, "summary", False):
+        args["summary"] = True
     data = _call("ticket.list", args)
     return data, lambda d: _render_list(d)
 

@@ -576,6 +576,8 @@ def _validate_ticket_key_args(args):
 
 def _validate_ticket_list(args):
     out = {"workspace": _workspace_arg(args)}
+    if "summary" in args:
+        out["summary"] = req_bool(args, "summary")
     status = req_text(args, "status", 64, required=False, allow_empty=False)
     if status is not None:
         out["status"] = status
@@ -667,7 +669,8 @@ def _ticket_list(args, req):
     clean = _validate_ticket_list(args)
     conn = _reader()
     try:
-        return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"))
+        return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"), clean.get("phase"),
+                                      clean.get("summary", False))
     finally:
         conn.close()
 

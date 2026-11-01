@@ -91,7 +91,7 @@ USAGE = """agent-studio <command>
   ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
                                            move a ticket; finished tickets need --force
   ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)
-  ticket list [--status STATUS] [--phase ID] (--workspace PATH | cwd)   the workspace's tickets (read-only)
+  ticket list [--status STATUS] [--phase ID] [--summary] (--workspace PATH | cwd)   the workspace's tickets (read-only; --summary omits bodies and adds dependencies)
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
   ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
   ticket apply (--workspace PATH | cwd) KEY RUN   apply a finished workflow run's outcome to its ticket
