@@ -51,6 +51,25 @@ class LifecycleCase(unittest.TestCase):
 
 
 class Lifecycle(LifecycleCase):
+    def test_stray_team_json_is_ignored_and_overview_shows_only_saved_members(self):
+        legacy = os.path.join(self.ws, ".agent-studio", "team.json")
+        with open(legacy, "w") as f:
+            json.dump({"version": 1, "agents": [
+                {"providerId": "fake", "role": "developer", "name": "Old One"},
+                {"providerId": "fake", "role": "reviewer", "name": "Old Two"}]}, f)
+        a = self.start("alpha")
+        self.assertTrue(a["ok"], a)
+        self.assertEqual([x["displayName"] for x in a["data"]["agents"]], ["Ryan", "Sam"])
+        rc, r, p = self.sb.request(req("team.overview", {"workspace": self.ws}, idempotencyKey=key("overview")))
+        self.assertTrue(r["ok"], (r, p))
+        entries = {t["id"]: t for t in r["data"]["teams"]}
+        self.assertEqual(set(entries), {"alpha", "beta"})
+        self.assertEqual([m["name"] for m in entries["alpha"]["members"]], ["Ryan", "Sam"])
+        self.assertFalse(r["data"]["partial"])
+        with open(legacy) as f:
+            self.assertEqual(len(json.load(f)["agents"]), 2)
+        self.assertTrue(self.stop("alpha")["ok"])
+
     def test_two_definitions_run_and_stop_independently(self):
         a, b = self.start("alpha"), self.start("beta")
         self.assertTrue(a["ok"] and b["ok"], (a, b))

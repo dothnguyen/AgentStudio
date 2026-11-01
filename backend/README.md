@@ -151,7 +151,7 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   `ticketFields`, `rules`, `leaseSeconds`, `baseBranch`, `agentTicketStatus`; `null` removes a key) into the raw
   `board.json`, validates it (schema, rules check, protected routes) and writes atomically. Invalid edits
   (`BOARD_CONFIG_INVALID` with `data.problems`) and a stale `expectedSha256` (`CONFIG_CHANGED`) write nothing.
-- `role.list {workspace}` returns a read-only role catalog with ordered roles, bounded instruction text, full-file tokens, skill availability, warnings, and structured problems. Each role includes bounded saved and live usage, an exact reference count, runtime connectivity, and fail-closed partial/blocking status. An absent legacy roster is valid; an invalid or unreadable entry at its path, including a directory, makes usage partial. Catalog validation and resolver warnings use the same catalog snapshot; invalid catalog contents are reported as data. Catalog, instruction, and warning-resolution reads use confined, nonblocking opens and reject non-regular files.
+- `role.list {workspace}` returns a read-only role catalog with ordered roles, bounded instruction text, full-file tokens, skill availability, warnings, and structured problems. Each role includes bounded saved and live usage, an exact reference count, runtime connectivity, and fail-closed partial/blocking status. An absent saved team reference is valid; an invalid or unreadable team, board or workflow entry makes usage partial. Catalog validation and resolver warnings use the same catalog snapshot; invalid catalog contents are reported as data. Catalog, instruction, and warning-resolution reads use confined, nonblocking opens and reject non-regular files.
 - `role.create {workspace, role, expectedSha256?}` creates a role with an immutable slug id and optional description and skills. `role.update {workspace, roleId, changes, expectedSha256?}` edits its display name, description, and ordered skills; null removes a name or description. Both return a SHA token and missing-skill warnings.
 - `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
   (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
@@ -263,11 +263,9 @@ agent-studio provider verify --provider codex --model gpt-5.1-codex --reasoning 
 agent-studio preflight --workspace ~/work/project --provider codex --role Developer --deep
 ```
 
-Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Reviewer,model=sonnet,reasoning=high`): `--effort` levels `low medium high xhigh max`; Claude agents can read and edit files but never run commands (see `providers/claude/CONTRACT.md`). Without `--agent`, the roster comes from the workspace:
+Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Reviewer,model=sonnet,reasoning=high`): `--effort` levels `low medium high xhigh max`; Claude agents can read and edit files but never run commands (see `providers/claude/CONTRACT.md`). Without `--agent`, the roster comes from a saved team definition in `.agent-studio/teams/` (`agent-studio team start --team ID`). The rest of the workspace configuration:
 
 ```
-.agent-studio/team.json          {"version": 1, "agents": [{"providerId": "codex", "role": "Developer", "name": "dev",
-                                                            "model": "gpt-5.1-codex", "reasoning": "high"}]}
 .agent-studio/roles.json         {"version": 1, "roles": {"Developer": {"description": "Implements features",
                                                                        "instructions": "roles/developer.md",
                                                                        "skills": ["python-testing"],

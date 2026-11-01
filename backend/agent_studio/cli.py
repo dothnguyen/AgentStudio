@@ -41,7 +41,6 @@ USAGE = """agent-studio <command>
   team resume --member ID|NAME --agent CATALOG_ID [--team ID] [--workspace PATH]
                                            clear a specific agent's quota hold without switching
   team list|show|validate [--team ID] [--workspace PATH]   team definitions (read-only)
-  team import-legacy [--id ID] [--name N] [--workspace PATH]   convert .agent-studio/team.json into a team file
   team attach --team ID|UUID [--print]     attach this terminal to the team's tmux window (or print commands)
   team start [--team ID] [--workspace PATH] [--name NAME]   start a team definition by id
   team stop [--team ID|UUID] [--workspace PATH]   stop the running team of a definition (or a runtime team UUID)
@@ -194,7 +193,6 @@ _TEAM_LOCAL = {
     "list": (),
     "show": ("--team",),
     "validate": ("--team",),
-    "import-legacy": ("--id", "--name"),
 }
 
 
@@ -206,18 +204,17 @@ def _render_team(d: dict) -> str:
     if "teams" in d:
         if not d["teams"]:
             return "no teams defined"
-        return "\n".join(f"{t['id']}  {t['name']}  {t['members']} member(s)" + ("  (legacy team.json)" if t["legacy"] else "")
-                         for t in d["teams"])
+        return "\n".join(f"{t['id']}  {t['name']}  {t['members']} member(s)" for t in d["teams"])
     team = d["team"]
     if "problems" in d:
         return f"team {team}: valid"
-    if "legacy" in d:
-        lines = [f"{team.get('name')}  ({team.get('id')})" + ("  legacy team.json" if d["legacy"] else "")]
+    if isinstance(team, dict):
+        lines = [f"{team.get('name')}  ({team.get('id')})"]
         for m in team.get("members") or []:
             extra = "".join(f"  {k}={m[k]}" for k in ("model", "reasoning") if m.get(k))
             lines.append(f"  {m.get('id')}  {m.get('name')}  {m.get('role')}  {m.get('provider')}{extra}")
         return "\n".join(lines)
-    return f"team {team['id']}"
+    return f"team {team}"
 
 
 def _team_command(argv, pretty):
@@ -246,8 +243,6 @@ def _team_command(argv, pretty):
             data = teamdefs.show(ws, ns.team)
         elif action == "validate":
             data = teamdefs.validate_team(ws, ns.team)
-        else:
-            data = teamdefs.import_legacy(ws, ns.id or teamdefs.LEGACY_ID, ns.name or teamdefs.LEGACY_ID)
         resp = envelope(None, True, data=data)
     except AsError as e:
         err = e.to_error()
@@ -258,12 +253,11 @@ def _team_command(argv, pretty):
 
 
 def _render_team_action(action, d):
-    if action in ("add", "add-member", "remove-member", "import-legacy"):
+    if action in ("add", "add-member", "remove-member"):
         t = d["team"]
         head = {"add": f"created team {t['id']} ({t['name']})",
                 "add-member": f"added member {d.get('member', {}).get('id')} to team {t['id']}",
-                "remove-member": f"removed member {d.get('removed', {}).get('id')} from team {t['id']}",
-                "import-legacy": f"imported team.json as team {t['id']} ({len(t['members'])} member(s))"}[action]
+                "remove-member": f"removed member {d.get('removed', {}).get('id')} from team {t['id']}"}[action]
         return "\n".join([head] + _render_team_warnings(d))
     return _render_team(d)
 
@@ -658,9 +652,8 @@ def _human_request(argv) -> dict:
             else:
                 ws = _team_workspace(ns)
                 if not teamdefs.list_ids(ws):
-                    remediation = ("run agent-studio team import-legacy" if teamdefs.legacy_exists(ws)
-                                   else "run agent-studio team add --name NAME")
-                    raise AsError(TEAM_NOT_FOUND, "No team definition in this workspace.", remediation=remediation)
+                    raise AsError(TEAM_NOT_FOUND, "No team definition in this workspace.",
+                                  remediation="run agent-studio team add --name NAME")
                 req.update(command="team.start", args=_definition_start_args(ws, ns))
         elif ns.action == "stop" and (ns.team is None or not _is_uuid(ns.team)):
             ws = _team_workspace(ns)

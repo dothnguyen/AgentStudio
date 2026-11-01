@@ -138,8 +138,8 @@ class ModeSelection(Base):
         self.assertEqual(c.exception.code, "TEAM_CONFIG_INVALID")
         self.assertEqual(c.exception.data["problems"][0]["path"], "members")
 
-    def test_legacy_start_is_refused_and_names_import_legacy(self):
-        # P04-S06 deleted the CLI-side team.json fallback: only team import-legacy reads it now.
+    def test_start_without_roster_or_definition_is_bad_request(self):
+        # A stray team.json is not a roster: only a teamDefId or an explicit roster can start a team.
         legacy = os.path.join(self.root, "legacy")
         os.makedirs(os.path.join(legacy, ".agent-studio"))
         with open(os.path.join(legacy, ".agent-studio", "team.json"), "w") as f:
@@ -148,7 +148,12 @@ class ModeSelection(Base):
             with self.assertRaises(AsError) as c:
                 self.build(*argv)
             self.assertEqual(c.exception.code, "TEAM_NOT_FOUND")
-            self.assertIn("team import-legacy", c.exception.remediation)
+            self.assertIn("team add", c.exception.remediation)
+        with mock.patch.object(teams, "worker_path", return_value="/bin/true"):
+            with self.assertRaises(AsError) as c:
+                teams.team_start(None, {"workspace": legacy}, {"debug": True})
+        self.assertEqual(c.exception.code, "BAD_REQUEST")
+        self.assertEqual(c.exception.message, "Give a teamDefId (a saved team) or a roster.")
 
     def test_agent_roster_path_and_conflict_with_team(self):
         self.put_team("alpha", [member("a", "A")])

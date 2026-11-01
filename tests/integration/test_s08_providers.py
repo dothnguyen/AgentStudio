@@ -117,11 +117,9 @@ class SettingsAndRoles(CodexCase):
             self.assertIn(word, r["error"]["message"])
         self.assertEqual(self.sb.tmux("list-sessions", check=False), "")
 
-    def test_team_json_and_cli_agent_settings(self):
-        write(os.path.join(self.ws, ".agent-studio", "team.json"), json.dumps({"version": 1, "agents": [
-            {"providerId": "codex", "role": "Developer", "name": "dev", "model": "gpt-5.1-codex-mini",
-             "reasoning": "low"}]}))
-        r = self.start()
+    def test_roster_and_cli_agent_settings(self):
+        r = self.start([{"providerId": "codex", "role": "Developer", "model": "gpt-5.1-codex-mini",
+                         "reasoning": "low", "displayName": "dev"}])
         self.assertTrue(r["ok"], r)
         self.assertEqual(r["data"]["agents"][0]["model"], "gpt-5.1-codex-mini")
         self.sb.run("team", "stop", "--team", r["data"]["teamId"])

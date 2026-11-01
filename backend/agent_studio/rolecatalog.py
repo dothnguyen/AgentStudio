@@ -252,7 +252,7 @@ def _label(value):
 def _scan_saved_references(workspace: str, role_id: str, keep_members: bool = False) -> dict:
     from . import boardmodel, teamdefs, workflowdef
 
-    result = {key: [] for key in ("members", "boardRules", "workflows", "legacyRoster", "problems")}
+    result = {key: [] for key in ("members", "boardRules", "workflows", "problems")}
 
     def problem(source, path, error, code=None):
         message = error.message if isinstance(error, AsError) else str(error)
@@ -299,28 +299,6 @@ def _scan_saved_references(workspace: str, role_id: str, keep_members: bool = Fa
         except (AsError, OSError) as e:
             problem("teams", path, e)
 
-    legacy_path = ".agent-studio/team.json"
-    try:
-        exists = teamdefs.legacy_exists(workspace)
-        if not exists and os.path.lexists(os.path.join(workspace, legacy_path)):
-            raise AsError("ROLES_CONFIG_INVALID", f"{legacy_path} is not a readable roster file")
-        if exists:
-            for index, member in enumerate(roles.load_team(workspace)):
-                if not isinstance(member, dict) or ("role" in member and not isinstance(member["role"], str)):
-                    problem("legacyRoster", legacy_path, AsError("ROLES_CONFIG_INVALID", f"agents[{index}] is invalid"))
-                    continue
-                if member.get("role") == role_id:
-                    name = member.get("name") or member.get("displayName") or f"{member.get('role')}-{index + 1}"
-                    try:
-                        mid = teamdefs.slug(str(name))
-                    except AsError as e:
-                        problem("legacyRoster", legacy_path, e)
-                        mid = None
-                    result["legacyRoster"].append({"memberIndex": index, "memberId": mid,
-                                                   "memberName": _label(name), "path": legacy_path})
-    except (AsError, OSError) as e:
-        problem("legacyRoster", legacy_path, e)
-
     board_path = ".agent-studio/board.json"
     try:
         board = boardmodel.load_config(workspace)
@@ -351,11 +329,11 @@ def _scan_saved_references(workspace: str, role_id: str, keep_members: bool = Fa
                     result["workflows"].append({"name": _label(entry["name"]), "path": path, "stageId": stage.id})
         except (AsError, OSError) as e:
             problem("workflows", path, e)
-    result["count"] = sum(len(result[k]) for k in ("members", "boardRules", "workflows", "legacyRoster"))
+    result["count"] = sum(len(result[k]) for k in ("members", "boardRules", "workflows"))
     result["truncated"] = any(len(result[k]) > (MAX_REFERENCE_PROBLEMS if k == "problems" else MAX_REFERENCE_ITEMS)
-                              for k in ("members", "boardRules", "workflows", "legacyRoster", "problems"))
+                              for k in ("members", "boardRules", "workflows", "problems"))
     # Members stay complete until runtime rows have been joined.
-    for key in ("boardRules", "workflows", "legacyRoster", "problems"):
+    for key in ("boardRules", "workflows", "problems"):
         result[key] = result[key][:(MAX_REFERENCE_PROBLEMS if key == "problems" else MAX_REFERENCE_ITEMS)]
     if not keep_members:
         result["members"] = result["members"][:MAX_REFERENCE_ITEMS]

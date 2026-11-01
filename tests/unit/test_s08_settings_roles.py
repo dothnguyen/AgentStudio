@@ -362,12 +362,6 @@ class Roles(unittest.TestCase):
         self.assertIn("[instructions truncated by Agent Studio]", rc["text"])
         self.assertTrue(any("skipped" in w for w in rc["warnings"]))
 
-    def test_team_json(self):
-        with self.assertRaises(AsError):
-            roles.load_team(self.ws)
-        self.write("team.json", json.dumps({"version": 1, "agents": [{"providerId": "codex", "role": "Developer"}]}))
-        self.assertEqual(roles.load_team(self.ws)[0]["role"], "Developer")
-
 
 REAL = shutil.which("codex", path="/tmp/codexcli/node_modules/.bin:" + os.environ.get("PATH", ""))
 if REAL:

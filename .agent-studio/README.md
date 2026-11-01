@@ -43,11 +43,8 @@ Everything below runs **inside WSL** (Ubuntu-24.04). The `agent-studio team …`
 2. Make sure `~/.local/bin` is on your PATH (`echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`), and that
    `claude auth status` shows you logged in.
 
-3. If the workspace still has the legacy `.agent-studio/team.json` and no `.agent-studio/teams/`, convert it once:
-
-   ```bash
-   agent-studio team import-legacy          # writes .agent-studio/teams/<id>.json from team.json
-   ```
+3. Teams come only from `.agent-studio/teams/<id>.json`. A leftover legacy `.agent-studio/team.json` is ignored;
+   if there is no saved team, create one with `agent-studio team add --name NAME`.
 
 ## Daily: start and watch
 

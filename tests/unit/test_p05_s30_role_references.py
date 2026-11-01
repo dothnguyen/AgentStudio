@@ -80,7 +80,7 @@ class RoleReferenceTests(fixture.TeamOverviewTests):
         self.assertTrue(all(call.kwargs.get('builtin_dir') is None for call in listing.call_args_list))
 
     def test_invalid_sources_are_partial_and_fail_closed(self):
-        cases = [('teams/a.json', '{', 'teams'), ('team.json', '{', 'legacyRoster'),
+        cases = [('teams/a.json', '{', 'teams'),
                  ('board.json', '{', 'board'), ('workflows/bad.json', '{', 'workflows'),
                  ('workflows/bad.yaml', 'stages: [', 'workflows')]
         for path, content, source in cases:
@@ -106,13 +106,12 @@ class RoleReferenceTests(fixture.TeamOverviewTests):
         self.assertEqual((u['count'], u['liveRuntime']['state'], u['partial'], u['blocking']), (1, 'unavailable', True, True))
         self.assertEqual(u['problems'][0]['code'], 'BACKEND_UNAVAILABLE')
 
-    def test_legacy_roster_directory_is_partial_and_blocks(self):
+    def test_stray_team_json_directory_is_ignored(self):
         os.mkdir(os.path.join(self.ws, '.agent-studio', 'team.json'))
         u = self.usage()
-        self.assertEqual((u['count'], u['partial'], u['blocking']), (0, True, True))
-        problem = next(p for p in u['problems'] if p['source'] == 'legacyRoster')
-        self.assertEqual(problem['path'], '.agent-studio/team.json')
-        self.assertEqual(problem['code'], 'ROLES_CONFIG_INVALID')
+        self.assertEqual((u['count'], u['partial'], u['blocking']), (0, False, False))
+        self.assertNotIn('legacyRoster', u)
+        self.assertNotIn('legacyRoster', [p['source'] for p in u['problems']])
 
     def test_disconnected_runtime_is_distinct_and_still_scanned(self):
         self.seed_runtime('core')
@@ -126,17 +125,15 @@ class RoleReferenceTests(fixture.TeamOverviewTests):
         self.assertLessEqual(len(u['members'][0]['memberName']), 200)
         self.assertNotIn('\n', u['members'][0]['memberName'])
 
-    def test_legacy_roster_and_multiple_members_are_distinct_references(self):
+    def test_stray_team_json_members_are_not_referenced(self):
         self.put_team('core', [fixture.DEV, dict(fixture.DEV, id='dev2')])
         self.write('team.json', {'version': 1, 'agents': [
             {'displayName': 'Legacy Dev', 'role': 'developer'}, {'role': 'developer'}]})
         u = self.usage()
-        self.assertEqual(u['count'], 4)
-        self.assertEqual(u['legacyRoster'], [
-            {'memberIndex': 0, 'memberId': 'legacy-dev', 'memberName': 'Legacy Dev',
-             'path': '.agent-studio/team.json'},
-            {'memberIndex': 1, 'memberId': 'developer-2', 'memberName': 'developer-2',
-             'path': '.agent-studio/team.json'}])
+        self.assertEqual(u['count'], 2)
+        self.assertEqual([(m['teamDefId'], m['memberId']) for m in u['members']],
+                         [('core', 'dev'), ('core', 'dev2')])
+        self.assertNotIn('legacyRoster', u)
 
     def test_missing_member_id_is_a_problem_and_does_not_merge_by_name(self):
         self.put_team('core', [{'name': 'Agent 0', 'role': 'developer'}])

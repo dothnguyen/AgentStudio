@@ -54,7 +54,7 @@ def _validate_fixture(args):
 
 def _validate_team_start(args):
     out = {"workspace": req_text(args, "workspace", 4096, allow_empty=False)}
-    if args.get("roster") is not None:  # omitted -> the coordinator reads .agent-studio/team.json
+    if args.get("roster") is not None:  # omitted -> the coordinator requires a teamDefId; there is no roster fallback
         teams.validate_roster(copy.deepcopy(args), allow_fake=True)  # shape check only; the coordinator decides
         out["roster"] = args["roster"]
     name = req_text(args, "name", 80, required=False)

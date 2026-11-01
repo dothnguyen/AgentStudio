@@ -7,8 +7,6 @@ Layout inside the workspace (all optional, all plain files you commit with the p
                                                                        "skills": ["python-testing"]}}}
     .agent-studio/roles/<role>.md       instructions for a role (used directly when roles.json does not list it)
     .agent-studio/skills/<name>/SKILL.md  one skill
-    .agent-studio/team.json             {"version": 1, "agents": [{"providerId": "<id>", "role": "developer",
-                                                                    "model": "...", "reasoning": "high"}, ...]}
 
 At every dispatch the agent's role is resolved, bounded, hashed, and placed in front of the prompt as data
 (never executed). Paths must stay inside .agent-studio (no '..', no symlink escape). Each provider still reads
@@ -182,20 +180,6 @@ def context_for(workspace: str, role: str) -> dict:
     text = "".join(parts)
     return {"role": role, "text": text, "sha256": hashlib.sha256(text.encode()).hexdigest(), "sources": sources,
             "warnings": warnings, "configured": bool(sources or description)}
-
-
-def load_team(workspace: str) -> list:
-    path = os.path.join(workspace, CONFIG_DIR, "team.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
-    except FileNotFoundError:
-        raise AsError("BAD_REQUEST", f"No roster given and no {CONFIG_DIR}/team.json in the workspace.")
-    except (OSError, ValueError) as e:
-        raise AsError(ROLES_CONFIG_INVALID, f"{CONFIG_DIR}/team.json is not valid JSON: {e}")
-    if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("agents"), list):
-        raise AsError(ROLES_CONFIG_INVALID, f'{CONFIG_DIR}/team.json must be {{"version": 1, "agents": [...]}}.')
-    return raw["agents"]
 
 
 def _invalid_mutation(problems):

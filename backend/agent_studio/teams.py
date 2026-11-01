@@ -397,15 +397,14 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError("BACKEND_UNAVAILABLE", f"The worker shim {worker_path()} is not executable.",
                       remediation=f"Run: bash {os.path.join(os.path.dirname(os.path.dirname(worker_path())), 'install.sh')}")
     workspace = ops.canonical_workspace(args["workspace"])
-    if not args.get("roster"):
-        from . import roles
-        args = dict(args, roster=roles.load_team(workspace))  # .agent-studio/team.json
+    if not args.get("roster") and not args.get("teamDefId"):
+        raise AsError(BAD_REQUEST, "Give a teamDefId (a saved team) or a roster.")
     frozen_options = {}
     if args.get("teamDefId"):
         from . import teamdefs
         definition = teamdefs.load(workspace, args["teamDefId"])
         catalog = teamdefs._members_catalog(workspace, definition)
-        args = dict(args, roster=[dict(m) for m in args["roster"]])
+        args = dict(args, roster=[dict(m) for m in args.get("roster") or []])
         for member in args["roster"]:
             if not member.get("memberId"):
                 continue

@@ -14,9 +14,7 @@ from .teams import TEAM_CONFIG_INVALID
 CONFIG_DIR = ".agent-studio"
 CATALOG_FILE = "agents.json"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-LEGACY_ID = "default"
 _ADD_HINT = "run agent-studio team add --name NAME"
-_LEGACY_HINT = "run agent-studio team import-legacy"
 
 
 def slug(name: str) -> str:
@@ -74,36 +72,6 @@ def find_member(team: dict, ref: str) -> dict:
         if isinstance(m.get("name"), str) and m["name"].casefold() == str(ref).casefold():
             return m
     raise AsError(MEMBER_NOT_FOUND, f"No member {ref!r} in team {team.get('id')!r}.")
-
-
-# ---- legacy team.json ---------------------------------------------------------------------------
-
-def _legacy_path(workspace: str) -> str:
-    return os.path.join(workspace, CONFIG_DIR, "team.json")
-
-
-def legacy_exists(workspace: str) -> bool:
-    return os.path.isfile(_legacy_path(workspace))
-
-
-def legacy_team(workspace: str, team_id: str = LEGACY_ID, name: str = LEGACY_ID) -> dict:
-    agents = roles.load_team(workspace)
-    members = []
-    for i, a in enumerate(agents):
-        if not isinstance(a, dict):
-            raise AsError(TEAM_CONFIG_INVALID, f"{CONFIG_DIR}/team.json agents[{i}] must be an object.")
-        role = a.get("role")
-        mname = a.get("name") or a.get("displayName") or f"{role}-{i + 1}"
-        m = {"id": slug(str(mname)), "name": mname}
-        if "role" in a:
-            m["role"] = role
-        if "providerId" in a:
-            m["provider"] = a["providerId"]
-        for k in ("model", "reasoning"):
-            if k in a:
-                m[k] = a[k]
-        members.append(m)
-    return {"id": team_id, "name": name, "members": members}
 
 
 # ---- validation ---------------------------------------------------------------------------------
@@ -259,26 +227,21 @@ def _invalid(team_id: str, problems: list) -> AsError:
 # ---- commands -----------------------------------------------------------------------------------
 
 def _select(workspace: str, team_id):
-    """-> (team dict, file id, legacy flag). The legacy flag is always False since P04-S06 removed the
-    team.json fallback from the CLI (the coordinator's roster-less team.start still reads team.json)."""
+    """-> (team dict, file id)."""
     ids = list_ids(workspace)
     if team_id:
         if team_id in ids:
-            return load(workspace, team_id), team_id, False
+            return load(workspace, team_id), team_id
         raise AsError(TEAM_NOT_FOUND, f"No team {team_id!r}.", remediation=_ADD_HINT)
     if not ids:
         raise AsError(TEAM_NOT_FOUND, "No team is defined in this workspace.", remediation=_ADD_HINT)
     if len(ids) > 1:
         raise AsError(TEAM_AMBIGUOUS, f"Several teams exist ({', '.join(ids)}); pass --team ID.")
-    return load(workspace, ids[0]), ids[0], False
+    return load(workspace, ids[0]), ids[0]
 
 
 def _select_writable(workspace: str, team_id):
-    team, fid, legacy = _select(workspace, team_id)
-    if legacy:
-        raise AsError(BAD_REQUEST, "The team is the legacy team.json; it cannot be edited here.",
-                      remediation=_LEGACY_HINT)
-    return team, fid
+    return _select(workspace, team_id)
 
 
 def add_team(workspace: str, name, team_id=None) -> dict:
@@ -335,34 +298,21 @@ def list_teams(workspace: str) -> dict:
     for tid in ids:
         t = load(workspace, tid)
         members = t.get("members")
-        out.append({"id": tid, "name": t.get("name"), "members": len(members) if isinstance(members, list) else 0,
-                    "legacy": False})
+        out.append({"id": tid, "name": t.get("name"), "members": len(members) if isinstance(members, list) else 0})
     return {"teams": out}
 
 
 def show(workspace: str, team_id) -> dict:
-    team, _, legacy = _select(workspace, team_id)
-    return {"team": team, "legacy": legacy}
+    team, _ = _select(workspace, team_id)
+    return {"team": team}
 
 
 def validate_team(workspace: str, team_id) -> dict:
-    team, fid, _ = _select(workspace, team_id)
+    team, fid = _select(workspace, team_id)
     problems = validate(workspace, team, fid)
     if problems:
         raise _invalid(fid, problems)
     return {"team": fid, "problems": []}
-
-
-def import_legacy(workspace: str, team_id=LEGACY_ID, name=LEGACY_ID) -> dict:
-    if not SLUG_RE.match(team_id or ""):
-        raise AsError(BAD_REQUEST, f"--id {team_id!r} is not a slug (lowercase letters, digits, '-').")
-    if not legacy_exists(workspace):
-        raise AsError(TEAM_NOT_FOUND, f"No {CONFIG_DIR}/team.json to import.")
-    if list_ids(workspace):
-        raise AsError(TEAM_EXISTS, "A team definition already exists; import-legacy only runs on an empty workspace.")
-    team = legacy_team(workspace, team_id, name)
-    save(workspace, team)
-    return {"team": team, "warnings": validate(workspace, team, team_id)}
 
 
 # ---- strict edits (teamdef.* serve commands) ----------------------------------------------------
@@ -429,7 +379,7 @@ def _check_edit(workspace: str, fid: str, before, candidate: dict) -> list:
 
 
 def _strict_team(workspace: str, team_id):
-    team, fid, _ = _select(workspace, team_id)
+    team, fid = _select(workspace, team_id)
     if not isinstance(team.get("members"), list):
         raise AsError(TEAM_CONFIG_INVALID, f"team {fid}: members must be a list")
     return team, fid

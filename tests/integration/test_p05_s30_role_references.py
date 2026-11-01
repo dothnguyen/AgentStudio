@@ -47,7 +47,7 @@ class RoleListDispatchTests(unittest.TestCase):
         self.assertEqual(usage['workflows'], [
             {'name': 'first', 'path': '.agent-studio/workflows/first.json', 'stageId': 'work'},
             {'name': 'second', 'path': '.agent-studio/workflows/second.yaml', 'stageId': 'work'}])
-        self.assertEqual(set(usage), {'members', 'boardRules', 'workflows', 'legacyRoster', 'liveRuntime',
+        self.assertEqual(set(usage), {'members', 'boardRules', 'workflows', 'liveRuntime',
                                       'problems', 'count', 'blocking', 'partial', 'truncated'})
 
     def test_role_list_survives_reader_failure_with_partial_usage(self):

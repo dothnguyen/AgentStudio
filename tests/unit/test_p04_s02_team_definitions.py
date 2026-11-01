@@ -190,8 +190,8 @@ class ValidateTests(Base):
         self.assertIn("members[0].role:", c.exception.message)
 
 
-class LegacyTests(Base):
-    """P04-S06 removed the CLI-side team.json fallback: only `team import-legacy` reads team.json now."""
+class LegacyFileIgnoredTests(Base):
+    """A stray .agent-studio/team.json is ignored: saved team definitions are the only source of teams."""
 
     def setUp(self):
         super().setUp()
@@ -212,12 +212,12 @@ class LegacyTests(Base):
         self.assertEqual(self.code(teamdefs.remove_member, self.ws, None, "dev-one"), "TEAM_NOT_FOUND")
         self.same()
 
-    def test_team_start_without_teams_is_team_not_found_naming_import_legacy(self):
+    def test_team_start_without_teams_is_team_not_found_naming_team_add(self):
         rc, out, err = self.cli("team", "start")
         self.assertEqual(rc, 1)
         resp = json.loads(out)
         self.assertEqual(resp["error"]["code"], "TEAM_NOT_FOUND")
-        self.assertIn("team import-legacy", resp["error"]["remediation"])
+        self.assertIn("team add", resp["error"]["remediation"])
         self.same()
 
     def test_team_start_named_default_is_also_refused(self):
@@ -232,37 +232,6 @@ class LegacyTests(Base):
         self.assertEqual(json.loads(out)["data"]["teams"], [])
         rc, out, _ = self.cli("team", "list")
         self.assertEqual(out.strip(), "no teams defined")
-
-    def test_import_legacy_still_converts(self):
-        res = teamdefs.import_legacy(self.ws)
-        self.assertEqual(res["warnings"], [])
-        self.assertEqual(teamdefs.validate_team(self.ws, "default")["problems"], [])
-        self.assertEqual(self.code(teamdefs.import_legacy, self.ws), "TEAM_EXISTS")
-        self.assertFalse(teamdefs.show(self.ws, None)["legacy"])
-        self.same()
-
-    def test_import_without_team_json(self):
-        os.remove(os.path.join(self.cfg, "team.json"))
-        self.assertEqual(self.code(teamdefs.import_legacy, self.ws), "TEAM_NOT_FOUND")
-
-    def test_import_legacy_cli_human_and_json(self):
-        rc, out, _ = self.cli("team", "import-legacy", "--id", "core", "--name", "Core")
-        self.assertEqual(rc, 0)
-        self.assertEqual(out.splitlines()[0], "imported team.json as team core (2 member(s))")
-        os.remove(self.team_file("core"))
-        rc, out, _ = self.cli("team", "import-legacy", "--json")
-        resp = json.loads(out)
-        self.assertEqual(rc, 0)
-        self.assertTrue(resp["ok"])
-        self.assertEqual(resp["data"]["team"]["id"], "default")
-        self.assertEqual(len(resp["data"]["team"]["members"]), 2)
-        self.assertEqual(resp["data"]["warnings"], [])
-
-    def test_import_legacy_cli_error(self):
-        os.remove(os.path.join(self.cfg, "team.json"))
-        rc, out, err = self.cli("team", "import-legacy", "--json")
-        self.assertEqual(rc, 1)
-        self.assertEqual(json.loads(out)["error"]["code"], "TEAM_NOT_FOUND")
 
     def test_team_add_ignores_team_json(self):
         teamdefs.add_team(self.ws, "new")
@@ -288,7 +257,7 @@ class CliTests(Base):
         rc, out, _ = self.cli("team", "list", "--json")
         resp = json.loads(out)
         self.assertTrue(resp["ok"])
-        self.assertEqual(resp["data"]["teams"], [{"id": "core", "name": "Core", "members": 1, "legacy": False}])
+        self.assertEqual(resp["data"]["teams"], [{"id": "core", "name": "Core", "members": 1}])
         rc, out, _ = self.cli("team", "remove-member", "--member", "a")
         self.assertEqual(rc, 0)
 
@@ -318,7 +287,7 @@ class CliTests(Base):
 
 
 def teamdefs_actions():
-    return ["add", "add-member", "remove-member", "list", "show", "validate", "import-legacy"]
+    return ["add", "add-member", "remove-member", "list", "show", "validate"]
 
 
 if __name__ == "__main__":

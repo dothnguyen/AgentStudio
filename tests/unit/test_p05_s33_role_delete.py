@@ -98,11 +98,6 @@ class RoleDeleteTests(fixture.TeamOverviewTests):
         u = self.usage(self.rejected("ROLE_IN_USE"))
         self.assertEqual((u["members"][0]["teamDefId"], u["members"][0]["memberId"]), ("core", "dev"))
 
-    def test_legacy_roster_blocks_delete(self):
-        self.write("team.json", {"version": 1, "agents": [{"providerId": "fake", "role": "victim", "name": "Old"}]})
-        u = self.usage(self.rejected("ROLE_IN_USE"))
-        self.assertEqual((u["legacyRoster"][0]["memberIndex"], u["legacyRoster"][0]["memberName"]), (0, "Old"))
-
     def test_board_rule_blocks_delete(self):
         self.write("board.json", BOARD)
         u = self.usage(self.rejected("ROLE_IN_USE"))
@@ -132,16 +127,14 @@ class RoleDeleteTests(fixture.TeamOverviewTests):
 
     def test_combined_references_return_one_complete_usage(self):
         self.put_team("core", [dict(id="dev", name="Dev", role="victim")])
-        self.write("team.json", {"version": 1, "agents": [{"providerId": "fake", "role": "victim", "name": "Old"}]})
         self.write("board.json", BOARD)
         self.workflows()
         self.seed_runtime("live")
         self.conn.execute("UPDATE agents SET role='victim'")
         self.conn.commit()
         u = self.usage(self.rejected("ROLE_IN_USE"))
-        self.assertEqual((len(u["members"]), len(u["legacyRoster"]), len(u["boardRules"]), len(u["workflows"])),
-                         (2, 1, 1, 2))
-        self.assertEqual(u["count"], 6)
+        self.assertEqual((len(u["members"]), len(u["boardRules"]), len(u["workflows"])), (2, 1, 2))
+        self.assertEqual(u["count"], 5)
 
     def test_stopped_runtime_and_frozen_assignment_do_not_block(self):
         team, agents = self.seed_runtime("old", status="stopped")
