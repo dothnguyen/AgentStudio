@@ -3,17 +3,12 @@ import type { ConnectionStatus, ManagementApi, ManagementError, RoleCatalogItem,
 import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { RoleDeleteDialog } from './RoleDeleteDialog';
 import { RoleForm, type RoleFormConflict, type RoleFormPhase } from './RoleForm';
-import { buildRoleSavePlan, type RoleFormField, type RoleFormMode, type RoleFormValues } from './roleEditModel';
-import { ROLE_DATA_CHANGED_REASON, assignedMemberLabels, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, requestedRoleSelection, roleUsageProblems, selectedRoleId } from './rolesModel';
+import type { RoleFormField, RoleFormMode, RoleFormValues } from './roleEditModel';
+import { runRoleSave, normalizeRoleError } from './roleSave';
+import { INSTRUCTION_MESSAGES, ROLE_DATA_CHANGED_REASON, assignedMemberLabels, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, selectionAfterRoleDeletion, filterRoleRows, roleDisplayLabel, roleInitials, roleIssueSummary, roleRows, roleRuntimeState, requestedRoleSelection, roleUsageProblems, selectedRoleId } from './rolesModel';
 
 export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus; requestedRoleId?: string | null }
 export function RolesScreen(props: RolesScreenProps): JSX.Element { return <RolesBrowser key={props.workspace.id} {...props} />; }
-
-const INSTRUCTION_MESSAGES: Record<string, string> = {
-  none: 'No shared instruction file configured.',
-  missing: 'The configured instruction file is missing.',
-  invalid: 'Shared instructions are unavailable because the configured file is invalid or unsafe.',
-};
 
 function ProblemList(props: { title: string; items: Array<{ path: string; message: string }> }): JSX.Element | null {
   if (props.items.length === 0) return null;
@@ -264,11 +259,8 @@ interface Session {
   metadataSaved: boolean;
 }
 
-const TOKENS_MESSAGE = 'Metadata and skills were saved, but current instruction tokens could not be loaded. Reload and review before saving instructions.';
-const INSTRUCTIONS_MESSAGE = 'Metadata and skills were saved; shared instructions were not saved.';
-const VERIFY_MESSAGE = 'The save completed, but the catalog could not be reloaded to verify it. Reload and review.';
 const changedError = (remediation?: string): ManagementError => ({ code: 'CONFIG_CHANGED', message: 'Another edit was saved first.', retryable: true, remediation });
-const normalize = (reason: unknown): ManagementError => ({ code: 'INTERNAL', message: String(reason), retryable: false });
+const normalize = normalizeRoleError;
 async function guarded<T>(run: () => Promise<{ ok: true; data: T } | { ok: false; error: ManagementError }>): Promise<{ ok: true; data: T } | { ok: false; error: ManagementError }> {
   try { return await run(); } catch (reason) { return { ok: false, error: normalize(reason) }; }
 }
@@ -367,62 +359,38 @@ function useRoleEditing(
     const rid = ++requestRef.current;
     const live = () => mounted.current && sessionRef.current?.id === sid && requestRef.current === rid;
     setPending(true); setServerError(null); setPartialNotice(null);
-    let wrote = false;
-    let createdOrEdited: string | null = start.base?.id ?? null;
-    const fail = (error: ManagementError, notice: string | null = null) => {
-      setPending(false); setPhase('idle');
-      setPartialNotice(notice);
-      setServerError(error);
-      setConflict(null);
-    };
     try {
-      const plan = buildRoleSavePlan(start.mode, start.base, values);
-      if (plan.create) {
-        setPhase('saving_metadata');
-        const r = await guarded(() => management.createRole(workspaceId, plan.create!, start.catalogSha));
-        if (!live()) return;
-        if (!r.ok) return fail(r.error);
-        wrote = true;
-        createdOrEdited = r.data.role.id;
-        patch({ mode: 'edit', base: r.data.role, catalogSha: r.data.sha256, metadataSaved: true });
-      } else if (plan.metadata && start.base) {
-        setPhase('saving_metadata');
-        const r = await guarded(() => management.updateRole(workspaceId, start.base!.id, plan.metadata!, start.catalogSha!));
-        if (!live()) return;
-        if (!r.ok) return fail(r.error);
-        wrote = true;
-        patch({ base: r.data.role, catalogSha: r.data.sha256, metadataSaved: true });
+      const outcome = await runRoleSave({
+        management,
+        workspaceId,
+        session: { mode: start.mode, base: start.base, catalogSha: start.catalogSha, metadataSaved: start.metadataSaved },
+        values,
+        reload: fresh,
+        isLive: live,
+        onPhase: setPhase,
+        onSession: change => patch(change),
+      });
+      if (outcome.status === 'stale') return;
+      if (outcome.status === 'failed') {
+        setPending(false);
+        setPhase('idle');
+        setPartialNotice(outcome.partialNotice);
+        setServerError(outcome.error);
+        setConflict(null);
+        return;
       }
-      const roleId = createdOrEdited;
-      if (!roleId) return fail(normalize('Role id is missing.'));
-      if (plan.instructionsChanged) {
-        if (wrote) {
-          setPhase('reloading_tokens');
-          const reloaded = await fresh();
-          if (!live()) return;
-          const role = reloaded.ok ? reloaded.data.items.find(item => item.id === roleId) : undefined;
-          if (!reloaded.ok || !role) return fail(reloaded.ok ? normalize(`Role ${roleId} was not found after saving.`) : reloaded.error, TOKENS_MESSAGE);
-          patch({ base: role, catalogSha: reloaded.data.sha256 });
-        }
-        setPhase('saving_instructions');
-        const current = sessionRef.current!;
-        const r = await guarded(() => management.updateRoleInstructions(workspaceId, roleId, values.instructions, current.catalogSha!, current.base!.instructions.sha256));
-        if (!live()) return;
-        if (!r.ok) return fail(r.error, sessionRef.current?.metadataSaved ? INSTRUCTIONS_MESSAGE : null);
-        wrote = true;
-        patch({ base: r.data.role, catalogSha: r.data.sha256 });
-      }
-      setPhase('verifying');
-      const verified = await fresh();
-      if (!live()) return;
-      const role = verified.ok ? verified.data.items.find(item => item.id === roleId) : undefined;
-      if (!verified.ok || !role) return fail(verified.ok ? normalize(`Role ${roleId} was not found after saving.`) : verified.error, VERIFY_MESSAGE);
-      select(roleId);
+      select(outcome.role.id);
       setQuery('');
-      if (wrote) setAnnouncement(`${start.mode === 'create' ? 'Created' : 'Saved'} role "${role.name}" (${role.id}). Saved changes apply to new assignments; current assignments are unchanged.`);
+      if (outcome.wrote) setAnnouncement(`${start.mode === 'create' ? 'Created' : 'Saved'} role "${outcome.role.name}" (${outcome.role.id}). Saved changes apply to new assignments; current assignments are unchanged.`);
       close('role');
     } catch (reason) {
-      if (live()) fail(normalize(reason));
+      if (live()) {
+        setPending(false);
+        setPhase('idle');
+        setPartialNotice(null);
+        setServerError(normalize(reason));
+        setConflict(null);
+      }
     } finally {
       lock.current = false;
     }

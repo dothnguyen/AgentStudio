@@ -100,6 +100,25 @@ describe('member details v7 styles', () => {
     expect(workspace[2]! + screenPad[2]! + detail[2]!).toBe(56);
   });
 
+  it('matches the role instructions card and edit dialog tokens', () => {
+    parts('.role-instructions-preview', ['border: 1px solid #23262c', 'border-radius: 8px', 'background: #121418', 'overflow: hidden']);
+    parts('.role-instructions-preview pre', ['max-height: 168px', 'overflow: hidden', 'font-size: 12px', 'line-height: 1.6', 'color: #c4cad2']);
+    parts('.role-instructions-fade', ['height: 56px', 'linear-gradient(to bottom, rgba(18, 20, 24, 0), #121418)']);
+    parts('.role-instructions-field .role-instructions-prompt-input', ['min-height: 280px', 'resize: vertical', 'font-family: var(--font-mono)', 'font-size: 12.5px']);
+    parts('.role-instructions-note', ['background: rgba(240, 180, 83, 0.07)', 'color: #f0b453', 'font-size: 12px']);
+    parts('.dialog-subtitle', ['font-size: 12px', '#a3a9b2']);
+  });
+
+  it('does not let the new dialog title group inherit the legacy .dialog-heading layout', () => {
+    // CreateWorkspaceDialog still uses the older flex heading.
+    parts('.dialog-heading', ['display: flex', 'gap: 11px', 'margin-bottom: 20px']);
+    const group = rule('.dialog-title-group');
+    expect(group).toContain('min-width: 0');
+    expect(group).not.toContain('display');
+    expect(group).not.toContain('gap');
+    expect(group).not.toContain('margin');
+  });
+
   it('does not double the padding inside the legacy live-agent card', () => {
     expect(rule('.section-card .teams-live-actions')).toContain('padding: 0;');
   });

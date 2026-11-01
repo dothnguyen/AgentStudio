@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type JSX, type RefObject } from 'react';
-import type { AgentDef, ManagementApi, OverviewMember, OverviewTeam, RoleCatalogItem } from '../api';
+import type { AgentDef, ManagementApi, OverviewMember, OverviewTeam, Result, RoleCatalogItem, RoleCatalogList } from '../api';
 import { Icon } from '../icons/Icon';
 import { MemberForm } from './TeamEditForms';
 import {
@@ -14,11 +14,16 @@ import {
 import { memberAgentActions, type MemberActionInFlight } from './memberAgentActionsModel';
 import { SectionCard } from './SectionCard';
 import { MemberSettingsDialog } from './MemberSettingsDialog';
+import { RoleInstructionsSection } from './RoleInstructionsSection';
 import { useTicketPermission } from './useTicketPermission';
 
 export interface MemberDetailPanelProps {
   workspaceId: string; management: ManagementApi; savedRevision: number;
   team: OverviewTeam; member: OverviewMember; agents: AgentDef[] | null; roleItems: RoleCatalogItem[] | null; roleCatalogMessage: string | null;
+  /** Expected roles.json token, needed to save a role's description and prompt. */
+  roleCatalogSha?: string | null;
+  /** Reloads the role catalog fresh so the card and the Roles screen show the saved text. */
+  reloadRoleCatalog?(): Promise<Result<RoleCatalogList>>;
   onViewRole?(roleId: string): void; writes: TeamWrites; pending: boolean; connected: boolean;
   agentsFresh?: boolean; rolesFresh?: boolean; readOnly?: boolean;
   liveActions: JSX.Element; agentsSection: JSX.Element; onBack(): void; onRemoved(): void;
@@ -134,7 +139,7 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
           {/* LEGACY: removed by "Member details v7 (5/5)" */}
           {editing ? <MemberForm key={memberId} mode="edit" heading={`Edit ${name}`} submitLabel="Save changes" cancelLabel="Discard changes" initial={editing} originalOptions={member.agentOptions} inlineContext={member.agentMode === 'inline' ? { provider: member.provider, model: member.model, reasoning: member.reasoning } : null} agents={agents} roles={formRoles} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} showMemberSettings={false} onSubmit={values => { const changes = memberChanges(editing, values); if (changes) void writes.updateMember(team, memberId, changes).then(outcome => { if (outcome.ok) { setEditing(null); setFocusTarget('edit'); } }); }} onCancel={() => { setEditing(null); setFocusTarget('edit'); }} /> : <>
             <dl className="teams-member-settings"><dt>Name</dt><dd>{name}</dd><dt>Member id</dt><dd><code className="entity-id">{memberId}</code></dd><dt>Role</dt><dd>
-              {catalogRole ? <><span className="teams-role-name">{catalogRole.name}</span> <code className="entity-id">{catalogRole.id}</code><p>{catalogRole.description ?? 'No description'}</p>{catalogRole.warnings.length > 0 && <ul aria-label="Role warnings">{catalogRole.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}{props.onViewRole && <button type="button" onClick={() => props.onViewRole?.(catalogRole.id)}>{`View ${catalogRole.name} in Roles`}</button>}</> : <>{roleText(member)}{roleNote(member) && <p>{roleNote(member)}</p>}{props.roleItems === null && props.roleCatalogMessage && <p>{props.roleCatalogMessage}</p>}{props.roleItems !== null && member.role !== null && canEditMember(team, member) && <p>Choose an existing role by editing this member.</p>}</>}
+              {catalogRole ? <><span className="teams-role-name">{catalogRole.name}</span> <code className="entity-id">{catalogRole.id}</code><p>{catalogRole.description ?? 'No description'}</p></> : <>{roleText(member)}{roleNote(member) && <p>{roleNote(member)}</p>}{props.roleItems === null && props.roleCatalogMessage && <p>{props.roleCatalogMessage}</p>}{props.roleItems !== null && member.role !== null && canEditMember(team, member) && <p>Choose an existing role by editing this member.</p>}</>}
               <p>{ROLE_SHARING_NOTE}</p></dd><dt>Ticket permission</dt><dd>{ticketPermissionText(permission)} {permission.state === 'error' && <button type="button" onClick={() => setRetry(n => n + 1)}>Retry loading ticket permission</button>}</dd></dl>
             <h3 id="teams-member-agents-title">Agent options</h3><p className="panel-note">{SAVED_OPTIONS_NOTE}</p>
             {member.source === 'runtime' ? <p>Saved configuration is not available for runtime-only members.</p> : member.agentMode === 'inline' ? <><p>Inline agent — {providerModelText(member.provider, member.model)}{member.reasoning ? ` · Reasoning: ${member.reasoning}` : ''}</p><p>This member uses inline provider settings, not an Agents catalog entry. They stay unchanged unless you choose Use catalog agents while editing.</p></> : member.agentOptions.length === 0 ? <p>No saved agent options were returned.</p> : <ol className="teams-saved-options" aria-label="Saved agent options">{member.agentOptions.map((o, i) => <li key={`${o.id}-${i}`}><strong>{o.name ?? o.id}</strong>{o.name !== null && <> <code className="entity-id">{o.id}</code></>}{i === 0 && <> <span className="teams-option-default">{NEXT_START_DEFAULT}</span></>}{o.state === 'missing' && <> <span className="teams-option-missing">Missing from catalog</span></>} <span className="teams-saved-option-detail">{providerModelText(o.provider, o.model)}{o.reasoning ? ` · Reasoning: ${o.reasoning}` : ''}</span>{o.description !== null && <> <span className="teams-saved-option-detail">{o.description}</span></>}</li>)}</ol>}
@@ -146,6 +151,18 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
           {/* LEGACY: removed by "Member details v7 (5/5)" */}
           {props.liveActions}
         </SectionCard>
+        <RoleInstructionsSection
+          workspaceId={props.workspaceId}
+          management={props.management}
+          member={member}
+          roles={props.roleItems}
+          catalogSha={props.roleCatalogSha ?? null}
+          roleCatalogMessage={props.roleCatalogMessage}
+          pending={props.pending}
+          readOnly={props.readOnly === true}
+          reloadRoles={() => props.reloadRoleCatalog ? props.reloadRoleCatalog() : props.management.roles(props.workspaceId)}
+          onViewRole={props.onViewRole}
+        />
       </div>
       <aside className="teams-member-aside" aria-label="Member status and actions">
         <MemberLiveStatusCard team={team} member={member} catalog={props.agents} connected={props.connected} inFlight={props.inFlight ?? null} />

@@ -83,6 +83,14 @@ describe('Dialog', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close' }));
   });
 
+  it('uses its own title group class instead of the legacy dialog-heading class', async () => {
+    await open();
+    const header = screen.getByRole('dialog').querySelector('.dialog-header')!;
+    expect(header.querySelector('.dialog-heading')).toBeNull();
+    expect(header.querySelector('.dialog-title-group')).not.toBeNull();
+    expect(css).toContain('.dialog-title-group { min-width: 0; }');
+  });
+
   it('does not inherit the legacy dialog divider above the footer buttons', async () => {
     await open();
     const actions = screen.getByRole('button', { name: 'Cancel' }).parentElement!;

@@ -92,6 +92,11 @@ const MAX_LABEL = 200;
 const bound = (value: string): string => (value.length > MAX_LABEL ? `${value.slice(0, MAX_LABEL)}…` : value);
 
 export const ROLE_DATA_CHANGED_REASON = 'Role data changed. Close and reopen Delete to confirm the latest version.';
+export const INSTRUCTION_MESSAGES: Record<string, string> = {
+  none: 'No shared instruction file configured.',
+  missing: 'The configured instruction file is missing.',
+  invalid: 'Shared instructions are unavailable because the configured file is invalid or unsafe.',
+};
 
 export function conventionalInstructionPath(roleId: string): string {
   return `.agent-studio/roles/${roleId}.md`;

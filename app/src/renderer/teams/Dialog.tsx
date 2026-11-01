@@ -13,6 +13,8 @@ export interface DialogAction {
 export interface DialogProps {
   /** Dialog title, also used as its accessible name. */
   title: ReactNode;
+  /** Optional secondary line under the title, for example the file the dialog saves to. */
+  subtitle?: ReactNode;
   /** Panel width in pixels. It never grows past the window. */
   width?: number;
   onClose(): void;
@@ -131,7 +133,10 @@ export function Dialog(props: DialogProps): JSX.Element {
         style={{ width: `min(${width}px, 100%)` }}
       >
         <div className="dialog-header">
-          <h2 id={titleId}>{props.title}</h2>
+          <div className="dialog-title-group">
+            <h2 id={titleId}>{props.title}</h2>
+            {props.subtitle !== undefined && <p className="dialog-subtitle">{props.subtitle}</p>}
+          </div>
           <button
             type="button"
             className="dialog-close"

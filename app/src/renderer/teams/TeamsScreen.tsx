@@ -19,6 +19,7 @@ import type {
   ManagementResult,
   OverviewTeam,
   OverviewMember,
+  Result,
   RoleCatalogItem,
   RoleCatalogList,
   RunRetryResult,
@@ -749,6 +750,10 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             rolesFresh={rolesFresh}
             readOnly={!overviewFresh}
             roleItems={roleItems}
+            roleCatalogSha={roleItems !== null ? rolesData?.sha256 ?? null : null}
+            reloadRoleCatalog={() => roleCatalog.reloadFresh
+              ? roleCatalog.reloadFresh()
+              : Promise.resolve({ ok: false as const, error: { code: 'INTERNAL', message: 'Role catalog reload is unavailable.', retryable: true } })}
             roleCatalogMessage={roleCatalogMessage}
             onViewRole={props.onViewRole}
             onManageAgents={props.onOpenAgents}
@@ -793,6 +798,8 @@ function TeamDetailPanel(props: {
   agents: AgentDef[] | null;
   agentsFresh: boolean; rolesFresh: boolean;
   roleItems: RoleCatalogItem[] | null;
+  roleCatalogSha: string | null;
+  reloadRoleCatalog(): Promise<Result<RoleCatalogList>>;
   roleCatalogMessage: string | null;
   onViewRole?(roleId: string): void;
   onManageAgents?(): void;
@@ -830,7 +837,7 @@ function TeamDetailPanel(props: {
     if (id === 'routing') return props.routing;
     if (id === 'overview') return (
       <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
-        agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
+        agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogSha={props.roleCatalogSha} reloadRoleCatalog={props.reloadRoleCatalog} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
         onManageAgents={props.onManageAgents}
         writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
         onSwitch={props.onSwitch} onResume={props.onResume}
