@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Roles — catalog</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+.nav-link:hover{background:#181b20}
+.btn-sec:hover{background:#222831 !important}
+.btn-pri:hover{background:#7cb0ff !important}
+.btn-ghost:hover{background:#1b1f24 !important}
+.btn-danger:hover{background:#4a2c2c !important}
+.row-btn:hover{background:#1b1f25 !important}
+.crumb:hover{color:#e7e9ec !important;text-decoration:underline}
+.member-row+.member-row{border-top:1px solid #1f2328}
+.row-btn:focus-visible{outline-offset:-2px}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #5b9cff;outline-offset:2px}
+input::placeholder,textarea::placeholder{color:#8d949e}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+  <!-- Sidebar -->
+  <nav aria-label="Primary" style="flex: 1 1 240px; max-width: 260px; min-width: 220px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 2px 8px">
+      <div style="width: 26px; height: 26px; border-radius: 7px; background: #5b9cff; display: flex; align-items: center; justify-content: center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d0f12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6"></path><path d="M12 19h8"></path></svg>
+      </div>
+      <span style="font-weight: 600; font-size: 14px">Agent Studio</span>
+    </div>
+    <button type="button" class="btn-ghost" style="all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #23262c; border-radius: 8px; background: #14171b">
+      <span style="width: 28px; height: 28px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: flex; align-items: center; justify-content: center">AS</span>
+      <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+        <span style="font-weight: 600; font-size: 13px">Agent Studio</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">/mnt/c/Works/Projects/AgentStudio</span>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15l5 5 5-5"></path><path d="M7 9l5-5 5 5"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Home</a>
+      <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"></path></svg>
+        <span style="flex: 1">Teams</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid #23262c">
+        <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent Studio Dev Team</span>
+          <span style="font-size: 11px; color: #a3a9b2">6</span>
+        </a>
+        <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New team</a>
+      </div>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Agents</a>
+      <a class="nav-link" href="#" aria-current="page" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #e7e9ec; background: #181b20; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"></path></svg>Roles</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16M15 4v16"></path></svg>Boards</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>Configuration</a>
+    </div>
+    <div style="margin-top: auto; border-top: 1px solid #23262c; padding-top: 12px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"></path></svg>Switch workspace</a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px">
+
+      <!-- ============ LIST VIEW ============ -->
+      <sc-if value="{{isList}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Roles</h1>
+            <p style="margin: 0; color: #a3a9b2; font-size: 12.5px">Shared descriptions, instructions and skills. Every member with a role uses it.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            <sc-if value="{{flash}}" hint-placeholder-val="{{true}}">
+              <span role="status" style="display: inline-flex; align-items: center; gap: 7px; color: #6fd38b; font-size: 12.5px; background: rgba(74,194,107,0.10); padding: 6px 12px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>{{flash}}</span>
+            </sc-if>
+            <button type="button" class="btn-pri" onClick="{{openNew}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; gap: 7px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New role</button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ec3ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+          <span>Saved changes apply to new assignments. Assignments already running keep the instructions they started with.</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between">
+          <label style="display: flex; align-items: center; gap: 8px; height: 38px; width: min(360px, 100%); box-sizing: border-box; padding: 0 12px; border: 1px solid #2f343c; border-radius: 8px; background: #121418">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+            <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search roles</span>
+            <input type="text" value="{{query}}" onChange="{{setQuery}}" placeholder="Search roles" style="all: unset; flex: 1; min-width: 0; color: #e7e9ec">
+          </label>
+          <span style="font-size: 12px; color: #8d949e">{{countText}}</span>
+        </div>
+
+        <section aria-label="Role catalog" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+          <div style="overflow-x: auto">
+            <div style="min-width: 820px">
+              <div aria-hidden="true" style="display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 3fr) minmax(0, 1.7fr) minmax(0, 1.1fr) 28px; gap: 16px; padding: 10px 18px; border-bottom: 1px solid #23262c; color: #8d949e; font-size: 12px; font-weight: 500">
+                <span>Role</span><span>Description</span><span>Skills</span><span>Used by</span><span></span>
+              </div>
+              <ul style="list-style: none; margin: 0; padding: 0">
+                <sc-for list="{{roleRows}}" as="r" hint-placeholder-count="6">
+                  <li style="border-bottom: 1px solid #1f2328">
+                    <button type="button" class="row-btn" onClick="{{r.pick}}" aria-label="Open role {{r.name}}" style="all: unset; cursor: pointer; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 3fr) minmax(0, 1.7fr) minmax(0, 1.1fr) 28px; gap: 16px; align-items: center; padding: 13px 18px">
+                      <span style="display: flex; align-items: center; gap: 12px; min-width: 0">
+                        <span style="width: 34px; height: 34px; border-radius: 8px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; flex: none">{{r.letter}}</span>
+                        <span style="display: flex; flex-direction: column; min-width: 0">
+                          <span style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.name}}</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.path}}</span>
+                        </span>
+                      </span>
+                      <span style="color: #c4cad2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{r.description}}</span>
+                      <span style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+                        <sc-for list="{{r.skills}}" as="k" hint-placeholder-count="2">
+                          <span style="padding: 2px 8px; border-radius: 5px; background: {{k.bg}}; border: 1px solid {{k.border}}; color: {{k.color}}; font-family: 'JetBrains Mono', monospace; font-size: 11.5px">{{k.id}}</span>
+                        </sc-for>
+                        <sc-if value="{{r.hasMore}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a3a9b2">{{r.more}}</span></sc-if>
+                        <sc-if value="{{r.noSkills}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #8d949e">None</span></sc-if>
+                      </span>
+                      <span style="display: flex; flex-direction: column; gap: 2px">
+                        <span style="font-weight: 500; color: {{r.usageColor}}">{{r.usage}}</span>
+                        <span style="font-size: 12px; color: #8d949e">{{r.running}}</span>
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+                    </button>
+                  </li>
+                </sc-for>
+              </ul>
+            </div>
+          </div>
+          <sc-if value="{{noMatches}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0; padding: 22px 18px; color: #a3a9b2">No role matches “{{query}}”.</p>
+          </sc-if>
+        </section>
+      </sc-if>
+
+      <!-- ============ DETAIL VIEW ============ -->
+      <sc-if value="{{isDetail}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <div style="font-size: 12px; color: #8d949e; display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+            <button type="button" onClick="{{backToList}}" class="crumb" style="all: unset; cursor: pointer; color: #a3a9b2; border-radius: 3px">Roles</button><span aria-hidden="true">/</span><span style="color: #e7e9ec">{{name}}</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between">
+            <div style="display: flex; align-items: center; gap: 14px; min-width: 0">
+              <span style="width: 48px; height: 48px; border-radius: 11px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 18px; display: flex; align-items: center; justify-content: center; flex: none">{{letter}}</span>
+              <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+                  <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">{{name}}</h1>
+                  <code style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4cad2; background: #1e2228; border: 1px solid #2a2e35; border-radius: 5px; padding: 1px 7px">{{id}}</code>
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: {{usagePillBg}}; color: {{usagePillColor}}; font-size: 12px; font-weight: 500">{{usageText}}</span>
+                </div>
+                <span style="color: #a3a9b2; font-size: 12px">{{assignmentsText}}</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+              <sc-if value="{{flash}}" hint-placeholder-val="{{true}}">
+                <span role="status" style="display: inline-flex; align-items: center; gap: 7px; color: #6fd38b; font-size: 12.5px; background: rgba(74,194,107,0.10); padding: 6px 12px; border-radius: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>{{flash}}</span>
+              </sc-if>
+              <button type="button" class="btn-danger" onClick="{{openDelete}}" disabled="{{deleteBlocked}}" aria-describedby="delete-why" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #4a2c2c; border-radius: 7px; color: #f0a3a3; font-weight: 500; opacity: {{deleteOpacity}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"></path></svg>Delete role</button>
+            </div>
+          </div>
+          <p id="delete-why" style="margin: 0; font-size: 12px; color: {{deleteWhyColor}}">{{deleteWhy}}</p>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ec3ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+            <span>Saved changes apply to new assignments. Assignments already running keep the instructions they started with.</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start">
+          <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+            <section aria-labelledby="ov-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <div>
+                  <h3 id="ov-h" style="margin: 0; font-size: 14px; font-weight: 600">Overview</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Name and description shown in Roles and on member pages.</p>
+                </div>
+                <button type="button" class="btn-sec" onClick="{{openGeneral}}" aria-label="Edit overview" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>Edit</button>
+              </div>
+              <dl style="margin: 0; padding: 16px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 24px">
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Name</dt><dd style="margin: 0; font-weight: 500">{{name}}</dd></div>
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Role id</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: #c4cad2">{{id}}</dd></div>
+                <div style="grid-column: 1 / -1"><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Description</dt><dd style="margin: 0; color: #d6dae0">{{description}}</dd></div>
+              </dl>
+            </section>
+            <section aria-labelledby="ins-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <div>
+                  <h3 id="ins-h" style="margin: 0; font-size: 14px; font-weight: 600">Shared instructions</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Read when an assignment starts. Later edits apply to new assignments only.</p>
+                </div>
+                <button type="button" class="btn-sec" onClick="{{openInstructions}}" aria-label="Edit shared instructions" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>Edit</button>
+              </div>
+              <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+                <span style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between">
+                  <span style="display: inline-flex; align-items: center; gap: 8px; color: #8d949e; font-size: 12px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg><code style="font-family: 'JetBrains Mono', monospace; color: #c4cad2">{{path}}</code></span>
+                  <span style="font-size: 11.5px; color: #8d949e">{{promptStats}}</span>
+                </span>
+                <div style="position: relative; border: 1px solid #23262c; border-radius: 8px; background: #121418; overflow: hidden">
+                  <div style="max-height: 300px; overflow: hidden; padding: 12px 14px; white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #c4cad2">{{prompt}}</div>
+                  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 64px; background: linear-gradient(to bottom, rgba(18,20,24,0), #121418)"></div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div style="flex: 1 1 320px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+            <section aria-labelledby="sk-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <div>
+                  <h3 id="sk-h" style="margin: 0; font-size: 14px; font-weight: 600">Skills</h3>
+                  <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Skill files the role can use.</p>
+                </div>
+                <button type="button" class="btn-sec" onClick="{{openSkills}}" aria-label="Edit skills" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13.5 6.5l4 4"></path></svg>Edit</button>
+              </div>
+              <div style="padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 8px">
+                <sc-for list="{{skillChips}}" as="s" hint-placeholder-count="3">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; background: {{s.bg}}; border: 1px solid {{s.border}}; color: {{s.color}}; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{s.id}}<sc-if value="{{s.missing}}" hint-placeholder-val="{{false}}"><span style="font-family: Inter, system-ui, sans-serif; font-size: 11px">missing</span></sc-if></span>
+                </sc-for>
+                <sc-if value="{{noSkills}}" hint-placeholder-val="{{false}}"><span style="color: #a3a9b2">No skills.</span></sc-if>
+              </div>
+            </section>
+            <section aria-labelledby="use-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <h3 id="use-h" style="margin: 0; font-size: 14px; font-weight: 600">Used by</h3>
+                <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Change a member’s role from its page.</p>
+              </div>
+              <ul style="list-style: none; margin: 0; padding: 0">
+                <sc-for list="{{memberRows}}" as="m" hint-placeholder-count="1">
+                  <li class="member-row" style="display: flex; align-items: center; gap: 12px; padding: 12px 18px">
+                    <span style="width: 30px; height: 30px; border-radius: 50%; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: flex; align-items: center; justify-content: center; flex: none">{{m.initials}}</span>
+                    <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                      <span style="font-weight: 500">{{m.name}}</span>
+                      <span style="font-size: 12px; color: #8d949e">{{m.team}} · {{m.state}}</span>
+                    </span>
+                    <a href="MemberDetailV2.dc.html" aria-label="Open {{m.name}}" style="font-size: 12.5px; font-weight: 500">Open</a>
+                  </li>
+                </sc-for>
+                <sc-if value="{{unused}}" hint-placeholder-val="{{false}}">
+                  <li style="padding: 16px 18px; color: #a3a9b2">No member has this role yet.</li>
+                </sc-if>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+
+  <!-- DIALOGS -->
+  <sc-if value="{{dialogOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 10; background: rgba(6,7,9,0.68); display: flex; align-items: flex-start; justify-content: center; padding: 96px 24px 24px; box-sizing: border-box">
+
+      <!-- Overview dialog -->
+      <sc-if value="{{dGeneral}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-gen-h" style="width: min(560px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <h2 id="dlg-gen-h" style="margin: 0; font-size: 15px; font-weight: 600">Edit overview</h2>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px">
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Name</span>
+              <input type="text" value="{{dName}}" onChange="{{setName}}" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec">
+            </label>
+            <sc-if value="{{nameInvalid}}" hint-placeholder-val="{{false}}"><span role="alert" style="font-size: 12px; color: #f0897f; margin-top: -8px">Enter a name.</span></sc-if>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Role id</span>
+              <span style="display: flex; align-items: center; gap: 8px; height: 38px; box-sizing: border-box; padding: 0 12px; border: 1px dashed #2a2e35; border-radius: 7px; color: #a3a9b2; font-family: 'JetBrains Mono', monospace; font-size: 12.5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>{{id}}</span>
+              <span style="font-size: 12px; color: #a3a9b2">Members refer to the role by this id, so it cannot change.</span>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Description</span>
+              <textarea rows="4" value="{{dDesc}}" onChange="{{setDesc}}" style="all: unset; box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; line-height: 1.5; white-space: pre-wrap"></textarea>
+            </label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Saved to roles.json</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveGeneral}}" disabled="{{nameInvalid}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: {{nameOpacity}}">Save</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Instructions dialog -->
+      <sc-if value="{{dInstructions}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-ins-h" style="width: min(780px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <div>
+              <h2 id="dlg-ins-h" style="margin: 0; font-size: 15px; font-weight: 600">Edit {{name}} instructions</h2>
+              <p style="margin: 2px 0 0; font-size: 12px; color: #a3a9b2">Saved to <code style="font-family: 'JetBrains Mono', monospace; color: #c4cad2">{{path}}</code></p>
+            </div>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; justify-content: space-between">
+                <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Instructions</span>
+                <span style="font-size: 11.5px; color: {{limitColor}}">{{dPromptStats}}</span>
+              </span>
+              <textarea rows="16" value="{{dPrompt}}" onChange="{{setPrompt}}" style="all: unset; box-sizing: border-box; width: 100%; padding: 12px 14px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; min-height: 320px"></textarea>
+            </label>
+            <sc-if value="{{overLimit}}" hint-placeholder-val="{{false}}"><span role="alert" style="font-size: 12px; color: #f0897f">Instructions are over the 16 KiB limit. Shorten them to save.</span></sc-if>
+            <div style="display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 8px; background: rgba(240,180,83,0.07); color: #f0b453; font-size: 12px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+              <span>Every member with the {{name}} role uses this file. Assignments already running keep the instructions they started with.</span>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Takes effect on the next assignment</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveInstructions}}" disabled="{{overLimit}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: {{limitOpacity}}">Save to file</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Skills dialog -->
+      <sc-if value="{{dSkills}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-sk-h" style="width: min(560px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <h2 id="dlg-sk-h" style="margin: 0; font-size: 15px; font-weight: 600">Edit skills</h2>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div role="group" aria-label="Skills" style="padding: 16px 20px; display: flex; flex-direction: column; gap: 8px">
+            <sc-for list="{{skillChoices}}" as="c" hint-placeholder-count="4">
+              <button type="button" role="checkbox" aria-checked="{{c.checkedStr}}" onClick="{{c.toggle}}" style="all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 9px; border: 1px solid {{c.border}}; background: {{c.bg}}">
+                <span style="width: 18px; height: 18px; border-radius: 5px; border: 2px solid {{c.ring}}; background: {{c.fill}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center; flex: none"><sc-if value="{{c.checked}}" hint-placeholder-val="{{false}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0b1220" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg></sc-if></span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px">{{c.id}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Saved to roles.json</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveSkills}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600">Save</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- New role dialog -->
+      <sc-if value="{{dNew}}" hint-placeholder-val="{{false}}">
+        <div role="dialog" aria-modal="true" aria-labelledby="dlg-new-h" style="width: min(560px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #23262c">
+            <h2 id="dlg-new-h" style="margin: 0; font-size: 15px; font-weight: 600">New role</h2>
+            <button type="button" class="btn-ghost" onClick="{{closeDialog}}" aria-label="Close" style="all: unset; cursor: pointer; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+          </div>
+          <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px">
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Name</span>
+              <input type="text" value="{{nName}}" onChange="{{setNewName}}" placeholder="For example Architect" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Role id</span>
+              <input type="text" value="{{nId}}" onChange="{{setNewId}}" style="all: unset; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font-family: 'JetBrains Mono', monospace; font-size: 12.5px">
+              <span style="font-size: 12px; color: #a3a9b2">Letters, numbers and dashes. It cannot be changed later. The instructions file will be <code style="font-family: 'JetBrains Mono', monospace; color: #c4cad2">{{newPath}}</code>.</span>
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 6px">
+              <span style="font-size: 12px; color: #c4cad2; font-weight: 500">Description <span style="color: #8d949e; font-weight: 400">(optional)</span></span>
+              <textarea rows="3" value="{{nDesc}}" onChange="{{setNewDesc}}" style="all: unset; box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; line-height: 1.5; white-space: pre-wrap"></textarea>
+            </label>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid #23262c; background: #14171a">
+            <span style="font-size: 12px; color: #8d949e">Add the instructions after creating it</span>
+            <span style="display: flex; gap: 8px">
+              <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+              <button type="button" class="btn-pri" onClick="{{saveNew}}" disabled="{{newInvalid}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; opacity: {{newOpacity}}">Create role</button>
+            </span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Delete dialog -->
+      <sc-if value="{{dDelete}}" hint-placeholder-val="{{false}}">
+        <div role="alertdialog" aria-modal="true" aria-labelledby="dlg-del-h" aria-describedby="dlg-del-d" style="width: min(480px, 100%); background: #16191d; border: 1px solid #2f343c; border-radius: 14px; box-shadow: 0 24px 64px rgba(0,0,0,0.55); overflow: hidden">
+          <div style="padding: 20px 20px 8px">
+            <h2 id="dlg-del-h" style="margin: 0 0 8px; font-size: 15px; font-weight: 600">Delete {{name}}?</h2>
+            <p id="dlg-del-d" style="margin: 0; color: #a3a9b2">The role entry and its instructions file <code style="font-family: 'JetBrains Mono', monospace; color: #c4cad2">{{path}}</code> will be removed. No member uses this role.</p>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px">
+            <button type="button" class="btn-sec" onClick="{{closeDialog}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 14px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-weight: 500">Cancel</button>
+            <button type="button" onClick="{{confirmDelete}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 34px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 7px; background: #b4413b; color: #ffffff; font-weight: 600">Delete role</button>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startView":{"editor":"enum","options":["list","detail"],"default":"list"},"openDialog":{"editor":"enum","options":["none","general","instructions","skills","new","delete"],"default":"none"},"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const team = 'Agent Studio Dev Team';
+    const roles = [
+      { id: 'TeamLead', name: 'TeamLead', path: 'roles/team-lead.md', skills: ['story-format', 'code-search'], assignments: 0,
+        members: [{ name: 'lead', team: team, state: 'Available' }],
+        description: 'Team lead: unpacks features into phases, epics and stories; refines each story into a detailed technical plan before development and fixes it in place. Does not review code or merge.',
+        prompt: 'You are the team lead for Agent Studio (read PRD.md, ROADMAP.md and phases/ first; they are the source of truth).\nYou never edit code or tests. You edit planning documents only: story files, a phase README / design contract, and\nbriefs - and only when the task below says so.\n\nWhen asked to UNPACK a feature:\n- Restate the goal in two sentences, list open questions, and state the assumptions you will use if unanswered.\n- Propose phases -> epics -> stories. Each story is small enough for one developer session and independently testable.\n- Write the plan into the files the task names (usually phases/phase-NN/...), following the story-format skill.\n- End with a short list of decisions the operator must make.\n\nWhen asked to REVIEW A STORY BEFORE WORK:\n- Check it has a clear goal, numbered steps, testable "Done when" items, dependencies, and no hidden scope.' },
+      { id: 'Developer', name: 'Developer', path: 'roles/developer.md', skills: ['story-format', 'python-testing', 'code-search'], assignments: 1,
+        members: [{ name: 'dev', team: team, state: 'Working on T-107' }],
+        description: 'Developer: implements one approved story at a time, with tests.',
+        prompt: 'You implement the ticket you are given.\n\nRead the whole ticket first. Make a checklist of every required behaviour and map each one to code and a test.\nKeep changes focused on the ticket. Do not run git commands that change history.' },
+      { id: 'SeniorDeveloper', name: 'SeniorDeveloper', path: 'roles/senior-developer.md', skills: ['story-format', 'python-testing', 'legacy-notes'], assignments: 0,
+        members: [{ name: 'senior', team: team, state: 'Available' }],
+        description: 'Senior developer: resolves escalated tickets and recurring QA failures.',
+        prompt: 'You take the tickets the Developer could not finish.\n\nStart from the findings of the previous rounds and fix the root cause, not the symptom.' },
+      { id: 'QA', name: 'QA', path: 'roles/qa.md', skills: ['code-search'], assignments: 0,
+        members: [{ name: 'qa', team: team, state: 'Available' }],
+        description: 'QA: checks every acceptance criterion against the code and tests and returns a verdict.',
+        prompt: 'You judge whether the ticket is done.\n\nCheck each "Done when" item against the code and the tests. End with a verdict line.' },
+      { id: 'Reviewer', name: 'Reviewer', path: 'roles/reviewer.md', skills: ['code-search'], assignments: 0,
+        members: [{ name: 'reviewer', team: team, state: 'Available' }],
+        description: 'Reviewer: reads the ticket diff against the plan and the project conventions and returns a verdict with findings.',
+        prompt: 'You review the change.\n\nCheck that it does what the ticket asks and nothing else. End with a pass or fail verdict.' },
+      { id: 'ProductOwner', name: 'ProductOwner', path: 'roles/product-owner.md', skills: ['story-format'], assignments: 0,
+        members: [],
+        description: 'Product owner: turns rough ideas into tickets with acceptance criteria and a priority.',
+        prompt: 'You write tickets.\n\nEach ticket needs a goal, acceptance criteria and a priority.' }
+    ];
+    const open = props && props.openDialog && props.openDialog !== 'none' ? props.openDialog : null;
+    const detailDialogs = ['general', 'instructions', 'skills', 'delete'];
+    this.state = { roles: roles, selected: 'TeamLead', view: (open && detailDialogs.indexOf(open) !== -1) || (props && props.startView === 'detail') ? 'detail' : 'list', query: '', flash: '', dialog: open, draft: {}, available: ['story-format', 'python-testing', 'code-search', 'ts-testing'] };
+    this.state.draft = this.mkDraft(roles[0]);
+  }
+  mkDraft(role) {
+    return { name: role ? role.name : '', desc: role ? role.description : '', prompt: role ? role.prompt : '', skills: role ? role.skills.slice() : [], nName: '', nId: '', nIdEdited: false, nDesc: '' };
+  }
+  cur() {
+    const list = this.state.roles;
+    return list.find((r) => r.id === this.state.selected) || list[0] || null;
+  }
+  bytes(t) { return typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(t).length : t.length; }
+  stats(t) {
+    return t.split('\n').length + ' lines · ' + this.bytes(t).toLocaleString('en-US') + ' / 16,384 bytes';
+  }
+  slug(n) { return n.replace(/[^A-Za-z0-9-]+/g, ''); }
+  renderVals() {
+    const s = this.state;
+    const d = s.draft;
+    const role = this.cur();
+    const q = s.query.trim().toLowerCase();
+    const visible = s.roles.filter((r) => q === '' || r.name.toLowerCase().indexOf(q) !== -1 || r.id.toLowerCase().indexOf(q) !== -1);
+    const memberCount = (r) => r.members.length;
+    const usageOf = (r) => memberCount(r) === 0 ? 'Unused' : memberCount(r) + (memberCount(r) === 1 ? ' member' : ' members');
+    const dlg = s.dialog;
+    const set = (patch) => this.setState({ draft: Object.assign({}, this.state.draft, patch) });
+    const openTo = (which) => () => this.setState({ dialog: which, draft: this.mkDraft(this.cur()) });
+    const patchRole = (patch, msg) => {
+      const id = this.cur().id;
+      this.setState({ roles: this.state.roles.map((r) => r.id === id ? Object.assign({}, r, patch) : r), dialog: null, flash: msg });
+    };
+    const out = {
+      query: s.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      countText: visible.length === s.roles.length ? s.roles.length + ' roles' : visible.length + ' of ' + s.roles.length + ' roles',
+      noMatches: visible.length === 0,
+      flash: s.flash,
+      hasRole: !!role,
+      isList: s.view === 'list' || !role,
+      isDetail: s.view === 'detail' && !!role,
+      backToList: () => this.setState({ view: 'list', flash: '' }),
+      roleRows: visible.map((r) => {
+        const miss = (id) => s.available.indexOf(id) === -1;
+        const shown = r.skills.slice(0, 2);
+        return { name: r.name, letter: r.name.slice(0, 1).toUpperCase(), path: r.path, description: r.description,
+          skills: shown.map((id) => ({ id: id, bg: miss(id) ? 'rgba(240,180,83,0.10)' : '#1e2228', border: miss(id) ? '#5a4a26' : '#2a2e35', color: miss(id) ? '#f0b453' : '#c4cad2' })),
+          hasMore: r.skills.length > 2, more: '+' + (r.skills.length - 2), noSkills: r.skills.length === 0,
+          usage: usageOf(r), usageColor: memberCount(r) === 0 ? '#8d949e' : '#e7e9ec',
+          running: r.assignments === 0 ? 'No running assignments' : r.assignments + ' running',
+          pick: () => this.setState({ selected: r.id, view: 'detail', flash: '' }) };
+      }),
+      openNew: openTo('new'),
+      openGeneral: openTo('general'),
+      openInstructions: openTo('instructions'),
+      openSkills: openTo('skills'),
+      openDelete: openTo('delete'),
+      closeDialog: () => this.setState({ dialog: null }),
+      dialogOpen: !!dlg,
+      dGeneral: dlg === 'general',
+      dInstructions: dlg === 'instructions',
+      dSkills: dlg === 'skills',
+      dNew: dlg === 'new',
+      dDelete: dlg === 'delete'
+    };
+    if (role) {
+      const blocked = memberCount(role) > 0;
+      const skillIds = role.skills.slice();
+      Object.assign(out, {
+        name: role.name, id: role.id, letter: role.name.slice(0, 1).toUpperCase(), description: role.description, prompt: role.prompt, path: role.path,
+        promptStats: this.stats(role.prompt),
+        usageText: usageOf(role) === 'Unused' ? 'Unused' : 'Used by ' + usageOf(role),
+        usagePillBg: blocked ? 'rgba(91,156,255,0.12)' : '#1e2228',
+        usagePillColor: blocked ? '#9ec3ff' : '#c4cad2',
+        assignmentsText: role.assignments === 0 ? 'No running assignments' : role.assignments + ' running assignment' + (role.assignments === 1 ? '' : 's'),
+        deleteBlocked: blocked, deleteOpacity: blocked ? '0.45' : '1',
+        deleteWhy: blocked ? 'This role is still referenced. Remove its references before deleting it.' : 'No member uses this role, so it can be deleted.',
+        deleteWhyColor: blocked ? '#f0b453' : '#8d949e',
+        skillChips: skillIds.map((id) => { const miss = s.available.indexOf(id) === -1; return { id: id, missing: miss, bg: miss ? 'rgba(240,180,83,0.10)' : '#1e2228', border: miss ? '#5a4a26' : '#2a2e35', color: miss ? '#f0b453' : '#c4cad2' }; }),
+        noSkills: skillIds.length === 0,
+        memberRows: role.members.map((m) => ({ name: m.name, team: m.team, state: m.state, initials: m.name.slice(0, 2).toUpperCase() })),
+        unused: memberCount(role) === 0
+      });
+    }
+    // overview dialog
+    const nameInvalid = d.name.trim() === '';
+    Object.assign(out, {
+      dName: d.name, dDesc: d.desc, nameInvalid: nameInvalid, nameOpacity: nameInvalid ? '0.45' : '1',
+      setName: (e) => set({ name: e.target.value }), setDesc: (e) => set({ desc: e.target.value }),
+      saveGeneral: () => { if (this.state.draft.name.trim() === '') return; patchRole({ name: this.state.draft.name.trim(), description: this.state.draft.desc.trim() }, 'Saved role ' + this.state.draft.name.trim()); }
+    });
+    // instructions dialog
+    const over = this.bytes(d.prompt) > 16384;
+    Object.assign(out, {
+      dPrompt: d.prompt, dPromptStats: this.stats(d.prompt), overLimit: over, limitColor: over ? '#f0897f' : '#8d949e', limitOpacity: over ? '0.45' : '1',
+      setPrompt: (e) => set({ prompt: e.target.value }),
+      saveInstructions: () => { if (this.bytes(this.state.draft.prompt) > 16384) return; patchRole({ prompt: this.state.draft.prompt }, 'Saved ' + this.cur().path); }
+    });
+    // skills dialog
+    out.skillChoices = s.available.concat(d.skills.filter((x) => s.available.indexOf(x) === -1)).map((id) => {
+      const on = d.skills.indexOf(id) !== -1;
+      return { id: id, checked: on, checkedStr: on ? 'true' : 'false', border: on ? '#3d6bb3' : '#262a30', bg: on ? 'rgba(91,156,255,0.08)' : '#121418',
+        ring: on ? '#5b9cff' : '#4a5059', fill: on ? '#5b9cff' : 'transparent',
+        toggle: () => { const cur = this.state.draft.skills; set({ skills: cur.indexOf(id) !== -1 ? cur.filter((x) => x !== id) : cur.concat([id]) }); } };
+    });
+    out.saveSkills = () => patchRole({ skills: this.state.draft.skills.slice() }, 'Saved skills');
+    // new role dialog
+    const newId = d.nIdEdited ? d.nId : this.slug(d.nName);
+    const dupe = s.roles.some((r) => r.id === newId);
+    const newInvalid = d.nName.trim() === '' || newId === '' || dupe;
+    Object.assign(out, {
+      nName: d.nName, nId: newId, nDesc: d.nDesc, newPath: 'roles/' + (newId || '<id>').replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() + '.md',
+      newInvalid: newInvalid, newOpacity: newInvalid ? '0.45' : '1',
+      setNewName: (e) => set({ nName: e.target.value }),
+      setNewId: (e) => set({ nId: e.target.value, nIdEdited: true }),
+      setNewDesc: (e) => set({ nDesc: e.target.value }),
+      saveNew: () => {
+        const dr = this.state.draft;
+        const id = dr.nIdEdited ? dr.nId : this.slug(dr.nName);
+        if (dr.nName.trim() === '' || id === '' || this.state.roles.some((r) => r.id === id)) return;
+        const created = { id: id, name: dr.nName.trim(), path: 'roles/' + id.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() + '.md', skills: [], assignments: 0, members: [], description: dr.nDesc.trim(), prompt: '' };
+        this.setState({ roles: this.state.roles.concat([created]), selected: id, view: 'detail', dialog: null, flash: 'Created role ' + created.name });
+      }
+    });
+    out.confirmDelete = () => {
+      const id = this.cur().id;
+      const rest = this.state.roles.filter((r) => r.id !== id);
+      this.setState({ roles: rest, selected: rest.length ? rest[0].id : null, view: 'list', dialog: null, flash: 'Deleted role ' + id });
+    };
+    return out;
+  }
+}
+</script>
+</body>
+</html>
