@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import { MemberDetailPanel, type MemberDetailPanelProps } from './MemberDetailPanel';
 import { AgentsSection } from './AgentsSection';
-import { MemberLiveAgentActions } from './MemberLiveAgentActions';
 import { memberActionKey, type MemberActionInFlight } from './memberAgentActionsModel';
 import type { AttentionRun, BlockedTicket, OverviewMember, OverviewTeam, TeamAttention } from '../api';
 import { Icon } from '../icons/Icon';
@@ -12,7 +11,7 @@ import type { BoardStatus } from './teamActionsModel';
 import { teamsPanelId } from './teamsViewModel';
 import { filterMembers, missingMemberNotice, resolveMemberSelection, type MemberSelection } from './teamsModel';
 
-export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'liveActions' | 'agentsSection'> {
+export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'agentsSection'> {
   announce?: boolean;
   onNoticeChange?(active: boolean): void;
   onManageAgents?(): void;
@@ -71,7 +70,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
         onResume={(id, label) => props.onResume(team, result.member, id, label)}
         onManageAgents={props.onManageAgents}
       />}
-      liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} announce={props.announce} inFlight={liveInFlight} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
+      onBack={back} onRemoved={removed} />;
   }
   const empty = team.members.length === 0;
   return <div className="teams-members teams-members-view">
@@ -86,7 +85,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
         </div>
       </div>
       {lost !== null && <p className="panel-note teams-members-note" role={props.announce === false ? undefined : 'status'}>{missingMemberNotice(lost, team.membersTruncated)}</p>}
-      {adding && <div className="teams-members-inline"><MemberForm mode="add" heading="Add member" initial={emptyMemberForm()} originalOptions={[]} inlineContext={null} agents={props.agentsFresh === false ? null : props.agents} roles={props.rolesFresh === false ? null : props.roleItems} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} onSubmit={values => { void props.writes.addMember(team, values).then(ok => { if (ok) { setAdding(false); setReturnFocus('add'); } }); }} onCancel={() => { setAdding(false); setReturnFocus('add'); }} /></div>}
+      {adding && <div className="teams-members-inline"><MemberForm heading="Add member" initial={emptyMemberForm()} originalOptions={[]} inlineContext={null} agents={props.agentsFresh === false ? null : props.agents} roles={props.rolesFresh === false ? null : props.roleItems} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} onSubmit={values => { void props.writes.addMember(team, values).then(ok => { if (ok) { setAdding(false); setReturnFocus('add'); } }); }} onCancel={() => { setAdding(false); setReturnFocus('add'); }} /></div>}
       {empty ? <p className="panel-empty teams-members-note">This team has no members.</p> : filtered.length === 0 && <p className="panel-empty teams-members-note">No returned members match the current filters.</p>}
       {filtered.length > 0 && <MemberList
         team={team}

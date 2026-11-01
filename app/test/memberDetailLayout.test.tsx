@@ -100,7 +100,7 @@ describe('member detail v7 layout', () => {
     expect(css).toContain('@media (max-width: 1240px) { .teams-member-layout { flex-direction: column; } .teams-member-main { width: 100%; flex: 1 1 auto; } .teams-member-aside { width: 100%; max-width: none; } }');
   });
 
-  it('puts both legacy cards in the main column and the status and remove cards in the aside', async () => {
+  it('puts the Agents, Role instructions and status cards in their v7 columns', async () => {
     await mount(runningOverview());
     const detail = await open('Lead Developer');
     const layout = detail.querySelector('.teams-member-layout')!;
@@ -108,10 +108,11 @@ describe('member detail v7 layout', () => {
     const aside = detail.querySelector('.teams-member-aside')!;
     expect(layout.children[0]).toBe(main);
     expect(layout.children[1]).toBe(aside);
-    for (const card of ['Saved configuration (temporary)', 'Live agent (temporary)']) {
+    for (const card of ['Agents', 'Role instructions']) {
       expect(main.contains(within(detail).getByRole('region', { name: card }))).toBe(true);
     }
     expect(aside.contains(within(detail).getByRole('region', { name: 'Live status' }))).toBe(true);
+    expect(aside.contains(within(detail).getByRole('region', { name: 'Member settings' }))).toBe(true);
     expect(aside.lastElementChild).toBe(within(detail).getByRole('region', { name: 'Remove member' }));
   });
 
@@ -211,8 +212,8 @@ describe('member detail v7 layout', () => {
     const user = userEvent.setup();
     await mount(runningOverview(), { updateMember });
     const detail = await open('Lead Developer');
-    expect(within(detail).getByRole('heading', { name: 'Saved configuration (temporary)', level: 2 })).toBeTruthy();
-    expect(within(detail).getByRole('heading', { name: 'Live agent (temporary)', level: 2 })).toBeTruthy();
+    expect(within(detail).getByRole('heading', { name: 'Member settings', level: 2 })).toBeTruthy();
+    expect(within(detail).getByRole('heading', { name: 'Agents', level: 2 })).toBeTruthy();
     const edit = within(detail).getByRole('button', { name: 'Edit member settings' });
 
     await user.click(edit);
@@ -233,11 +234,11 @@ describe('member detail v7 layout', () => {
     expect(document.activeElement).toBe(edit);
   });
 
-  it('keeps the legacy live agent section inside its temporary card', async () => {
+  it('shows the live agent switch inside the Agents card', async () => {
     await mount(runningOverview());
     const detail = await open('Lead Developer');
-    const card = within(detail).getByRole('region', { name: 'Live agent (temporary)' });
-    expect(within(card).getByRole('region', { name: 'Live for Lead Developer' })).toBeTruthy();
-    expect(within(card).getByRole('button', { name: 'Switch' })).toBeTruthy();
+    const card = within(detail).getByRole('region', { name: 'Agents' });
+    expect(within(card).getByRole('button', { name: 'Switch live agent to Codex GPT' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Edit agent options' })).toBeTruthy();
   });
 });

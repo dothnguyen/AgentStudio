@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  emptyMemberForm, addMemberInput, addAgentOption, removeAgentOption, moveAgentOption, validateAgentOptions, memberFormInitial,
+  emptyMemberForm, addMemberInput, addAgentOption, removeAgentOption, moveAgentOption, validateAgentOptions,
   canEditMember,
   canEditTeam,
   errorFeedback,
   findCatalogRole,
   memberRoleChoices,
   roleChoiceLabel,
-  memberChanges, memberSettingsInitial, ticketPermissionText, ticketPermissionValue, TICKET_PERMISSION_UNKNOWN,
+  memberChanges, memberSettingsInitial, ticketPermissionValue, TICKET_PERMISSION_UNKNOWN,
   nextStartSuffix,
   problemsSuffix,
   validateMemberForm,
@@ -40,13 +40,12 @@ describe('teamEditModel', () => {
   });
   it('initial_values_and_conversion_are_explicit', () => {
     expect(emptyMemberForm()).toEqual({name: '', role: '', agents: [], useCatalogAgents: true});
-    expect(memberFormInitial(member({agentOptions: [], defaultAgent: 'fallback'})).agents).toEqual(['fallback']);
-    const inline = memberFormInitial(member({agentMode: 'inline'}));
-    expect(inline.agents).toEqual([]);
-    expect(validateMemberForm(inline, 'edit', new Set())).toEqual({});
-    expect(validateMemberForm({...inline, useCatalogAgents: true}, 'edit', new Set()).agents).toBe('Choose at least one agent.');
-    expect(memberChanges(inline, {...inline, useCatalogAgents: true, agents: ['a']})).toEqual({agents: ['a']});
-    expect(memberChanges(inline, {...inline})).toBeNull();
+    expect(memberSettingsInitial(member())).toEqual({name: 'dev', role: 'Developer', agents: [], useCatalogAgents: false});
+    expect(validateMemberForm(memberSettingsInitial(member()), 'edit', new Set())).toEqual({});
+    expect(validateMemberForm({...emptyMemberForm(), useCatalogAgents: true}, 'edit', new Set()).agents).toBe('Choose at least one agent.');
+    const initial = {name: 'dev', role: 'Developer', agents: [], useCatalogAgents: false};
+    expect(memberChanges(initial, {...initial, agents: ['a'], useCatalogAgents: true})).toEqual({agents: ['a']});
+    expect(memberChanges(initial, {...initial})).toBeNull();
     const input = addMemberInput({name: ' Name ', role: ' QA ', agents: ['a'], useCatalogAgents: true});
     expect(input).toEqual({name: 'Name', role: 'QA', agents: ['a']});
   });
@@ -56,18 +55,6 @@ describe('teamEditModel', () => {
     expect(validateAgentOptions(['missing', 'missing'], missing)).toBe('Each agent can appear only once.');
     expect(validateAgentOptions(['missing'], missing)).toBe('Remove or replace missing catalog agents before saving.');
     expect(validateAgentOptions(['a', 'b'], missing)).toBeNull();
-  });
-  it('single_catalog_is_not_silently_rewritten', () => {
-    const initial = memberFormInitial(member());
-    expect(memberChanges(initial, {...initial, role: 'QA'})).toEqual({role: 'QA'});
-  });
-  it('inline_member_preserves_provider_fields', () => {
-    const initial = memberFormInitial(member({agentMode: 'inline', provider: 'p', model: 'm', reasoning: 'r'}));
-    expect(memberChanges(initial, {...initial, name: 'new', role: 'QA'})).toEqual({name: 'new', role: 'QA'});
-  });
-  it('preserves_role_identity_and_can_add_tickets', () => {
-    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}));
-    expect(memberChanges(initial, {...initial, agents: ['other']})).toEqual({agents: ['other']});
   });
   it('add_and_validate_member', () => {
     const draft = { name: ' ', role: ' QA ', agents: ['a'], useCatalogAgents: true };
@@ -134,38 +121,31 @@ describe('teamEditModel', () => {
     expect(problemsSuffix([])).toBe('');
     expect(problemsSuffix([{ path: 'a', message: 'b' }])).toBe(' The team still has 1 problem; see the team details.');
   });
-  it('saved_configuration_changes_include_only_changed_fields_in_backend_shape', () => {
-    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}), false);
+  it('member_changes_include_only_changed_fields_in_backend_shape', () => {
+    const initial = {name: 'dev', role: 'Developer', agents: ['a'], useCatalogAgents: true, canAddTickets: false};
     expect(memberChanges(initial, {...initial, name: 'renamed', role: 'QA', agents: ['b', 'a'], canAddTickets: true}))
       .toEqual({name: 'renamed', role: 'QA', agents: ['b', 'a'], canAddTickets: true});
   });
-  it('unchanged_saved_configuration_returns_null', () => {
-    const initial = memberFormInitial(member({agentMode: 'ordered_catalog'}), true);
+  it('unchanged_member_values_return_null', () => {
+    const initial = {name: 'dev', role: 'Developer', agents: ['a'], useCatalogAgents: true, canAddTickets: true};
     expect(memberChanges(initial, {...initial, agents: [...initial.agents]})).toBeNull();
   });
 });
 
 describe('ticket permission', () => {
   it('preserves known values and omits unknown values', () => {
-    expect(memberFormInitial(member(), true).canAddTickets).toBe(true);
-    expect(memberFormInitial(member(), null)).not.toHaveProperty('canAddTickets');
-    expect(memberFormInitial(member())).not.toHaveProperty('canAddTickets');
-    const base = memberFormInitial(member(), false);
+    expect(memberSettingsInitial(member(), true).canAddTickets).toBe(true);
+    expect(memberSettingsInitial(member(), null)).not.toHaveProperty('canAddTickets');
+    expect(memberSettingsInitial(member())).not.toHaveProperty('canAddTickets');
+    const base = memberSettingsInitial(member(), false);
     expect(memberChanges(base, {...base, canAddTickets: true})).toEqual({canAddTickets: true});
     expect(memberChanges({...base, canAddTickets: true}, base)).toEqual({canAddTickets: false});
-    expect(memberChanges(memberFormInitial(member()), memberFormInitial(member()))).toBeNull();
+    expect(memberChanges(memberSettingsInitial(member()), memberSettingsInitial(member()))).toBeNull();
   });
   it('sends add permission only when enabled', () => {
     const v = {...emptyMemberForm(), role: 'QA', agents: ['a']};
     expect(addMemberInput({...v, canAddTickets: true})).toEqual({role: 'QA', agents: ['a'], canAddTickets: true});
     expect(addMemberInput({...v, canAddTickets: false})).toEqual({role: 'QA', agents: ['a']});
-  });
-  it('describes all permission states', () => {
-    expect(ticketPermissionText({state: 'loading'})).toBe('Checking ticket permission…');
-    expect(ticketPermissionText({state: 'ready', canAddTickets: true})).toBe('Can add tickets: Yes');
-    expect(ticketPermissionText({state: 'ready', canAddTickets: false})).toBe('Can add tickets: No');
-    expect(ticketPermissionText({state: 'ready', canAddTickets: null})).toBe('Can add tickets: Not available for this member');
-    expect(ticketPermissionText({state: 'error', error: {code: 'INTERNAL', message: 'oops', retryable: false}})).toBe('Ticket permission could not be loaded (INTERNAL: oops).');
   });
   it('renders the read-only card value and never sends an unknown permission', () => {
     expect(ticketPermissionValue({state: 'loading'})).toBe('Checking ticket permission…');

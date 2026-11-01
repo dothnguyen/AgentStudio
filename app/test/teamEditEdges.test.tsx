@@ -258,26 +258,6 @@ describe('team editing edge cases', () => {
     expect(document.activeElement).toBe(submit);
     expect(addMember).toHaveBeenCalledTimes(1);
   });
-  it('saved_configuration_loading_error_and_retry_states_are_truthful', async () => {
-    const gate = deferred<ReturnType<typeof ok>>();
-    const teamCall = vi.fn()
-      .mockImplementationOnce(() => gate.promise)
-      .mockResolvedValueOnce(fail({ code: 'INTERNAL', message: 'offline' }))
-      .mockResolvedValue(ok({ team: teamDefinition({ members: [{ id: 'dev', role: 'Developer', canAddTickets: false }] }), members: [], problems: [], active: null }));
-    await renderScreen({ calls: { team: teamCall }, roles: [fail({ code: 'INTERNAL', message: 'roles down' })], agents: [fail({ code: 'OFFLINE', message: 'offline' })] });
-    await openTab('Overview'); openMember('dev');
-    const saved = () => screen.getByRole('region', { name: 'Saved configuration (temporary)' });
-    expect(saved().textContent).toContain('Checking ticket permission…');
-    await act(async () => { gate.resolve(fail({ code: 'INTERNAL', message: 'first' })); });
-    expect(saved().textContent).toContain('Ticket permission could not be loaded (INTERNAL: first).');
-    await click('Retry loading ticket permission');
-    expect(saved().textContent).toContain('Ticket permission could not be loaded (INTERNAL: offline).');
-    await click('Retry loading ticket permission');
-    expect(saved().textContent).toContain('Can add tickets: No');
-    expect(within(saved()).queryByRole('button', { name: 'Retry loading ticket permission' })).toBeNull();
-    expect(saved().textContent).toContain('Developer');
-  });
-
   it('save_discard_remove_and_role_navigation_do_not_cross_call', async () => {
     const updateMember = vi.fn(async () => ok({ team: teamDefinition(), member: { id: 'dev', name: 'dev2', role: 'Developer' }, problems: [], appliesOnNextStart: true }));
     const removeMember = vi.fn(async () => ok({ removed: { id: 'dev', name: 'dev' }, problems: [] }));

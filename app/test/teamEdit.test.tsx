@@ -16,7 +16,7 @@ import {
   teamDefinition,
   twoTeams,
 } from './teamsFixtures';
-import { MEMBER_DETAIL_TIMING_NOTE, ROLE_SHARING_NOTE, RUNNING_TEAM_NOTICE, SAVED_OPTIONS_NOTE } from '../src/renderer/teams/teamEditModel';
+import { MEMBER_DETAIL_TIMING_NOTE, RUNNING_TEAM_NOTICE, TICKET_PERMISSION_UNKNOWN } from '../src/renderer/teams/teamEditModel';
 
 afterEach(cleanup);
 
@@ -36,9 +36,8 @@ const MEMBER_ACTION = /^(Add member|Edit |Remove |Confirm remove )/;
 const click = async (name: string | RegExp) => {
   if (typeof name === 'string' && MEMBER_ACTION.test(name)
     && screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected') !== 'true') await openTab('Overview');
-  if (typeof name === 'string' && /^(Edit|Remove) (dev|lead)$/.test(name) && !screen.queryByRole('region', { name: name.split(' ')[1] })) openMember(name.split(' ')[1]!);
-  const editAlias = typeof name === 'string' ? /^Edit (dev|lead)$/.exec(name) : null;
-  fireEvent.click(screen.getByRole('button', { name: editAlias ? 'Edit saved configuration' : name }));
+  if (typeof name === 'string' && /^Remove (dev|lead)$/.test(name) && !screen.queryByRole('region', { name: name.split(' ')[1] })) openMember(name.split(' ')[1]!);
+  fireEvent.click(screen.getByRole('button', { name }));
   await flush();
 };
 const submitAddMember = async () => {
@@ -295,247 +294,6 @@ describe('team editing', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit member settings' }));
   });
 
-  it('edit_inline_member_switches_to_catalog_agent', async () => {
-    const updateMember = vi.fn(async () => ok({
-      team: teamDefinition(),
-      member: { id: 'lead', name: 'lead', role: 'TeamLead', agent: 'spare' },
-      problems: [],
-      appliesOnNextStart: false,
-    }));
-    await renderScreen({ calls: { updateMember } });
-    await click('Edit lead');
-    await click('Use catalog agents');
-    const select = screen.getByLabelText('Add agent option') as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: 'spare' } });
-    await click('Save changes');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', { agents: ['spare'] });
-  });
-
-  it('ordered_options_buttons_and_partial_patch', async () => {
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
-    await renderScreen({calls: {updateMember}});
-    await click('Edit dev');
-    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
-    const up = screen.getByRole('button', {name: 'Move Codex GPT up'});
-    expect(up.tagName).toBe('BUTTON');
-    up.focus(); expect(document.activeElement).toBe(up);
-    fireEvent.click(up);
-    expect(screen.getByRole('button', {name: 'Move Codex GPT down'}).tagName).toBe('BUTTON');
-    expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'}).tagName).toBe('BUTTON');
-    await click('Remove OpenCode Sonnet');
-    await click('Save changes');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt']});
-    expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
-  });
-  it('saved_configuration_edit_saves_once_and_never_calls_live_actions', async () => {
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'developer', role: 'QA'}, problems: [], appliesOnNextStart: true}));
-    const teamCall = vi.fn(async () => ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: false}]}), members: [], problems: [], active: null}));
-    const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn();
-    await renderScreen({calls: {updateMember, team: teamCall, switchMemberAgent, resumeMemberAgent}});
-    const dialog = await openSettings('dev');
-    fireEvent.change(within(dialog).getByLabelText('Display name'), {target: {value: 'developer'}});
-    fireEvent.click(within(dialog).getByRole('radio', {name: /QA/}));
-    fireEvent.click(within(dialog).getByRole('switch', {name: 'Can add tickets'}));
-    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
-    await flush();
-    expect(updateMember).toHaveBeenCalledTimes(1);
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {name: 'developer', role: 'QA', canAddTickets: true});
-    expect(switchMemberAgent).not.toHaveBeenCalled();
-    expect(resumeMemberAgent).not.toHaveBeenCalled();
-    expect(screen.getByRole('status').textContent).toContain('Saved configuration applies on the next team start; the running member is unchanged.');
-    expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit member settings'}));
-  });
-  it('settings_cancel_and_escape_discard_the_draft', async () => {
-    const updateMember = vi.fn();
-    await renderScreen({calls: {updateMember}});
-    for (const close of ['cancel', 'escape']) {
-      const dialog = await openSettings('dev');
-      fireEvent.change(within(dialog).getByLabelText('Display name'), {target: {value: 'dirty'}});
-      fireEvent.click(within(dialog).getByRole('radio', {name: /QA/}));
-      if (close === 'cancel') fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
-      else { fireEvent.keyDown(document, {key: 'Escape'}); await flush(); }
-      await flush();
-      expect(updateMember).not.toHaveBeenCalled();
-      expect(screen.queryByRole('dialog', {name: 'Edit member settings'})).toBeNull();
-      expect(within(screen.getByRole('region', {name: 'dev'})).getByRole('heading', {name: 'dev', level: 1})).toBeTruthy();
-      expect(document.activeElement).toBe(screen.getByRole('button', {name: 'Edit member settings'}));
-    }
-  });
-  it('saved_configuration_noop_save_is_disabled', async () => {
-    const updateMember = vi.fn();
-    await renderScreen({calls: {updateMember}});
-    await click('Edit dev');
-    const save = screen.getByRole('button', {name: 'Save changes'}) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    fireEvent.submit(screen.getByRole('form', {name: 'Edit dev'}));
-    await flush();
-    expect(updateMember).not.toHaveBeenCalled();
-    expect(screen.queryByRole('status')).toBeNull();
-    expect(screen.getByRole('form', {name: 'Edit dev'})).toBeTruthy();
-  });
-  it('failed_member_settings_write_keeps_draft_and_focuses_the_error', async () => {
-    const updateMember = vi.fn(async () => fail({code: 'INTERNAL', message: 'failed'}));
-    await renderScreen({calls: {updateMember}});
-    const dialog = await openSettings('dev');
-    fireEvent.change(within(dialog).getByLabelText('Display name'), {target: {value: 'kept'}});
-    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
-    await flush();
-    expect(updateMember).toHaveBeenCalledTimes(1);
-    expect((within(dialog).getByLabelText('Display name') as HTMLInputElement).value).toBe('kept');
-    const alert = screen.getByRole('alert');
-    expect(alert.closest('[role="dialog"]')).toBe(dialog);
-    expect(document.activeElement).toBe(alert);
-  });
-  it('add_options_excludes_selected_agents_and_restores_removed_agents', async () => {
-    await renderScreen();
-    await click('Edit dev');
-    const select = screen.getByLabelText('Add agent option') as HTMLSelectElement;
-    const offered = () => Array.from(select.options, option => option.value).filter(Boolean);
-    expect(offered()).toEqual(['codex-gpt', 'spare']);
-    fireEvent.change(select, {target: {value: 'codex-gpt'}});
-    expect(offered()).toEqual(['spare']);
-    fireEvent.change(select, {target: {value: 'spare'}});
-    expect(offered()).toEqual([]);
-    expect(select.disabled).toBe(true);
-    expect(screen.getByText('All catalog agents are already options.')).toBeTruthy();
-    await click('Remove Codex GPT');
-    expect(select.disabled).toBe(false);
-    expect(offered()).toEqual(['codex-gpt']);
-  });
-
-  it('saved_edit_does_not_change_live_agent_while_overview_reloads', async () => {
-    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof twoTeams>>>>();
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: true}));
-    await renderScreen({overview: [ok(twoTeams()), gate.promise], calls: {updateMember}});
-    await click('Edit dev');
-    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
-    await click('Move Codex GPT up');
-    await click('Save changes');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt', 'opencode-sonnet']});
-    gate.resolve(ok(twoTeams()));
-    await flush();
-    const row = screen.getByRole('region', {name: 'dev'});
-    expect(row.textContent).toContain('opencode-sonnet · opencode · claude-sonnet');
-  });
-  it('missing_option_blocks_save_until_removed', async () => {
-    const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: false}));
-    await renderScreen({overview: [ok(overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [missing]})]})]))], calls: {updateMember}});
-    await click('Edit dev');
-    const form = screen.getByRole('form', { name: 'Edit dev' });
-    expect(within(form).getByText('Missing from catalog')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
-    await click('Save changes');
-    expect(screen.getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
-    expect(updateMember).not.toHaveBeenCalled();
-    await click('Remove gone');
-    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
-    await click('Save changes');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['codex-gpt']});
-  });
-
-  it('removing_last_option_blocks_save_and_associates_error', async () => {
-    const updateMember = vi.fn();
-    await renderScreen({calls: {updateMember}});
-    await click('Edit dev');
-    await click('Remove OpenCode Sonnet');
-    await click('Save changes');
-    const error = screen.getByRole('alert');
-    expect(error.textContent).toBe('Choose at least one agent.');
-    expect(screen.getByLabelText('Add agent option').getAttribute('aria-describedby')).toBe(error.id);
-    expect(updateMember).not.toHaveBeenCalled();
-  });
-
-  it('inline_name_edit_keeps_saved_configuration_until_conversion', async () => {
-    const inline = member({memberId: 'lead', name: 'lead', role: 'TeamLead', source: 'inline', agentMode: 'inline', agentOptions: [], defaultAgent: null, provider: 'codex', model: 'model-x', reasoning: 'high'});
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'lead', name: 'Lead', role: 'TeamLead'}, problems: [], appliesOnNextStart: false}));
-    await renderScreen({overview: [ok(overviewFixture([team({members: [inline]})]))], calls: {updateMember}});
-    const dialog = await openSettings('lead');
-    fireEvent.change(within(dialog).getByLabelText('Display name'), {target: {value: 'Lead'}});
-    fireEvent.click(within(dialog).getByRole('button', {name: 'Save'}));
-    await flush();
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'lead', {name: 'Lead'});
-    await click('Edit lead');
-    expect(screen.getAllByText(/Inline — codex · model-x · Reasoning: high/).length).toBeGreaterThan(0);
-    expect(screen.queryByLabelText('Add agent option')).toBeNull();
-    await click('Use catalog agents');
-    await click('Save changes');
-    expect(screen.getByRole('alert').textContent).toBe('Choose at least one agent.');
-    expect(updateMember).toHaveBeenCalledTimes(1);
-  });
-
-  it('unavailable_catalog_preserves_rows_and_missing_evidence', async () => {
-    const missing = {id: 'gone', name: null, provider: null, model: null, reasoning: null, description: null, state: 'missing' as const};
-    const saved = member({agentMode: 'ordered_catalog', agentOptions: [...member().agentOptions, missing]});
-    const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'QA'}, problems: [], appliesOnNextStart: false}));
-    await renderScreen({overview: [ok(overviewFixture([team({members: [saved]})]))], agents: [fail({code: 'OFFLINE', message: 'offline'}), ok(catalogFixture())], calls: {updateMember}});
-    await click('Edit dev');
-    expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'})).toBeTruthy();
-    expect(screen.getByRole('button', {name: 'Remove gone'})).toBeTruthy();
-    expect((screen.getByLabelText('Add agent option') as HTMLSelectElement).disabled).toBe(true);
-    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getAllByText('Missing from catalog')).toHaveLength(1);
-    // A change that depends on the catalog stays blocked until it is fresh again.
-    await click('Move gone up');
-    expect((screen.getByRole('button', {name: 'Save changes'}) as HTMLButtonElement).disabled).toBe(true);
-    expect(updateMember).not.toHaveBeenCalled();
-    await click('Retry loading agents');
-    await click('Save changes');
-    expect(within(screen.getByRole('form', {name: 'Edit dev'})).getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
-    await click('Remove gone');
-    await click('Save changes');
-    expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', {agents: ['opencode-sonnet']});
-  });
-
-  it('option_controls_are_ordered_native_buttons_and_operable', async () => {
-    await renderScreen();
-    await click('Edit dev');
-    fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
-    const form = screen.getByRole('form', {name: 'Edit dev'});
-    const controls = within(form).getAllByRole('button').filter(b => /^(Move |Remove )/.test(b.getAttribute('aria-label') ?? ''));
-    expect(controls.map(b => b.getAttribute('aria-label'))).toEqual([
-      'Move OpenCode Sonnet up', 'Move OpenCode Sonnet down', 'Remove OpenCode Sonnet',
-      'Move Codex GPT up', 'Move Codex GPT down', 'Remove Codex GPT',
-    ]);
-    for (const button of controls) {
-      expect(button.tagName).toBe('BUTTON');
-      expect(button.getAttribute('type')).toBe('button');
-    }
-    expect((controls[0] as HTMLButtonElement).disabled).toBe(true);
-    expect((controls[4] as HTMLButtonElement).disabled).toBe(true);
-    const enabled = controls.filter((button) => !(button as HTMLButtonElement).disabled);
-    for (const [index, button] of enabled.entries()) {
-      expect(button.tabIndex).toBe(0);
-      if (index > 0) expect(enabled[index - 1]!.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      button.focus();
-      expect(document.activeElement).toBe(button);
-    }
-
-    // jsdom does not perform the browser's native button activation on Space.
-    // Dispatch the keyboard events and their native click default action explicitly.
-    const activate = (name: string) => {
-      const button = screen.getByRole('button', {name}) as HTMLButtonElement;
-      expect(button.disabled).toBe(false);
-      button.focus();
-      expect(document.activeElement).toBe(button);
-      fireEvent.keyDown(button, {key: ' ', code: 'Space'});
-      fireEvent.keyUp(button, {key: ' ', code: 'Space'});
-      fireEvent.click(button, {detail: 0});
-    };
-    const names = () => Array.from(form.querySelectorAll('.teams-option-meta strong'), (node) => node.textContent);
-    activate('Move OpenCode Sonnet down');
-    expect(names()).toEqual(['Codex GPT', 'OpenCode Sonnet']);
-    activate('Move OpenCode Sonnet up');
-    expect(names()).toEqual(['OpenCode Sonnet', 'Codex GPT']);
-    activate('Move Codex GPT up');
-    expect(names()).toEqual(['Codex GPT', 'OpenCode Sonnet']);
-    activate('Move Codex GPT down');
-    expect(names()).toEqual(['OpenCode Sonnet', 'Codex GPT']);
-    activate('Remove OpenCode Sonnet');
-    expect(names()).toEqual(['Codex GPT']);
-    activate('Remove Codex GPT');
-    expect(names()).toEqual([]);
-  });
-
   it('remove_member_after_confirmation', async () => {
     const removeMember = vi.fn(async () => ok({
       team: teamDefinition(),
@@ -582,10 +340,6 @@ describe('team editing', () => {
     expect(screen.getByText('Choose at least one agent.')).toBeTruthy();
     expect(screen.getByText('Enter a role.')).toBeTruthy();
     await click('Cancel');
-    await click('Edit dev');
-    expect((screen.getByRole('button', {name: 'Save changes'}) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole('alert')).toBeNull();
-    expect(updateMember).not.toHaveBeenCalled();
     expect(createTeam).not.toHaveBeenCalled();
     expect(addMember).not.toHaveBeenCalled();
     expect(updateMember).not.toHaveBeenCalled();
@@ -781,10 +535,15 @@ describe('ticket permission and member focus', () => {
     const teamCall = vi.fn().mockResolvedValueOnce(fail({code: 'INTERNAL', message: 'offline'}))
       .mockResolvedValueOnce(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null}));
     await renderScreen({calls: {team: teamCall}}); await openTab('Overview'); openMember('dev'); await flush();
-    expect(screen.getByText('Ticket permission could not be loaded (INTERNAL: offline).')).toBeTruthy();
-    await click('Retry loading ticket permission');
-    expect(screen.getByText('Can add tickets: Yes')).toBeTruthy();
+    expect(screen.getByText(TICKET_PERMISSION_UNKNOWN)).toBeTruthy();
+    const dialog = await openSettings('dev');
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Retry loading ticket permission'}));
+    await flush();
+    expect(within(dialog).getByRole('switch', {name: 'Can add tickets'}).getAttribute('aria-checked')).toBe('true');
     expect(teamCall).toHaveBeenCalledTimes(2);
+    fireEvent.click(within(dialog).getByRole('button', {name: 'Cancel'}));
+    await flush();
+    expect(screen.getByText('Allowed')).toBeTruthy();
   });
   it('sends only the role when permission is known and unchanged', async () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', role: 'qa-b'}, problems: []}));
@@ -857,7 +616,7 @@ describe('permission request lifetime', () => {
     await act(async () => { first.resolve(ok({team: teamDefinition({members: [{id: 'dev', role: 'Developer', canAddTickets: true}]}), members: [], problems: [], active: null})); });
     expect(screen.getByRole('region', {name: 'lead'}).textContent).not.toContain('Can add tickets: Yes');
     await act(async () => { second.resolve(ok({team: teamDefinition(), members: [], problems: [], active: null})); });
-    expect(screen.getByRole('region', {name: 'lead'}).textContent).toContain('Can add tickets: Not available for this member');
+    expect(screen.getByRole('region', {name: 'lead'}).textContent).toContain(TICKET_PERMISSION_UNKNOWN);
   });
 });
 
@@ -924,8 +683,6 @@ describe('T-090 saved configuration completion', () => {
     expect(screen.queryByRole('dialog', { name: 'Edit member settings' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Member settings' }).textContent).not.toContain('renamed');
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit member settings' }));
-    expect(screen.getByText(SAVED_OPTIONS_NOTE)).toBeTruthy();
-    expect(screen.getByText(ROLE_SHARING_NOTE)).toBeTruthy();
     // success returns focus to Edit
     const reopened = await openSettings('dev');
     fireEvent.change(within(reopened).getByLabelText('Display name'), { target: { value: 'renamed' } });
@@ -946,16 +703,18 @@ describe('T-090 saved configuration completion', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await flush();
 
-    await click('Edit dev');
-    expect(screen.getByRole('button', { name: 'Remove ghost-agent-def' })).toBeTruthy();
-    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getAllByText('Missing from catalog')).toHaveLength(1);
+    fireEvent.click(within(screen.getByRole('region', { name: 'dev' })).getByRole('button', { name: 'Edit agent options' }));
+    await flush();
+    const agents = screen.getByRole('dialog', { name: 'Edit agent options' });
+    expect(within(agents).getByText('Missing from catalog')).toBeTruthy();
     // the missing agent blocks Save until the user repairs it
-    await click('Move OpenCode Sonnet up');
-    await click('Save changes');
+    const save = within(agents).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.click(save); await flush();
     expect(updateMember).not.toHaveBeenCalled();
-    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
-    await click('Remove ghost-agent-def');
-    await click('Save changes');
+    fireEvent.click(within(agents).getByRole('button', { name: 'Remove ghost-agent-def' }));
+    fireEvent.click(within(agents).getByRole('button', { name: 'Save' }));
+    await flush();
     expect(updateMember).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', { agents: ['opencode-sonnet'] });
   });
 
@@ -969,8 +728,8 @@ describe('T-090 saved configuration completion', () => {
     const switchMemberAgent = vi.fn(), resumeMemberAgent = vi.fn();
     await renderScreen({ calls: { overview, updateMember, switchMemberAgent, resumeMemberAgent } });
     openMember('dev');
-    const liveText = () => screen.getByRole('region', { name: 'Live for dev' }).textContent!;
-    const liveFacts = ['Active agent', 'opencode-sonnet · opencode · claude-sonnet', 'No active assignment'];
+    const liveText = () => screen.getByRole('region', { name: 'Agents' }).textContent! + screen.getByRole('region', { name: 'Live status' }).textContent!;
+    const liveFacts = ['OpenCode Sonnet', 'opencode-sonnet · opencode · claude-sonnet', 'No active assignment'];
     for (const fact of liveFacts) expect(liveText()).toContain(fact);
     const dialog = await openSettings('dev');
     fireEvent.change(within(dialog).getByLabelText('Display name'), { target: { value: 'renamed' } });

@@ -73,7 +73,7 @@ it('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   const switchMemberAgent = vi.fn().mockResolvedValue({ ok: false, error: { code: 'BAD_REQUEST', message: 'Member has an active assignment; confirm cancellation of this assignment to switch.', retryable: false, data: { assignmentId: 'job-1' } } });
   const { view } = await mount({ overview: [{ ok: true, data }], calls: { switchMemberAgent } }, 'Overview');
   openMember('dev'); await act(async () => {});
-  const opener = view.getByRole('button', { name: 'Switch' }); opener.focus();
+  const opener = view.getByRole('button', { name: 'Switch live agent to Codex GPT' }); opener.focus();
   await userEvent.keyboard('{Enter}'); await act(async () => {});
   const dialog = view.getByRole('dialog');
   expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -148,7 +148,7 @@ it('nested_team_buttons_have_unique_accessible_names_and_single_current_item', a
   expect(rows.every(row => row.tagName === 'BUTTON' && !row.hasAttribute('tabindex'))).toBe(true);
 });
 
-// --- T-090: v4/v6 hierarchy (nested sidebar, roster on Overview, live-first detail, separate Saved configuration) ---
+// --- T-090: v4/v6 hierarchy (nested sidebar, roster on Overview, v7 member detail sections and dialogs) ---
 function labelOf(el: Element | null): string {
   if (!el) return '';
   const labels = (el as HTMLInputElement).labels;
@@ -179,19 +179,19 @@ async function mountSidebar(opts: Parameters<typeof fakeManagement>[0] = {}) {
   return { fake, view };
 }
 
-it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved_role_and_destructive_controls', async () => {
+it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_agents_role_and_destructive_controls', async () => {
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
   const overviewOrder = await tabNames(30);
   inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdev/]);
-    // Enter opens the exact member; detail order reaches the role link, saved editor, live Switch and Remove
+    // Enter opens the exact member; detail order reaches the agents editor, live Switch, role editor and Remove
   const row = memberOpen('dev');
   row.focus();
   await userEvent.keyboard('{Enter}');
   await act(async () => {});
   expect(document.activeElement).toBe(document.getElementById('teams-member-detail-title'));
   const detailOrder = await tabNames(30);
-  inOrder(detailOrder, ['Back to members', 'Retry loading ticket permission', 'Edit saved configuration', 'Switch', 'Edit role instructions', /^View Developer in Roles$/, 'Edit member settings', 'Remove dev']);
+  inOrder(detailOrder, ['Back to members', 'Edit agent options', /^Switch live agent to Codex GPT$/, 'Edit role instructions', /^View Developer in Roles$/, 'Edit member settings', 'Remove dev']);
   expect(detailOrder).toContain('Back to members');
   // The page heading takes focus on open, but Back to members is still the
   // first focusable control on the page.
@@ -200,13 +200,10 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   expect(focusables[0]?.textContent).toBe('Back to members');
   expect(focusables[1]?.textContent).toBe('Edit options');
   expect(focusables[2]?.textContent).toBe('Switch');
-  expect(focusables[3]?.textContent).toBe('Retry loading ticket permission');
-  expect(focusables[4]?.textContent).toBe('Edit saved configuration');
-  expect(focusables[5]?.textContent).toBe('Switch');
-  expect(focusables[6]?.textContent).toBe('Edit');
-  expect(focusables[7]?.textContent).toBe('View Developer in Roles');
-  expect(focusables[8]?.textContent).toBe('Edit');
-  expect(focusables[9]?.textContent).toBe('Remove');
+  expect(focusables[3]?.textContent).toBe('Edit');
+  expect(focusables[4]?.textContent).toBe('View Developer in Roles');
+  expect(focusables[5]?.textContent).toBe('Edit');
+  expect(focusables[6]?.textContent).toBe('Remove');
   // Back restores the invoking row
   await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
   expect(document.activeElement).toBe(memberOpen('dev'));
@@ -231,7 +228,7 @@ it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantic
   }
   // modal confirmation: named, described, aria-modal, closes on Escape and restores the opener
   openMember('dev'); await act(async () => {});
-  const opener = view.getByRole('button', { name: 'Switch' });
+  const opener = view.getByRole('button', { name: 'Switch live agent to Codex GPT' });
   fireEvent.click(opener); await act(async () => {});
   const dialog = view.getByRole('dialog');
   expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -310,4 +307,78 @@ it('v4_v6_dialogs_are_viewport_bounded_and_reduced_motion_preserves_focus_visibi
   await userEvent.keyboard('{Escape}');
   expect(view.queryByRole('dialog')).toBeNull();
   expect(document.activeElement).toBe(view.getByRole('button', { name: 'New team' }));
+});
+
+it('member_details_and_each_dialog_have_named_controls_focus_trap_and_focus_restore', async () => {
+  const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
+  const detail = openMember('dev');
+  await act(async () => {});
+  expect(view.getAllByRole('main')).toHaveLength(1);
+  expect(within(detail).getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(within(detail).getByRole('navigation', { name: 'Member location' })).toBeTruthy();
+  for (const control of within(detail).getAllByRole('button')) {
+    expect((control.getAttribute('aria-label') ?? control.textContent ?? '').trim().length).toBeGreaterThan(0);
+  }
+  for (const card of ['Agents', 'Role instructions', 'Live status', 'Member settings', 'Remove member']) {
+    expect(within(detail).getByRole('region', { name: card })).toBeTruthy();
+  }
+
+  const cases = [
+    { opener: 'Edit member settings', dialog: 'Edit member settings', width: 'min(680px, 100%)' },
+    { opener: 'Edit agent options', dialog: 'Edit agent options', width: 'min(600px, 100%)' },
+    { opener: 'Edit role instructions', dialog: 'Edit Developer instructions', width: 'min(780px, 100%)' },
+  ];
+  for (const item of cases) {
+    const opener = within(detail).getByRole('button', { name: item.opener });
+    opener.focus();
+    await userEvent.keyboard('{Enter}');
+    await act(async () => {});
+    const dialog = view.getByRole('dialog', { name: item.dialog });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect((dialog as HTMLElement).style.width).toBe(item.width);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    for (const control of within(dialog).getAllByRole('button')) {
+      expect((control.getAttribute('aria-label') ?? control.textContent ?? '').trim().length).toBeGreaterThan(0);
+    }
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard('{Escape}');
+    await act(async () => {});
+    expect(view.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  }
+});
+
+it('member_details_breakpoints_stack_and_keep_dialogs_inside_the_viewport', () => {
+  // One stacking breakpoint: the 560px main column plus the 320px aside no
+  // longer fit before roughly 1222px of viewport, so 1240px is the single rule
+  // and it already covers the required one-column layout at 900px and below.
+  expect(flat).toMatch(/@media \(max-width: 1240px\) \{\s*\.teams-member-layout \{ flex-direction: column; \}\s*\.teams-member-main \{ width: 100%; flex: 1 1 auto; \}\s*\.teams-member-aside \{ width: 100%; max-width: none; \}/);
+  expect(flat).toMatch(/@media \(max-width: 900px\) \{/);
+  expect(flat).toMatch(/@media \(max-width: 700px\) \{[^@]*\.dialog-backdrop \{ padding: 24px 12px; \}[^@]*\.dialog-panel \{ max-height: calc\(100vh - 48px\); \}/);
+  expect(flat.match(/\.dialog-backdrop \{ padding: 24px 12px; \}/g)).toHaveLength(1);
+  expect(flat).toMatch(/\.dialog-panel \{[^}]*max-width: 100%; max-height: calc\(100vh - 120px\);[^}]*overflow: hidden;/);
+  expect(flat).toMatch(/\.dialog-body \{[^}]*overflow-y: auto;/);
+});
+
+it('secondary_member_text_meets_4_5_contrast_on_card_backgrounds', () => {
+  const channel = (value: number): number => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (hex: string): number => {
+    const [r, g, b] = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+    return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!);
+  };
+  const ratio = (a: string, b: string): number => {
+    const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (light! + 0.05) / (dark! + 0.05);
+  };
+  expect(ratio('#8d949e', '#16191d')).toBeGreaterThanOrEqual(4.5);
+  expect(ratio('#a3a9b2', '#16191d')).toBeGreaterThanOrEqual(4.5);
+  expect(ratio('#c4cad2', '#121418')).toBeGreaterThanOrEqual(4.5);
+  expect(flat).toMatch(/\.section-card-heading p \{ margin: 2px 0 0; color: #8d949e; font-size: 12px; \}/);
+  expect(flat).toMatch(/\.teams-member-settings-grid dt \{ margin-bottom: 3px; color: #8d949e; font-size: 12px; \}/);
 });

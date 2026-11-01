@@ -246,6 +246,8 @@ describe('Member settings card and dialog', () => {
     await flush();
     expect(screen.queryByRole('dialog', { name: 'Edit member settings' })).toBeNull();
     expect(document.activeElement).toBe(within(detail).getByRole('button', { name: 'Edit member settings' }));
+    const announcements = screen.getAllByRole('status').filter(node => node.textContent?.includes('Saved Renamed.'));
+    expect(announcements).toHaveLength(1);
   });
 
   it('discards the draft on Cancel and Escape and reopens the saved values', async () => {

@@ -70,11 +70,6 @@ export interface TeamActions {
   copy(text: string, label: string): void;
 }
 export type TicketPermissionState = { state: 'loading' } | { state: 'ready'; canAddTickets: boolean | null } | { state: 'error'; error: ManagementError };
-export function ticketPermissionText(p: TicketPermissionState): string {
-  if (p.state === 'loading') return 'Checking ticket permission…';
-  if (p.state === 'error') return `Ticket permission could not be loaded (${p.error.code}: ${p.error.message}).`;
-  return p.canAddTickets === null ? 'Can add tickets: Not available for this member' : `Can add tickets: ${p.canAddTickets ? 'Yes' : 'No'}`;
-}
 /** Read-only Member settings card value: Allowed / Not allowed / the unknown explanation. */
 export function ticketPermissionValue(p: TicketPermissionState): string {
   if (p.state === 'loading') return 'Checking ticket permission…';
@@ -84,10 +79,7 @@ export function ticketPermissionValue(p: TicketPermissionState): string {
 export const NEXT_START_DEFAULT = 'Next-start default';
 /** The single notice row on the member details screen (v7). */
 export const MEMBER_DETAIL_TIMING_NOTE = 'Name, role, permissions and agent options apply the next time the team starts. Switching the live agent and editing role instructions take effect on new work straight away.';
-export const ROLE_SHARING_NOTE = 'Shared role instructions are edited in Roles and apply to new assignments after they are saved; current assignments keep the instructions they started with.';
-export const SAVED_OPTIONS_NOTE = 'Saved options are used in this order the next time the team starts; the first is the default. Editing them does not switch the running agent.';
-export const LIVE_STATE_NOTE = 'Live state comes from the running team. Saving member settings does not change it.';
-export const TICKET_PERMISSION_HINT = 'Lets this member add tickets with the board ticket tools during its assignments.';
+export const TICKET_PERMISSION_HINT = 'Create new tickets on the team’s board.';
 export const TICKET_PERMISSION_UNKNOWN = 'Ticket permission could not be loaded; it will not be changed.';
 
 export function isLiveTeam(team: OverviewTeam): boolean {
@@ -225,12 +217,6 @@ export function memberSettingsInitial(m: OverviewMember, canAddTickets?: boolean
     useCatalogAgents: false,
     ...(typeof canAddTickets === 'boolean' ? { canAddTickets } : {}),
   };
-}
-export function memberFormInitial(m: OverviewMember, canAddTickets?: boolean | null): MemberFormValues {
-  const catalog = m.agentMode !== 'inline';
-  const agents = m.agentOptions.map((o) => o.id);
-  if (m.agentMode === 'single_catalog' && agents.length === 0 && m.defaultAgent !== null) agents.push(m.defaultAgent);
-  return { name: m.name ?? '', role: m.role ?? '', agents: catalog ? agents : [], useCatalogAgents: catalog, ...(typeof canAddTickets === 'boolean' ? { canAddTickets } : {}) };
 }
 export function emptyMemberForm(): MemberFormValues {
   return { name: '', role: '', agents: [], useCatalogAgents: true };

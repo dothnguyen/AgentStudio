@@ -22,3 +22,21 @@ Behaviour shown by the source (open it to see the handlers):
 - Agents: the list and the per-agent **Switch** button stay on the page (the live agent); **Edit options** opens the dialog.
 - Changing the role in Edit member settings reloads the Role instructions section for the new role after saving.
 - The sample names, roles, agent options and prompt text are placeholders; use the real data.
+
+## Captures
+
+The screenshots in `captures/` are rendered from the real member details screen and its three dialogs with
+the capture fixture:
+
+| File | What it shows |
+| --- | --- |
+| `captures/overview.png` | The member details page |
+| `captures/edit-member.png` | Edit member settings |
+| `captures/edit-agents.png` | Edit agent options |
+| `captures/edit-instructions.png` | Edit role instructions |
+
+Regenerate them with `npm --prefix app run capture:member` (Windows or a desktop Linux session; needs the
+Electron binary). The command also writes `captures/manifest.json` with the SHA-256 of each image, so the
+capture test fails if an image is stale or partly regenerated. The capture app adds the existing team page
+header and tabs above the member page, and it uses real fixture data, so those parts differ from the
+standalone artboards.

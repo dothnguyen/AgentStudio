@@ -1,14 +1,13 @@
 import { useEffect, useId, useRef, useState, type JSX, type RefObject } from 'react';
 import type { AgentDef, ManagementApi, OverviewMember, OverviewTeam, Result, RoleCatalogItem, RoleCatalogList } from '../api';
 import { Icon } from '../icons/Icon';
-import { MemberForm } from './TeamEditForms';
 import {
-  canEditMember, findCatalogRole, memberChanges, memberFormInitial, ticketPermissionText, ticketPermissionValue,
-  uneditableNote, liveNote, MEMBER_DETAIL_TIMING_NOTE, ROLE_SHARING_NOTE, SAVED_OPTIONS_NOTE, NEXT_START_DEFAULT,
-  type MemberFormValues, type TeamWrites, type TicketPermissionState,
+  canEditMember, ticketPermissionValue,
+  uneditableNote, liveNote, MEMBER_DETAIL_TIMING_NOTE,
+  type TeamWrites, type TicketPermissionState,
 } from './teamEditModel';
 import {
-  memberName, memberSourceNote, roleNote, roleText, providerModelText, teamLabel,
+  memberName, memberSourceNote, roleText, teamLabel,
   presenceLabel, presenceTone, memberInitials, RUNTIME_LABELS,
 } from './teamsModel';
 import { memberAgentActions, type MemberActionInFlight } from './memberAgentActionsModel';
@@ -26,7 +25,7 @@ export interface MemberDetailPanelProps {
   reloadRoleCatalog?(): Promise<Result<RoleCatalogList>>;
   onViewRole?(roleId: string): void; writes: TeamWrites; pending: boolean; connected: boolean;
   agentsFresh?: boolean; rolesFresh?: boolean; readOnly?: boolean;
-  liveActions: JSX.Element; agentsSection: JSX.Element; onBack(): void; onRemoved(): void;
+  agentsSection: JSX.Element; onBack(): void; onRemoved(): void;
   /** In-flight live-agent action for this member, so the status card and live section agree. */
   inFlight?: MemberActionInFlight;
   /** One-shot intent from the row actions menu. */
@@ -82,18 +81,16 @@ function MemberSettingsCard(props: {
 
 export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
   const { team, member, writes } = props;
-  const agents = props.agentsFresh === false ? null : props.agents;
   const formRoles = props.rolesFresh === false ? null : props.roleItems;
   const pending = props.pending || props.readOnly === true;
   const memberId = member.memberId!;
   const name = memberName(member);
   const uid = useId();
-  const [editing, setEditing] = useState<MemberFormValues | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [focusTarget, setFocusTarget] = useState<'edit' | 'settings' | 'remove' | 'confirm' | null>(null);
-  const headingRef = useRef<HTMLHeadingElement>(null), editRef = useRef<HTMLButtonElement>(null), settingsEditRef = useRef<HTMLButtonElement>(null), removeRef = useRef<HTMLButtonElement>(null), cancelRemoveRef = useRef<HTMLButtonElement>(null), confirmRemoveRef = useRef<HTMLButtonElement>(null);
+  const [focusTarget, setFocusTarget] = useState<'settings' | 'remove' | 'confirm' | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null), settingsEditRef = useRef<HTMLButtonElement>(null), removeRef = useRef<HTMLButtonElement>(null), cancelRemoveRef = useRef<HTMLButtonElement>(null), confirmRemoveRef = useRef<HTMLButtonElement>(null);
   const intentApplied = useRef(false);
   const permission = useTicketPermission({ workspaceId: props.workspaceId, management: props.management, team, member, savedRevision: props.savedRevision, retry });
   useEffect(() => { headingRef.current?.focus(); }, [member.memberId]);
@@ -106,9 +103,8 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
     // The menu intent is consumed exactly once per mounted member panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.intent]);
-  useEffect(() => { if (!focusTarget) return; const el = focusTarget === 'edit' ? editRef.current : focusTarget === 'settings' ? settingsEditRef.current : focusTarget === 'confirm' ? confirmRemoveRef.current : removeRef.current; if (el?.isConnected && !el.disabled) { el.focus(); setFocusTarget(null); } }, [focusTarget, pending, editing, settingsOpen]);
+  useEffect(() => { if (!focusTarget) return; const el = focusTarget === 'settings' ? settingsEditRef.current : focusTarget === 'confirm' ? confirmRemoveRef.current : removeRef.current; if (el?.isConnected && !el.disabled) { el.focus(); setFocusTarget(null); } }, [focusTarget, pending, settingsOpen]);
   useEffect(() => { if (confirmingRemove) cancelRemoveRef.current?.focus(); }, [confirmingRemove]);
-  const catalogRole = member.roleState === 'undefined' || props.roleItems === null ? null : findCatalogRole(props.roleItems, member.role);
   const noticeRows = [MEMBER_DETAIL_TIMING_NOTE, memberSourceNote(member), uneditableNote(team), liveNote(team)].filter((note): note is string => note !== null);
   const removeTitleId = `${uid}-remove-title`;
   return <section className="teams-member-detail" aria-labelledby="teams-member-detail-title">
@@ -135,22 +131,6 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
     <div className="teams-member-layout">
       <div className="teams-member-main">
         {props.agentsSection}
-        <SectionCard title="Saved configuration (temporary)" className="teams-saved-configuration">
-          {/* LEGACY: removed by "Member details v7 (5/5)" */}
-          {editing ? <MemberForm key={memberId} mode="edit" heading={`Edit ${name}`} submitLabel="Save changes" cancelLabel="Discard changes" initial={editing} originalOptions={member.agentOptions} inlineContext={member.agentMode === 'inline' ? { provider: member.provider, model: member.model, reasoning: member.reasoning } : null} agents={agents} roles={formRoles} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} showMemberSettings={false} onSubmit={values => { const changes = memberChanges(editing, values); if (changes) void writes.updateMember(team, memberId, changes).then(outcome => { if (outcome.ok) { setEditing(null); setFocusTarget('edit'); } }); }} onCancel={() => { setEditing(null); setFocusTarget('edit'); }} /> : <>
-            <dl className="teams-member-settings"><dt>Name</dt><dd>{name}</dd><dt>Member id</dt><dd><code className="entity-id">{memberId}</code></dd><dt>Role</dt><dd>
-              {catalogRole ? <><span className="teams-role-name">{catalogRole.name}</span> <code className="entity-id">{catalogRole.id}</code><p>{catalogRole.description ?? 'No description'}</p></> : <>{roleText(member)}{roleNote(member) && <p>{roleNote(member)}</p>}{props.roleItems === null && props.roleCatalogMessage && <p>{props.roleCatalogMessage}</p>}{props.roleItems !== null && member.role !== null && canEditMember(team, member) && <p>Choose an existing role by editing this member.</p>}</>}
-              <p>{ROLE_SHARING_NOTE}</p></dd><dt>Ticket permission</dt><dd>{ticketPermissionText(permission)} {permission.state === 'error' && <button type="button" onClick={() => setRetry(n => n + 1)}>Retry loading ticket permission</button>}</dd></dl>
-            <h3 id="teams-member-agents-title">Agent options</h3><p className="panel-note">{SAVED_OPTIONS_NOTE}</p>
-            {member.source === 'runtime' ? <p>Saved configuration is not available for runtime-only members.</p> : member.agentMode === 'inline' ? <><p>Inline agent — {providerModelText(member.provider, member.model)}{member.reasoning ? ` · Reasoning: ${member.reasoning}` : ''}</p><p>This member uses inline provider settings, not an Agents catalog entry. They stay unchanged unless you choose Use catalog agents while editing.</p></> : member.agentOptions.length === 0 ? <p>No saved agent options were returned.</p> : <ol className="teams-saved-options" aria-label="Saved agent options">{member.agentOptions.map((o, i) => <li key={`${o.id}-${i}`}><strong>{o.name ?? o.id}</strong>{o.name !== null && <> <code className="entity-id">{o.id}</code></>}{i === 0 && <> <span className="teams-option-default">{NEXT_START_DEFAULT}</span></>}{o.state === 'missing' && <> <span className="teams-option-missing">Missing from catalog</span></>} <span className="teams-saved-option-detail">{providerModelText(o.provider, o.model)}{o.reasoning ? ` · Reasoning: ${o.reasoning}` : ''}</span>{o.description !== null && <> <span className="teams-saved-option-detail">{o.description}</span></>}</li>)}</ol>}
-            <p>Saved agents are defined in the Agents catalog.</p>
-            {canEditMember(team, member) && <div className="teams-member-actions"><button ref={editRef} type="button" disabled={pending} onClick={() => setEditing(memberFormInitial(member, permission.state === 'ready' ? permission.canAddTickets : null))}>Edit saved configuration</button></div>}
-          </>}
-        </SectionCard>
-        <SectionCard title="Live agent (temporary)" className="teams-live-actions-card">
-          {/* LEGACY: removed by "Member details v7 (5/5)" */}
-          {props.liveActions}
-        </SectionCard>
         <RoleInstructionsSection
           workspaceId={props.workspaceId}
           management={props.management}

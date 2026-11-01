@@ -6,9 +6,11 @@ const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8
 
 function rule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(css);
-  if (match === null) throw new Error(`rule ${selector} not found`);
-  return match[1];
+  const bodies = Array.from(css.matchAll(new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`, 'g')), (match) => match[1]!);
+  if (bodies.length === 0) throw new Error(`rule ${selector} not found`);
+  // Responsive overrides come earlier in the file and are shorter; the tests
+  // assert the base rule, which is the longest matching declaration block.
+  return bodies.sort((a, b) => b.length - a.length)[0]!;
 }
 
 function parts(selector: string, expected: string[]): void {
@@ -59,7 +61,9 @@ describe('member details v7 styles', () => {
   });
 
   it('matches the Dialog backdrop, panel, header, footer and actions', () => {
-    parts('.dialog-backdrop', ['padding: 96px 24px 24px', 'background: rgba(6, 7, 9, 0.68)']);
+    const backdrop = Array.from(css.matchAll(/\.dialog-backdrop\s*\{([^}]*)\}/g), (match) => match[1]!)
+      .find((body) => body.includes('position: fixed'))!;
+    for (const part of ['padding: 96px 24px 24px', 'background: rgba(6, 7, 9, 0.68)']) expect(backdrop).toContain(part);
     parts('.dialog-panel', ['background: #16191d', 'border: 1px solid #2f343c', 'border-radius: 14px', 'box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55)', 'max-height: calc(100vh - 120px)']);
     parts('.dialog-header', ['padding: 16px 20px', 'border-bottom: 1px solid #23262c']);
     parts('.dialog-header h2', ['font-size: 15px', 'font-weight: 600']);
@@ -117,10 +121,6 @@ describe('member details v7 styles', () => {
     expect(group).not.toContain('display');
     expect(group).not.toContain('gap');
     expect(group).not.toContain('margin');
-  });
-
-  it('does not double the padding inside the legacy live-agent card', () => {
-    expect(rule('.section-card .teams-live-actions')).toContain('padding: 0;');
   });
 
   it('styles the v7 Agents card rows and the Edit agent options dialog', () => {

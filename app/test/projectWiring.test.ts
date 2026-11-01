@@ -16,6 +16,7 @@ describe('Electron project wiring', () => {
       test: 'vitest run',
       'live-check': 'npm run build && node dist/live/liveCheck.js',
       'capture:teams': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureTeams.js',
+      'capture:member': 'npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureMember.js',
     });
     expect(pkg.dependencies ?? {}).toEqual({});
     expect(fs.existsSync(path.join(appDir, 'package-lock.json'))).toBe(true);

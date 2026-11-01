@@ -494,7 +494,20 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         if (!mounted.current || !connectedRef.current || connectionAtRequest !== connectionGeneration.current) return;
         if (!refreshed.ok) { setFeedback(errorFeedback('Refresh failed.', refreshed.error)); return; }
         const member = refreshed.data.teams.find(t => t.id === context.teamDefId)?.members.find(m => m.memberId === context.memberId);
-        if (member && matchingTerminalSwitch(member, context.agentId, context.signature)) return;
+        const terminal = member ? matchingTerminalSwitch(member, context.agentId, context.signature) : null;
+        if (terminal === 'completed') {
+          setFeedback({ kind: 'success', text: `Switched ${context.memberName} to ${context.agentLabel}.` });
+          return;
+        }
+        if (terminal === 'failed') {
+          const result = member?.runtime?.lastSwitch ?? null;
+          setFeedback(errorFeedback('Switch failed.', {
+            code: result?.code ?? 'SWITCH_FAILED',
+            message: result?.message ?? `Switching ${context.memberName} to ${context.agentLabel} did not complete.`,
+            retryable: false,
+          }));
+          return;
+        }
       }
       setFeedback({ kind: 'success', text: 'Switch accepted; completion is still pending. Refresh to check again.' });
     } finally { if (mounted.current) setPolling(a => { const next = { ...a }; delete next[memberActionKey(context.teamDefId, context.memberId)]; return next; }); unlock(context.teamDefId, context.memberId); }

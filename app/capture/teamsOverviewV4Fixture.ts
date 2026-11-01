@@ -157,11 +157,16 @@ function roleItems(): RoleCatalogItem[] {
       : id === 'Developer' ? 'Implements scoped tickets.'
       : id === 'Reviewer' ? 'Reviews changes.'
       : 'Validates changes.';
+    const prompt = id === 'TeamLead'
+      ? 'You are the team lead.\n\nTake a feature request and break it into phases, epics and stories.\nFor each story write a technical plan a developer can follow without asking questions: files to touch, tests to add, edge cases, and what done looks like.\n\nWhen a story is refined, fix the plan in place on the ticket.\nDo not review code. Do not merge. Do not implement stories yourself.\n\nIf a request is ambiguous, write down the assumption you made at the top of the story.'
+      : null;
     return {
       id,
       name: id,
       description,
-      instructions: { state: 'none', path: null, text: null, sha256: null, bytes: null },
+      instructions: prompt === null
+        ? { state: 'none', path: null, text: null, sha256: null, bytes: null }
+        : { state: 'ok', path: `.agent-studio/roles/${id === 'TeamLead' ? 'team-lead' : id.toLowerCase()}.md`, text: prompt, sha256: 'd'.repeat(64), bytes: prompt.length },
       skills: [],
       warnings: [],
       problems: [],
