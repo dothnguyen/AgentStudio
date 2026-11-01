@@ -1073,6 +1073,27 @@ def release_claim(tx, ticket: dict, reason: str, to_status=None, detail=None) ->
 
 # ---- read-only queries ------------------------------------------------------------------------------------
 
+def _ticket_links(conn, ticket_id: str) -> dict:
+    """Dependency and dependent link objects for the ticket page's Dependencies card.
+
+    A reference whose ticket row is gone keeps the stored id as `key` and reports null title, status and
+    phase, so a stale edge never makes `ticket.show` fail."""
+    def links(sql):
+        return [{"key": row["key"] if row["key"] is not None else row["ref"],
+                 "title": row["title"], "status": row["status"], "phase": row["phase"]}
+                for row in conn.execute(sql, (ticket_id,))]
+    return {
+        "dependsOn": links("SELECT t.key, t.title, t.status, p.slug AS phase, d.blocked_by_ticket_id AS ref "
+                           "FROM ticket_deps d LEFT JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+                           "LEFT JOIN phases p ON p.id = t.phase_id WHERE d.ticket_id = ? "
+                           "ORDER BY COALESCE(t.key, d.blocked_by_ticket_id)"),
+        "dependents": links("SELECT t.key, t.title, t.status, p.slug AS phase, d.ticket_id AS ref "
+                            "FROM ticket_deps d LEFT JOIN tickets t ON t.id = d.ticket_id "
+                            "LEFT JOIN phases p ON p.id = t.phase_id WHERE d.blocked_by_ticket_id = ? "
+                            "ORDER BY COALESCE(t.key, d.ticket_id)"),
+    }
+
+
 def ticket_detail(conn, workspace: str, key: str) -> dict:
     config = load_config(workspace)
     ticket = get_ticket(conn, workspace, key)
@@ -1082,12 +1103,15 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
         "WHERE d.blocked_by_ticket_id = ? ORDER BY t.key", (ticket["id"],))]
     events = conn.execute("SELECT * FROM (SELECT * FROM ticket_events WHERE ticket_id = ? ORDER BY id DESC LIMIT ?) "
                           "ORDER BY id", (ticket["id"], EVENTS_SHOWN)).fetchall()
+    event_count = conn.execute("SELECT COUNT(*) FROM ticket_events WHERE ticket_id = ?",
+                               (ticket["id"],)).fetchone()[0]
     return {"workspace": workspace, "ticket": _ticket_json(conn, conn.execute(
         "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone(), config),
-        "dependsOn": deps, "dependents": dependents,
+        "dependsOn": deps, "dependents": dependents, "links": _ticket_links(conn, ticket["id"]),
         "events": [{"id": e["id"], "at": e["at"], "actor": e["actor"], "name": e["name"],
                     "from": e["from_status"], "to": e["to_status"], "payload": json.loads(e["payload_json"])}
                    for e in events],
+        "eventsTruncated": event_count > EVENTS_SHOWN,
         "statuses": config_status_ids(config)}
 
 

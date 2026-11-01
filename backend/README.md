@@ -382,6 +382,12 @@ ticket keeps its usual fields (`key`, `title`, `status`, `priority`, `phase`, `p
 dependency keys) and `openDependsOn` (the dependency keys whose status is not a done/closed kind). The default
 output is unchanged. `status`, `phase` and `summary` combine.
 
+`ticket.show` still returns the ticket with `dependsOn` and `dependents` key lists, and adds `links`
+(`{dependsOn, dependents}`) for the ticket page's Dependencies card: each item is `{key, title, status, phase}`
+with `phase` as the phase slug. A dependency or dependent whose ticket row no longer exists keeps its stored id as
+`key` and reports null `title`, `status` and `phase` instead of failing the command. `events` is still the newest
+50 (`EVENTS_SHOWN`) events oldest first, and `eventsTruncated` is true when the ticket has more than that.
+
 The rules decide who works which status and what happens on pass/fail/blocked; agent rules may set
 `createdTicketStatus`, while action rules may set `onPassCreatedTickets: {from, to}` to hold tickets created by a
 workflow and promote them only after its follow-up action succeeds. `ticket apply KEY RUN` feeds a finished workflow
