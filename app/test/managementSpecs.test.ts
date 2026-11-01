@@ -6,7 +6,7 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(35);
+    expect(MANAGEMENT_SPECS).toHaveLength(41);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
@@ -263,6 +263,97 @@ describe('managementSpecs', () => {
     for (const [method, request, suffix] of cases) {
       expect(parse(method, request)).toBe(`management.${method}: ${suffix}`);
     }
+  });
+
+  it('maps every skill method to one fixed backend command and keeps writes non-idempotent like role writes', () => {
+    const rows: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
+      ['skills', {}, 'skill.list', {}],
+      ['skill', { skillId: 'python-testing' }, 'skill.show', { skill: 'python-testing' }],
+      ['createSkill', { skill: { id: 'new-skill', text: '# New\n' } }, 'skill.create', { skill: { id: 'new-skill', text: '# New\n' } }],
+      ['updateSkill', { skillId: 'python-testing', text: '', expectedSha256: SHA }, 'skill.update', { skill: 'python-testing', text: '', expectedSha256: SHA }],
+      ['deleteSkill', { skillId: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA2 }, 'skill.delete', { skill: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA2 }],
+      ['updateSkillRoles', { skillId: 'code-search', roles: ['Developer', 'TeamLead'], expectedRolesSha256: SHA }, 'skill.roles.update', { skill: 'code-search', roles: ['Developer', 'TeamLead'], expectedRolesSha256: SHA }],
+    ];
+    for (const [method, request, command, args] of rows) {
+      expect(byLabel(method).command).toBe(command);
+      expect(byLabel(method).mutating).toBe(false);
+      expect(parse(method, request)).toEqual(args);
+    }
+  });
+
+  it('validates skill ids and skill text in UTF-8 bytes, allowing empty text', () => {
+    const id = (value: unknown, method = 'skill') => parse(method, { skillId: value, ...(method === 'skill' ? {} : { text: '', expectedSha256: SHA }) });
+    expect(id('a')).not.toBeTypeOf('string');
+    expect(id('a.b_c-1')).not.toBeTypeOf('string');
+    expect(id('a'.repeat(64))).not.toBeTypeOf('string');
+    expect(id('9lives')).toEqual({ skill: '9lives' });
+    expect(id('a'.repeat(65))).toContain('skillId must be a skill id');
+    expect(id('')).toContain('skillId must be a skill id');
+    expect(id('-a')).toContain('skillId must be a skill id');
+    expect(id('../etc')).toContain('skillId must be a skill id');
+    expect(id('Upper')).toContain('skillId must be a skill id');
+    expect(parse('skill', {})).toBe('management.skill: skillId is required.');
+    expect(parse('skill', { skillId: 'ok', extra: 1 })).toBe('management.skill: unknown field(s): extra.');
+    const text = (value: unknown) => parse('updateSkill', { skillId: 'ok', text: value as never, expectedSha256: SHA });
+    expect(text('')).toEqual({ skill: 'ok', text: '', expectedSha256: SHA });
+    expect(text('a'.repeat(32768))).not.toBeTypeOf('string');
+    expect(text('a'.repeat(32769))).toBe('management.updateSkill: text must be at most 32768 UTF-8 bytes.');
+    expect(text('é'.repeat(16384))).not.toBeTypeOf('string');
+    expect(text('é'.repeat(16385))).toBe('management.updateSkill: text must be at most 32768 UTF-8 bytes.');
+    expect(text('😀'.repeat(8192))).not.toBeTypeOf('string');
+    expect(text('😀'.repeat(8193))).toBe('management.updateSkill: text must be at most 32768 UTF-8 bytes.');
+    expect(text('\ud800')).toContain('unpaired surrogates');
+    expect(text(5)).toBe('management.updateSkill: text must be a string.');
+  });
+
+  it('validates create skill nested fields and copies the text', () => {
+    const create = (skill: unknown) => parse('createSkill', { skill });
+    expect(create(undefined)).toBe('management.createSkill: skill is required.');
+    expect(create('x')).toBe('management.createSkill: skill must be an object.');
+    expect(create({})).toBe('management.createSkill: skill.id is required.');
+    expect(create({ id: 'ok' })).toBe('management.createSkill: skill.text is required.');
+    expect(create({ id: 'Bad', text: '' })).toContain('skill.id must be a skill id');
+    expect(create({ id: 'ok', text: 1 })).toBe('management.createSkill: skill.text must be a string.');
+    expect(create({ id: 'ok', text: 'x', path: '/etc' })).toBe('management.createSkill: unknown field(s): skill.path.');
+    expect(create({ id: 'ok', text: 'a'.repeat(32768) })).not.toBeTypeOf('string');
+    expect(create({ id: 'ok', text: 'a'.repeat(32769) })).toBe('management.createSkill: skill.text must be at most 32768 UTF-8 bytes.');
+    expect(create({ id: 'ok', text: 'é'.repeat(16384) })).not.toBeTypeOf('string');
+    expect(create({ id: 'ok', text: 'é'.repeat(16385) })).toBe('management.createSkill: skill.text must be at most 32768 UTF-8 bytes.');
+    expect(create({ id: 'ok', text: '\ud800' })).toBe('management.createSkill: skill.text must not contain unpaired surrogates.');
+    expect(create({ id: 'ok', text: '' })).toEqual({ skill: { id: 'ok', text: '' } });
+    expect(create({ id: '9lives', text: '' })).toEqual({ skill: { id: '9lives', text: '' } });
+  });
+
+  it('requires exact update and delete concurrency tokens and copies roles', () => {
+    expect(parse('updateSkill', { skillId: 'ok', text: '' })).toBe('management.updateSkill: expectedSha256 is required.');
+    expect(parse('updateSkill', { skillId: 'ok', text: '', expectedSha256: 'A'.repeat(64) })).toBe('management.updateSkill: expectedSha256 must be a lowercase hex sha256.');
+    expect(parse('deleteSkill', { skillId: 'ok', expectedSha256: SHA })).toBe('management.deleteSkill: expectedRolesSha256 is required.');
+    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: SHA, expectedSha256: null as never })).toContain('expectedSha256 must be a lowercase hex sha256');
+    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: 'x', expectedSha256: SHA })).toBe('management.deleteSkill: expectedRolesSha256 must be a lowercase hex sha256 or null.');
+    expect(parse('deleteSkill', { skillId: 'ok', expectedRolesSha256: null, expectedSha256: SHA, count: 1 })).toBe('management.deleteSkill: unknown field(s): count.');
+    const roles = ['Developer', 'TeamLead'];
+    const out = parse('updateSkillRoles', { skillId: 'ok', roles, expectedRolesSha256: null }) as Record<string, unknown>;
+    expect(out).toEqual({ skill: 'ok', roles, expectedRolesSha256: null });
+    expect(out.roles).not.toBe(roles);
+    expect(parse('updateSkillRoles', { skillId: 'ok', roles: [], expectedRolesSha256: null })).toEqual({ skill: 'ok', roles: [], expectedRolesSha256: null });
+  });
+
+  it('rejects invalid duplicate or oversized role lists', () => {
+    const roles = (value: unknown) => parse('updateSkillRoles', { skillId: 'ok', roles: value, expectedRolesSha256: null });
+    expect(roles('Developer')).toBe('management.updateSkillRoles: roles must be an array of role ids.');
+    expect(roles(['Developer', 'Developer'])).toBe('management.updateSkillRoles: roles must not contain duplicates.');
+    expect(roles(['Developer', 1])).toBe('management.updateSkillRoles: roles[1] must be a non-empty string of at most 64 characters.');
+    expect(roles(['Developer', '  '])).toBe('management.updateSkillRoles: roles[1] must be a non-empty string of at most 64 characters.');
+    expect(roles(['D'.repeat(65)])).toBe('management.updateSkillRoles: roles[0] must be a non-empty string of at most 64 characters.');
+    expect(roles(Array.from({ length: 101 }, (_, i) => `r${i}`))).toBe('management.updateSkillRoles: roles must have at most 100 roles.');
+    expect(roles(Array.from({ length: 100 }, (_, i) => `r${i}`))).not.toBeTypeOf('string');
+  });
+
+  it('rejects unknown skill fields before validation errors', () => {
+    expect(parse('skills', { workspace: '/etc' })).toBe('management.skills: unknown field(s): workspace.');
+    expect(parse('createSkill', { skill: { id: 'Bad', text: 1 }, extra: 1 })).toBe('management.createSkill: unknown field(s): extra.');
+    expect(parse('updateSkill', { skillId: 'Bad', text: '', expectedSha256: SHA, role: 'x' })).toBe('management.updateSkill: unknown field(s): role.');
+    expect(parse('updateSkillRoles', { skillId: 'ok', roles: ['a', 'a'], expectedRolesSha256: null, owner: 'x' })).toBe('management.updateSkillRoles: unknown field(s): owner.');
   });
 
 });

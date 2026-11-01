@@ -170,7 +170,8 @@ describe('Teams v4 capture fixture', () => {
     const writes = [
       'createAgent', 'updateAgent', 'deleteAgent', 'createTeam', 'renameTeam', 'deleteTeam',
       'addMember', 'updateMember', 'removeMember', 'updateBoardSettings', 'createRole', 'updateRole',
-      'updateRoleInstructions', 'deleteRole', 'runBoard', 'switchMemberAgent', 'resumeMemberAgent', 'stopBoard',
+      'updateRoleInstructions', 'deleteRole', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
+      'runBoard', 'switchMemberAgent', 'resumeMemberAgent', 'stopBoard',
       'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand',
       'cancelCommand', 'startTeam', 'stopTeam',
     ];

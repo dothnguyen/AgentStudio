@@ -22,6 +22,12 @@ export const MANAGEMENT_CHANNELS = {
   managementUpdateRole: 'management:updateRole',
   managementUpdateRoleInstructions: 'management:updateRoleInstructions',
   managementDeleteRole: 'management:deleteRole',
+  managementSkills: 'management:skills',
+  managementSkill: 'management:skill',
+  managementCreateSkill: 'management:createSkill',
+  managementUpdateSkill: 'management:updateSkill',
+  managementDeleteSkill: 'management:deleteSkill',
+  managementUpdateSkillRoles: 'management:updateSkillRoles',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
@@ -60,9 +66,12 @@ const SHA = /^[0-9a-f]{64}$/;
 const SKILL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const MAX_INSTRUCTION_BYTES = 16384;
+const MAX_SKILL_BYTES = 32768;
+const MAX_SKILL_ROLES = 100;
 
 type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
   | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull'
+  | 'skillId' | 'skillText' | 'roleIds'
   | 'ticketKey' | 'reason';
 
 interface Field {
@@ -129,6 +138,24 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
         if (typeof value[i] !== 'string' || !SKILL_ID.test(value[i])) return `${label}: ${field}[${i}] must be a valid skill id.`;
       }
       return new Set(value).size === value.length ? null : `${label}: ${field} must not contain duplicates.`;
+    case 'skillId':
+      return typeof value === 'string' && SKILL_ID.test(value)
+        ? null
+        : `${label}: ${field} must be a skill id (lowercase letters, digits, '.', '_', '-'; at most 64 characters).`;
+    case 'skillText':
+      if (typeof value !== 'string') return `${label}: ${field} must be a string.`;
+      if (LONE_SURROGATE.test(value)) return `${label}: ${field} must not contain unpaired surrogates.`;
+      return new TextEncoder().encode(value).length <= MAX_SKILL_BYTES
+        ? null
+        : `${label}: ${field} must be at most ${MAX_SKILL_BYTES} UTF-8 bytes.`;
+    case 'roleIds':
+      if (!Array.isArray(value)) return `${label}: ${field} must be an array of role ids.`;
+      if (value.length > MAX_SKILL_ROLES) return `${label}: ${field} must have at most ${MAX_SKILL_ROLES} roles.`;
+      for (let i = 0; i < value.length; i++) {
+        const err = checkValue('roleId', value[i], `${field}[${i}]`, label);
+        if (err) return err;
+      }
+      return new Set(value).size === value.length ? null : `${label}: ${field} must not contain duplicates.`;
     case 'nonEmpty':
       return typeof value === 'string' && value.trim().length > 0 ? null : `${label}: ${field} must be a non-empty string.`;
     case 'string':
@@ -176,7 +203,7 @@ function parseObject(
     } else {
       const err = checkValue(spec.kind, value, name, label);
       if (err) return err;
-      out[key] = spec.kind === 'stringArrayOfSlugs' || spec.kind === 'skillIds' ? [...value as string[]] : value;
+      out[key] = spec.kind === 'stringArrayOfSlugs' || spec.kind === 'skillIds' || spec.kind === 'roleIds' ? [...value as string[]] : value;
     }
   }
   return out;
@@ -373,6 +400,42 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   }, {
     flatten: 'confirmation',
     map: ({ roleId, ...rest }) => ({ role: roleId, ...rest }),
+  }),
+  spec(C.managementSkills, 'skills', 'skill.list', {}),
+  spec(C.managementSkill, 'skill', 'skill.show', {
+    skillId: { kind: 'skillId', required: true },
+  }, {
+    map: ({ skillId, ...rest }) => ({ skill: skillId, ...rest }),
+  }),
+  spec(C.managementCreateSkill, 'createSkill', 'skill.create', {
+    skill: {
+      required: true,
+      object: {
+        id: { kind: 'skillId', required: true },
+        text: { kind: 'skillText', required: true },
+      },
+    },
+  }),
+  spec(C.managementUpdateSkill, 'updateSkill', 'skill.update', {
+    skillId: { kind: 'skillId', required: true },
+    text: { kind: 'skillText', required: true },
+    expectedSha256: { kind: 'sha', required: true },
+  }, {
+    map: ({ skillId, ...rest }) => ({ skill: skillId, ...rest }),
+  }),
+  spec(C.managementDeleteSkill, 'deleteSkill', 'skill.delete', {
+    skillId: { kind: 'skillId', required: true },
+    expectedRolesSha256: { kind: 'shaOrNull', required: true },
+    expectedSha256: { kind: 'sha', required: true },
+  }, {
+    map: ({ skillId, ...rest }) => ({ skill: skillId, ...rest }),
+  }),
+  spec(C.managementUpdateSkillRoles, 'updateSkillRoles', 'skill.roles.update', {
+    skillId: { kind: 'skillId', required: true },
+    roles: { kind: 'roleIds', required: true },
+    expectedRolesSha256: { kind: 'shaOrNull', required: true },
+  }, {
+    map: ({ skillId, ...rest }) => ({ skill: skillId, ...rest }),
   }),
   spec(C.managementRunBoard, 'runBoard', 'board.run', { teamId: { kind: 'uuid', required: true } }, { mutating: true }),
   spec(C.managementSwitchMemberAgent, 'switchMemberAgent', 'team.member.switch', {

@@ -1,5 +1,6 @@
 import { catalogFixture } from './teamsFixtures';
 import { roleCatalogFixture } from './roleFixtures';
+import { SKILLS_SHA, SKILL_TEXT, skillCatalog, skillDetail } from './skillFixtures';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { registerIpc, type ServeLike } from '../src/main/ipc';
@@ -71,6 +72,12 @@ const LABELS: Record<string, string> = {
   [C.managementUpdateRole]: 'updateRole',
   [C.managementUpdateRoleInstructions]: 'updateRoleInstructions',
   [C.managementDeleteRole]: 'deleteRole',
+  [C.managementSkills]: 'skills',
+  [C.managementSkill]: 'skill',
+  [C.managementCreateSkill]: 'createSkill',
+  [C.managementUpdateSkill]: 'updateSkill',
+  [C.managementDeleteSkill]: 'deleteSkill',
+  [C.managementUpdateSkillRoles]: 'updateSkillRoles',
   [C.managementRunBoard]: 'runBoard',
   [C.managementStopBoard]: 'stopBoard',
   [C.managementSwitchMemberAgent]: 'switchMemberAgent',
@@ -109,6 +116,12 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementUpdateRole, { roleId: 'TeamLead', changes: { description: null }, expectedRolesSha256: SHA }, 'role.update', { role: 'TeamLead', description: null, expectedSha256: SHA }],
   [C.managementUpdateRoleInstructions, { roleId: 'TeamLead', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }, 'role.instructions.update', { role: 'TeamLead', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }],
   [C.managementDeleteRole, { roleId: 'TeamLead', confirmation: { expectedRolesSha256: SHA, expectedInstructionsSha256: null } }, 'role.delete', { role: 'TeamLead', expectedRolesSha256: SHA, expectedInstructionsSha256: null }],
+  [C.managementSkills, {}, 'skill.list', {}],
+  [C.managementSkill, { skillId: 'python-testing' }, 'skill.show', { skill: 'python-testing' }],
+  [C.managementCreateSkill, { skill: { id: 'new-skill', text: '# New\n' } }, 'skill.create', { skill: { id: 'new-skill', text: '# New\n' } }],
+  [C.managementUpdateSkill, { skillId: 'python-testing', text: '', expectedSha256: SHA }, 'skill.update', { skill: 'python-testing', text: '', expectedSha256: SHA }],
+  [C.managementDeleteSkill, { skillId: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA }, 'skill.delete', { skill: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA }],
+  [C.managementUpdateSkillRoles, { skillId: 'code-search', roles: ['Developer'], expectedRolesSha256: SHA }, 'skill.roles.update', { skill: 'code-search', roles: ['Developer'], expectedRolesSha256: SHA }],
   [C.managementRunBoard, { teamId: UUID }, 'board.run', { teamId: UUID }],
   [C.managementStopBoard, {}, 'board.stop', {}],
   [C.managementSwitchMemberAgent, { teamDefId: 'core', memberId: 'm1', agent: 'ada' }, 'team.member.switch', { teamDefId: 'core', memberId: 'm1', agent: 'ada' }],
@@ -295,6 +308,124 @@ describe('management IPC', () => {
     expect(opts).toEqual([undefined, undefined, undefined, undefined, undefined]);
   });
 
+  const skillRequests: Array<[string, Record<string, unknown>]> = [
+    [C.managementSkills, {}],
+    [C.managementSkill, { skillId: 'python-testing' }],
+    [C.managementCreateSkill, { skill: { id: 'new-skill', text: '# New\n' } }],
+    [C.managementUpdateSkill, { skillId: 'python-testing', text: 'x', expectedSha256: SHA }],
+    [C.managementDeleteSkill, { skillId: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA }],
+    [C.managementUpdateSkillRoles, { skillId: 'code-search', roles: ['Developer'], expectedRolesSha256: SHA }],
+  ];
+
+  it('forwards the skill list and detail unchanged after resolving the workspace', async () => {
+    const catalog = skillCatalog();
+    const detail = skillDetail('python-testing');
+    const { call, calls } = setup({ replies: { 'skill.list': ok(catalog), 'skill.show': ok(detail) } });
+    expect(await call(C.managementSkills, 'workspace-a', {})).toEqual({ ok: true, data: catalog });
+    expect(await call(C.managementSkill, 'workspace-a', { skillId: 'python-testing' })).toEqual({ ok: true, data: detail });
+    expect(calls).toEqual([
+      ['workspace.list', {}],
+      ['skill.list', { workspace: '/work/a' }],
+      ['workspace.list', {}],
+      ['skill.show', { workspace: '/work/a', skill: 'python-testing' }],
+    ]);
+  });
+
+  it('maps skill ids to the backend skill argument and keeps create nested', async () => {
+    const { call, calls } = setup();
+    await call(C.managementSkill, 'workspace-a', { skillId: 'code-search' });
+    await call(C.managementCreateSkill, 'workspace-a', { skill: { id: 'new-skill', text: '' } });
+    await call(C.managementUpdateSkill, 'workspace-a', { skillId: 'code-search', text: '  x\n', expectedSha256: SHA });
+    await call(C.managementDeleteSkill, 'workspace-a', { skillId: 'ts-testing', expectedRolesSha256: SHA, expectedSha256: 'b'.repeat(64) });
+    await call(C.managementUpdateSkillRoles, 'workspace-a', { skillId: 'code-search', roles: ['TeamLead', 'Developer'], expectedRolesSha256: SHA });
+    const targets = calls.filter(([c]) => c !== 'workspace.list');
+    expect(targets).toEqual([
+      ['skill.show', { workspace: '/work/a', skill: 'code-search' }],
+      ['skill.create', { workspace: '/work/a', skill: { id: 'new-skill', text: '' } }],
+      ['skill.update', { workspace: '/work/a', skill: 'code-search', text: '  x\n', expectedSha256: SHA }],
+      ['skill.delete', { workspace: '/work/a', skill: 'ts-testing', expectedRolesSha256: SHA, expectedSha256: 'b'.repeat(64) }],
+      ['skill.roles.update', { workspace: '/work/a', skill: 'code-search', roles: ['TeamLead', 'Developer'], expectedRolesSha256: SHA }],
+    ]);
+    for (const [, args] of targets) {
+      for (const k of ['skillId', 'input']) expect(k in (args as object)).toBe(false);
+    }
+  });
+
+  it('forwards skill text byte-exact and keeps an empty created skill empty', async () => {
+    const { call, calls } = setup();
+    const text = '  line\r\n\ttab 😀  \n';
+    await call(C.managementCreateSkill, 'workspace-a', { skill: { id: 'empty', text: '' } });
+    await call(C.managementUpdateSkill, 'workspace-a', { skillId: 'empty', text, expectedSha256: SHA });
+    const targets = calls.filter(([c]) => c !== 'workspace.list');
+    expect(targets[0][1]).toEqual({ workspace: '/work/a', skill: { id: 'empty', text: '' } });
+    expect(targets[1][1]).toEqual({ workspace: '/work/a', skill: 'empty', text, expectedSha256: SHA });
+  });
+
+  it('rejects malformed skill requests before workspace lookup', async () => {
+    await bad(C.managementSkill, { skillId: 'Bad' }, 'management.skill: skillId must be a skill id (lowercase letters, digits, \'.\', \'_\', \'-\'; at most 64 characters).');
+    await bad(C.managementSkill, { skillId: 'a'.repeat(65) }, 'management.skill: skillId must be a skill id (lowercase letters, digits, \'.\', \'_\', \'-\'; at most 64 characters).');
+    await bad(C.managementSkill, { skillId: 5 }, 'management.skill: skillId must be a skill id (lowercase letters, digits, \'.\', \'_\', \'-\'; at most 64 characters).');
+    await bad(C.managementSkill, {}, 'management.skill: skillId is required.');
+    await bad(C.managementCreateSkill, { skill: { id: 'Bad', text: '' } }, 'management.createSkill: skill.id must be a skill id (lowercase letters, digits, \'.\', \'_\', \'-\'; at most 64 characters).');
+    await bad(C.managementCreateSkill, { skill: { id: 'ok', text: 'a'.repeat(32769) } }, 'management.createSkill: skill.text must be at most 32768 UTF-8 bytes.');
+    await bad(C.managementCreateSkill, { skill: { id: 'ok', text: 5 } }, 'management.createSkill: skill.text must be a string.');
+    await bad(C.managementCreateSkill, { skill: { id: 'ok', text: '\ud800' } }, 'management.createSkill: skill.text must not contain unpaired surrogates.');
+    await bad(C.managementCreateSkill, { skill: { id: 'ok', text: '', path: '/x' } }, 'management.createSkill: unknown field(s): skill.path.');
+    await bad(C.managementUpdateSkill, { skillId: 'ok', text: 5, expectedSha256: SHA }, 'management.updateSkill: text must be a string.');
+    await bad(C.managementUpdateSkill, { skillId: 'ok', text: 'a'.repeat(32769), expectedSha256: SHA }, 'management.updateSkill: text must be at most 32768 UTF-8 bytes.');
+    await bad(C.managementUpdateSkill, { skillId: 'ok', text: '', expectedSha256: 'ABC' }, 'management.updateSkill: expectedSha256 must be a lowercase hex sha256.');
+    await bad(C.managementDeleteSkill, { skillId: 'ok', expectedRolesSha256: 'x', expectedSha256: SHA }, 'management.deleteSkill: expectedRolesSha256 must be a lowercase hex sha256 or null.');
+    await bad(C.managementDeleteSkill, { skillId: 'ok', expectedRolesSha256: null }, 'management.deleteSkill: expectedSha256 is required.');
+    await bad(C.managementUpdateSkillRoles, { skillId: 'ok', roles: ['Developer', 'Developer'], expectedRolesSha256: null }, 'management.updateSkillRoles: roles must not contain duplicates.');
+    await bad(C.managementUpdateSkillRoles, { skillId: 'ok', roles: ['Developer', 1], expectedRolesSha256: null }, 'management.updateSkillRoles: roles[1] must be a non-empty string of at most 64 characters.');
+    await bad(C.managementUpdateSkillRoles, { skillId: 'ok', roles: Array.from({ length: 101 }, (_, i) => `r${i}`), expectedRolesSha256: null }, 'management.updateSkillRoles: roles must have at most 100 roles.');
+    await bad(C.managementUpdateSkillRoles, { skillId: 'ok', roles: ['Developer'], expectedRolesSha256: null, force: true }, 'management.updateSkillRoles: unknown field(s): force.');
+    await bad(C.managementSkills, { workspace: '/etc' }, 'management.skills: unknown field(s): workspace.');
+  });
+
+  it('skill config commands receive no generated idempotency key like role writes', async () => {
+    const { call, calls, optsSeen } = setup({ newIdempotencyKey: () => 'k-00000001' });
+    for (const [channel, request] of skillRequests) await call(channel, 'workspace-a', request);
+    const opts = calls.map(([c], i) => [c, optsSeen[i]] as const).filter(([c]) => c !== 'workspace.list').map(([, o]) => o);
+    expect(opts).toEqual([undefined, undefined, undefined, undefined, undefined, undefined]);
+  });
+
+  it('returns stale or missing workspace errors without invoking a skill command', async () => {
+    for (const [channel, request] of skillRequests) {
+      const a = setup();
+      expect((await a.call(channel, 'nope', request)).error.code).toBe('WORKSPACE_NOT_FOUND');
+      expect(a.calls).toEqual([['workspace.list', {}]]);
+      const b = setup({ workspaces: [{ ...WS, exists: false }] });
+      expect((await b.call(channel, 'workspace-a', request)).error.code).toBe('WORKSPACE_MISSING');
+      expect(b.calls).toEqual([['workspace.list', {}]]);
+    }
+  });
+
+  it('preserves skill CONFIG_CHANGED SKILL_EXISTS SKILL_IN_USE SKILL_NOT_FOUND and their data', async () => {
+    const cases: Array<[string, string, Record<string, unknown>, Record<string, unknown>, Record<string, unknown>]> = [
+      ['skill.update', C.managementUpdateSkill, skillRequests[3][1], { code: 'CONFIG_CHANGED', message: 'm', retryable: false }, { skillSha256: SHA }],
+      ['skill.delete', C.managementDeleteSkill, skillRequests[4][1], { code: 'CONFIG_CHANGED', message: 'm', retryable: false }, { rolesSha256: null, skillSha256: SHA }],
+      ['skill.delete', C.managementDeleteSkill, skillRequests[4][1], { code: 'SKILL_IN_USE', message: 'm', retryable: false }, { roles: ['Developer'] }],
+      ['skill.create', C.managementCreateSkill, skillRequests[2][1], { code: 'SKILL_EXISTS', message: 'm', retryable: false }, { path: 'skills/new-skill/SKILL.md' }],
+      ['skill.roles.update', C.managementUpdateSkillRoles, skillRequests[5][1], { code: 'SKILL_NOT_FOUND', message: 'm', retryable: false }, { skill: 'code-search' }],
+    ];
+    for (const [command, channel, request, error, data] of cases) {
+      const { call } = setup({ replies: { [command]: { ok: false, error, data } } });
+      expect(await call(channel, 'workspace-a', request)).toEqual({ ok: false, error: { ...error, data } });
+    }
+  });
+
+  it('forwards skill write results unchanged', async () => {
+    const detail = skillDetail('code-search');
+    const deleted = { workspace: '/work/a', deleted: { id: 'ts-testing', folder: 'removed' as const }, rolesSha256: SKILLS_SHA };
+    const roles = { workspace: '/work/a', skill: 'code-search', roles: ['Developer'], added: ['Developer'], removed: [], rolesSha256: SKILLS_SHA };
+    const { call } = setup({ replies: { 'skill.create': ok(detail), 'skill.update': ok(detail), 'skill.delete': ok(deleted), 'skill.roles.update': ok(roles) } });
+    expect(await call(C.managementCreateSkill, 'workspace-a', { skill: { id: 'code-search', text: SKILL_TEXT['code-search'] } })).toEqual({ ok: true, data: detail });
+    expect(await call(C.managementUpdateSkill, 'workspace-a', { skillId: 'code-search', text: SKILL_TEXT['code-search'], expectedSha256: SHA })).toEqual({ ok: true, data: detail });
+    expect(await call(C.managementDeleteSkill, 'workspace-a', { skillId: 'ts-testing', expectedRolesSha256: null, expectedSha256: SHA })).toEqual({ ok: true, data: deleted });
+    expect(await call(C.managementUpdateSkillRoles, 'workspace-a', { skillId: 'code-search', roles: ['Developer'], expectedRolesSha256: SHA })).toEqual({ ok: true, data: roles });
+  });
+
   it('stale or missing workspace ids stop before the target command', async () => {
     const a = setup();
     expect((await a.call(C.managementOverview, 'nope', {})).error.code).toBe('WORKSPACE_NOT_FOUND');
@@ -417,8 +548,10 @@ describe('management IPC', () => {
     expect([...new Set(calls.map(([c]) => c))].sort()).toEqual([
       'agentdef.create', 'agentdef.delete', 'agentdef.list', 'agentdef.update', 'board.run', 'board.settings',
       'board.settings.update', 'board.stop', 'command.approve', 'command.cancel', 'command.reject',
-      'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update', 'team.attach',
-      'team.member.resume', 'team.member.switch', 'team.overview', 'team.start', 'team.stop', 'team.usage.reset',
+      'role.create', 'role.delete', 'role.instructions.update', 'role.list', 'role.update',
+      'skill.create', 'skill.delete', 'skill.list', 'skill.roles.update', 'skill.show', 'skill.update',
+      'team.attach', 'team.member.resume', 'team.member.switch', 'team.overview', 'team.start', 'team.stop',
+      'team.usage.reset',
       'teamdef.create',
       'teamdef.delete', 'teamdef.member.add', 'teamdef.member.remove', 'teamdef.member.update', 'teamdef.rename',
       'teamdef.show', 'teamdef.validate', 'ticket.retry', 'ticket.unblock', 'workflow.cancel', 'workflow.retry',

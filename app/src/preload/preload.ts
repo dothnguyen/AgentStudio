@@ -32,6 +32,12 @@ export const PRELOAD_CHANNELS = {
   managementUpdateRole: 'management:updateRole',
   managementUpdateRoleInstructions: 'management:updateRoleInstructions',
   managementDeleteRole: 'management:deleteRole',
+  managementSkills: 'management:skills',
+  managementSkill: 'management:skill',
+  managementCreateSkill: 'management:createSkill',
+  managementUpdateSkill: 'management:updateSkill',
+  managementDeleteSkill: 'management:deleteSkill',
+  managementUpdateSkillRoles: 'management:updateSkillRoles',
   managementRunBoard: 'management:runBoard',
   managementStopBoard: 'management:stopBoard',
   managementSwitchMemberAgent: 'management:switchMemberAgent',
@@ -102,6 +108,15 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
         ipc.invoke(PRELOAD_CHANNELS.managementUpdateRoleInstructions, w, { roleId, text, expectedRolesSha256, expectedInstructionsSha256 }),
       deleteRole: (w, roleId, confirmation) =>
         ipc.invoke(PRELOAD_CHANNELS.managementDeleteRole, w, { roleId, confirmation }),
+      skills: (w) => ipc.invoke(PRELOAD_CHANNELS.managementSkills, w, {}),
+      skill: (w, skillId) => ipc.invoke(PRELOAD_CHANNELS.managementSkill, w, { skillId }),
+      createSkill: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementCreateSkill, w, { skill: input }),
+      updateSkill: (w, skillId, text, expectedSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateSkill, w, { skillId, text, expectedSha256 }),
+      deleteSkill: (w, skillId, expectedRolesSha256, expectedSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementDeleteSkill, w, { skillId, expectedRolesSha256, expectedSha256 }),
+      updateSkillRoles: (w, skillId, roles, expectedRolesSha256) =>
+        ipc.invoke(PRELOAD_CHANNELS.managementUpdateSkillRoles, w, { skillId, roles, expectedRolesSha256 }),
       runBoard: (w, teamId) => ipc.invoke(PRELOAD_CHANNELS.managementRunBoard, w, { teamId }),
       switchMemberAgent: (w, teamDefId, memberId, agent, confirmation) =>
         ipc.invoke(PRELOAD_CHANNELS.managementSwitchMemberAgent, w, confirmation === undefined ? { teamDefId, memberId, agent } : { teamDefId, memberId, agent, confirmation }),

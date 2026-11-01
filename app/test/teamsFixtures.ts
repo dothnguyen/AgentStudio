@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { vi } from 'vitest';
 import { roleItem, rolesFixture } from './rolesFixtures';
+import { fakeSkillManagement } from './skillFixtures';
 import type {
   AgentCatalogList,
   BoardRunner,
@@ -182,11 +183,21 @@ export function fakeManagement(opts: {
   const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
   const boardSettings = vi.fn((_id: string) => Promise.resolve(boardList[Math.min(b++, boardList.length - 1)]!));
   const roles = vi.fn((_id: string) => Promise.resolve(roleList[Math.min(rl++, roleList.length - 1)]!));
+  const skillFake = fakeSkillManagement();
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
-  const api = new Proxy({ overview, agents, boardSettings, roles, ...opts.calls } as Record<string, unknown>, {
+  const api = new Proxy({
+    overview, agents, boardSettings, roles,
+    skills: skillFake.skills,
+    skill: skillFake.skill,
+    createSkill: skillFake.createSkill,
+    updateSkill: skillFake.updateSkill,
+    deleteSkill: skillFake.deleteSkill,
+    updateSkillRoles: skillFake.updateSkillRoles,
+    ...opts.calls,
+  } as Record<string, unknown>, {
     get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
   }) as unknown as ManagementApi;
-  return { api, overview, agents, boardSettings, roles };
+  return { api, overview, agents, boardSettings, roles, skillFake };
 }
 
 export function teamDefinition(overrides: Partial<TeamDefinition> = {}): TeamDefinition {

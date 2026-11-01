@@ -133,7 +133,9 @@ describe('getManagementApi', () => {
   const METHODS = [
     'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-    'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
+    'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
+    'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
+    'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
     'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
     'startTeam', 'stopTeam',
   ];
@@ -177,6 +179,28 @@ describe('getManagementApi', () => {
     expect(fns.updateRole).toHaveBeenCalledWith('ws', 'QA', { skills: [] }, sha);
     expect(fns.updateRoleInstructions).toHaveBeenCalledWith('ws', 'QA', '', sha, null);
     expect(fns.deleteRole).toHaveBeenCalledWith('ws', 'QA', conf);
+    expect('extra' in api).toBe(false);
+  });
+
+  it('forwards skill methods with their arguments and returns success and error results unchanged', async () => {
+    const error = { ok: false as const, error: { code: 'CONFIG_CHANGED', message: 'm', retryable: false, data: { skillSha256: 'x' } } };
+    const fns = fakes();
+    for (const m of ['skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles']) fns[m] = vi.fn(async () => error);
+    window.agentStudio = { connection: { onChange: () => () => {} }, management: { ...fns, extra: vi.fn() } as never };
+    const api = getManagementApi();
+    const sha = 'a'.repeat(64);
+    expect(await api.skills('ws')).toBe(error);
+    expect(await api.skill('ws', 'code-search')).toBe(error);
+    expect(await api.createSkill('ws', { id: 'new-skill', text: '' })).toBe(error);
+    expect(await api.updateSkill('ws', 'code-search', 'text', sha)).toBe(error);
+    expect(await api.deleteSkill('ws', 'ts-testing', null, sha)).toBe(error);
+    expect(await api.updateSkillRoles('ws', 'code-search', ['Developer'], sha)).toBe(error);
+    expect(fns.skills).toHaveBeenCalledWith('ws');
+    expect(fns.skill).toHaveBeenCalledWith('ws', 'code-search');
+    expect(fns.createSkill).toHaveBeenCalledWith('ws', { id: 'new-skill', text: '' });
+    expect(fns.updateSkill).toHaveBeenCalledWith('ws', 'code-search', 'text', sha);
+    expect(fns.deleteSkill).toHaveBeenCalledWith('ws', 'ts-testing', null, sha);
+    expect(fns.updateSkillRoles).toHaveBeenCalledWith('ws', 'code-search', ['Developer'], sha);
     expect('extra' in api).toBe(false);
   });
 

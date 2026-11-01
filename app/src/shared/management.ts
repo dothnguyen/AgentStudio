@@ -435,6 +435,46 @@ export interface RoleDeleteConfirmation {
   expectedRolesSha256: string;
   expectedInstructionsSha256: string | null;
 }
+export type SkillState = 'ok' | 'missing' | 'unreadable' | 'truncated';
+export interface SkillRoleRef {
+  id: string;
+  name: string | null;
+  contextBytes: number;
+}
+export interface SkillItem {
+  id: string;
+  path: string;
+  state: SkillState;
+  title: string | null;
+  bytes: number | null;
+  sha256: string | null;
+  roles: SkillRoleRef[];
+}
+export interface SkillCatalogList {
+  workspace: string;
+  rolesSha256: string | null;
+  limits: { skillBytes: number; roleContextBytes: number };
+  skills: SkillItem[];
+  problems: Problem[];
+}
+export interface SkillDetail {
+  workspace: string;
+  skill: SkillItem;
+  text: string | null;
+}
+export interface SkillDeleteResult {
+  workspace: string;
+  deleted: { id: string; folder: 'removed' | 'kept' };
+  rolesSha256: string | null;
+}
+export interface SkillRolesResult {
+  workspace: string;
+  skill: string;
+  roles: string[];
+  added: string[];
+  removed: string[];
+  rolesSha256: string;
+}
 export interface BoardRunResult {
   board: { workspace: string; status: 'running' | 'stopped'; teamId: string | null };
   rules?: number;
@@ -527,6 +567,12 @@ export interface ManagementApi {
   updateRole(workspaceId: string, roleId: string, changes: RoleChanges, expectedRolesSha256: string): R<RoleMutationResult>;
   updateRoleInstructions(workspaceId: string, roleId: string, text: string, expectedRolesSha256: string, expectedInstructionsSha256: string | null): R<RoleInstructionsMutationResult>;
   deleteRole(workspaceId: string, roleId: string, confirmation: RoleDeleteConfirmation): R<RoleDeleteResult>;
+  skills(workspaceId: string): R<SkillCatalogList>;
+  skill(workspaceId: string, skillId: string): R<SkillDetail>;
+  createSkill(workspaceId: string, input: { id: string; text: string }): R<SkillDetail>;
+  updateSkill(workspaceId: string, skillId: string, text: string, expectedSha256: string): R<SkillDetail>;
+  deleteSkill(workspaceId: string, skillId: string, expectedRolesSha256: string | null, expectedSha256: string): R<SkillDeleteResult>;
+  updateSkillRoles(workspaceId: string, skillId: string, roles: string[], expectedRolesSha256: string | null): R<SkillRolesResult>;
   runBoard(workspaceId: string, teamId: string): R<BoardRunResult>;
   switchMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string, confirmation?: { cancelActive: true; assignmentId: string }): R<MemberSwitchResult>;
   resumeMemberAgent(workspaceId: string, teamDefId: string, memberId: string, agent: string): R<MemberResumeResult>;

@@ -21,7 +21,9 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
-  'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole', 'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
+  'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
+  'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
+  'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
   'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
   'startTeam', 'stopTeam',
 ];
@@ -81,6 +83,12 @@ describe('preload', () => {
     m.updateRoleInstructions('ws', 'TeamLead', '', sha, null, x);
     m.updateRoleInstructions('ws', 'TeamLead', 'text', sha, sha, x);
     m.deleteRole('ws', 'TeamLead', { expectedRolesSha256: sha, expectedInstructionsSha256: null }, x);
+    m.skills('ws', x);
+    m.skill('ws', 'code-search', x);
+    m.createSkill('ws', { id: 'new-skill', text: '' }, x);
+    m.updateSkill('ws', 'code-search', 'text', sha, x);
+    m.deleteSkill('ws', 'ts-testing', null, sha, x);
+    m.updateSkillRoles('ws', 'code-search', ['Developer'], sha, x);
     m.runBoard('ws', uuid, x);
     m.stopBoard('ws', x);
     m.startTeam('ws', 'core', x);
@@ -126,6 +134,12 @@ describe('preload', () => {
       [P.managementUpdateRoleInstructions, 'ws', { roleId: 'TeamLead', text: '', expectedRolesSha256: sha, expectedInstructionsSha256: null }],
       [P.managementUpdateRoleInstructions, 'ws', { roleId: 'TeamLead', text: 'text', expectedRolesSha256: sha, expectedInstructionsSha256: sha }],
       [P.managementDeleteRole, 'ws', { roleId: 'TeamLead', confirmation: { expectedRolesSha256: sha, expectedInstructionsSha256: null } }],
+      [P.managementSkills, 'ws', {}],
+      [P.managementSkill, 'ws', { skillId: 'code-search' }],
+      [P.managementCreateSkill, 'ws', { skill: { id: 'new-skill', text: '' } }],
+      [P.managementUpdateSkill, 'ws', { skillId: 'code-search', text: 'text', expectedSha256: sha }],
+      [P.managementDeleteSkill, 'ws', { skillId: 'ts-testing', expectedRolesSha256: null, expectedSha256: sha }],
+      [P.managementUpdateSkillRoles, 'ws', { skillId: 'code-search', roles: ['Developer'], expectedRolesSha256: sha }],
       [P.managementRunBoard, 'ws', { teamId: uuid }],
       [P.managementStopBoard, 'ws', {}],
       [P.managementStartTeam, 'ws', { teamDefId: 'core' }],
