@@ -159,6 +159,11 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
       workspaceId={props.workspace.id}
       onBack={backToList}
       onViewRole={props.onViewRole}
+      connected={connected}
+      onReloadCatalog={async () => {
+        if (catalog.reloadFresh !== undefined) await catalog.reloadFresh();
+        else await catalog.reload();
+      }}
       headingRef={skillHeading}
     />}
     {view.kind === 'skill' && skillRemoved && <div className="skills-page skills-removed" role="region" aria-label="Skill details">

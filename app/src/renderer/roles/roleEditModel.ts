@@ -1,4 +1,5 @@
 import type { ManagementError, RoleCatalogItem, RoleCatalogList, RoleChanges, RoleCreateInput } from '../api';
+import { textBytes } from '../shared/textStats';
 
 export type RoleFormMode = 'create' | 'edit';
 export interface RoleFormValues { id: string; name: string; description: string; instructions: string; skills: string[] }
@@ -12,12 +13,11 @@ export const MAX_INSTRUCTION_BYTES = 16384;
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SKILL_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 export const SKILL_ID_MESSAGE = "Use 1–64 lowercase letters, digits, '.', '_' or '-', starting with a letter or digit.";
-const encoder = new TextEncoder();
 
 export function suggestRoleId(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64).replace(/-+$/, '');
 }
-export function instructionBytes(text: string): number { return encoder.encode(text).byteLength; }
+export function instructionBytes(text: string): number { return textBytes(text); }
 const nameKey = (name: string) => name.trim().toLocaleLowerCase();
 
 export function validateRoleForm(values: RoleFormValues, mode: RoleFormMode, catalog: RoleCatalogList): RoleFormErrors {

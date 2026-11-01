@@ -1,8 +1,9 @@
-import { useEffect, useState, type JSX, type RefObject } from 'react';
+import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
 import type { ManagementApi, ManagementError, ManagementResult, SkillDetail, SkillItem } from '../api';
 import { Icon } from '../icons/Icon';
 import { ShellIcon } from '../shell/ShellIcon';
 import { SectionCard } from '../teams/SectionCard';
+import { SkillContentDialog } from './SkillContentDialog';
 import {
   formatRoleContext,
   formatSkillStats,
@@ -21,6 +22,10 @@ export interface SkillPageProps {
   workspaceId: string;
   onBack(): void;
   onViewRole?(roleId: string): void;
+  /** Reloads the skill list after a save so the page shows the new file. */
+  onReloadCatalog?(): Promise<void>;
+  /** False while the backend is connecting or lost; editing is unavailable. */
+  connected?: boolean;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 }
 
@@ -46,6 +51,11 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
   const usage = skillUsage(skill);
   const [detail, setDetail] = useState<DetailState>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const [contentOpen, setContentOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
+  const refocusEdit = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -69,8 +79,42 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     return () => { active = false; };
   }, [props.management, props.workspaceId, skill.id, skill.sha256, attempt]);
 
+  // The Edit button is disabled while the refreshed detail loads, which can
+  // take focus away from it after the dialog closes. Return focus once the new
+  // content is ready so keyboard users continue from where they were.
+  useEffect(() => {
+    if (!refocusEdit.current || saving) return;
+    if (detail.kind !== 'ready' || detail.text === null) return;
+    refocusEdit.current = false;
+    editButtonRef.current?.focus();
+  }, [detail, saving]);
+
   const canPreview = skill.state === 'ok' || skill.state === 'truncated';
   const text = detail.kind === 'ready' ? detail.text : null;
+  const editReason = missing ? null
+    : skill.state === 'truncated' || skill.state === 'unreadable' ? 'Shorten the file outside the app first.'
+    : saving ? 'Saving the file; wait for it to finish.'
+    : props.connected === false ? 'Connect to the backend to edit this skill.'
+    : detail.kind === 'loading' ? 'The content is still loading.'
+    : detail.kind === 'error' || detail.text === null || skill.sha256 === null ? 'The content could not be loaded.' : null;
+
+  function openContent(): void {
+    if (editReason !== null) return;
+    setAnnouncement(null);
+    setContentOpen(true);
+  }
+
+  async function savedContent(): Promise<void> {
+    setContentOpen(false);
+    setSaving(false);
+    setAnnouncement(`Saved ${skill.path}.`);
+    // Show the loading state immediately so Edit stays disabled until the
+    // refreshed content arrives; the effect above returns focus then.
+    refocusEdit.current = true;
+    setDetail({ kind: 'loading' });
+    await props.onReloadCatalog?.();
+    setAttempt(value => value + 1);
+  }
 
   return <div className="skills-page" role="region" aria-label="Skill details">
     <div className="skills-page-top">
@@ -90,6 +134,10 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
               <div className="skills-page-title-row">
                 <h1 tabIndex={-1} ref={props.headingRef} className="skills-page-title">{skill.id}</h1>
                 <span className={`skills-page-pill is-${usage.tone}`}>{usage.text}</span>
+                {announcement !== null && <span className="skills-page-saved" role="status">
+                  <Icon name="check-circle" size={13} tone="success" />
+                  {announcement}
+                </span>}
               </div>
               <span className="skills-page-subtitle">{skillHeaderNote(skill)}</span>
             </div>
@@ -114,6 +162,9 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
           detail={detail}
           canPreview={canPreview}
           text={text}
+          editReason={editReason}
+          editButtonRef={editButtonRef}
+          onEdit={openContent}
           onRetry={() => setAttempt(value => value + 1)}
         />}
       </div>
@@ -159,6 +210,17 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
         </SectionCard>
       </aside>
     </div>
+    {contentOpen && !missing && detail.kind === 'ready' && detail.text !== null && <SkillContentDialog
+      skill={skill}
+      initialText={detail.text}
+      limit={props.limits.skillBytes}
+      roleContextLimit={props.limits.roleContextBytes}
+      management={props.management}
+      workspaceId={props.workspaceId}
+      onClose={() => { setContentOpen(false); setSaving(false); }}
+      onSaved={() => { void savedContent(); }}
+      onPendingChange={setSaving}
+    />}
   </div>;
 }
 
@@ -191,8 +253,14 @@ interface ContentCardProps {
   detail: DetailState;
   canPreview: boolean;
   text: string | null;
+  /** Null when Edit is available; otherwise the reason shown through aria-describedby. */
+  editReason: string | null;
+  editButtonRef?: RefObject<HTMLButtonElement | null>;
+  onEdit(): void;
   onRetry(): void;
 }
+
+const EDIT_REASON_ID = 'skills-content-edit-reason';
 
 function ContentCard(props: ContentCardProps): JSX.Element {
   const { skill, detail } = props;
@@ -202,7 +270,16 @@ function ContentCard(props: ContentCardProps): JSX.Element {
     title="Content"
     subtitle="What the agent reads. Loaded into the role's context when an assignment starts."
     className="skills-content-card"
+    action={{
+      label: 'Edit',
+      ariaLabel: 'Edit skill content',
+      disabled: props.editReason !== null,
+      descriptionId: props.editReason !== null ? EDIT_REASON_ID : undefined,
+      buttonRef: props.editButtonRef,
+      onClick: props.onEdit,
+    }}
   >
+    {props.editReason !== null && <p id={EDIT_REASON_ID} className="skills-content-edit-reason">{props.editReason}</p>}
     <div className="skills-content-head">
       <span className="skills-content-file"><Icon name="document" size={13} /><code>{skill.path}</code></span>
       {showStats && <span className="skills-content-stats">{formatSkillStats(props.text!, skill.bytes!, props.limit)}</span>}

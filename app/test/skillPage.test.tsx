@@ -141,7 +141,7 @@ describe('Skill page header', () => {
 });
 
 describe('Skill page content', () => {
-  it('shows the path, line and byte counts and the read-only preview for an ok skill', async () => {
+  it('shows the path, line and byte counts, the read-only preview and the Edit action for an ok skill', async () => {
     const { view } = setup();
     await open(view);
     await waitFor(() => expect(card(view, 'skills-content-preview')).toBeTruthy());
@@ -153,7 +153,7 @@ describe('Skill page content', () => {
     expect(within(content).getByText('11 lines · 839 / 32,768 bytes')).toBeTruthy();
     expect(content.querySelector('pre')?.textContent).toContain('# Searching the code cheaply');
     expect(card(view, 'skills-content-fade')).toBeTruthy();
-    expect(within(content).queryByRole('button')).toBeNull();
+    expect(within(content).getByRole('button', { name: 'Edit skill content' })).toBeTruthy();
     expect(content.querySelector('textarea, [contenteditable="true"]')).toBeNull();
   });
 

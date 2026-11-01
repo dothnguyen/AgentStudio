@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import type { ManagementError, Result, RoleCatalogItem, RoleCatalogList } from '../api';
 import { Icon } from '../icons/Icon';
 import { Dialog } from '../teams/Dialog';
-import { instructionBytes, MAX_DESCRIPTION, MAX_INSTRUCTION_BYTES, type RoleFormValues } from './roleEditModel';
+import { textByteCountText, textBytes, textCharacters, textLines } from '../shared/textStats';
+import { MAX_DESCRIPTION, MAX_INSTRUCTION_BYTES, type RoleFormValues } from './roleEditModel';
 import { CONFLICT_MESSAGE, type RoleSaveOutcome } from './roleSave';
 
 export interface RoleInstructionsDialogProps {
@@ -30,15 +31,13 @@ export interface RoleInstructionsDialogProps {
 }
 
 const unreadable = (role: RoleCatalogItem): boolean => role.instructions.state === 'invalid' || role.instructions.state === 'truncated';
-export function promptLines(text: string): number { return text === '' ? 0 : text.split('\n').length; }
-export function promptCharacters(text: string): number { return Array.from(text).length; }
+export const promptLines = textLines;
+export const promptCharacters = textCharacters;
 export function promptCountText(text: string): string {
-  return `${promptLines(text)} lines · ${promptCharacters(text)} characters`;
+  return `${textLines(text)} lines · ${textCharacters(text)} characters`;
 }
 export function promptByteCountText(text: string): string {
-  const bytes = instructionBytes(text).toLocaleString('en-US');
-  const limit = MAX_INSTRUCTION_BYTES.toLocaleString('en-US');
-  return `${promptLines(text)} lines · ${bytes} / ${limit} bytes`;
+  return textByteCountText(text, MAX_INSTRUCTION_BYTES);
 }
 
 function stateExplanation(role: RoleCatalogItem): string | null {
@@ -66,7 +65,7 @@ export function RoleInstructionsDialog(props: RoleInstructionsDialogProps): JSX.
   const alertRef = useRef<HTMLDivElement>(null);
   const blocked = unreadable(role);
   const explanation = stateExplanation(role);
-  const bytes = instructionBytes(prompt);
+  const bytes = textBytes(prompt);
   const overLimit = bytes > MAX_INSTRUCTION_BYTES;
   const descriptionTooLong = showDescription && description.trim().length > MAX_DESCRIPTION;
   const dirty = (showDescription && description.trim() !== (role.description ?? '').trim())
