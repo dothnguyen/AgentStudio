@@ -14,7 +14,7 @@ import re
 import stat
 
 from . import rolecatalog, roles
-from .protocol import BAD_REQUEST, CONFIG_CHANGED, SKILL_EXISTS, SKILL_NOT_FOUND, AsError
+from .protocol import BAD_REQUEST, CONFIG_CHANGED, SKILL_EXISTS, SKILL_IN_USE, SKILL_NOT_FOUND, AsError
 
 SKILL_FILE = "SKILL.md"
 TITLE_CHARS = 120
@@ -423,3 +423,91 @@ def update_skill(workspace: str, skill: str, text, expected_sha256) -> dict:
         roles._discard(tmp)
         raise
     return _write_result(workspace, base, skill, text)
+
+
+# ---- skill deletion (P07-S03) ---------------------------------------------------------------
+#
+# A delete removes only skills/<id>/SKILL.md and then that folder when it is empty. It never edits
+# roles.json and never follows a symbolic link in the skill path.
+
+def _delete_conflict(message: str, roles_data, skill_data) -> AsError:
+    return AsError(CONFIG_CHANGED, message,
+                   data={"rolesSha256": roles._sha(roles_data), "skillSha256": roles._sha(skill_data)})
+
+
+def _read_skill_bytes(real_base: str, skill: str, target: str):
+    """The bytes of one regular SKILL.md, or None when it is missing; a link is a bad request."""
+    try:
+        info = os.lstat(target)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise AsError(BAD_REQUEST, f"Skill '{skill}' file could not be inspected.")
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise AsError(BAD_REQUEST, f"Skill '{skill}' must be a regular file, not a symbolic link or folder.")
+    try:
+        with os.fdopen(rolecatalog._open_confined(real_base, target), "rb") as f:
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+                raise AsError(BAD_REQUEST, f"Skill '{skill}' must be a regular file, not a symbolic link or folder.")
+            return f.read()
+    except FileNotFoundError:
+        return None
+    except AsError:
+        raise
+    except (OSError, ValueError):
+        raise AsError(BAD_REQUEST, f"Skill '{skill}' file could not be read.")
+
+
+def _roles_listing(workspace: str, roles_data: bytes, skill: str) -> list[str]:
+    raw = roles._validated_catalog(workspace, roles_data)
+    return [role_id for role_id, spec in raw["roles"].items()
+            if skill in spec.get("skills", [])]
+
+
+def delete_skill(workspace: str, skill, expected_roles_sha256, expected_sha256) -> dict:
+    _valid_skill_id(skill)
+    base = _base(workspace)
+    real_base, _, folder, target = _skill_paths(base, skill)
+    skill_data = _read_skill_bytes(real_base, skill, target)
+    if skill_data is None:
+        raise AsError(SKILL_NOT_FOUND, f"Skill '{skill}' has no {_relative(skill)} to delete; "
+                                       "a missing skill has nothing to delete.")
+    roles_path = os.path.join(real_base, "roles.json")
+    roles_data = roles._read_raw(roles_path)
+    roles_sha, skill_sha = roles._sha(roles_data), roles._sha(skill_data)
+    if roles_sha != expected_roles_sha256:
+        raise _delete_conflict(f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.",
+                               roles_data, skill_data)
+    if skill_sha != expected_sha256:
+        raise _delete_conflict(f"Skill '{skill}' changed since it was read; reload and retry.",
+                               roles_data, skill_data)
+    if roles_data is not None:
+        listed = _roles_listing(workspace, roles_data, skill)
+        if listed:
+            raise AsError(SKILL_IN_USE,
+                          f"Skill '{skill}' is still used by role(s) {', '.join(listed)}; "
+                          "remove it from those roles before deleting it.",
+                          data={"roles": listed})
+
+    # Recheck immediately before removing anything: a change after the first check must not delete.
+    now_roles, now_skill = roles._read_raw(roles_path), _read_skill_bytes(real_base, skill, target)
+    if now_roles != roles_data:
+        raise _delete_conflict(f"{roles.CONFIG_DIR}/roles.json changed since it was read; reload and retry.",
+                               now_roles, now_skill)
+    if now_skill != skill_data:
+        raise _delete_conflict(f"Skill '{skill}' changed since it was read; reload and retry.",
+                               now_roles, now_skill)
+    try:
+        os.unlink(target)
+    except FileNotFoundError:
+        raise _delete_conflict(f"Skill '{skill}' changed since it was read; reload and retry.", now_roles, None)
+
+    folder_state = "kept"
+    if not os.path.islink(folder):
+        try:
+            os.rmdir(folder)
+            folder_state = "removed"
+        except OSError:
+            folder_state = "kept"
+    return {"workspace": workspace, "deleted": {"id": skill, "folder": folder_state},
+            "rolesSha256": roles_sha}

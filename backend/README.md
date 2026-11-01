@@ -177,6 +177,14 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   `data.skillSha256` (or null); identical bytes are a no-op that does not touch the file. Both writes are direct
   requests, must not read or write `roles.json`, and use a staged same-directory temp file plus atomic
   `os.replace`; temp files and newly created empty folders are removed on failure.
+- `skill.delete {workspace, skill, expectedRolesSha256, expectedSha256}` removes `.agent-studio/skills/<id>/SKILL.md`
+  and then the skill folder only when it is empty, returning `{workspace, deleted: {id, folder}, rolesSha256}` with
+  `folder` `removed|kept`; other files in the folder are never touched. A role that lists the skill blocks the
+  delete with `SKILL_IN_USE` and `data.roles` (the role ids). `expectedRolesSha256` is the `roles.json` SHA from
+  `skill.list` (null only when the file is absent) and `expectedSha256` is the `SKILL.md` SHA; either stale token,
+  or a change found on the recheck immediately before removal, is `CONFIG_CHANGED` with
+  `data.rolesSha256|skillSha256` and deletes nothing. A missing file is `SKILL_NOT_FOUND` (nothing to delete); a
+  symlinked skills folder, skill folder or `SKILL.md` is `BAD_REQUEST`. The command never edits `roles.json`.
 
 Protected routes: when a board has the `merge-conflict` or `plan-merge-conflict` status, it must keep it, with a
 rule `when.status == <id>` whose `role` is `TeamLead`. Live controls are the existing `board.run` and
