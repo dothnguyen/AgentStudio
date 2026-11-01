@@ -64,7 +64,7 @@ $Allow = @{
     'command catalog' = 'read'; 'command requests' = 'read'
     'command approve' = 'write'; 'command reject' = 'write'; 'command cancel' = 'write'
     'ticket retry' = 'write'; 'ticket move' = 'write'; 'ticket unblock' = 'write'
-    'ticket add' = 'write'; 'ticket depend' = 'write'
+    'ticket add' = 'write'; 'ticket depend' = 'write'; 'ticket phase' = 'write'
     'workflow retry' = 'write'; 'workflow cancel' = 'write'
     'assignment resolve' = 'write'; 'assignment cancel' = 'write'
     'board resume' = 'write'; 'team run-board' = 'write'; 'team stop-board' = 'write'
