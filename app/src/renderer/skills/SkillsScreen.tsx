@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { ConnectionStatus, ManagementApi, SkillCatalogList, Workspace } from '../api';
+import type { ConnectionStatus, ManagementApi, SkillCatalogList, SkillDetail, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
+import { SkillCreateDialog } from './SkillCreateDialog';
 import { SkillPage } from './SkillPage';
 import { filterSkills, skillRoleNames, skillSize, skillSummary } from './skillsModel';
 
@@ -32,6 +33,10 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const [view, setView] = useState<SkillsView>({ kind: 'list' });
   const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const [focusSkillPage, setFocusSkillPage] = useState(false);
+  const [createTarget, setCreateTarget] = useState<{ initialId: string | null } | null>(null);
+  const [createPending, setCreatePending] = useState(false);
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
 
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
 
@@ -46,6 +51,10 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     : `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}`;
   const error = catalog.error;
   const limit = shown?.limits.skillBytes ?? 0;
+  const createBlock = !connected ? 'Skill changes are unavailable while the backend is disconnected.'
+    : shown === null ? 'Skill changes are unavailable until the catalog loads.'
+    : createPending ? 'A skill is being created; wait for it to finish.'
+    : null;
 
   const openSkill = (skillId: string) => {
     setView({ kind: 'skill', skillId });
@@ -56,6 +65,28 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     if (view.kind !== 'skill') return;
     setFocusRowId(view.skillId);
     setView({ kind: 'list' });
+  };
+
+  const refreshCatalog = async (): Promise<void> => {
+    if (catalog.reloadFresh !== undefined) await catalog.reloadFresh();
+    else await catalog.reload();
+  };
+
+  const openCreate = (initialId: string | null = null) => {
+    if (createBlock !== null || shown === null) return;
+    setAnnouncement('');
+    setCreateTarget({ initialId });
+  };
+
+  const createdSkill = (detail: SkillDetail) => {
+    const createdId = detail.skill.id;
+    setCreateTarget(null);
+    setCreatePending(false);
+    setAnnouncement(`Created skill ${createdId}.`);
+    // Open the new page as soon as the list has it, then keep the reload going
+    // so a missing skill stops being marked missing.
+    setPendingOpenId(createdId);
+    void refreshCatalog().catch(() => undefined);
   };
 
   useEffect(() => {
@@ -73,6 +104,16 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     target.focus();
   }, [focusSkillPage, view, data]);
 
+  useEffect(() => {
+    if (pendingOpenId === null || shown === null) return;
+    if (!shown.skills.some(skill => skill.id === pendingOpenId)) return;
+    const openId = pendingOpenId;
+    setPendingOpenId(null);
+    openSkill(openId);
+    // openSkill only updates local view state and is stable enough for this transition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOpenId, shown]);
+
   const skillPage = view.kind === 'skill' ? shown?.skills.find(skill => skill.id === view.skillId) ?? null : null;
   const skillRemoved = view.kind === 'skill' && skillPage === null && catalog.state === 'ready'
     && shown !== null && !shown.skills.some(skill => skill.id === view.skillId);
@@ -87,7 +128,21 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
         <h1>Skills</h1>
         <p className="skills-subtitle">Reusable instructions that roles load. Each skill is a folder with a SKILL.md file; a role lists the skills it uses.</p>
       </div>
+      <div className="skills-header-actions">
+        <button
+          type="button"
+          className="skills-new-button"
+          disabled={createBlock !== null}
+          aria-describedby={createBlock !== null ? 'skills-create-reason' : undefined}
+          onClick={() => openCreate()}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          New skill
+        </button>
+        {createBlock !== null && <span id="skills-create-reason" className="skills-create-reason">{createBlock}</span>}
+      </div>
     </header>}
+    {announcement !== '' && <p role="status" className="skills-announcement">{announcement}</p>}
     {view.kind === 'list' && <div className="skills-notice">
       <ShellIcon name="refresh" size={14} strokeWidth={2.2} />
       <span>Saved changes apply to new assignments. Assignments already running keep the skills they started with.</span>
@@ -160,10 +215,9 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
       onBack={backToList}
       onViewRole={props.onViewRole}
       connected={connected}
-      onReloadCatalog={async () => {
-        if (catalog.reloadFresh !== undefined) await catalog.reloadFresh();
-        else await catalog.reload();
-      }}
+      onCreateSkill={() => openCreate(skillPage.id)}
+      createPending={createPending}
+      onReloadCatalog={refreshCatalog}
       headingRef={skillHeading}
     />}
     {view.kind === 'skill' && skillRemoved && <div className="skills-page skills-removed" role="region" aria-label="Skill details">
@@ -176,5 +230,16 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
       <p className="skills-removed-text">This skill no longer exists.</p>
       <button type="button" className="skills-removed-back" onClick={backFromRemoved}>Back to skills</button>
     </div>}
+    {createTarget !== null && shown !== null && <SkillCreateDialog
+      catalog={shown}
+      initialId={createTarget.initialId}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      limit={shown.limits.skillBytes}
+      onClose={() => { setCreateTarget(null); setCreatePending(false); }}
+      onCreated={createdSkill}
+      onPendingChange={setCreatePending}
+      onRefreshCatalog={refreshCatalog}
+    />}
   </div>;
 }

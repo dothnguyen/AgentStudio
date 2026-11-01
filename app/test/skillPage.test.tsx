@@ -236,7 +236,7 @@ describe('Skill page content', () => {
 });
 
 describe('Skill page missing state', () => {
-  it('shows the two fixing rows without any write button and omits the content card', async () => {
+  it('shows the two fixing rows with the two Create this skill buttons and omits the content card', async () => {
     const { view } = setup();
     await open(view, 'legacy-notes');
 
@@ -246,10 +246,10 @@ describe('Skill page missing state', () => {
     expect(within(missing).getByText('Two ways to fix the roles that list this skill.')).toBeTruthy();
     expect(within(missing).getByText('Create the file')).toBeTruthy();
     expect(within(missing).getByText('Start from a template and write the skill.')).toBeTruthy();
+    expect(within(missing).getByRole('button', { name: 'Create this skill' })).toBeTruthy();
     expect(within(missing).getByText('Remove it from the roles')).toBeTruthy();
     expect(within(missing).getByText('Stop listing a skill that does not exist.')).toBeTruthy();
-    expect(within(missing).queryByRole('button')).toBeNull();
-    expect(page(view).queryByRole('button', { name: /create this skill/i })).toBeNull();
+    expect(page(view).getAllByRole('button', { name: 'Create this skill' })).toHaveLength(2);
     expect(page(view).queryByRole('button', { name: /edit roles/i })).toBeNull();
     expect(page(view).queryByRole('button', { name: /delete skill/i })).toBeNull();
     expect(page(view).queryByRole('button', { name: 'Edit' })).toBeNull();

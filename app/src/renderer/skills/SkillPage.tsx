@@ -24,6 +24,10 @@ export interface SkillPageProps {
   onViewRole?(roleId: string): void;
   /** Reloads the skill list after a save so the page shows the new file. */
   onReloadCatalog?(): Promise<void>;
+  /** Opens the New skill dialog prefilled with this missing skill's id. */
+  onCreateSkill?(): void;
+  /** True while a skill creation is being saved. */
+  createPending?: boolean;
   /** False while the backend is connecting or lost; editing is unavailable. */
   connected?: boolean;
   headingRef?: RefObject<HTMLHeadingElement | null>;
@@ -35,6 +39,7 @@ type DetailState =
   | { kind: 'error'; error: ManagementError };
 
 const NOTICE = 'Saved changes apply to new assignments. Assignments already running keep the skills they started with.';
+const CREATE_REASON_ID = 'skills-page-create-reason';
 
 function detailError(reason: unknown): ManagementError {
   return {
@@ -97,6 +102,10 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     : props.connected === false ? 'Connect to the backend to edit this skill.'
     : detail.kind === 'loading' ? 'The content is still loading.'
     : detail.kind === 'error' || detail.text === null || skill.sha256 === null ? 'The content could not be loaded.' : null;
+  const createReason = !missing ? null
+    : props.createPending ? 'A skill is being created; wait for it to finish.'
+    : props.connected === false ? 'Connect to the backend to create this skill.'
+    : null;
 
   function openContent(): void {
     if (editReason !== null) return;
@@ -142,6 +151,16 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
               <span className="skills-page-subtitle">{skillHeaderNote(skill)}</span>
             </div>
           </div>
+          {missing && <div className="skills-page-actions">
+            <button
+              type="button"
+              className="skills-create-button"
+              disabled={createReason !== null}
+              aria-describedby={createReason !== null ? CREATE_REASON_ID : undefined}
+              onClick={props.onCreateSkill}
+            >Create this skill</button>
+            {createReason !== null && <span id={CREATE_REASON_ID} className="skills-create-reason">{createReason}</span>}
+          </div>}
         </div>
         {missing && <div className="skills-missing-note">
           <Icon name="warning" size={14} tone="warning" />
@@ -156,7 +175,10 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
 
     <div className="skills-page-layout">
       <div className="skills-page-main">
-        {missing ? <MissingCard /> : <ContentCard
+        {missing ? <MissingCard
+          createReason={createReason}
+          onCreate={props.onCreateSkill}
+        /> : <ContentCard
           skill={skill}
           limit={props.limits.skillBytes}
           detail={detail}
@@ -224,7 +246,7 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
   </div>;
 }
 
-function MissingCard(): JSX.Element {
+function MissingCard(props: { createReason: string | null; onCreate?: () => void }): JSX.Element {
   return <SectionCard
     title="No SKILL.md yet"
     subtitle="Two ways to fix the roles that list this skill."
@@ -236,6 +258,13 @@ function MissingCard(): JSX.Element {
           <span className="skills-missing-option-title">Create the file</span>
           <span className="skills-missing-option-description">Start from a template and write the skill.</span>
         </span>
+        <button
+          type="button"
+          className="skills-create-button is-small"
+          disabled={props.createReason !== null}
+          aria-describedby={props.createReason !== null ? CREATE_REASON_ID : undefined}
+          onClick={props.onCreate}
+        >Create this skill</button>
       </div>
       <div className="skills-missing-option">
         <span className="skills-missing-option-text">

@@ -60,7 +60,7 @@ describe('SkillsScreen', () => {
     expect(view.getByText('Saved changes apply to new assignments. Assignments already running keep the skills they started with.')).toBeTruthy();
     expect(view.getByLabelText('Search skills')).toBeTruthy();
     expect(view.getByText('5 skills')).toBeTruthy();
-    expect(view.queryByRole('button', { name: /new skill/i })).toBeNull();
+    expect(view.getByRole('button', { name: /new skill/i })).toBeTruthy();
     expect(view.queryAllByRole('alert')).toHaveLength(0);
   });
 
@@ -197,13 +197,13 @@ describe('SkillsScreen', () => {
     expect(view.getByText('5 skills')).toBeTruthy();
   });
 
-  it('shows_the_empty_catalog_copy_without_a_create_button', async () => {
+  it('shows_the_empty_catalog_copy_with_a_create_button', async () => {
     const { view } = setup(skillCatalog({ skills: [], problems: [] }));
     expect(await view.findByText(/No skills yet\. A skill is a folder/)).toBeTruthy();
     expect(view.getByText('.agent-studio/skills/<id>/SKILL.md')).toBeTruthy();
     expect(view.queryByRole('list', { name: 'Saved skills' })).toBeNull();
     expect(view.queryByLabelText('Search skills')).toBeNull();
-    expect(view.queryByRole('button', { name: /new skill/i })).toBeNull();
+    expect(view.getByRole('button', { name: /new skill/i })).toBeTruthy();
   });
 
   it('keeps_a_loading_status_until_the_catalog_arrives', async () => {
