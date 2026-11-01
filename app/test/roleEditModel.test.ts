@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildRoleSavePlan, editRoleForm, emptyRoleForm, instructionBytes, moveRoleSkill, roleErrorProblems, suggestRoleId, validateRoleForm,
+  buildRoleSavePlan, editRoleForm, emptyRoleForm, instructionBytes, roleErrorProblems, suggestRoleId, validateRoleForm,
 } from '../src/renderer/roles/roleEditModel';
 import { roleItem, rolesFixture } from './rolesFixtures';
 
@@ -65,13 +65,7 @@ describe('roleEditModel', () => {
     expect(buildRoleSavePlan('edit', dev, { ...form, skills: [...form.skills].reverse() }).metadata).toEqual({ skills: ['retired-skill', 'python-testing'] });
   });
 
-  it('keeps_missing_skills_and_moves_only_one_position', () => {
-    const list = ['a', 'missing', 'c'];
-    expect(moveRoleSkill(list, 1, -1)).toEqual(['missing', 'a', 'c']);
-    expect(moveRoleSkill(list, 1, 1)).toEqual(['a', 'c', 'missing']);
-    expect(moveRoleSkill(list, 0, -1)).toEqual(list);
-    expect(moveRoleSkill(list, 2, 1)).toEqual(list);
-    expect(moveRoleSkill(list, 0, 1)).not.toBe(list);
+  it('keeps_missing_skills_in_the_edit_form_values', () => {
     expect(editRoleForm(catalog.items[0]!).skills).toEqual(['python-testing', 'retired-skill']);
   });
 

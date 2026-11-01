@@ -150,6 +150,26 @@ describe('RolesScreen delete flow', () => {
     expect(deleteRole).toHaveBeenCalledTimes(1);
   });
 
+  it('role_page_edits_are_blocked_while_a_delete_is_pending', async () => {
+    let release!: (v: ReturnType<typeof okDeleted>) => void;
+    const deleteRole = vi.fn(() => new Promise<ReturnType<typeof okDeleted>>(r => { release = r; }));
+    const { view } = setup([catalog([role('a')])], deleteRole as never);
+    await view.findByRole('list', { name: 'Saved roles' });
+    pick(view, 'a');
+    fireEvent.click(trigger(view));
+    fireEvent.click(confirm(view));
+    const region = view.getByRole('region', { name: 'Role details' });
+    for (const name of ['Edit overview', 'Edit shared instructions', 'Edit skills']) {
+      const button = within(region).getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
+    }
+    expect(document.getElementById('roles-mutation-reason')?.textContent).toBe('A role deletion is in progress.');
+    await act(async () => { release(okDeleted()); });
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(view.queryByRole('region', { name: 'Role details' })).toBeNull();
+  });
+
   it('changed_tokens_disable_stale_open_confirmation_without_calling_backend', async () => {
     const { view, roles, deleteRole } = setup([catalog([role('a'), role('b')])]);
     await view.findByRole('list', { name: 'Saved roles' });
@@ -307,6 +327,12 @@ describe('RolesScreen delete flow', () => {
     expect(view.queryByRole('alertdialog')).toBeNull();
     const roleHeading = within(view.getByRole('region', { name: 'Role details' })).getByRole('heading', { level: 1, name: 'a' });
     expect((trigger(view) as HTMLButtonElement).disabled).toBe(true);
+    for (const name of ['Edit overview', 'Edit shared instructions', 'Edit skills']) {
+      const button = within(view.getByRole('region', { name: 'Role details' })).getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
+    }
+    expect(document.getElementById('roles-mutation-reason')?.textContent).toBe('Role changes are unavailable until Roles is reloaded.');
     // The disabled Delete button cannot take focus; the page heading keeps the user in place.
     await waitFor(() => expect(document.activeElement).toBe(roleHeading));
     backToRoles(view);

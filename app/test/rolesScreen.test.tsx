@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionStatus, Workspace } from '../src/renderer/api';
 import { RolesScreen } from '../src/renderer/roles/RolesScreen';
 import type { RoleCatalogList } from '../src/shared/management';
-import { fakeManagement } from './teamsFixtures';
+import { deferred, fakeManagement } from './teamsFixtures';
 import { LONG_ID, LONG_PATH, MEMBERS, roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -236,13 +236,15 @@ describe('RolesScreen', () => {
     const { view } = setup(rolesFixture({ problems }));
     await view.findByRole('list', { name: 'Saved roles' });
     openRow(view, 'Developer');
-    const edit = view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement;
+    const edit = view.getByRole('button', { name: 'Edit overview' }) as HTMLButtonElement;
     expect(edit.disabled).toBe(true);
     expect(edit.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
     const reason = document.getElementById('roles-mutation-reason');
     expect(reason).not.toBeNull();
     expect(reason!.textContent).toBe('Role changes are unavailable while the roles catalog has problems.');
     expect(view.getAllByText('Role changes are unavailable while the roles catalog has problems.')).toHaveLength(1);
+    expect((view.getByRole('button', { name: 'Edit skills' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((view.getByRole('button', { name: 'Edit shared instructions' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('role_page_keeps_the_mutation_reason_associated_when_the_backend_is_disconnected', async () => {
@@ -250,7 +252,7 @@ describe('RolesScreen', () => {
     const { view } = setup(rolesFixture(), lost);
     await view.findByRole('list', { name: 'Saved roles' });
     openRow(view, 'Developer');
-    const edit = view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement;
+    const edit = view.getByRole('button', { name: 'Edit overview' }) as HTMLButtonElement;
     expect(edit.disabled).toBe(true);
     expect(edit.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
     const reason = document.getElementById('roles-mutation-reason');
@@ -260,16 +262,41 @@ describe('RolesScreen', () => {
     expect(view.queryByRole('button', { name: 'New role' })).toBeNull();
   });
 
-  it('role_page_is_read_only_until_the_edit_dialogs_exist', async () => {
+  it('role_page_cards_open_their_own_edit_dialogs', async () => {
     const { view } = setup();
     await view.findByRole('list', { name: 'Saved roles' });
     openRow(view, 'Developer');
-    const edit = view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement;
-    expect(edit.disabled).toBe(true);
-    expect(edit.getAttribute('aria-describedby')).toBe('roles-mutation-reason');
-    expect(document.getElementById('roles-mutation-reason')!.textContent).toBe('Editing the role overview is available in the next update.');
-    fireEvent.click(edit);
-    expect(view.queryByRole('dialog')).toBeNull();
+    const user = userEvent.setup();
+    for (const [button, title] of [
+      ['Edit overview', 'Edit overview'],
+      ['Edit shared instructions', 'Edit Developer instructions'],
+      ['Edit skills', 'Edit skills'],
+    ] as const) {
+      await user.click(view.getByRole('button', { name: button }));
+      expect(view.getByRole('dialog', { name: title })).toBeTruthy();
+      await user.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+      expect(view.queryByRole('dialog')).toBeNull();
+    }
+  });
+
+  it('role_page_edits_and_new_role_are_blocked_while_a_write_is_pending', async () => {
+    const gate = deferred<unknown>();
+    const updateRole = vi.fn(() => gate.promise);
+    const fake = fakeManagement({ calls: { roles: vi.fn(async () => ok(rolesFixture())), updateRole } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    openRow(view, 'Developer');
+    const user = userEvent.setup();
+    await user.click(view.getByRole('button', { name: 'Edit overview' }));
+    await user.clear(within(view.getByRole('dialog')).getByLabelText('Description'));
+    await user.type(within(view.getByRole('dialog')).getByLabelText('Description'), 'Changed');
+    await user.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(within(view.getByRole('dialog')).getByRole('button', { name: 'Saving…' })).toBeTruthy());
+    const deleteButton = within(view.getByRole('region', { name: 'Role details' })).getByRole('button', { name: 'Delete role' }) as HTMLButtonElement;
+    expect(deleteButton.disabled).toBe(true);
+    expect((view.getByRole('button', { name: 'Edit skills' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(view.getAllByText('Another role change is in progress.').length).toBeGreaterThan(0);
+    await act(async () => { gate.resolve({ ok: false, error: { code: 'INTERNAL', message: 'stop', retryable: false } }); });
   });
 
   it('role_page_replaces_the_list_chrome_and_the_breadcrumb_shows_the_display_name', async () => {
@@ -605,6 +632,121 @@ describe('RolesScreen', () => {
     expect(css).toMatch(/\.roles-role-delete \{[^}]*border: 1px solid #4a2c2c[^}]*color: #f0a3a3/);
   });
 
+  it('new_role_creates_metadata_opens_the_new_page_and_refreshes_the_list', async () => {
+    const role = roleItem('qa-lead', { name: 'QA Lead', description: null });
+    const after = rolesFixture({ items: [...rolesFixture().items, role], sha256: '9'.repeat(64) });
+    const roles = vi.fn().mockResolvedValueOnce(ok(rolesFixture())).mockResolvedValue(ok(after));
+    const createRole = vi.fn(async () => ({ ok: true as const, data: { workspace: '/w', sha256: '9'.repeat(64), role, warnings: [], appliesToNewAssignments: true as const } }));
+    const updateRoleInstructions = vi.fn();
+    const fake = fakeManagement({ calls: { roles, createRole, updateRoleInstructions } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    const user = userEvent.setup();
+    await user.click(view.getByRole('button', { name: 'New role' }));
+    const dialog = view.getByRole('dialog', { name: 'New role' });
+    await user.type(within(dialog).getByLabelText('Name'), 'QA Lead');
+    expect((within(dialog).getByLabelText('Role id') as HTMLInputElement).value).toBe('qa-lead');
+    await user.click(within(dialog).getByRole('button', { name: 'Create role' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    expect(createRole).toHaveBeenCalledWith('a', { id: 'qa-lead', name: 'QA Lead', skills: [] }, rolesFixture().sha256);
+    expect(updateRoleInstructions).not.toHaveBeenCalled();
+    expect(view.getByText('Created role QA Lead.')).toBeTruthy();
+    const region = await view.findByRole('region', { name: 'Role details' });
+    expect(within(region).getByRole('heading', { level: 1, name: 'QA Lead' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(within(region).getByRole('heading', { level: 1, name: 'QA Lead' })));
+    fireEvent.click(view.getByRole('button', { name: 'Roles' }));
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(view.getByRole('button', { name: 'Open role QA Lead' })).toBeTruthy();
+  });
+
+  it('saves_shared_instructions_from_the_role_page_through_the_shared_dialog', async () => {
+    const before = rolesFixture();
+    const updatedRole = roleItem('Developer', {
+      ...before.items[0],
+      instructions: { state: 'ok', path: '.agent-studio/roles/Developer.md', text: 'New instructions', sha256: '9'.repeat(64), bytes: 16 },
+    });
+    const after = rolesFixture({ items: [updatedRole, ...before.items.slice(1)], sha256: '8'.repeat(64) });
+    const roles = vi.fn().mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after));
+    const updateRole = vi.fn();
+    const updateRoleInstructions = vi.fn(async () => ({ ok: true as const, data: { workspace: '/w', sha256: '8'.repeat(64), role: updatedRole, warnings: [], appliesToNewAssignments: true as const } }));
+    const fake = fakeManagement({ calls: { roles, updateRole, updateRoleInstructions } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    openRow(view, 'Developer');
+    const user = userEvent.setup();
+    await user.click(view.getByRole('button', { name: 'Edit shared instructions' }));
+    const dialog = view.getByRole('dialog', { name: 'Edit Developer instructions' });
+    expect(dialog.getAttribute('style')).toContain('width: min(780px, 100%)');
+    expect(within(dialog).getByLabelText('Instructions')).toBeTruthy();
+    expect(within(dialog).queryByLabelText('Description')).toBeNull();
+    expect((within(dialog).getByLabelText('Instructions') as HTMLTextAreaElement).value).toBe('Write tests.\nKeep it small.');
+    await user.clear(within(dialog).getByLabelText('Instructions'));
+    await user.type(within(dialog).getByLabelText('Instructions'), 'New instructions');
+    await user.click(within(dialog).getByRole('button', { name: 'Save to file' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    expect(updateRole).not.toHaveBeenCalled();
+    expect(updateRoleInstructions).toHaveBeenCalledWith('a', 'Developer', 'New instructions', before.sha256, 'd'.repeat(64));
+    expect(view.getByText('Saved role Developer. Saved changes apply to new assignments; current assignments are unchanged.')).toBeTruthy();
+    expect(within(view.getByRole('region', { name: 'Role details' })).getByText('New instructions')).toBeTruthy();
+  });
+
+  it('overview_save_refreshes_the_page_and_the_list', async () => {
+    const before = rolesFixture();
+    const renamed = roleItem('Developer', { ...before.items[0], name: 'Lead Dev' });
+    const after = rolesFixture({ items: [renamed, ...before.items.slice(1)], sha256: '8'.repeat(64) });
+    const roles = vi.fn().mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after));
+    const updateRole = vi.fn(async () => ({ ok: true as const, data: { workspace: '/w', sha256: '8'.repeat(64), role: renamed, warnings: [], appliesToNewAssignments: true as const } }));
+    const fake = fakeManagement({ calls: { roles, updateRole } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    openRow(view, 'Developer');
+    const user = userEvent.setup();
+    const opener = view.getByRole('button', { name: 'Edit overview' });
+    opener.focus();
+    await user.click(opener);
+    await user.clear(within(view.getByRole('dialog')).getByLabelText('Name'));
+    await user.type(within(view.getByRole('dialog')).getByLabelText('Name'), 'Lead Dev');
+    await user.click(within(view.getByRole('dialog')).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    expect(updateRole).toHaveBeenCalledWith('a', 'Developer', { name: 'Lead Dev' }, before.sha256);
+    expect(view.getByText('Saved role Lead Dev. Saved changes apply to new assignments; current assignments are unchanged.')).toBeTruthy();
+    expect(within(view.getByRole('region', { name: 'Role details' })).getByRole('heading', { level: 1, name: 'Lead Dev' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: 'Edit overview' })));
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(view.getByRole('button', { name: 'Open role Lead Dev' })).toBeTruthy();
+  });
+
+  it('skills_save_refreshes_the_page_and_the_list', async () => {
+    const before = rolesFixture({ availableSkills: ['python-testing', 'extra-skill'] });
+    const updated = roleItem('Developer', {
+      ...before.items[0],
+      skills: [{ id: 'python-testing', state: 'ok' }, { id: 'retired-skill', state: 'missing' }, { id: 'extra-skill', state: 'ok' }],
+    });
+    const after = rolesFixture({ items: [updated, ...before.items.slice(1)], availableSkills: ['python-testing', 'extra-skill'], sha256: '8'.repeat(64) });
+    const roles = vi.fn().mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after));
+    const updateRole = vi.fn(async () => ({ ok: true as const, data: { workspace: '/w', sha256: '8'.repeat(64), role: updated, warnings: [], appliesToNewAssignments: true as const } }));
+    const fake = fakeManagement({ calls: { roles, updateRole } });
+    const view = render(<main><RolesScreen workspace={workspace} management={fake.api} /></main>);
+    await view.findByRole('list', { name: 'Saved roles' });
+    openRow(view, 'Developer');
+    const user = userEvent.setup();
+    const opener = view.getByRole('button', { name: 'Edit skills' });
+    opener.focus();
+    await user.click(opener);
+    const dialog = view.getByRole('dialog', { name: 'Edit skills' });
+    await user.click(within(dialog).getByRole('checkbox', { name: 'extra-skill' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    expect(updateRole).toHaveBeenCalledWith('a', 'Developer', { skills: ['python-testing', 'retired-skill', 'extra-skill'] }, before.sha256);
+    expect(view.getByText('Saved role Developer. Saved changes apply to new assignments; current assignments are unchanged.')).toBeTruthy();
+    expect(within(view.getByRole('region', { name: 'Role details' })).getByText('extra-skill')).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(view.getByRole('button', { name: 'Edit skills' })));
+    backToRoles(view);
+    await view.findByRole('list', { name: 'Saved roles' });
+    expect(within(roleList(view)).getByRole('button', { name: 'Open role Developer' }).textContent).toContain('+1');
+  });
+
   it('role_page_header_and_cards_follow_the_design_metrics_and_tones', () => {
     const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
     // Avatar is a 48 px rounded square and the id is a mono chip.
@@ -618,6 +760,16 @@ describe('RolesScreen', () => {
     expect(css).toMatch(/\.roles-skill-chip-missing \{[^}]*color: var\(--warning\)/);
     expect(css).toMatch(/\.roles-usedby-disclaimer \{[^}]*color: #8d949e/);
     expect(css).toMatch(/\.roles-instructions-fade \{[^}]*linear-gradient\(to bottom, rgba\(18, 20, 24, 0\), #121418\)/);
+  });
+
+  it('role_edit_dialog_css_matches_the_design_tokens', () => {
+    const css = readFileSync(resolve(__dirname, '../src/renderer/styles.css'), 'utf8').replace(/\s+/g, ' ');
+    expect(css).toMatch(/\.roles-screen \.section-card-action \{[^}]*height: 32px[^}]*border: 1px solid #2f343c/);
+    expect(css).toMatch(/\.role-dialog-locked-id \{[^}]*border: 1px dashed #2a2e35[^}]*font-family: var\(--font-mono\)/);
+    expect(css).toMatch(/\.role-skill-option\.is-checked \{[^}]*border-color: #3d6bb3[^}]*rgba\(91, 156, 255, 0\.08\)/);
+    expect(css).toMatch(/\.role-skill-option\.is-missing \{[^}]*rgba\(240, 180, 83, 0\.45\)/);
+    expect(css).toMatch(/\.role-skill-option\.is-checked \.role-skill-check \{[^}]*background: #5b9cff/);
+    expect(css).toMatch(/\.role-dialog-error \{[^}]*border: 1px solid #5a2e2e/);
   });
 
   it('roles_layout_css_defines_the_shared_grid_template_once_and_scrolls_narrow_tables', () => {

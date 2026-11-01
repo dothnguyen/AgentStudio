@@ -14,7 +14,9 @@ function setup(role: RoleCatalogItem, over: Partial<RolePageProps> = {}) {
     role,
     editDisabled: false,
     editReason: null,
-    onEdit: vi.fn(),
+    onEditOverview: vi.fn(),
+    onEditSkills: vi.fn(),
+    onEditInstructions: vi.fn(),
     onBack: vi.fn(),
     onDelete: vi.fn(),
     deleteDisabledReason: null,
@@ -156,26 +158,29 @@ describe('RolePage cards', () => {
     expect(fade?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('keeps_the_unwired_section_edits_disabled_with_their_reason', () => {
+  it('wires_each_card_edit_action_and_shows_the_mutation_reason_when_disabled', () => {
     const { view, props } = setup(roleItem('Developer', { name: 'Developer' }));
-    const overview = view.getByRole('button', { name: 'Edit role' }) as HTMLButtonElement;
-    expect(overview.disabled).toBe(true);
-    const overviewReason = overview.getAttribute('aria-describedby');
-    expect(overviewReason).toBeTruthy();
-    expect(document.getElementById(overviewReason!)?.textContent).toBe('Editing the role overview is available in the next update.');
-
+    const overview = view.getByRole('button', { name: 'Edit overview' }) as HTMLButtonElement;
     const instructions = view.getByRole('button', { name: 'Edit shared instructions' }) as HTMLButtonElement;
-    expect(instructions.disabled).toBe(true);
-    const instructionsReason = instructions.getAttribute('aria-describedby');
-    expect(instructionsReason).toBeTruthy();
-    expect(document.getElementById(instructionsReason!)?.textContent).toBe('Editing shared instructions is available in the next update.');
-
     const skills = view.getByRole('button', { name: 'Edit skills' }) as HTMLButtonElement;
-    expect(skills.disabled).toBe(true);
-    const skillsReason = skills.getAttribute('aria-describedby');
-    expect(skillsReason).toBeTruthy();
-    expect(document.getElementById(skillsReason!)?.textContent).toBe('Editing skills is available in the next update.');
-    expect(props.onEdit).not.toHaveBeenCalled();
+    expect([overview.disabled, instructions.disabled, skills.disabled]).toEqual([false, false, false]);
+    overview.click();
+    instructions.click();
+    skills.click();
+    expect(props.onEditOverview).toHaveBeenCalledTimes(1);
+    expect(props.onEditInstructions).toHaveBeenCalledTimes(1);
+    expect(props.onEditSkills).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    const disabled = setup(roleItem('Developer', { name: 'Developer' }), { editDisabled: true, editReason: 'Role changes are unavailable while the roles catalog has problems.' });
+    for (const name of ['Edit overview', 'Edit shared instructions', 'Edit skills']) {
+      const button = disabled.view.getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      const reason = button.getAttribute('aria-describedby');
+      expect(reason).toBe('roles-mutation-reason');
+      expect(document.getElementById(reason!)?.textContent).toBe('Role changes are unavailable while the roles catalog has problems.');
+    }
+    expect(disabled.props.onEditOverview).not.toHaveBeenCalled();
   });
 
   it('used_by_rows_are_plain_text_when_no_member_handler_is_wired', () => {

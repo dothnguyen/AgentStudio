@@ -4,8 +4,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ManagementApi, RoleCatalogItem, RoleCatalogList } from '../src/renderer/api';
-import { CONFLICT_MESSAGE } from '../src/renderer/roles/RoleForm';
+import { CONFLICT_MESSAGE } from '../src/renderer/roles/roleSave';
 import { INSTRUCTIONS_MESSAGE } from '../src/renderer/roles/roleSave';
+import { TOKENS_MESSAGE } from '../src/renderer/roles/roleSave';
+import { RoleInstructionsDialog } from '../src/renderer/roles/RoleInstructionsDialog';
+import { RolePageInstructionsDialog } from '../src/renderer/roles/RolePageInstructionsDialog';
 import { RoleInstructionsSection } from '../src/renderer/teams/RoleInstructionsSection';
 import { deferred, fakeManagement, member } from './teamsFixtures';
 import { roleItem, rolesFixture } from './rolesFixtures';
@@ -262,6 +265,31 @@ describe('Role instructions dialog', () => {
     expect(field('Prompt').value).toBe('New prompt');
   });
 
+  it('reports the metadata-saved token reload failure and keeps the draft', async () => {
+    const user = userEvent.setup();
+    const described = role({ description: 'New description' });
+    const updateRole = vi.fn(async () => mutation(described, NEXT_SHA));
+    const updateRoleInstructions = vi.fn();
+    const reload = vi.fn(async () => fail('INTERNAL', 'offline'));
+    setup({ updateRole, updateRoleInstructions, reload });
+    await user.click(editButton());
+    await user.clear(field('Description'));
+    await user.type(field('Description'), 'New description');
+    await user.clear(field('Prompt'));
+    await user.type(field('Prompt'), 'New prompt');
+    await user.click(saveButton());
+    await flush();
+    const dialog = screen.getByRole('dialog', { name: 'Edit TeamLead instructions' });
+    const alert = within(dialog).getByRole('alert');
+    expect(alert.textContent).toContain(TOKENS_MESSAGE);
+    expect(alert.textContent).toContain('INTERNAL: offline');
+    expect(document.activeElement).toBe(alert);
+    expect(updateRole).toHaveBeenCalledWith('ws-a', 'TeamLead', { description: 'New description' }, SHA);
+    expect(updateRoleInstructions).not.toHaveBeenCalled();
+    expect(field('Description').value).toBe('New description');
+    expect(field('Prompt').value).toBe('New prompt');
+  });
+
   it('keeps the dialog open with the error when the description write fails', async () => {
     const user = userEvent.setup();
     const updateRole = vi.fn(async () => fail('BAD_REQUEST', 'Description rejected'));
@@ -375,5 +403,86 @@ describe('Role instructions dialog', () => {
     expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true);
     await act(async () => { gate.resolve(mutation(described, NEXT_SHA)); });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('role_page_dialog_counts_utf8_bytes_against_the_16_kib_limit', () => {
+    const r = role();
+    const fake = fakeManagement();
+    render(<RolePageInstructionsDialog
+      role={r}
+      catalogSha={SHA}
+      management={fake.api}
+      workspaceId="ws-a"
+      reload={vi.fn(async () => ok(catalog(r)))}
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit TeamLead instructions' });
+    expect(within(dialog).getByText('1 lines · 10 / 16,384 bytes')).toBeTruthy();
+    const prompt = within(dialog).getByLabelText('Instructions') as HTMLTextAreaElement;
+    fireEvent.change(prompt, { target: { value: '€'.repeat(5462) } });
+    expect(within(dialog).getByText('Too long: 16,386 / 16,384 bytes.')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Save to file' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('role_page_mode_hides_the_description_and_uses_the_instructions_label', () => {
+    const r = role();
+    render(<RoleInstructionsDialog
+      role={r}
+      pending={false}
+      error={null}
+      partialNotice={null}
+      showDescription={false}
+      promptLabel="Instructions"
+      promptRows={16}
+      onSave={vi.fn()}
+      onReload={vi.fn(async () => ok(catalog(r)))}
+      onClearError={vi.fn()}
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit TeamLead instructions' });
+    expect(within(dialog).queryByLabelText('Description')).toBeNull();
+    expect((within(dialog).getByLabelText('Instructions') as HTMLTextAreaElement).rows).toBe(16);
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Instructions'));
+    expect(dialog.querySelector('.dialog-footer-note')!.textContent).toBe('Takes effect on the next assignment');
+  });
+
+  it('explains_a_missing_or_absent_file_and_refuses_to_save_over_a_truncated_file', () => {
+    const missing = role({ instructions: { state: 'missing', path: '.agent-studio/roles/team-lead.md', text: null, sha256: null, bytes: null } });
+    const view = render(<RoleInstructionsDialog
+      role={missing}
+      pending={false}
+      error={null}
+      partialNotice={null}
+      showDescription={false}
+      promptLabel="Instructions"
+      onSave={vi.fn()}
+      onReload={vi.fn(async () => ok(catalog(missing)))}
+      onClearError={vi.fn()}
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+    expect(screen.getByText('The configured instruction file is missing. Saving instructions creates it again.')).toBeTruthy();
+    expect((screen.getByLabelText('Instructions') as HTMLTextAreaElement).disabled).toBe(false);
+    view.unmount();
+
+    const truncated = role({ instructions: { state: 'truncated', path: '.agent-studio/roles/team-lead.md', text: 'partial', sha256: FINAL_SHA, bytes: 99999 } });
+    render(<RoleInstructionsDialog
+      role={truncated}
+      pending={false}
+      error={null}
+      partialNotice={null}
+      showDescription={false}
+      promptLabel="Instructions"
+      onSave={vi.fn()}
+      onReload={vi.fn(async () => ok(catalog(truncated)))}
+      onClearError={vi.fn()}
+      onSaved={vi.fn()}
+      onCancel={vi.fn()}
+    />);
+    expect(screen.getByText('Shared instructions were not fully read, so this role cannot be saved here. Reload the catalog to try again.')).toBeTruthy();
+    expect((screen.getByLabelText('Instructions') as HTMLTextAreaElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Save to file' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

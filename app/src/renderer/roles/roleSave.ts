@@ -13,6 +13,7 @@ import { buildRoleSavePlan, instructionBytes, MAX_INSTRUCTION_BYTES, type RoleFo
  */
 export type RoleSavePhase = 'idle' | 'saving_metadata' | 'reloading_tokens' | 'saving_instructions' | 'verifying';
 
+export const CONFLICT_MESSAGE = 'Another edit was saved first. Reload current values and review the differences; nothing was overwritten.';
 export const TOKENS_MESSAGE = 'Metadata and skills were saved, but current instruction tokens could not be loaded. Reload and review before saving instructions.';
 export const INSTRUCTIONS_MESSAGE = 'Metadata and skills were saved; shared instructions were not saved.';
 export const VERIFY_MESSAGE = 'The save completed, but the catalog could not be reloaded to verify it. Reload and review.';

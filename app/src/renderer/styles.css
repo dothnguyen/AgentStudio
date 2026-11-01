@@ -1785,6 +1785,53 @@ ul[aria-label="Workspaces"] {
 }
 
 
+/* Roles v2 edit dialogs (T-114) */
+.roles-screen .section-card-action { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; }
+.roles-screen .section-card-action:hover:not(:disabled) { background: #222831; }
+.roles-screen .section-card-action:disabled { opacity: 0.45; cursor: default; }
+.roles-screen .roles-new-button:disabled { opacity: 0.45; cursor: default; }
+.role-overview-dialog .dialog-body,
+.role-skills-dialog .dialog-body,
+.role-create-dialog .dialog-body { display: flex; flex-direction: column; gap: 16px; }
+.role-dialog-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.role-dialog-field > label, .role-dialog-label { color: #c4cad2; font-size: 12px; font-weight: 500; }
+.role-dialog-field input,
+.role-dialog-field textarea { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit; }
+.role-dialog-field input { height: 38px; padding: 0 12px; }
+.role-dialog-field textarea { padding: 10px 12px; line-height: 1.5; white-space: pre-wrap; resize: vertical; }
+.role-dialog-field input:disabled,
+.role-dialog-field textarea:disabled { opacity: 0.55; }
+.role-dialog-field input:focus-visible,
+.role-dialog-field textarea:focus-visible,
+.role-skill-option:focus-visible,
+.role-dialog-error button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.role-dialog-hint { margin: 0; color: #a3a9b2; font-size: 12px; overflow-wrap: anywhere; }
+.role-dialog-hint code { color: #c4cad2; font-family: var(--font-mono); }
+.role-dialog-optional { color: #8d949e; font-weight: 400; }
+.role-dialog-locked-id { display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px dashed #2a2e35; border-radius: 7px; color: #a3a9b2; font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.role-dialog-locked-id svg { flex: none; }
+.role-dialog-field-error { margin: 0; color: #f0a3a3; font-size: 12px; overflow-wrap: anywhere; }
+.role-dialog-error { padding: 10px 12px; border: 1px solid #5a2e2e; border-radius: 8px; background: rgba(180, 60, 60, 0.08); color: #f0c7c0; font-size: 12.5px; overflow-wrap: anywhere; }
+.role-dialog-error p { margin: 2px 0; }
+.role-dialog-error code { color: #f0c7c0; }
+.role-dialog-error button { margin-top: 6px; }
+.role-dialog-error:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.role-dialog-reloaded { margin: 0; color: #a3a9b2; font-size: 12px; }
+.role-skill-options { display: flex; flex-direction: column; gap: 8px; }
+.role-skill-option { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: 100%; min-height: 40px; padding: 10px 14px; border: 1px solid #262a30; border-radius: 9px; background: #121418; color: #e7e9ec; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.role-skill-option.is-checked { border-color: #3d6bb3; background: rgba(91, 156, 255, 0.08); }
+.role-skill-option.is-missing { border-color: rgba(240, 180, 83, 0.45); }
+.role-skill-option.is-missing .role-skill-option-id { color: #f0b453; }
+.role-skill-option.is-missing .role-skill-missing-label { margin-left: auto; font-size: 11.5px; }
+.role-skill-option:disabled { opacity: 0.55; cursor: default; }
+.role-skill-check { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 18px; height: 18px; flex: none; border: 2px solid #4a5059; border-radius: 5px; background: transparent; }
+.role-skill-option.is-checked .role-skill-check { border-color: #5b9cff; background: #5b9cff; }
+.role-skill-option-id { font-family: var(--font-mono); font-size: 12.5px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .role-dialog-locked-id { height: auto; min-height: 38px; padding: 8px 12px; }
+}
+
+
 /* Teams v4 Members card (P05-S59) */
 .teams-members-view { gap: 22px; }
 .teams-roster { display: flex; flex-direction: column; min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden; }

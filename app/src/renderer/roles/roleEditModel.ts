@@ -71,14 +71,6 @@ export function buildRoleSavePlan(mode: RoleFormMode, base: RoleCatalogItem | nu
   };
 }
 
-export function moveRoleSkill(skills: readonly string[], index: number, direction: -1 | 1): string[] {
-  const next = [...skills];
-  const to = index + direction;
-  if (index < 0 || index >= next.length || to < 0 || to >= next.length) return next;
-  [next[index], next[to]] = [next[to]!, next[index]!];
-  return next;
-}
-
 export function roleErrorProblems(error: ManagementError): { fields: RoleFormErrors; unmatched: string[] } {
   const fields: RoleFormErrors = {};
   const unmatched: string[] = [];

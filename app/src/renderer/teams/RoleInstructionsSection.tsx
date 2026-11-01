@@ -6,7 +6,7 @@ import { INSTRUCTION_MESSAGES } from '../roles/rolesModel';
 import { findCatalogRole } from './teamEditModel';
 import { roleNote } from './teamsModel';
 import { SectionCard } from './SectionCard';
-import { promptCountText, RoleInstructionsDialog, roleInstructionsValues } from './RoleInstructionsDialog';
+import { promptCountText, RoleInstructionsDialog, roleInstructionsValues } from '../roles/RoleInstructionsDialog';
 
 export interface RoleInstructionsSectionProps {
   workspaceId: string;

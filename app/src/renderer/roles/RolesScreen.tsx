@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import type { ConnectionStatus, ManagementApi, ManagementError, RoleCatalogItem, RoleCatalogList, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
+import { RoleCreateDialog } from './RoleCreateDialog';
 import { RoleDeleteDialog } from './RoleDeleteDialog';
+import { RoleOverviewDialog } from './RoleOverviewDialog';
 import { RolePage } from './RolePage';
-import { RoleForm, type RoleFormConflict, type RoleFormPhase } from './RoleForm';
-import type { RoleFormField, RoleFormMode, RoleFormValues } from './roleEditModel';
-import { runRoleSave, normalizeRoleError } from './roleSave';
+import { RolePageInstructionsDialog } from './RolePageInstructionsDialog';
+import { RoleSkillsDialog } from './RoleSkillsDialog';
 import { ROLE_DATA_CHANGED_REASON, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, filterRoleRows, roleDisplayLabel, roleInitials, roleRows, roleUsageSummary } from './rolesModel';
 
 export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus; requestedRoleId?: string | null; onOpenMember?(teamId: string, memberId: string): void }
@@ -32,6 +33,12 @@ function DeleteAlert(props: { alert: DeleteAlert }): JSX.Element {
 
 type RolesView = { kind: 'list' } | { kind: 'role'; roleId: string };
 
+type RoleDialogState =
+  | { kind: 'overview'; roleId: string }
+  | { kind: 'skills'; roleId: string }
+  | { kind: 'instructions'; roleId: string }
+  | { kind: 'create' };
+
 function RolesBrowser(props: RolesScreenProps): JSX.Element {
   const catalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const connected = !props.connection || props.connection.state === 'connected';
@@ -52,6 +59,8 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
   const [refreshRequired, setRefreshRequired] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   const [refreshFailure, setRefreshFailure] = useState(false);
+  const [dialog, setDialog] = useState<RoleDialogState | null>(null);
+  const [dialogPending, setDialogPending] = useState(false);
   const deleteButton = useRef<HTMLButtonElement>(null);
   const deleteLock = useRef(false);
   const active = useRef(true);
@@ -67,8 +76,11 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
     setMissingRequest(null);
     setFocusRolePage(focusPage);
   };
-  const edit = useRoleEditing(props, catalog, roleId => openRole(roleId, false), setQuery, search, deletePending || refreshRequired || deleteTarget !== null);
-  const data = edit.displayed;
+  const data = catalog.data ?? (catalog.loading ? lastData.current : null);
+  const reloadFresh = useCallback((): Promise<{ ok: true; data: RoleCatalogList } | { ok: false; error: ManagementError }> => {
+    if (catalog.reloadFresh !== undefined) return catalog.reloadFresh();
+    return Promise.resolve({ ok: false, error: { code: 'INTERNAL', message: 'Roles cannot be refreshed.', retryable: true } });
+  }, [catalog.reloadFresh]);
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
 
   const requestedRoleId = props.requestedRoleId ?? null;
@@ -89,8 +101,8 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedRoleId, data]);
 
-  if (data) lastData.current = data;
-  const shown = data ?? (refreshRequired ? lastData.current : null);
+  if (catalog.data) lastData.current = catalog.data;
+  const shown = data ?? ((refreshRequired || dialog !== null) ? lastData.current : null);
   const rows = roleRows(shown?.items ?? []);
   const visible = filterRoleRows(rows, query);
   const filtering = query.trim().length > 0;
@@ -112,14 +124,46 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
 
   useEffect(() => {
     if (!focusRolePage || view.kind !== 'role') return;
+    const target = roleHeading.current;
+    if (target === null) return;
     setFocusRolePage(false);
-    roleHeading.current?.focus();
-  }, [focusRolePage, view]);
+    target.focus();
+  }, [focusRolePage, view, data]);
 
   useEffect(() => {
     if (view.kind !== 'role' || catalog.state !== 'ready' || data === null) return;
     if (!data.items.some(item => item.id === view.roleId)) setView({ kind: 'list' });
   }, [view, catalog.state, data]);
+
+  const mutationBlock = !connected ? 'Role changes are unavailable while the backend is disconnected.'
+    : !shown ? 'Role changes are unavailable until the catalog loads.'
+    : shown.state === 'invalid' || shown.problems.length > 0 ? 'Role changes are unavailable while the roles catalog has problems.'
+    : refreshRequired ? 'Role changes are unavailable until Roles is reloaded.'
+    : deletePending || deleteTarget !== null ? 'A role deletion is in progress.'
+    : dialogPending ? 'Another role change is in progress.' : null;
+
+  const dialogRole = dialog !== null && dialog.kind !== 'create' && shown !== null
+    ? shown.items.find(item => item.id === dialog.roleId) ?? null
+    : null;
+  useEffect(() => {
+    if (dialog !== null && dialog.kind !== 'create' && dialogRole === null) setDialog(null);
+  }, [dialog, dialogRole]);
+
+  const openDialog = (next: RoleDialogState) => {
+    if (mutationBlock !== null || shown === null) return;
+    setAnnouncement('');
+    setDialog(next);
+  };
+  const closeDialog = () => { setDialog(null); setDialogPending(false); };
+  const savedRole = (role: RoleCatalogItem, created: boolean) => {
+    const label = roleDisplayLabel(role) || role.id;
+    setDialog(null);
+    setDialogPending(false);
+    setAnnouncement(created
+      ? `Created role ${label}.`
+      : `Saved role ${label}. Saved changes apply to new assignments; current assignments are unchanged.`);
+    if (created) openRole(role.id);
+  };
 
   const finalize = () => {
     const done = committed.current;
@@ -149,7 +193,7 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
   }, [focusTrigger, view]);
 
   const selectedRole = rolePage;
-  const disabledReason = selectedRole ? roleDeleteDisabledReason({ role: selectedRole, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: deletePending || edit.busy, refreshRequired }) : null;
+  const disabledReason = selectedRole ? roleDeleteDisabledReason({ role: selectedRole, catalogSha256: shown?.sha256 ?? null, disconnected: !connected, mutationPending: deletePending || dialogPending || deleteTarget !== null, refreshRequired }) : null;
   const targetCurrent = deleteTarget ? shown?.items.find(r => r.id === deleteTarget.role.id) : undefined;
   const targetChanged = !!deleteTarget && (!targetCurrent || currentId !== deleteTarget.role.id
     || shown?.sha256 !== deleteTarget.catalogSha256 || (targetCurrent.instructions.sha256 ?? null) !== deleteTarget.instructionsSha256
@@ -206,11 +250,11 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
         <p className="roles-subtitle">Shared descriptions, instructions and skills. Every member with a role uses it.</p>
       </div>
       <div className="roles-header-actions">
-        <button type="button" className="roles-new-button" disabled={edit.mutationBlock !== null} aria-describedby={edit.mutationBlock ? 'roles-mutation-reason' : undefined} onClick={() => edit.open('create', null)}>
+        <button type="button" className="roles-new-button" disabled={mutationBlock !== null} aria-describedby={mutationBlock ? 'roles-mutation-reason' : undefined} onClick={() => openDialog({ kind: 'create' })}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
           New role
         </button>
-        {edit.mutationBlock && <span id="roles-mutation-reason">{edit.mutationBlock}</span>}
+        {mutationBlock && <span id="roles-mutation-reason">{mutationBlock}</span>}
       </div>
     </header>}
     {view.kind === 'list' && <div className="roles-notice">
@@ -223,7 +267,6 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
     {refreshFailure && <p role="alert">{REFRESH_FAILED}</p>}
     {error && <div className="panel-error roles-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; void catalog.reload(); }}>Retry loading roles</button></div>}
     {missingRequest !== null && <p role="status" className="roles-missing-request">{`Role "${missingRequest}" is unavailable in this workspace.`}</p>}
-    {edit.announcement && <p role="status" className="roles-saved">{edit.announcement}</p>}
     {view.kind === 'list' && showCatalog && shown && <>
       {shown.state === 'missing' && <p>No roles catalog is configured for this workspace.</p>}
       {invalid && <div className="panel-note roles-problems" role="alert"><p>Roles catalog is invalid.</p><ul>{shown.problems.map((p, i) => <li key={i}>{p.path ? `${p.path}: ` : ''}{p.message}</li>)}</ul></div>}
@@ -290,10 +333,12 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
       {deleteAlert?.roleId === rolePage.id && <DeleteAlert alert={deleteAlert} />}
       <RolePage
         role={rolePage}
-        editDisabled={edit.mutationBlock !== null || shown?.state !== 'ok'}
-        editReason={edit.mutationBlock}
-        onEdit={() => edit.open('edit', rolePage)}
-        onBack={() => { setView({ kind: 'list' }); setFocusRowId(view.roleId); }}
+        editDisabled={mutationBlock !== null || shown?.state !== 'ok'}
+        editReason={mutationBlock}
+        onEditOverview={() => openDialog({ kind: 'overview', roleId: rolePage.id })}
+        onEditSkills={() => openDialog({ kind: 'skills', roleId: rolePage.id })}
+        onEditInstructions={() => openDialog({ kind: 'instructions', roleId: rolePage.id })}
+        onBack={() => { closeDialog(); setView({ kind: 'list' }); setFocusRowId(view.roleId); }}
         onDelete={openDelete}
         deleteDisabledReason={disabledReason}
         onOpenMember={props.onOpenMember}
@@ -301,204 +346,51 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
         deleteRef={deleteButton}
       />
     </div>}
-    {edit.dialog}
+    {dialog?.kind === 'create' && shown && <RoleCreateDialog
+      catalog={shown}
+      catalogSha={shown.sha256}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      reload={reloadFresh}
+      onCreated={role => savedRole(role, true)}
+      onCancel={closeDialog}
+      onPendingChange={setDialogPending}
+    />}
+    {dialogRole !== null && shown && dialog !== null && dialog.kind === 'overview' && <RoleOverviewDialog
+      key={`overview:${dialogRole.id}`}
+      role={dialogRole}
+      catalog={shown}
+      catalogSha={shown.sha256}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      reload={reloadFresh}
+      onSaved={role => savedRole(role, false)}
+      onCancel={closeDialog}
+      onPendingChange={setDialogPending}
+    />}
+    {dialogRole !== null && shown && dialog !== null && dialog.kind === 'skills' && <RoleSkillsDialog
+      key={`skills:${dialogRole.id}`}
+      role={dialogRole}
+      catalog={shown}
+      catalogSha={shown.sha256}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      reload={reloadFresh}
+      onSaved={role => savedRole(role, false)}
+      onCancel={closeDialog}
+      onPendingChange={setDialogPending}
+    />}
+    {dialogRole !== null && shown && dialog !== null && dialog.kind === 'instructions' && <RolePageInstructionsDialog
+      key={`instructions:${dialogRole.id}`}
+      role={dialogRole}
+      catalogSha={shown.sha256}
+      management={props.management}
+      workspaceId={props.workspace.id}
+      reload={reloadFresh}
+      onSaved={role => savedRole(role, false)}
+      onCancel={closeDialog}
+      onPendingChange={setDialogPending}
+    />}
     {deleteTarget && <RoleDeleteDialog role={deleteTarget.role} shared={deleteTarget.shared} pending={deletePending} blockedReason={targetChanged ? ROLE_DATA_CHANGED_REASON : null} onCancel={closeDelete} onConfirm={() => void confirmDelete()} />}
   </div>;
-}
-
-
-interface Session {
-  id: number;
-  mode: RoleFormMode;
-  base: RoleCatalogItem | null;
-  catalogSha: string | null;
-  opener: HTMLElement | null;
-  metadataSaved: boolean;
-}
-
-const changedError = (remediation?: string): ManagementError => ({ code: 'CONFIG_CHANGED', message: 'Another edit was saved first.', retryable: true, remediation });
-const normalize = normalizeRoleError;
-async function guarded<T>(run: () => Promise<{ ok: true; data: T } | { ok: false; error: ManagementError }>): Promise<{ ok: true; data: T } | { ok: false; error: ManagementError }> {
-  try { return await run(); } catch (reason) { return { ok: false, error: normalize(reason) }; }
-}
-function changedFields(before: RoleCatalogItem, after: RoleCatalogItem): RoleFormField[] {
-  const out: RoleFormField[] = [];
-  if (before.name !== after.name) out.push('name');
-  if ((before.description ?? '') !== (after.description ?? '')) out.push('description');
-  if (before.instructions.text !== after.instructions.text || before.instructions.sha256 !== after.instructions.sha256) out.push('instructions');
-  if (before.skills.map(s => s.id).join('\n') !== after.skills.map(s => s.id).join('\n')) out.push('skills');
-  return out;
-}
-
-function useRoleEditing(
-  props: RolesScreenProps,
-  catalog: ReturnType<typeof useDashboardSection<RoleCatalogList>>,
-  select: (id: string) => void,
-  setQuery: (query: string) => void,
-  search: RefObject<HTMLInputElement | null>,
-  deleteBusy: boolean,
-) {
-  const lastData = useRef<RoleCatalogList | null>(null);
-  if (catalog.data) lastData.current = catalog.data;
-  const displayed = catalog.data ?? (catalog.loading ? lastData.current : null);
-  const formCatalog = displayed ?? lastData.current;
-  const workspaceId = props.workspace.id;
-  const connected = !props.connection || props.connection.state === 'connected';
-
-  const [session, setSession] = useState<Session | null>(null);
-  const sessionRef = useRef<Session | null>(null);
-  const requestRef = useRef(0);
-  const sessionCounter = useRef(0);
-  const mounted = useRef(true);
-  const lock = useRef(false);
-  const [pending, setPending] = useState(false);
-  const [phase, setPhase] = useState<RoleFormPhase>('idle');
-  const [serverError, setServerError] = useState<ManagementError | null>(null);
-  const [partialNotice, setPartialNotice] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<RoleFormConflict | null>(null);
-  const [announcement, setAnnouncement] = useState<string | null>(null);
-  const [focusTarget, setFocusTarget] = useState<{ n: number; kind: 'opener' | 'role'; opener: HTMLElement | null } | null>(null);
-  const reloadFreshRef = useRef(catalog.reloadFresh);
-  reloadFreshRef.current = catalog.reloadFresh;
-  const management = props.management;
-
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => {
-    if (!focusTarget) return;
-    const root = document.querySelector('.roles-screen');
-    const roleHeading = root?.querySelector<HTMLElement>('.roles-role-heading');
-    const target = focusTarget.kind === 'opener' && focusTarget.opener?.isConnected
-      ? focusTarget.opener
-      : focusTarget.kind === 'role' ? roleHeading ?? search.current : search.current;
-    target?.focus();
-    setFocusTarget(null);
-  }, [focusTarget, search]);
-
-  const data = displayed;
-  const mutationBlock = !connected ? 'Role changes are unavailable while the backend is disconnected.'
-    : !data ? 'Role changes are unavailable until the catalog loads.'
-    : data.state === 'invalid' || data.problems.length > 0 ? 'Role changes are unavailable while the roles catalog has problems.'
-    : deleteBusy ? 'A role deletion is in progress.'
-    : pending || session ? 'Another role change is in progress.' : null;
-
-  const patch = (change: Partial<Session>) => {
-    const next = { ...sessionRef.current!, ...change };
-    sessionRef.current = next;
-    setSession(next);
-    return next;
-  };
-  const fresh = (): Promise<{ ok: true; data: RoleCatalogList } | { ok: false; error: ManagementError }> =>
-    guarded(async () => (await (reloadFreshRef.current?.() ?? management.roles(workspaceId))) as { ok: true; data: RoleCatalogList } | { ok: false; error: ManagementError });
-  const reset = () => { setPending(false); setPhase('idle'); setServerError(null); setPartialNotice(null); setConflict(null); };
-
-  const open = (mode: RoleFormMode, role: RoleCatalogItem | null) => {
-    if (mutationBlock || lock.current || !data) return;
-    if (mode === 'create' && data.state === 'invalid') return;
-    reset();
-    const next: Session = { id: ++sessionCounter.current, mode, base: role, catalogSha: data.sha256, opener: document.activeElement instanceof HTMLElement ? document.activeElement : null, metadataSaved: false };
-    requestRef.current += 1;
-    sessionRef.current = next;
-    setAnnouncement(null);
-    setSession(next);
-  };
-  const close = (kind: 'opener' | 'role') => {
-    const opener = sessionRef.current?.opener ?? null;
-    sessionRef.current = null;
-    requestRef.current += 1;
-    setSession(null);
-    reset();
-    setFocusTarget({ n: sessionCounter.current, kind, opener });
-  };
-
-  const submit = async (values: RoleFormValues) => {
-    const start = sessionRef.current;
-    if (!start || lock.current || !mounted.current) return;
-    lock.current = true;
-    const sid = start.id;
-    const rid = ++requestRef.current;
-    const live = () => mounted.current && sessionRef.current?.id === sid && requestRef.current === rid;
-    setPending(true); setServerError(null); setPartialNotice(null);
-    try {
-      const outcome = await runRoleSave({
-        management,
-        workspaceId,
-        session: { mode: start.mode, base: start.base, catalogSha: start.catalogSha, metadataSaved: start.metadataSaved },
-        values,
-        reload: fresh,
-        isLive: live,
-        onPhase: setPhase,
-        onSession: change => patch(change),
-      });
-      if (outcome.status === 'stale') return;
-      if (outcome.status === 'failed') {
-        setPending(false);
-        setPhase('idle');
-        setPartialNotice(outcome.partialNotice);
-        setServerError(outcome.error);
-        setConflict(null);
-        return;
-      }
-      select(outcome.role.id);
-      setQuery('');
-      if (outcome.wrote) setAnnouncement(`${start.mode === 'create' ? 'Created' : 'Saved'} role "${outcome.role.name}" (${outcome.role.id}). Saved changes apply to new assignments; current assignments are unchanged.`);
-      close('role');
-    } catch (reason) {
-      if (live()) {
-        setPending(false);
-        setPhase('idle');
-        setPartialNotice(null);
-        setServerError(normalize(reason));
-        setConflict(null);
-      }
-    } finally {
-      lock.current = false;
-    }
-  };
-
-  const reloadReview = async () => {
-    const start = sessionRef.current;
-    if (!start || lock.current || !mounted.current) return;
-    lock.current = true;
-    const sid = start.id;
-    const rid = ++requestRef.current;
-    const live = () => mounted.current && sessionRef.current?.id === sid && requestRef.current === rid;
-    const wasConflict = serverError?.code === 'CONFIG_CHANGED';
-    setPending(true); setPhase('reloading_tokens');
-    try {
-      const reloaded = await fresh();
-      if (!live()) return;
-      setPending(false); setPhase('idle');
-      if (!reloaded.ok) { setServerError(wasConflict ? changedError(`Reloading current values failed: ${reloaded.error.message}`) : reloaded.error); return; }
-      if (start.mode === 'create') {
-        patch({ catalogSha: reloaded.data.sha256 });
-        setServerError(null); setConflict(null);
-        setPartialNotice('Current roles were reloaded. Review the id and name, then save again.');
-        return;
-      }
-      const server = reloaded.data.items.find(item => item.id === start.base!.id);
-      if (!server) { setServerError(wasConflict ? changedError('This role no longer exists in the reloaded catalog.') : normalize('This role no longer exists in the reloaded catalog.')); return; }
-      const fields = changedFields(start.base!, server);
-      patch({ base: server, catalogSha: reloaded.data.sha256 });
-      setPartialNotice(null);
-      if (wasConflict) { setServerError(null); setConflict({ server, changedFields: fields, acknowledged: false }); } else setServerError(null);
-    } finally {
-      lock.current = false;
-    }
-  };
-  const keepDraft = () => { setConflict(c => (c ? { ...c, acknowledged: true } : c)); setServerError(null); };
-  const useServer = () => {
-    if (!conflict || !sessionRef.current) return;
-    const next = { ...sessionRef.current, id: ++sessionCounter.current, base: conflict.server };
-    requestRef.current += 1;
-    sessionRef.current = next;
-    setSession(next);
-    reset();
-  };
-
-  const dialog = session && formCatalog ? <div className="modal-overlay"><RoleForm key={session.id} mode={session.mode} source={session.base} catalog={formCatalog}
-    pending={pending} phase={phase} serverError={serverError} partialNotice={partialNotice} conflict={conflict}
-    mutationsBlockedReason={!connected ? 'Role changes are unavailable while the backend is disconnected.' : null}
-    onSubmit={values => void submit(values)} onCancel={() => close('opener')} onReloadConflict={() => void reloadReview()} onKeepDraft={keepDraft} onUseServer={useServer} /></div> : null;
-
-  return { displayed, mutationBlock, open, dialog, announcement, busy: pending || session !== null };
 }

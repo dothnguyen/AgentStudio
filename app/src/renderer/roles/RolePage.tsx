@@ -1,4 +1,4 @@
-import { useId, type JSX, type RefObject } from 'react';
+import type { JSX, RefObject } from 'react';
 import type { RoleCatalogItem } from '../api';
 import { Icon } from '../icons/Icon';
 import { SectionCard } from '../teams/SectionCard';
@@ -17,10 +17,12 @@ import {
 
 export interface RolePageProps {
   role: RoleCatalogItem;
-  /** Disables the overview Edit action and exposes its reason through aria-describedby. */
+  /** Disables every card Edit action and exposes its reason through aria-describedby. */
   editDisabled: boolean;
   editReason: string | null;
-  onEdit(): void;
+  onEditOverview(): void;
+  onEditSkills(): void;
+  onEditInstructions(): void;
   onBack(): void;
   onDelete(): void;
   /** Null when Delete is allowed; otherwise the reason shown under the header. */
@@ -31,9 +33,6 @@ export interface RolePageProps {
 }
 
 const SAVE_NOTICE = 'Saved changes apply to new assignments. Assignments already running keep the instructions they started with.';
-// Ticket 3 wires the card Edit actions; until then every card on this page is read-only.
-const CARDS_READ_ONLY = true;
-const READ_ONLY_EDIT_REASON = 'Editing the role overview is available in the next update.';
 
 function lineCount(text: string): number {
   return text === '' ? 0 : text.split('\n').length;
@@ -69,8 +68,6 @@ export function RolePage(props: RolePageProps): JSX.Element {
   const deleteDisabled = props.deleteDisabledReason !== null;
   const reasonTone = role.usage.blocking || props.deleteDisabledReason !== null ? 'is-warning' : 'is-muted';
   const editReasonId = 'roles-mutation-reason';
-  const instructionsEditReasonId = useId();
-  const skillsEditReasonId = useId();
   const instructions = role.instructions;
   const hasText = (instructions.state === 'ok' || instructions.state === 'truncated')
     && instructions.text !== null && instructions.text.trim() !== '';
@@ -120,10 +117,10 @@ export function RolePage(props: RolePageProps): JSX.Element {
           className="roles-overview-card"
           action={{
             label: 'Edit',
-            ariaLabel: 'Edit role',
-            disabled: CARDS_READ_ONLY || props.editDisabled,
-            descriptionId: editReasonId,
-            onClick: props.onEdit,
+            ariaLabel: 'Edit overview',
+            disabled: props.editDisabled,
+            descriptionId: props.editDisabled ? editReasonId : undefined,
+            onClick: props.onEditOverview,
           }}
         >
           <dl className="roles-overview-grid">
@@ -132,9 +129,7 @@ export function RolePage(props: RolePageProps): JSX.Element {
             {label !== role.id && <div><dt>Display name</dt><dd>{label}</dd></div>}
             <div className="roles-overview-description"><dt>Description</dt><dd>{description || 'No description'}</dd></div>
           </dl>
-          {props.editReason
-            ? <p id={editReasonId} className="roles-edit-reason">{props.editReason}</p>
-            : <span id={editReasonId} className="roles-visually-hidden">{READ_ONLY_EDIT_REASON}</span>}
+          {props.editReason && <p id={editReasonId} className="roles-edit-reason">{props.editReason}</p>}
         </SectionCard>
 
         <SectionCard
@@ -144,12 +139,11 @@ export function RolePage(props: RolePageProps): JSX.Element {
           action={{
             label: 'Edit',
             ariaLabel: 'Edit shared instructions',
-            disabled: true,
-            descriptionId: instructionsEditReasonId,
-            onClick: () => {},
+            disabled: props.editDisabled,
+            descriptionId: props.editDisabled ? editReasonId : undefined,
+            onClick: props.onEditInstructions,
           }}
         >
-          <span id={instructionsEditReasonId} className="roles-visually-hidden">Editing shared instructions is available in the next update.</span>
           {(instructionsPath || (hasText && bytes !== null)) && <div className="roles-instructions-head">
             {instructionsPath && <span className="roles-instructions-file"><Icon name="document" size={13} /><code>{instructionsPath}</code></span>}
             {hasText && instructions.text !== null && bytes !== null && <span className="roles-instructions-count">
@@ -193,12 +187,11 @@ export function RolePage(props: RolePageProps): JSX.Element {
           action={{
             label: 'Edit',
             ariaLabel: 'Edit skills',
-            disabled: true,
-            descriptionId: skillsEditReasonId,
-            onClick: () => {},
+            disabled: props.editDisabled,
+            descriptionId: props.editDisabled ? editReasonId : undefined,
+            onClick: props.onEditSkills,
           }}
         >
-          <span id={skillsEditReasonId} className="roles-visually-hidden">Editing skills is available in the next update.</span>
           {role.skills.length === 0
             ? <p className="roles-skills-empty">No skills configured.</p>
             : <div className="roles-skill-chips">{role.skills.map((skill, index) => <span key={`${skill.id}:${index}`} className={`roles-skill-chip${skill.state === 'ok' ? '' : ' roles-skill-chip-missing'}`}>
