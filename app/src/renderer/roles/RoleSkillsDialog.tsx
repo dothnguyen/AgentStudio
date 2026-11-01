@@ -15,6 +15,8 @@ export interface RoleSkillsDialogProps {
   onSaved(role: RoleCatalogItem): void;
   onCancel(): void;
   onPendingChange?(pending: boolean): void;
+  /** Footer link that discards the draft and opens the standalone Skills list. */
+  onManageSkills?(): void;
 }
 
 interface SkillRow {
@@ -116,6 +118,11 @@ export function RoleSkillsDialog(props: RoleSkillsDialogProps): JSX.Element {
     busy={save.pending}
     onClose={props.onCancel}
     footerNote="Saved to roles.json"
+    leadingActions={props.onManageSkills === undefined ? undefined : [{
+      label: 'Manage skills',
+      className: 'dialog-action-link',
+      onClick: props.onManageSkills,
+    }]}
     initialFocus={firstRef}
     className="role-skills-dialog"
     actions={[

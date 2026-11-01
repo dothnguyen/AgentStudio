@@ -28,6 +28,8 @@ export interface RolePageProps {
   /** Null when Delete is allowed; otherwise the reason shown under the header. */
   deleteDisabledReason: string | null;
   onOpenMember?(teamId: string, memberId: string): void;
+  /** Opens the standalone Skills screen on this skill (including a missing one). */
+  onOpenSkill?(skillId: string): void;
   headingRef?: RefObject<HTMLHeadingElement | null>;
   deleteRef?: RefObject<HTMLButtonElement | null>;
 }
@@ -194,9 +196,15 @@ export function RolePage(props: RolePageProps): JSX.Element {
         >
           {role.skills.length === 0
             ? <p className="roles-skills-empty">No skills configured.</p>
-            : <div className="roles-skill-chips">{role.skills.map((skill, index) => <span key={`${skill.id}:${index}`} className={`roles-skill-chip${skill.state === 'ok' ? '' : ' roles-skill-chip-missing'}`}>
+            : <div className="roles-skill-chips">{role.skills.map((skill, index) => <button
+              key={`${skill.id}:${index}`}
+              type="button"
+              className={`roles-skill-chip roles-skill-link${skill.state === 'ok' ? '' : ' roles-skill-chip-missing'}`}
+              aria-label={`Open skill ${skill.id}`}
+              onClick={() => props.onOpenSkill?.(skill.id)}
+            >
               {skill.id}{skill.state !== 'ok' && <><span aria-hidden="true"> · </span><span className="roles-skill-missing-label">missing</span></>}
-            </span>)}</div>}
+            </button>)}</div>}
         </SectionCard>
 
         <SectionCard title="Used by" subtitle="Change a member's role from its page." className="roles-usedby-card">

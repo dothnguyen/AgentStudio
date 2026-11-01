@@ -1621,6 +1621,8 @@ ul[aria-label="Workspaces"] {
 .dialog-action-danger { border-color: #4a2c2c; background: #3a2626; color: #f0a3a3; }
 .dialog-action-danger:hover:not(:disabled) { border-color: #5a3434; background: #4a2c2c; color: #ffd0d0; }
 .dialog-action:disabled { opacity: 0.45; cursor: default; }
+.dialog-action.dialog-action-link { height: auto; min-height: 0; padding: 0; border: 0; background: none; color: var(--link); font-weight: 500; }
+.dialog-action.dialog-action-link:hover:not(:disabled) { border: 0; background: none; color: var(--link-hover); text-decoration: underline; }
 .dialog-close:focus-visible, .dialog-action:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* At 700px and below the backdrop leaves 12px each side, so a dialog fills the
    viewport minus 24px, and its body scrolls inside the shortened panel. */
@@ -1867,7 +1869,9 @@ ul[aria-label="Workspaces"] {
 .roles-warning-group h3 { margin: 0 0 4px; color: #f0b453; font-size: 12px; font-weight: 600; }
 .roles-warning-list { margin: 0; padding-left: 18px; color: #f0b453; font-size: 12.5px; overflow-wrap: anywhere; }
 .roles-skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.roles-skill-chips .roles-skill-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+.roles-skill-chips .roles-skill-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 4px 10px; border-radius: 6px; font-family: var(--font-mono); font-size: 12px; font-weight: 400; cursor: pointer; }
+.roles-skill-chips .roles-skill-chip:hover:not(:disabled) { border-color: #3d6bb3; background: #222831; color: var(--text-bright); text-decoration: underline; }
+.roles-skill-chips .roles-skill-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .roles-skills-empty { margin: 0; color: #a3a9b2; font-size: 12.5px; }
 .roles-skill-missing-label { color: #f0b453; font-weight: 600; }
 .roles-usedby-card .section-card-body { padding: 0; }
@@ -1995,8 +1999,8 @@ ul[aria-label="Workspaces"] {
 .skills-breadcrumb ol { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 12px; }
 .skills-breadcrumb li + li::before { content: "/"; margin: 0 8px; color: var(--text-muted); }
 .skills-breadcrumb li[aria-current="page"] { color: var(--text); overflow-wrap: anywhere; }
-.skills-screen .skills-back { min-height: 0; padding: 0; border: 0; background: none; color: var(--link); font: inherit; cursor: pointer; }
-.skills-screen .skills-back:hover:not(:disabled) { border: 0; background: none; color: var(--link-hover); text-decoration: underline; }
+.skills-screen .skills-back { min-height: 0; padding: 0; border: 0; background: none; color: #a3a9b2; font: inherit; cursor: pointer; }
+.skills-screen .skills-back:hover:not(:disabled) { border: 0; background: none; color: var(--text-bright); text-decoration: underline; }
 .skills-page { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 .skills-page-top { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .skills-page-header { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -2042,7 +2046,7 @@ ul[aria-label="Workspaces"] {
 .skills-usedby-list { list-style: none; margin: 0; padding: 0; }
 .skills-usedby-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
 .skills-usedby-row + .skills-usedby-row { border-top: 1px solid #1f2328; }
-.skills-usedby-avatar { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--avatar-bg); color: var(--avatar-text); font-size: 11px; font-weight: 600; }
+.skills-usedby-avatar { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 30px; height: 30px; flex: none; border-radius: 8px; background: var(--avatar-bg); color: var(--avatar-text); font-size: 11px; font-weight: 600; }
 .skills-usedby-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .skills-usedby-name { color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
 .skills-usedby-context { color: #8d949e; font-size: 12px; overflow-wrap: anywhere; }
@@ -2095,6 +2099,7 @@ ul[aria-label="Workspaces"] {
 .skills-delete-reason.is-muted { color: #a3a9b2; }
 .skills-announcement { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin: 0; padding: 3px 9px; border-radius: 999px; background: rgba(111, 211, 139, 0.12); color: var(--success); font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .skills-announcement .icon { flex: none; }
+.skills-missing-request { margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
 .skills-refresh-failure { margin: 0; }
 .skill-delete-dialog .dialog-header { align-items: flex-start; padding: 20px 20px 0; border-bottom: 0; }
 .skill-delete-dialog .dialog-body { padding: 8px 20px 8px; color: #a3a9b2; }
@@ -2127,7 +2132,7 @@ ul[aria-label="Workspaces"] {
 .skill-create-error { padding: 10px 12px; border: 1px solid #5a2e2e; border-radius: 8px; background: rgba(180, 60, 60, 0.08); color: #f0c7c0; font-size: 12.5px; }
 .skill-create-error p { margin: 2px 0; }
 .skill-create-error button { margin-top: 6px; }
-@media (max-width: 1240px) {
+@media (max-width: 900px) {
   .skills-page-layout { flex-direction: column; }
   .skills-page-main, .skills-page-aside { width: 100%; flex: 1 1 auto; max-width: none; }
 }

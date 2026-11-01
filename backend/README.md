@@ -155,6 +155,16 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
 - `role.create {workspace, role, expectedSha256?}` creates a role with an immutable slug id and optional description and skills. `role.update {workspace, roleId, changes, expectedSha256?}` edits its display name, description, and ordered skills; null removes a name or description. Both return a SHA token and missing-skill warnings.
 - `role.update {workspace, role, description, expectedSha256?}` changes only `roles.<id>.description`
   (`null` removes it); unknown roles give `ROLE_NOT_FOUND`.
+## Skills
+
+Six direct commands manage reusable instruction files in `.agent-studio/skills/<id>/SKILL.md` and the role
+lists in `roles.json`: `skill.list`, `skill.show`, `skill.create`, `skill.update`, `skill.delete` and
+`skill.roles.update`. They share the skill id rule (`^[a-z0-9][a-z0-9._-]{0,63}$`), the 32 KiB per-skill
+limit and the 96 KiB per-role context limit. `SKILL_NOT_FOUND` means the id or file does not exist,
+`SKILL_EXISTS` means a create would overwrite an existing file, `SKILL_IN_USE` blocks a delete while a role
+still lists the skill, and `CONFIG_CHANGED` means a SHA token (or the file, role list or roles formatting)
+changed after it was read, so nothing was written.
+
 - `skill.list {workspace}` returns the read-only skill catalog: `rolesSha256`, the skill/role context limits,
   sorted `skills`, and `problems`. Each skill has its id, `skills/<id>/SKILL.md` path, state
   (`ok|missing|unreadable|truncated`), title, full-file bytes and SHA-256, and the roles that list it with their

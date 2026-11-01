@@ -123,6 +123,17 @@ cd C:\Works\Projects\AgentStudio\app
 npm run capture:teams
 ```
 
+The Teams capture page is read-only: it uses no backend or WSL connection. The command opens a hidden
+1440x1000 window at device scale factor 1 and writes:
+
+- `test-results/teams-overview-v4-actual.png` — the captured screen.
+- `test-results/teams-overview-v4-compare.png` — design | actual | difference. Red marks a channel
+  difference above 16; grey marks a matching pixel.
+
+It prints the number of differing pixels and exits 0 even when pixels differ. It exits 1 on errors
+(missing build, missing design image, capture page not ready within 15 s). The run is an operator check
+and is not part of `npm test`.
+
 ### Roles v2 visual check (Windows)
 
 Renders the real Roles screen (`WorkspaceShell` + `RolesScreen`) with the sample data of
@@ -140,16 +151,21 @@ The command opens a hidden 1440x1240 window at device scale factor 1 and writes 
 `edit-overview.png`, `edit-instructions.png`, `edit-skills.png`, `new-role.png`, `delete-role.png` and a
 `manifest.json` with their sizes and checksums. It is an operator check and is not part of `npm test`.
 
-The Teams capture page is read-only: it uses no backend or WSL connection. The command opens a hidden
-1440x1000 window at device scale factor 1 and writes:
+### Skills visual check (Windows)
 
-- `test-results/teams-overview-v4-actual.png` — the captured screen.
-- `test-results/teams-overview-v4-compare.png` — design | actual | difference. Red marks a channel
-  difference above 16; grey marks a matching pixel.
+Renders the real Skills screen (`WorkspaceShell` + `SkillsScreen`) with the sample data of
+`design/skills-v1/` from `capture/skillsV1Fixture.ts`, and writes the list, the skill page, the missing
+skill page and each dialog to `design/skills-v1/captures/`. It needs the Electron binary and is an operator
+check, not part of `npm test`.
 
-It prints the number of differing pixels and exits 0 even when pixels differ. It exits 1 on errors
-(missing build, missing design image, capture page not ready within 15 s). The run is an operator check
-and is not part of `npm test`.
+```powershell
+cd C:\Works\Projects\AgentStudio\app
+npm run capture:skills
+```
+
+The command opens a hidden 1440x1160 window at device scale factor 1 and writes `list.png`, `detail.png`,
+`detail-missing.png`, `edit-content.png`, `edit-roles.png`, `new-skill.png`, `delete-skill.png` and a
+`manifest.json` with their sizes and checksums. It is an operator check and is not part of `npm test`.
 
 The Routing screen (its own sidebar section after Boards) shows workspace-wide board transitions as three summary cards (Autonomous execution, Worktrees, Role coverage) above the rules table, with role links and the workflow availability note. Routing belongs to the workspace board rather than to one team; the team page links to this screen instead of embedding a routing view. The page header follows the design with the heading and notice; the Refresh action sits in the page header so routing reads and the role catalog can be reloaded together. Operators add, edit, and remove routes in per-rule dialogs, edit the worktree base branch in its own dialog, and manage agent failure escalation policies. Protected routes can be edited but not removed. Routing saves apply workspace-wide to future claims and transitions; they do not change member roles or shared role instructions, cancel assignments, or reroute work already in flight. Saves check the configuration version and reload the latest settings. If a refresh reports invalid board or roles configuration, open drafts cannot be saved until the configuration is valid again. Configuration conflicts require an explicit reload before retrying. If the reload fails, the editor retains the draft and offers a retry; a successful write is reported only after fresh settings load.
 
@@ -189,13 +205,20 @@ reaches its limit.
 
 The Roles screen shows the saved catalog as a full-width table with a search field, a role count and each role's description, skills and usage. Selecting a row opens that role's page; the breadcrumb returns to the same filtered list and puts focus back on the row that was opened. A deep link from a member page opens the requested role page directly, and an unknown role id keeps the fallback notice while showing the list.
 
-The role page repeats the role name, id, usage count, running assignments, the saved-changes notice and Delete role. Its Overview and Shared instructions cards sit beside the Skills and Used by cards, wrapping to one column at 900 px. Shared instructions keep every catalog state (missing, unreadable, not configured, truncated) and show a read-only 300 px preview; warnings and assignment-source problems appear in an amber card only when there are some. Used by rows link to the member page when both ids are known. Each card's Edit button opens that section's dialog: Edit overview (name and locked role id plus description), Edit shared instructions (the same dialog the member page uses, with the prompt file and byte limit), and Edit skills (a checklist that keeps missing skills visible until they are removed). Cancel or Escape discards the draft; a successful save refreshes the catalog and announces that new assignments use the new values. New role creates only the role id, name and optional description, then opens the new role page so instructions and skills can be added there. The Delete role confirmation is a compact dialog with the instruction-file outcome and returns to the refreshed list after a successful delete. Edit actions stay disabled while a write or delete is pending, while the backend is disconnected, or after a role delete until Roles is refreshed, with the reason attached through `aria-describedby`.
+The role page repeats the role name, id, usage count, running assignments, the saved-changes notice and Delete role. Its Overview and Shared instructions cards sit beside the Skills and Used by cards, wrapping to one column at 900 px. Shared instructions keep every catalog state (missing, unreadable, not configured, truncated) and show a read-only 300 px preview; warnings and assignment-source problems appear in an amber card only when there are some. Used by rows link to the member page when both ids are known. Each skill chip is a link-style button that opens that skill's page (including the missing page for a missing skill) through the same deep-link handling as roles. Each card's Edit button opens that section's dialog: Edit overview (name and locked role id plus description), Edit shared instructions (the same dialog the member page uses, with the prompt file and byte limit), and Edit skills (a checklist that keeps missing skills visible until they are removed). The Edit skills footer has a **Manage skills** link that discards the draft and opens the Skills list. Cancel or Escape discards the draft; a successful save refreshes the catalog and announces that new assignments use the new values. New role creates only the role id, name and optional description, then opens the new role page so instructions and skills can be added there. The Delete role confirmation is a compact dialog with the instruction-file outcome and returns to the refreshed list after a successful delete. Edit actions stay disabled while a write or delete is pending, while the backend is disconnected, or after a role delete until Roles is refreshed, with the reason attached through `aria-describedby`.
 
-### Skills list
+### Skills
+
+A skill is a reusable instruction file that a role loads into its context when an assignment starts. Each
+skill lives in `.agent-studio/skills/<id>/SKILL.md`; the folder name is the immutable skill id (lowercase
+letters, numbers, dots, dashes and underscores, up to 64 characters). Roles list the ids they use in
+`.agent-studio/roles.json`. Limits are 32 KiB per skill and 96 KiB for a role's whole context (its shared
+instructions plus all its `ok` skills); a skill that does not fit is skipped. Saved changes apply to new
+assignments, while assignments already running keep the skills they started with.
 
 The Skills screen (its own sidebar section after Roles) loads `management.skills(workspaceId)` once per workspace with the shared section controller, so loading, retry, stale-data and focus behaviour match Roles. The header carries **New skill**, the saved-changes notice, a search field that matches skill ids and titles case-insensitively, and a count that reports both the total and the filtered matches. Catalog problems appear above the table in an amber note. New skill is disabled with a reason while a creation is saving or the backend is disconnected.
 
-Each row shows the skill id and file path, its summary title, the first two roles that use it with a remainder count, and its size against the 32 KiB limit. Missing skills keep an amber row with "Missing" and "File not found"; unreadable skills show "Unreadable"; skills over the limit show their real size in amber. Selecting a row opens the read-only skill page with a `Skills / <id>` breadcrumb. Going back restores the same search text and focuses the row that was opened. Workspace changes reset the screen to the unfiltered list.
+Each row shows the skill id and file path, its summary title, the first two roles that use it with a remainder count, and its size against the 32 KiB limit. Missing skills keep an amber row with "Missing" and "File not found"; unreadable skills show "Unreadable"; skills over the limit show their real size in amber. Selecting a row opens the read-only skill page with a `Skills / <id>` breadcrumb. Going back restores the same search text and focuses the row that was opened. Workspace changes reset the screen to the unfiltered list. A role's skill chip deep-links straight to that skill's page, including its missing page; an id the catalog does not know keeps the list visible with a fallback notice. The screen reloads its catalog whenever it is opened again, so a role's skill change made in Roles is visible the next time Skills is opened.
 
 The skill page repeats the id, the usage pill (`Used by n roles`, `Not used`, or `Missing`), the title or the missing-file explanation, and the saved-changes notice. Its Content card loads `management.skill(workspaceId, id)` for the preview, line and byte counts and the 360 px fade, keeping loading, error and Retry states; truncated files carry the limit note and unreadable files replace the preview with an explanation. Missing skills show the amber explanation, a **Create this skill** action in the header and on the Create the file row of the two fixing options. Both open the New skill dialog with the missing id prefilled and locked.
 

@@ -23,6 +23,39 @@ and spacing. Tokens: page `#111316`, card `#16191d`, card border `#262a30`, text
 success `#6fd38b`, warning `#f0b453`, danger border `#4a2c2c` / text `#f0a3a3`. Fonts: Inter, JetBrains Mono. The sidebar is the
 existing app sidebar plus the new Skills item.
 
+## Captures
+
+The real Skills screen is captured against this folder with the app's fixture data:
+
+```powershell
+npm --prefix app run capture:skills
+```
+
+The command builds the app, opens a hidden 1440x1160 window at device scale factor 1 and writes
+`captures/list.png`, `captures/detail.png`, `captures/detail-missing.png`, `captures/edit-content.png`,
+`captures/edit-roles.png`, `captures/new-skill.png` and `captures/delete-skill.png`, plus
+`captures/manifest.json` with the image sizes and checksums. It needs the Electron binary and is an operator
+check, not part of `npm test`.
+
+The captures use the real screen with the `capture/skillsV1Fixture.ts` sample data and the app's own sidebar,
+so they differ from the static files in these ways:
+
+- The app's own sidebar is rendered (including the live workspace row); the static files show a simplified
+  sidebar with design sample labels.
+- The workspace name and path are the real workspace values from the shell, not hard-coded design text.
+- The list adds the amber "Skill catalog problems" note because the sample includes a missing skill; the
+  design list omits that note.
+- Save to file is disabled for a dialog opened from an unchanged draft (the design shows the enabled
+  style); the button becomes enabled as soon as the draft differs. The Edit roles dialog's Save is disabled
+  for the same reason, and New skill keeps Create skill disabled until the id is valid.
+- The static design's Edit content textarea renders empty because its HTML uses a `value` attribute; the
+  app shows the real SKILL.md content and its line/byte counter. The New skill dialog likewise starts with
+  the starter content and shows the same counter, while `new-skill.png` shows an empty editor without one.
+- Context bytes come from the fixture's sample roles; the design's "Context n KB of 96 KiB" values are
+  placeholders, not the same byte totals.
+- The missing skill page shows the same app-rendered missing note and fix-up card as the design, with the
+  roles catalog's real Edit action wired to its dialog.
+
 Rules the screen must respect (from the backend: `roles.py`, `rolecatalog.py`):
 - skill id = folder name, matching `^[a-z0-9][a-z0-9._-]{0,63}$`; it cannot change after creation;
 - one file per skill, `skills/<id>/SKILL.md`, at most 32 KiB (`LIMITS["skill"]`);

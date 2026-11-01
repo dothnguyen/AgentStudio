@@ -9,7 +9,17 @@ import { RolePageInstructionsDialog } from './RolePageInstructionsDialog';
 import { RoleSkillsDialog } from './RoleSkillsDialog';
 import { ROLE_DATA_CHANGED_REASON, isInstructionFileShared, roleBlockerGroups, roleDeleteAnnouncement, roleDeleteDisabledReason, roleDeleteDisposition, roleUsageFromDeleteError, roleUsageProblemsFromDeleteError, filterRoleRows, roleDisplayLabel, roleInitials, roleRows, roleUsageSummary } from './rolesModel';
 
-export interface RolesScreenProps { workspace: Workspace; management: ManagementApi; connection?: ConnectionStatus; requestedRoleId?: string | null; onOpenMember?(teamId: string, memberId: string): void }
+export interface RolesScreenProps {
+  workspace: Workspace;
+  management: ManagementApi;
+  connection?: ConnectionStatus;
+  requestedRoleId?: string | null;
+  onOpenMember?(teamId: string, memberId: string): void;
+  /** Opens the standalone Skills screen on that skill's page. */
+  onOpenSkill?(skillId: string): void;
+  /** Opens the Skills list; used by the Edit skills dialog footer. */
+  onOpenSkills?(): void;
+}
 export function RolesScreen(props: RolesScreenProps): JSX.Element { return <RolesBrowser key={props.workspace.id} {...props} />; }
 
 interface DeleteAlert { roleId: string; error: ManagementError }
@@ -342,6 +352,7 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
         onDelete={openDelete}
         deleteDisabledReason={disabledReason}
         onOpenMember={props.onOpenMember}
+        onOpenSkill={props.onOpenSkill}
         headingRef={roleHeading}
         deleteRef={deleteButton}
       />
@@ -379,6 +390,10 @@ function RolesBrowser(props: RolesScreenProps): JSX.Element {
       onSaved={role => savedRole(role, false)}
       onCancel={closeDialog}
       onPendingChange={setDialogPending}
+      onManageSkills={props.onOpenSkills === undefined ? undefined : () => {
+        closeDialog();
+        props.onOpenSkills?.();
+      }}
     />}
     {dialogRole !== null && shown && dialog !== null && dialog.kind === 'instructions' && <RolePageInstructionsDialog
       key={`instructions:${dialogRole.id}`}

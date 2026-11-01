@@ -1,0 +1,13 @@
+{
+  "width": 1440,
+  "height": 1160,
+  "files": {
+    "list.png": "ddce9fe721882dbc496fcce2d970cf50ad56d86b6701b805a35a273ebf0c2ab3",
+    "detail.png": "89e2cb2fb41cb87598279a725e7e4ba78cfb9f76c32163ef41924e742306ba92",
+    "detail-missing.png": "ec18e38d7900c349fb1f78e0bcef6580b0abd0857008b656512b955c77196f96",
+    "edit-content.png": "86c9d1dd1856a5bdb184f7415be406bea59b4f3d2052b90e8c61ad2fedbe6ccf",
+    "edit-roles.png": "faff6af8c82b5038d8b3b0108f11244553f0f55a9db1465fb72fdd0743210af8",
+    "new-skill.png": "abffa9b00cfb9e31fa6599b24ff48e012bd24891ec4adfe0802066cfb32c246d",
+    "delete-skill.png": "59bb3266730867b7ccaf6032edbf5ad21a1fbab32c45fbb176bf8add6a98dd54"
+  }
+}

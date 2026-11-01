@@ -16,6 +16,8 @@ export interface DialogAction {
   descriptionId?: string;
   /** Optional handle so the owner can focus this action when the dialog opens. */
   buttonRef?: RefObject<HTMLButtonElement | null>;
+  /** Optional extra class, for example a link-style footer action. */
+  className?: string;
 }
 
 export interface DialogProps {
@@ -137,7 +139,7 @@ export function Dialog(props: DialogProps): JSX.Element {
       key={key}
       type="button"
       ref={action.buttonRef}
-      className={`dialog-action ${action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary'}`}
+      className={['dialog-action', action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary', action.className].filter(Boolean).join(' ')}
       aria-busy={action.busy ? true : undefined}
       aria-describedby={action.descriptionId}
       disabled={action.disabled || busy}

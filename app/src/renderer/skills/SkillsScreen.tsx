@@ -13,6 +13,10 @@ export interface SkillsScreenProps {
   workspace: Workspace;
   management: ManagementApi;
   connection?: ConnectionStatus;
+  /** Deep link from Roles: open this skill's page once the catalog is available. */
+  requestedSkillId?: string | null;
+  /** Focus the Skills heading when the screen was opened without a skill (for example Manage skills). */
+  focusListOnMount?: boolean;
   /** Opens the role page in the Roles screen; the member pages use the same navigation. */
   onViewRole?(roleId: string): void;
 }
@@ -39,6 +43,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const lastRoles = useRef<RoleCatalogList | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<SkillsView>({ kind: 'list' });
+  const [missingRequest, setMissingRequest] = useState<string | null>(null);
   const [focusRowId, setFocusRowId] = useState<string | null>(null);
   const [focusSkillPage, setFocusSkillPage] = useState(false);
   const [createTarget, setCreateTarget] = useState<{ initialId: string | null } | null>(null);
@@ -85,12 +90,47 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     setView({ kind: 'skill', skillId });
     setFocusRowId(null);
     setFocusSkillPage(true);
+    setMissingRequest(null);
   };
   const backToList = () => {
     if (view.kind !== 'skill') return;
     setFocusRowId(view.skillId);
     setView({ kind: 'list' });
   };
+
+  // A deep link from Roles opens the requested skill as soon as the catalog is
+  // available, including a missing skill so its fix-up page is shown. An id the
+  // catalog does not know keeps the list visible with a fallback notice.
+  const requestedSkillId = props.requestedSkillId ?? null;
+  const handledRequest = useRef<string | null>(null);
+  useEffect(() => {
+    if (requestedSkillId === null) {
+      handledRequest.current = null;
+      setMissingRequest(null);
+      return;
+    }
+    if (data === null || handledRequest.current === requestedSkillId) return;
+    handledRequest.current = requestedSkillId;
+    if (data.skills.some(skill => skill.id === requestedSkillId)) {
+      setQuery('');
+      setMissingRequest(null);
+      openSkill(requestedSkillId);
+    } else {
+      setView({ kind: 'list' });
+      setFocusRowId(null);
+      setMissingRequest(requestedSkillId);
+    }
+    // openSkill only changes local view state for this request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedSkillId, data]);
+
+  // Manage skills from the Roles dialog opens the list without a skill id; put
+  // focus on its heading instead of leaving it on the removed dialog opener.
+  useEffect(() => {
+    if (props.focusListOnMount === true && (props.requestedSkillId ?? null) === null) title.current?.focus();
+    // Only the first mount matters; later navigation manages its own focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refreshCatalog = async (): Promise<void> => {
     if (catalog.reloadFresh !== undefined) await catalog.reloadFresh();
@@ -246,6 +286,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     </div>}
     {!connected && <p role="status">{props.connection?.state === 'lost' ? 'Connection to the backend was lost. Saved skill data stays visible but may be out of date.' : 'Connecting to the backend… Saved skill data may be out of date.'}</p>}
     {catalog.loading && <p role="status">Loading skills…</p>}
+    {missingRequest !== null && <p role="status" className="skills-missing-request">{`Skill "${missingRequest}" is unavailable in this workspace.`}</p>}
     {deleteRefreshFailure && <p role="alert" className="skills-refresh-failure">{SKILL_DELETE_REFRESH_FAILED}</p>}
     {error && <div className="panel-error skills-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; if (refreshRequired) retryDeleteRefresh(); else void catalog.reload(); }}>Retry loading skills</button></div>}
     {rolesSection.error && <div className="panel-error skills-roles-error" role="alert"><p>Roles catalog: <code>{rolesSection.error.code}</code>: {rolesSection.error.message}</p>{rolesSection.error.remediation && <p>{rolesSection.error.remediation}</p>}<button type="button" onClick={() => { if (refreshRequired) retryDeleteRefresh(); else void rolesSection.reload(); }}>Retry loading roles</button></div>}

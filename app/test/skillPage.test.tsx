@@ -446,7 +446,7 @@ describe('Skill page layout styles', () => {
     const flat = css.replace(/\s+/g, ' ');
     expect(flat).toContain('.skills-page-main { flex: 999 1 560px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }');
     expect(flat).toContain('.skills-page-aside { flex: 1 1 320px; display: flex; flex-direction: column; gap: 22px; min-width: 0; max-width: 400px; }');
-    expect(flat).toMatch(/@media \(max-width: 1240px\) \{ \.skills-page-layout \{ flex-direction: column; \} \.skills-page-main, \.skills-page-aside \{ width: 100%; flex: 1 1 auto; max-width: none; \} \}/);
+    expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.skills-page-layout \{ flex-direction: column; \} \.skills-page-main, \.skills-page-aside \{ width: 100%; flex: 1 1 auto; max-width: none; \} \}/);
     expect(flat).toContain('.skills-content-preview pre { max-height: 360px;');
     expect(flat).toContain('.skills-content-fade { position: absolute; left: 0; right: 0; bottom: 0; height: 64px;');
   });
