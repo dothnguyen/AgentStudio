@@ -50,7 +50,7 @@ it('shows the three summary cards for a running team', async () => {
   expect(worktrees.getByText('Where isolated work starts from.')).toBeTruthy();
   expect(worktrees.getByText('Base branch')).toBeTruthy();
   expect(worktrees.getByText('main')).toBeTruthy();
-  expect(worktrees.queryByRole('button', { name: /Edit/ })).toBeNull();
+  expect((worktrees.getByRole('button', { name: 'Edit worktrees' }) as HTMLButtonElement).disabled).toBe(false);
 
   const coverage = within(view.getByRole('region', { name: 'Role coverage' }));
   expect(coverage.getByText('Roles the rules use, and who fills them.')).toBeTruthy();
@@ -507,7 +507,7 @@ it('labels the six rule columns with one action column and keeps every row a lis
   const rows = ruleRows(view);
   expect(rows).toHaveLength(5);
   expect(rows.every(row => row.tagName === 'LI')).toBe(true);
-  expect(within(rows[1]!).queryByRole('button')).toBeNull();
+  expect(within(rows[1]!).getByRole('button', { name: 'Edit rule 2, merge-ready' })).toBeTruthy();
 });
 
 it('numbers rules from their configured order and shows a lock on the protected tag', async () => {

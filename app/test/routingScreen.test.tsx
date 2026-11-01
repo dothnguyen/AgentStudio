@@ -123,7 +123,7 @@ it('switching workspace reloads routing for the new workspace and resets local s
   const fake = fakeManagement({ boardSettings: [okR(routingSettingsFixture()), okR(routingSettingsFixture())] });
   const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
   await act(async () => {});
-  fireEvent.click(view.getByRole('button', { name: 'Edit routing settings' }));
+  fireEvent.click(view.getByRole('button', { name: 'Edit worktrees' }));
   fireEvent.change(view.getByLabelText('Base branch'), { target: { value: 'uncommitted-draft' } });
   expect((view.getByLabelText('Base branch') as HTMLInputElement).value).toBe('uncommitted-draft');
   view.rerender(<RoutingScreen workspace={workspaceB} management={fake.api} />);

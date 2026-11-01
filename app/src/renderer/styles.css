@@ -1248,22 +1248,65 @@ ul[aria-label="Workspaces"] {
 .routing-workflow-roles { margin: 0; color: #a3a9b2; font-size: 12px; }
 .routing-workflow-error { margin: 0; color: #f0b453; font-size: 12px; }
 .routing-rules-empty { margin: 0; padding: 16px 18px; }
+.routing-screen .section-card-action { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; }
+.routing-screen .section-card-action:hover:not(:disabled) { background: #222831; }
+.routing-screen .section-card-action:disabled { opacity: 0.45; cursor: default; }
+.routing-edit-reason { margin: 0; padding: 10px 18px; border-bottom: 1px solid #23262c; color: #f0b453; font-size: 12px; }
+.routing-edit-rule { box-sizing: border-box; height: 30px; min-height: 30px; padding: 0 11px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; }
+.routing-edit-rule:hover:not(:disabled) { background: #222831; }
+.routing-edit-rule:disabled { opacity: 0.45; cursor: default; }
+
+/* v1 routing dialogs (T-118). */
+.routing-dialog .dialog-body { display: flex; flex-direction: column; gap: 22px; }
+.routing-dialog-section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.routing-dialog-section.is-divided { border-top: 1px solid #23262c; padding-top: 20px; }
+.routing-dialog-section h3 { margin: 0; color: #e7e9ec; font-size: 13px; font-weight: 600; }
+.routing-dialog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.routing-dialog-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; }
+.routing-dialog-label { color: #c4cad2; font-size: 12px; font-weight: 500; }
+.routing-dialog-field select, .routing-dialog-field input { box-sizing: border-box; width: 100%; height: 38px; padding: 0 10px; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit; }
+.routing-dialog-field input { padding: 0 12px; }
+.routing-dialog-field :is(select, input):disabled { opacity: 0.55; cursor: default; }
+.routing-dialog-field :is(select, input):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.routing-dialog-mono { font-family: var(--font-mono); font-size: 12.5px; }
+.routing-dialog-hint { color: #a3a9b2; font-size: 12px; }
+.routing-dialog-problem { display: flex; flex-direction: column; color: #f0a3a3; font-size: 12px; overflow-wrap: anywhere; }
+.routing-dialog-summary { box-sizing: border-box; padding: 10px 12px; border: 1px solid #4a2c2c; border-radius: 8px; background: rgba(58, 38, 38, 0.35); color: #f0c7c0; font-size: 12.5px; }
+.routing-dialog-summary p { margin: 2px 0; }
+.routing-dialog-failure { box-sizing: border-box; padding: 10px 12px; border: 1px solid #4a2c2c; border-radius: 8px; background: rgba(58, 38, 38, 0.35); color: #f0c7c0; font-size: 12.5px; }
+.routing-dialog-failure p { margin: 2px 0; }
+.routing-dialog-failure button { margin-top: 6px; padding: 0; border: 0; background: none; color: #7fb2ff; font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
+.routing-dialog-note { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid #2a2e35; border-radius: 8px; background: #1a1d22; color: #c4cad2; font-size: 12px; }
+.routing-dialog-note .icon { flex: none; margin-top: 1px; }
+.routing-dialog-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border: 1px solid #23262c; border-radius: 8px; background: #121418; }
+.routing-dialog-switch-text { display: flex; flex-direction: column; min-width: 0; }
+.routing-dialog-switch-title { color: #e7e9ec; font-weight: 500; }
+.routing-dialog-switch-hint { color: #a3a9b2; font-size: 12px; }
+.routing-switch { display: flex; align-items: center; justify-content: flex-start; box-sizing: border-box; inline-size: 38px; block-size: 22px; flex: none; padding: 0 3px; border: 0; border-radius: 999px; background: #3a3f47; cursor: pointer; }
+.routing-switch[aria-checked="true"] { justify-content: flex-end; background: #5b9cff; }
+.routing-switch:disabled { opacity: 0.45; cursor: default; }
+.routing-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.routing-switch-thumb { inline-size: 16px; block-size: 16px; border-radius: 50%; background: #ffffff; }
+.routing-dialog-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+.routing-dialog-option { display: flex; align-items: flex-start; gap: 10px; box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #262a30; border-radius: 9px; background: #121418; color: #e7e9ec; text-align: left; cursor: pointer; font: inherit; }
+.routing-dialog-option[aria-checked="true"] { border-color: #3d6bb3; background: rgba(91, 156, 255, 0.08); }
+.routing-dialog-option:disabled { opacity: 0.55; cursor: default; }
+.routing-dialog-option:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.routing-dialog-radio { box-sizing: border-box; inline-size: 16px; block-size: 16px; margin-top: 2px; flex: none; border: 2px solid #4a5059; border-radius: 50%; }
+.routing-dialog-option[aria-checked="true"] .routing-dialog-radio { border-color: #5b9cff; box-shadow: inset 0 0 0 3px #121418; background: #5b9cff; }
+.routing-dialog-option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.routing-dialog-option-title { font-weight: 500; }
+.routing-dialog-option-hint { color: #a3a9b2; font-size: 12px; }
+.routing-dialog-action-copy { margin: 0; color: #e7e9ec; font-size: 13px; }
+.routing-dialog-escalation { margin-top: 2px; }
+.dialog-footer-leading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.dialog-footer-leading:empty { display: none; }
+.dialog-action .icon { flex: none; }
 
 .routing-settings { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
-.routing-rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
-.routing-rule-grid fieldset { min-width: 0; }
-.routing-settings label { display: flex; flex-direction: column; gap: .25rem; margin-block: .5rem; }
-.routing-settings input, .routing-settings textarea, .routing-settings select { max-width: 100%; min-width: 0; }
 .routing-settings :is(input, textarea, select, button):focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .routing-problem { color: var(--danger, #b42318); overflow-wrap: anywhere; }
-@media (max-width: 900px) { .routing-rule-grid { grid-template-columns: minmax(0, 1fr); } }
-
-.routing-settings form h3 { margin-block: 1rem .5rem; }
-.routing-escalation { margin-block: .75rem; }
-.routing-escalation h4 { margin-block: .5rem; }
-.routing-escalation > label { flex-direction: row; align-items: center; }
-.routing-escalation-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .5rem; }
-.routing-problem span { display: block; }
+@media (max-width: 900px) { .routing-dialog-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .teams-option-list { padding-left: 1.5rem; }
 .teams-option-row { margin-bottom: .5rem; overflow-wrap: anywhere; }
@@ -1339,7 +1382,7 @@ ul[aria-label="Workspaces"] {
 .team-nav :is(.team-nav-item, .team-nav-label, .team-nav-state, .team-nav-warning, .team-nav-status, .team-nav-new), .teams-screen :is(.teams-roster, .teams-member-row, .teams-member-name, .teams-role-name, .teams-member-agent, .teams-member-detail, .teams-member-remove, .teams-confirm, .teams-edit-form, .teams-create-dialog), .teams-create-dialog { overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
 .teams-member-remove, .teams-confirm[role="alertdialog"] { box-sizing: border-box; }
 @media (max-width: 900px) {
-  .teams-overview, .routing-rule-grid, .routing-escalation-fields { grid-template-columns: minmax(0, 1fr); }
+  .teams-overview { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
   .routing-table-wrap { overflow-x: auto; max-width: 100%; }
@@ -1580,7 +1623,7 @@ ul[aria-label="Workspaces"] {
 /* Footer buttons are their own row: no margin, padding or border from the
    legacy .dialog-actions block, and pushed right even without a footer note. */
 .dialog-footer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; padding: 0; border: 0; }
-.dialog-action { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 14px; border: 1px solid #2f343c; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.dialog-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; height: 34px; min-height: 34px; padding: 0 14px; border: 1px solid #2f343c; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .dialog-action-secondary { color: #e7e9ec; background: #1b1f24; }
 .dialog-action-secondary:hover:not(:disabled) { background: #222831; }
 .dialog-action-primary { border-color: #5b9cff; background: #5b9cff; color: #0b1220; font-weight: 600; }

@@ -26,6 +26,16 @@ export interface RoutingReadViewProps {
   onViewRole?(roleId: string): void;
   onOpenTeam?(teamId: string | null): void;
   onOpenTeams?(): void;
+  /** False makes Add rule and every row Edit button read-only. */
+  canEdit?: boolean;
+  pending?: boolean;
+  /** Why editing is disabled; shown once and referenced by the disabled buttons. */
+  editReason?: string | null;
+  /** False when every board status already has a rule. */
+  hasFreeStatus?: boolean;
+  onEditRule?(index: number): void;
+  onAddRule?(): void;
+  onEditWorktrees?(): void;
 }
 
 function initial(value: string): string {
@@ -98,16 +108,38 @@ function TeamCard({ teams, teamsState, onOpenTeam, onOpenTeams }: { teams: TeamO
   </SectionCard>;
 }
 
-export function RoutingReadView({ settings, roleItems, teams = null, teamsState, onViewRole, onOpenTeam, onOpenTeams }: RoutingReadViewProps): JSX.Element {
+export function RoutingReadView({ settings, roleItems, teams = null, teamsState, onViewRole, onOpenTeam, onOpenTeams, canEdit = false, pending = false, editReason = null, hasFreeStatus = true, onEditRule, onAddRule, onEditWorktrees }: RoutingReadViewProps): JSX.Element {
   const state: RoutingTeamsState = teamsState ?? (teams === null ? 'loading' : 'ready');
   const activeTeams = runningTeams(teams);
   const runtimeUnavailable = teams !== null && !teams.runtimeState.available;
   const coverage = roleCoverage(settings, teams, roleItems);
   const warnings = configWarnings(settings);
+  const editable = canEdit && !pending;
+  const addReasonId = !hasFreeStatus ? 'routing-add-rule-reason' : !editable ? (editReason !== null ? 'routing-edit-reason' : undefined) : undefined;
+  const addRule = onAddRule === undefined ? undefined : {
+    label: 'Add rule',
+    ariaLabel: 'Add rule',
+    icon: 'plus' as const,
+    onClick: onAddRule,
+    disabled: !editable || !hasFreeStatus,
+    descriptionId: !editable || !hasFreeStatus ? addReasonId : undefined,
+  };
   return <div className="routing-read-view">
+    {editReason !== null && <p id="routing-edit-reason" className="routing-edit-reason">{editReason}</p>}
     <div className="routing-summary-grid">
       <TeamCard teams={teams} teamsState={state} onOpenTeam={onOpenTeam} onOpenTeams={onOpenTeams} />
-      <SectionCard title="Worktrees" subtitle="Where isolated work starts from." className="routing-summary-card routing-worktrees-card">
+      <SectionCard
+        title="Worktrees"
+        subtitle="Where isolated work starts from."
+        className="routing-summary-card routing-worktrees-card"
+        action={onEditWorktrees === undefined ? undefined : {
+          label: 'Edit',
+          ariaLabel: 'Edit worktrees',
+          onClick: onEditWorktrees,
+          disabled: !editable,
+          descriptionId: !editable && editReason !== null ? 'routing-edit-reason' : undefined,
+        }}
+      >
         <dl className="routing-worktree-list">
           <div><dt>Base branch</dt><dd><code className="routing-mono">{settings.worktree.baseBranch ?? 'unavailable'}</code></dd></div>
         </dl>
@@ -124,8 +156,9 @@ export function RoutingReadView({ settings, roleItems, teams = null, teamsState,
       </SectionCard>
     </div>
 
-    <SectionCard title="Rules" subtitle="Each status has at most one rule. A ticket in that status is worked as described." className="routing-rules-card">
+    <SectionCard title="Rules" subtitle="Each status has at most one rule. A ticket in that status is worked as described." className="routing-rules-card" action={addRule}>
       <div className="routing-rules-body">
+        {!hasFreeStatus && <p id="routing-add-rule-reason" className="routing-edit-reason">Every status already has a rule.</p>}
         {warnings.length > 0 && <div className="routing-warnings">{warnings.map((warning, index) => <p className="routing-warning-note" key={index}><Icon name="warning" size={14} tone="warning" /><span>{warning}</span></p>)}</div>}
         {settings.rules.length > 0 ? <div className="routing-table-wrap" role="region" aria-label="Routing transitions (scrollable)" tabIndex={0}>
           <div className="routing-rules-inner">
@@ -176,7 +209,17 @@ export function RoutingReadView({ settings, roleItems, teams = null, teamsState,
                   <span className="routing-rule-meta">{rule.type === 'action' ? 'Runs on the board' : `${workspaceLabel(rule.workspace)}${rule.syncBase ? ' · sync base' : ''}`}</span>
                   <span className="routing-rule-meta">{limitText(rule)}</span>
                 </span>
-                <span className="routing-rule-action" aria-hidden="true" />
+                <span className="routing-rule-action">
+                  {onEditRule !== undefined && <button
+                    type="button"
+                    className="routing-edit-rule"
+                    data-focus-rule={rule.index}
+                    aria-label={`Edit rule ${rule.index + 1}, ${statusName(settings.statuses, rule.status)}`}
+                    aria-describedby={!editable && editReason !== null ? 'routing-edit-reason' : undefined}
+                    disabled={!editable}
+                    onClick={() => onEditRule(rule.index)}
+                  >Edit</button>}
+                </span>
               </li>;
             })}</ol>
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Icon } from '../icons/Icon';
+import { Icon, type IconName } from '../icons/Icon';
 
 export interface DialogAction {
   label: string;
@@ -10,6 +10,8 @@ export interface DialogAction {
   disabled?: boolean;
   /** Marks a destructive action that is currently running. */
   busy?: boolean;
+  /** Optional icon shown before the label. */
+  icon?: IconName;
   /** Optional explanation associated with the action (for example a blocked reason). */
   descriptionId?: string;
   /** Optional handle so the owner can focus this action when the dialog opens. */
@@ -30,6 +32,8 @@ export interface DialogProps {
   footerNote?: ReactNode;
   /** Footer buttons, from left to right. */
   actions: DialogAction[];
+  /** Optional destructive or secondary actions shown on the left of the footer. */
+  leadingActions?: DialogAction[];
   /** Element focused when the dialog opens; defaults to the first focusable control. */
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
@@ -128,6 +132,22 @@ export function Dialog(props: DialogProps): JSX.Element {
     return () => document.removeEventListener('keydown', onDocumentKeyDown);
   }, []);
 
+  function actionButton(action: DialogAction, key: string): JSX.Element {
+    return <button
+      key={key}
+      type="button"
+      ref={action.buttonRef}
+      className={`dialog-action ${action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary'}`}
+      aria-busy={action.busy ? true : undefined}
+      aria-describedby={action.descriptionId}
+      disabled={action.disabled || busy}
+      onClick={action.onClick}
+    >
+      {action.icon !== undefined && <Icon name={action.icon} size={13} />}
+      {action.label}
+    </button>;
+  }
+
   // Pressing the backdrop keeps focus inside the dialog; the click itself
   // deliberately does nothing (the dialog stays open).
   return createPortal(
@@ -162,22 +182,12 @@ export function Dialog(props: DialogProps): JSX.Element {
         </div>
         <div className="dialog-body">{props.children}</div>
         <div className="dialog-footer">
-          {props.footerNote !== undefined && <span className="dialog-footer-note">{props.footerNote}</span>}
+          <div className="dialog-footer-leading">
+            {props.leadingActions?.map((action, index) => actionButton(action, `leading-${index}-${action.label}`))}
+            {props.footerNote !== undefined && <span className="dialog-footer-note">{props.footerNote}</span>}
+          </div>
           <div className="dialog-footer-actions">
-            {props.actions.map((action, index) => (
-              <button
-                key={`${index}-${action.label}`}
-                type="button"
-                ref={action.buttonRef}
-                className={`dialog-action ${action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary'}`}
-                aria-busy={action.busy ? true : undefined}
-                aria-describedby={action.descriptionId}
-                disabled={action.disabled || busy}
-                onClick={action.onClick}
-              >
-                {action.label}
-              </button>
-            ))}
+            {props.actions.map((action, index) => actionButton(action, `${index}-${action.label}`))}
           </div>
         </div>
       </div>

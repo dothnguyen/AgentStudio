@@ -205,16 +205,19 @@ export function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } 
 }
 
 export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): BoardSettings {
-  const raw = [
-    { type: 'agent', when: { status: 'backlog' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', maxRounds: 3, syncBase: true, onFailPriority: 2, onPassCreatedTickets: { status: 'backlog' } },
-    { type: 'action', when: { status: 'merge-ready' }, action: 'merge', onPass: 'done', onFail: 'merge-conflict' },
-    { type: 'action', when: { status: 'plan-merge-ready' }, action: 'merge', onPass: 'done', onFail: 'plan-merge-conflict' },
-    { type: 'agent', when: { status: 'merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready' },
-    { type: 'agent', when: { status: 'plan-merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'plan-merge-ready', onFail: 'dev-ready' },
+  const raw: Array<Record<string, unknown>> = [
+    { when: { status: 'backlog' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', maxRounds: 3, syncBase: true, onFailPriority: 2, onPassCreatedTickets: { status: 'backlog' } },
+    { when: { status: 'merge-ready' }, action: 'merge', onPass: 'done', onFail: 'merge-conflict' },
+    { when: { status: 'plan-merge-ready' }, action: 'merge', onPass: 'done', onFail: 'plan-merge-conflict' },
+    { when: { status: 'merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready' },
+    { when: { status: 'plan-merge-conflict' }, role: 'TeamLead', workflow: 'board-resolve-merge', workspace: 'worktree', onPass: 'plan-merge-ready', onFail: 'dev-ready' },
   ];
   return { ...boardSettingsFixture(), board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: { rules: raw } },
     statuses: ['backlog', 'dev-ready', 'merge-ready', 'merge-conflict', 'plan-merge-ready', 'plan-merge-conflict', 'done'].map(id => ({ id, name: id, kind: id === 'backlog' ? 'initial' : id === 'done' ? 'done' : null })),
-    rules: raw.map((r, index) => ({ index, status: r.when.status, type: r.type as 'agent' | 'action', role: r.role ?? null, workflow: r.workflow ?? null, action: r.action ?? null, onPass: r.onPass, onFail: r.onFail, onBlocked: null, workspace: r.workspace ?? null, syncBase: !!r.syncBase, maxRounds: r.maxRounds ?? null, priority: null, onFailureLimit: null, protected: r.when.status.includes('conflict') })),
+    rules: raw.map((r, index) => {
+      const status = (r.when as { status: string }).status;
+      return { index, status, type: 'action' in r ? 'action' as const : 'agent' as const, role: typeof r.role === 'string' ? r.role : null, workflow: typeof r.workflow === 'string' ? r.workflow : null, action: typeof r.action === 'string' ? r.action : null, onPass: r.onPass as string, onFail: r.onFail as string, onBlocked: null, workspace: typeof r.workspace === 'string' ? r.workspace : null, syncBase: !!r.syncBase, maxRounds: typeof r.maxRounds === 'number' ? r.maxRounds : null, priority: null, onFailureLimit: null, protected: status.includes('conflict') };
+    }),
     roles: { state: 'ok', sha256: 'b'.repeat(64), message: null, items: [{ id: 'Developer', description: 'Develops' }, { id: 'TeamLead', description: 'Leads' }] },
     workflows: [{ name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] }, { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] }],
     protectedRoutes: ['merge-conflict', 'plan-merge-conflict'].map(status => ({ status, role: 'TeamLead', satisfied: true })), ...overrides };
@@ -223,11 +226,11 @@ export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): 
 export function escalationSettingsFixture(): BoardSettings {
   const base = routingSettingsFixture();
   const policy = { count: 3, status: 'need-escalate' };
-  const raw = [
+  const raw: Array<Record<string, unknown>> = [
     ...(base.board.config!.rules as Array<Record<string, unknown>>),
-    { type: 'agent', when: { status: 'qa-ready' }, role: 'QA', workflow: 'board-qa', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
-    { type: 'agent', when: { status: 'review-ready' }, role: 'Reviewer', workflow: 'board-review', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
-    { type: 'agent', when: { status: 'need-escalate' }, role: 'SeniorDeveloper', workflow: 'board-senior-develop', workspace: 'worktree', syncBase: true, onPass: 'qa-ready', onFail: 'need-escalate', maxRounds: 3, priority: 0 },
+    { when: { status: 'qa-ready' }, role: 'QA', workflow: 'board-qa', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
+    { when: { status: 'review-ready' }, role: 'Reviewer', workflow: 'board-review', workspace: 'worktree', onPass: 'merge-ready', onFail: 'dev-ready', onFailPriority: 0, onFailureLimit: { ...policy } },
+    { when: { status: 'need-escalate' }, role: 'SeniorDeveloper', workflow: 'board-senior-develop', workspace: 'worktree', syncBase: true, onPass: 'qa-ready', onFail: 'need-escalate', maxRounds: 3, priority: 0 },
   ];
   const view = (index: number, status: string, role: string, workflow: string, onPass: string, onFail: string, extra: Partial<BoardSettings['rules'][number]>): BoardSettings['rules'][number] => ({
     index, status, type: 'agent', role, workflow, action: null, onPass, onFail, onBlocked: null, workspace: 'worktree',

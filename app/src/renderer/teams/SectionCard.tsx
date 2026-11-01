@@ -1,5 +1,5 @@
 import { useId, type JSX, type ReactNode, type RefObject } from 'react';
-import { Icon } from '../icons/Icon';
+import { Icon, type IconName } from '../icons/Icon';
 
 export interface SectionCardAction {
   /** Visible button text, usually short (for example "Edit"). */
@@ -8,6 +8,8 @@ export interface SectionCardAction {
   ariaLabel: string;
   onClick(): void;
   disabled?: boolean;
+  /** Icon shown before the label; defaults to the pencil of the v7 designs. */
+  icon?: IconName;
   /** Optional id of the explanation associated with a disabled action. */
   descriptionId?: string;
   /** Optional handle so the owner can return focus to the action after a dialog. */
@@ -47,7 +49,7 @@ export function SectionCard(props: SectionCardProps): JSX.Element {
             disabled={props.action.disabled}
             onClick={props.action.onClick}
           >
-            <Icon name="pencil" size={13} />
+            <Icon name={props.action.icon ?? 'pencil'} size={13} />
             {props.action.label}
           </button>
         )}

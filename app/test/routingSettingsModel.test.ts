@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, removeRuleFailureLimit, setRuleFailureLimit, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
+import { addRule, boardSettingsChanges, createRoutingDraft, errorProblems, failureLimitOf, isActionRule, isRuleFieldProblem, removeRule, removeRuleFailureLimit, ruleStatus, setRuleFailureLimit, setRuleSyncBase, unusedStatuses, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
 import { escalationSettingsFixture, routingSettingsFixture } from './teamsFixtures';
 
 describe('routing settings model', () => {
@@ -211,7 +211,7 @@ describe('failure escalation', () => {
       const rules = structuredClone(d.rules); rules[5].onFailureLimit = value;
       expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation needs a count and a target status.' });
     }
-    const rules = structuredClone(d.rules); rules[5].type = 'action'; rules[5].action = 'merge';
+    const rules = structuredClone(d.rules); rules[5].action = 'merge';
     expect(validateRoutingDraft({ ...d, rules }, s)).toContainEqual({ path: 'rules[5].onFailureLimit', message: 'Failure escalation is available only for agent rules.' });
   });
   it('does not create a policy when updating a non-object value', () => {
@@ -253,4 +253,134 @@ it('preserves hidden and future rule fields in the changes payload', () => {
   const draft = createRoutingDraft(s)!; const changed = updateRuleField(draft, 0, 'onFail', 'backlog');
   const expected = structuredClone(raw); expected[0].onFail = 'backlog';
   expect(boardSettingsChanges(changed, s)).toEqual({ rules: expected }); expect(draft.rules).toEqual(raw);
+});
+
+describe('adding and removing rules', () => {
+  it('classifies rules by their action, never by the derived or legacy type key', () => {
+    expect(isActionRule(undefined)).toBe(false);
+    expect(isActionRule({ when: { status: 'done' }, type: 'action' })).toBe(false);
+    expect(isActionRule({ when: { status: 'done' }, action: 'merge' })).toBe(true);
+    expect(ruleStatus(undefined)).toBeNull();
+    expect(ruleStatus({ when: null })).toBeNull();
+    expect(ruleStatus({ when: { status: 3 } })).toBeNull();
+    expect(ruleStatus({ when: { status: 'done' } })).toBe('done');
+  });
+
+  it('validates real board-shaped rules whatever stale type key they carry', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const raw = s.board.config!.rules as Array<Record<string, unknown>>;
+    const agentWithType = { ...raw[0]!, type: 'action' };
+    expect(validateRoutingDraft({ ...d, rules: [agentWithType, ...raw.slice(1)] }, s)).toEqual([]);
+    const actionWithType = { ...raw[1]!, type: 'agent' };
+    expect(validateRoutingDraft({ ...d, rules: [raw[0]!, actionWithType, ...raw.slice(2)] }, s)).toEqual([]);
+    const actionWithoutAction = { when: { status: 'dev-ready' }, type: 'action', onPass: 'done', onFail: 'backlog' };
+    expect(validateRoutingDraft({ ...d, rules: [...raw, actionWithoutAction] }, s)).toContainEqual({ path: 'rules[5].role', message: 'Choose a configured role.' });
+  });
+
+  it('uses only backend rule keys and identifies action rules by their action', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const raw = s.board.config!.rules as Array<Record<string, unknown>>;
+    expect(raw.every(rule => !('type' in rule))).toBe(true);
+    expect(validateRoutingDraft(d, s)).toEqual([]);
+    const added = addRule(d, s, 'dev-ready');
+    expect(added.rules.every(rule => !('type' in rule))).toBe(true);
+    expect('action' in added.rules[added.rules.length - 1]!).toBe(false);
+    expect('action' in addRule(d, s, 'done', 'action').rules[d.rules.length]!).toBe(true);
+  });
+
+  it('lists statuses without a rule in board order', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    expect(unusedStatuses(d, s)).toEqual(['dev-ready', 'done']);
+  });
+
+  it('appends an agent rule with the available defaults for a free status', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const next = addRule(d, s, 'dev-ready');
+    expect(next.rules).toHaveLength(d.rules.length + 1);
+    expect(ruleStatus(next.rules[next.rules.length - 1])).toBe('dev-ready');
+    expect(next.rules[next.rules.length - 1]).toEqual({ when: { status: 'dev-ready' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', syncBase: true, onPass: 'done', onFail: 'backlog' });
+    expect(d.rules).toHaveLength(s.rules.length);
+    expect(validateRoutingDraft(next, s)).toEqual([]);
+  });
+
+  it('skips unavailable workflows and roles the available workflows cannot use', () => {
+    const s = routingSettingsFixture();
+    s.roles = { ...s.roles, items: [{ id: 'BrokenRole', description: 'Only owns a broken workflow' }, { id: 'Developer', description: 'Develops' }, { id: 'TeamLead', description: 'Leads' }] };
+    s.workflows = [
+      { name: 'broken-develop', builtin: false, roles: ['BrokenRole', 'Developer'], errors: ['invalid'] },
+      { name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] },
+      { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] },
+    ];
+    const d = createRoutingDraft(s)!;
+    expect(addRule(d, s, 'dev-ready').rules[d.rules.length]).toEqual({
+      when: { status: 'dev-ready' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', syncBase: true, onPass: 'done', onFail: 'backlog',
+    });
+    expect(validateRoutingDraft(addRule(d, s, 'dev-ready'), s)).toEqual([]);
+  });
+
+  it('appends an action rule without a role, workflow or escalation', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const next = addRule(d, s, 'done', 'action');
+    const added = next.rules[next.rules.length - 1]!;
+    expect(added).toEqual({ when: { status: 'done' }, action: 'merge', onPass: 'done', onFail: 'backlog' });
+    expect(added).not.toHaveProperty('role');
+    expect(added).not.toHaveProperty('onFailureLimit');
+  });
+
+  it('refuses a status that already has a rule or is not on this board', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    expect(addRule(d, s, 'backlog')).toEqual({ ...d, rules: d.rules });
+    expect(addRule(d, s, 'not-on-this-board')).toEqual({ ...d, rules: d.rules });
+    expect(addRule(d, s, 'backlog')).not.toBe(d);
+  });
+
+  it('removes only the chosen rule and leaves the others in order', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const next = removeRule(d, 1, s);
+    expect(next.rules).toHaveLength(d.rules.length - 1);
+    expect(next.rules).toEqual([d.rules[0], d.rules[2], d.rules[3], d.rules[4]]);
+    expect(d.rules).toHaveLength(s.rules.length);
+    expect(removeRule(d, 99, s)).toEqual({ ...d, rules: d.rules });
+  });
+
+  it('cannot remove a protected route', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const index = d.rules.findIndex(rule => ruleStatus(rule) === 'merge-conflict');
+    expect(removeRule(d, index, s).rules).toEqual(d.rules);
+  });
+
+  it('keeps other escalation policies when a rule owning one is removed', () => {
+    const s = escalationSettingsFixture(); const d = createRoutingDraft(s)!;
+    const next = removeRule(d, 5, s);
+    expect(next.rules[4]).not.toHaveProperty('onFailureLimit');
+    expect(next.rules[5]!.onFailureLimit).toEqual({ count: 3, status: 'need-escalate' });
+  });
+
+  it('turns sync base on and off without touching other fields', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    const without = { ...d.rules[0]! }; delete without.syncBase;
+    const off = setRuleSyncBase(d, 0, false);
+    expect(off.rules[0]).toEqual(without);
+    expect(setRuleSyncBase(off, 0, true).rules[0]).toEqual(d.rules[0]);
+    expect(setRuleSyncBase(d, 99, true)).toEqual({ ...d, rules: d.rules });
+  });
+
+  it('shows role and workflow problems inline only for agent rules', () => {
+    expect(isRuleFieldProblem('rules[1].role', 1, true, false)).toBe(true);
+    expect(isRuleFieldProblem('rules[1].role', 1, false, false)).toBe(false);
+    expect(isRuleFieldProblem('rules[1].workflow', 1, false, false)).toBe(false);
+    expect(isRuleFieldProblem('rules[1].onPass', 1, false, false)).toBe(true);
+    expect(isRuleFieldProblem('rules[1].when.status', 1, true, false)).toBe(false);
+    expect(isRuleFieldProblem('rules[1].when.status', 1, true, true)).toBe(true);
+  });
+
+  it('drops sync base when a rule stops using an isolated worktree', () => {
+    const s = routingSettingsFixture(); const d = createRoutingDraft(s)!;
+    for (const workspace of ['main', 'none', '']) {
+      const changed = updateRuleField(d, 0, 'workspace', workspace);
+      expect(changed.rules[0]).not.toHaveProperty('syncBase');
+      expect(validateRoutingDraft(changed, s)).not.toContainEqual(expect.objectContaining({ path: 'rules[0].syncBase' }));
+    }
+    expect(updateRuleField(d, 0, 'workspace', 'worktree')).toEqual(d);
+  });
 });
