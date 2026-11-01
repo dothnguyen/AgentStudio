@@ -119,7 +119,7 @@ it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
     expect(body, selector).not.toMatch(/display: ?none/);
     expect(body, selector).not.toMatch(/text-overflow: ?ellipsis/);
     expect(body, selector).not.toMatch(/white-space: ?nowrap/);
-    if (!/status-dot|teams-members-table|teams-visually-hidden|teams-member-hero-avatar|teams-live-status-dot/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
+    if (!/status-dot|teams-members-table|teams-visually-hidden|teams-member-hero-avatar|teams-live-status-dot|teams-agent-mark/.test(selector)) expect(body, selector).not.toMatch(/(?<![\w-])(min-)?width: ?\d+(px|rem|em)/);
   }
   expect(rules.find(r => /teams-live-modal/.test(r.selector) && /overflow-x: hidden/.test(r.body))).toBeTruthy();
 });
@@ -198,12 +198,14 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   const detail = document.querySelector('.teams-member-detail')!;
   const focusables = Array.from(detail.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'));
   expect(focusables[0]?.textContent).toBe('Back to members');
-  expect(focusables[1]?.textContent).toMatch(/^View .* in Roles$/);
-  expect(focusables[2]?.textContent).toBe('Retry loading ticket permission');
-  expect(focusables[3]?.textContent).toBe('Edit saved configuration');
-  expect(focusables[4]?.textContent).toBe('Switch');
-  expect(focusables[5]?.textContent).toBe('Edit');
-  expect(focusables[6]?.textContent).toBe('Remove');
+  expect(focusables[1]?.textContent).toBe('Edit options');
+  expect(focusables[2]?.textContent).toBe('Switch');
+  expect(focusables[3]?.textContent).toMatch(/^View .* in Roles$/);
+  expect(focusables[4]?.textContent).toBe('Retry loading ticket permission');
+  expect(focusables[5]?.textContent).toBe('Edit saved configuration');
+  expect(focusables[6]?.textContent).toBe('Switch');
+  expect(focusables[7]?.textContent).toBe('Edit');
+  expect(focusables[8]?.textContent).toBe('Remove');
   // Back restores the invoking row
   await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
   expect(document.activeElement).toBe(memberOpen('dev'));

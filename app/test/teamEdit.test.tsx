@@ -422,7 +422,8 @@ describe('team editing', () => {
     const updateMember = vi.fn(async () => ok({team: teamDefinition(), member: {id: 'dev', name: 'dev', role: 'Developer'}, problems: [], appliesOnNextStart: false}));
     await renderScreen({overview: [ok(overviewFixture([team({members: [member({agentMode: 'ordered_catalog', agentOptions: [missing]})]})]))], calls: {updateMember}});
     await click('Edit dev');
-    expect(screen.getByText('Missing from catalog')).toBeTruthy();
+    const form = screen.getByRole('form', { name: 'Edit dev' });
+    expect(within(form).getByText('Missing from catalog')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Add agent option'), {target: {value: 'codex-gpt'}});
     await click('Save changes');
     expect(screen.getByRole('alert').textContent).toBe('Remove or replace missing catalog agents before saving.');
@@ -472,7 +473,7 @@ describe('team editing', () => {
     expect(screen.getByRole('button', {name: 'Remove OpenCode Sonnet'})).toBeTruthy();
     expect(screen.getByRole('button', {name: 'Remove gone'})).toBeTruthy();
     expect((screen.getByLabelText('Add agent option') as HTMLSelectElement).disabled).toBe(true);
-    expect(screen.getAllByText('Missing from catalog')).toHaveLength(1);
+    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getAllByText('Missing from catalog')).toHaveLength(1);
     // A change that depends on the catalog stays blocked until it is fresh again.
     await click('Move gone up');
     expect((screen.getByRole('button', {name: 'Save changes'}) as HTMLButtonElement).disabled).toBe(true);
@@ -947,7 +948,7 @@ describe('T-090 saved configuration completion', () => {
 
     await click('Edit dev');
     expect(screen.getByRole('button', { name: 'Remove ghost-agent-def' })).toBeTruthy();
-    expect(screen.getAllByText('Missing from catalog')).toHaveLength(1);
+    expect(within(screen.getByRole('form', { name: 'Edit dev' })).getAllByText('Missing from catalog')).toHaveLength(1);
     // the missing agent blocks Save until the user repairs it
     await click('Move OpenCode Sonnet up');
     await click('Save changes');

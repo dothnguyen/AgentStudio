@@ -4,7 +4,7 @@ export type IconName =
   | 'home' | 'teams' | 'agents' | 'roles' | 'boards' | 'configuration' | 'switch' | 'chevron' | 'refresh' | 'item'
   | 'document' | 'ticket' | 'check-circle' | 'check' | 'clock' | 'arrow-right' | 'lock'
   | 'box' | 'git-branch' | 'code' | 'search' | 'gear' | 'warning' | 'plus' | 'chevron-right' | 'more'
-  | 'pencil' | 'close' | 'info';
+  | 'pencil' | 'close' | 'info' | 'chevron-up' | 'chevron-down' | 'trash';
 export type IconTone = 'success' | 'info' | 'warning' | 'danger';
 export interface IconSpec { name: IconName; tone: IconTone | null }
 
@@ -38,6 +38,9 @@ const PATHS: Record<IconName, string> = {
   pencil: 'M2.5 13.5h3L13 6 10 3 2.5 10.5zM9 4l3 3',
   close: 'M4 4l8 8M12 4l-8 8',
   info: 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 7v4.5M8 4.75v.5',
+  'chevron-up': 'm4.5 9.5 3.5-3.5 3.5 3.5',
+  'chevron-down': 'm4.5 6.5 3.5 3.5 3.5-3.5',
+  trash: 'M2.5 4.5h11M6 4.5V2.5h4v2M4 4.5l.6 8a1.4 1.4 0 0 0 1.4 1.3h4a1.4 1.4 0 0 0 1.4-1.3l.6-8M6.6 7v4M9.4 7v4',
 };
 
 export function Icon(props: { name: IconName; size?: number; tone?: IconTone | null; className?: string }): JSX.Element {

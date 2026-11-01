@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import { MemberDetailPanel, type MemberDetailPanelProps } from './MemberDetailPanel';
+import { AgentsSection } from './AgentsSection';
 import { MemberLiveAgentActions } from './MemberLiveAgentActions';
 import { memberActionKey, type MemberActionInFlight } from './memberAgentActionsModel';
 import type { AttentionRun, BlockedTicket, OverviewMember, OverviewTeam, TeamAttention } from '../api';
@@ -11,9 +12,10 @@ import type { BoardStatus } from './teamActionsModel';
 import { teamsPanelId } from './teamsViewModel';
 import { filterMembers, missingMemberNotice, resolveMemberSelection, type MemberSelection } from './teamsModel';
 
-export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'liveActions'> {
+export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' | 'onBack' | 'onRemoved' | 'liveActions' | 'agentsSection'> {
   announce?: boolean;
   onNoticeChange?(active: boolean): void;
+  onManageAgents?(): void;
   actions: Record<string, MemberActionInFlight>;
   polling: Record<string, boolean>;
   onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void;
@@ -53,7 +55,23 @@ export function MembersView(props: MembersViewProps): JSX.Element {
   function removed(): void { setReturnFocus(canEditTeam(team) ? 'add' : { memberId: null }); setIntent(null); onSelect(null); }
   if (result.state === 'selected') {
     const liveInFlight = props.actions[memberActionKey(team.id ?? '', result.member.memberId ?? '')] ?? null;
-    return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} intent={intent ?? undefined} onIntentConsumed={() => setIntent(null)} inFlight={liveInFlight} liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} announce={props.announce} inFlight={liveInFlight} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
+    return <MemberDetailPanel key={result.member.memberId} {...props} member={result.member} intent={intent ?? undefined} onIntentConsumed={() => setIntent(null)} inFlight={liveInFlight}
+      agentsSection={<AgentsSection
+        team={team}
+        member={result.member}
+        catalog={props.agentsFresh === false ? null : props.agents}
+        connected={props.connected}
+        announce={props.announce}
+        inFlight={liveInFlight}
+        polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]}
+        pending={props.pending}
+        readOnly={props.readOnly === true}
+        writes={props.writes}
+        onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)}
+        onResume={(id, label) => props.onResume(team, result.member, id, label)}
+        onManageAgents={props.onManageAgents}
+      />}
+      liveActions={<MemberLiveAgentActions team={team} member={result.member} catalog={props.agents} connected={props.connected} announce={props.announce} inFlight={liveInFlight} polling={!!props.polling[memberActionKey(team.id ?? '', result.member.memberId ?? '')]} onSwitch={(id, label, trigger) => props.onSwitch(team, result.member, id, label, trigger)} onResume={(id, label) => props.onResume(team, result.member, id, label)} />} onBack={back} onRemoved={removed} />;
   }
   const empty = team.members.length === 0;
   return <div className="teams-members teams-members-view">

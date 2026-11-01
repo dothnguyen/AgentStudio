@@ -21,7 +21,7 @@ export interface MemberDetailPanelProps {
   team: OverviewTeam; member: OverviewMember; agents: AgentDef[] | null; roleItems: RoleCatalogItem[] | null; roleCatalogMessage: string | null;
   onViewRole?(roleId: string): void; writes: TeamWrites; pending: boolean; connected: boolean;
   agentsFresh?: boolean; rolesFresh?: boolean; readOnly?: boolean;
-  liveActions: JSX.Element; onBack(): void; onRemoved(): void;
+  liveActions: JSX.Element; agentsSection: JSX.Element; onBack(): void; onRemoved(): void;
   /** In-flight live-agent action for this member, so the status card and live section agree. */
   inFlight?: MemberActionInFlight;
   /** One-shot intent from the row actions menu. */
@@ -129,6 +129,7 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
     </div>
     <div className="teams-member-layout">
       <div className="teams-member-main">
+        {props.agentsSection}
         <SectionCard title="Saved configuration (temporary)" className="teams-saved-configuration">
           {/* LEGACY: removed by "Member details v7 (5/5)" */}
           {editing ? <MemberForm key={memberId} mode="edit" heading={`Edit ${name}`} submitLabel="Save changes" cancelLabel="Discard changes" initial={editing} originalOptions={member.agentOptions} inlineContext={member.agentMode === 'inline' ? { provider: member.provider, model: member.model, reasoning: member.reasoning } : null} agents={agents} roles={formRoles} roleCatalogMessage={props.roleCatalogMessage} pending={props.pending} readOnly={props.readOnly === true} showMemberSettings={false} onSubmit={values => { const changes = memberChanges(editing, values); if (changes) void writes.updateMember(team, memberId, changes).then(outcome => { if (outcome.ok) { setEditing(null); setFocusTarget('edit'); } }); }} onCancel={() => { setEditing(null); setFocusTarget('edit'); }} /> : <>

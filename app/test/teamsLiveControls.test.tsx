@@ -568,8 +568,9 @@ describe('live member actions', () => {
   it('dead_pane_and_all_switch_evidence_are_visible_without_options', async () => {
     const lastSwitch = {state: 'pending' as const, requestedAgent: 'codex-gpt', assignmentId: null, code: 'CODE', message: 'detail', at: 'now'};
     const {result} = await renderLive({overview: [ok(data({...live, configuredAgents: [], quotaHolds: {}, paneState: 'dead', lastSwitch}))]});
-    expect(result.getByText("The member's pane is not alive.")).toBeTruthy();
-    expect(result.getByText(/pending — CODE: detail/)).toBeTruthy();
+    const actions = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(actions.getByText("The member's pane is not alive.")).toBeTruthy();
+    expect(actions.getByText(/pending — CODE: detail/)).toBeTruthy();
   });
   it('exact_assignment_confirmation_and_decline', async () => {
     const call = vi.fn().mockResolvedValue(confirmation('assignment-A'));
@@ -623,9 +624,10 @@ describe('live member actions', () => {
   });
   it('all_held_and_unknown_reset_display', async () => {
     const {result} = await renderLive({overview: [{ok: true, data: data({...live, quotaHolds: {'codex-gpt': null, missing: 'bad'}})}]});
-    expect(result.getAllByText(/Reset time unknown/)).toHaveLength(2);
-    expect(result.getAllByRole('button', {name: 'Resume'})).toHaveLength(2);
-    expect(result.getByText('All alternate agents are on quota hold.')).toBeTruthy();
+    const actions = within(result.getByRole('region', {name: 'Live for dev'}));
+    expect(actions.getAllByText(/Reset time unknown/)).toHaveLength(2);
+    expect(actions.getAllByRole('button', {name: 'Resume'})).toHaveLength(2);
+    expect(actions.getByText('All alternate agents are on quota hold.')).toBeTruthy();
   });
   it('duplicate_switch_blocked', async () => {
     const call = vi.fn(() => new Promise(() => {}));
@@ -1000,7 +1002,7 @@ describe('live member actions', () => {
     }
     const {result} = await renderLive({overview: [{ok: true, data: data()}], agents: [{ok: true, data: catalogFixture({agents: []})}]});
     expect((result.getByRole('button', {name: 'Switch'}) as HTMLButtonElement).disabled).toBe(true);
-    expect(result.getByText("Agent 'codex-gpt' is missing from the catalog.")).toBeTruthy();
+    expect(result.getAllByText("Agent 'codex-gpt' is missing from the catalog.").length).toBeGreaterThan(0);
   });
   it('inline_member_has_no_live_actions', async () => {
     const inline = member({agentMode: 'inline', source: 'inline', runtime: live});
@@ -1084,7 +1086,7 @@ describe('live member actions', () => {
     const held = {...live, configuredAgents: ['opencode-sonnet', 'missing'], quotaHolds: {missing: null}};
     const resume = vi.fn().mockResolvedValue({ok: true, data: {teamId: 't', memberId: 'dev', agentId: 'a', option: 'missing', cleared: true, activeAgent: 'opencode-sonnet'}});
     const {result} = await renderLive({overview: [{ok: true, data: data(held)}, {ok: true, data: data({...held, quotaHolds: {}})}], calls: {resumeMemberAgent: resume}});
-    expect(result.getByText("Agent 'missing' is missing from the catalog.")).toBeTruthy();
+    expect(result.getAllByText("Agent 'missing' is missing from the catalog.").length).toBeGreaterThan(0);
     fireEvent.click(result.getByRole('button', {name: 'Resume'}));
     await act(async () => {});
     expect(resume).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'missing');
@@ -1296,10 +1298,11 @@ describe('T-082 live controls', () => {
     const resumeMemberAgent = vi.fn().mockResolvedValue({ ok: true, data: { teamId: 't', memberId: 'dev', agentId: 'a', option: 'codex-gpt', cleared: true, activeAgent: 'opencode-sonnet' } });
     const held = { ...live, quotaHolds: { 'codex-gpt': '2099-01-02T03:04:00Z', 'opencode-sonnet': null } };
     await renderLive({ overview: [ok(data(held)), ok(data({ ...held, quotaHolds: { 'opencode-sonnet': null } }))], calls: { resumeMemberAgent } });
-    expect(screen.getByText(/Resets at 2099-01-02 03:04 UTC/)).toBeTruthy();
-    expect(screen.getByText(/Reset time unknown/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Resume' })).toHaveLength(2);
-    const inactive = screen.getAllByRole('listitem').find(li => li.textContent!.includes('Codex GPT') && li.querySelector('button'))!;
+    const actions = within(screen.getByRole('region', { name: 'Live for dev' }));
+    expect(actions.getByText(/Resets at 2099-01-02 03:04 UTC/)).toBeTruthy();
+    expect(actions.getByText(/Reset time unknown/)).toBeTruthy();
+    expect(actions.getAllByRole('button', { name: 'Resume' })).toHaveLength(2);
+    const inactive = actions.getAllByRole('listitem').find(li => li.textContent!.includes('Codex GPT') && li.querySelector('button'))!;
     fireEvent.click(within(inactive).getByRole('button', { name: 'Resume' })); await flush();
     expect(resumeMemberAgent).toHaveBeenCalledTimes(1);
     expect(resumeMemberAgent).toHaveBeenCalledWith('ws-a', 'dev-team', 'dev', 'codex-gpt');

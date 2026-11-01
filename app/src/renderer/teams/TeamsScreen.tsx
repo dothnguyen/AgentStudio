@@ -63,6 +63,8 @@ export interface TeamsScreenProps {
   connection?: ConnectionStatus;
   onViewRole?(roleId: string): void;
   onOpenBoard?(): void;
+  /** Navigates to the Agents catalog from the Edit agent options dialog. */
+  onOpenAgents?(): void;
   createTeamRequested: boolean;
   onCreateTeamRequestedChange(requested: boolean): void;
   onTeamsWritePendingChange(pending: boolean): void;
@@ -749,6 +751,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             roleItems={roleItems}
             roleCatalogMessage={roleCatalogMessage}
             onViewRole={props.onViewRole}
+            onManageAgents={props.onOpenAgents}
             writes={writes}
             connected={connected}
             actions={actions}
@@ -792,6 +795,7 @@ function TeamDetailPanel(props: {
   roleItems: RoleCatalogItem[] | null;
   roleCatalogMessage: string | null;
   onViewRole?(roleId: string): void;
+  onManageAgents?(): void;
   connected: boolean;
   actions: Record<string, MemberActionInFlight>;
   polling: Record<string, boolean>;
@@ -827,6 +831,7 @@ function TeamDetailPanel(props: {
     if (id === 'overview') return (
       <MembersView workspaceId={props.workspaceId} management={props.management} savedRevision={props.savedRevision} teamKey={props.teamKey} team={team} selection={props.selection} onSelect={props.onSelectMember}
         agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
+        onManageAgents={props.onManageAgents}
         writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
         onSwitch={props.onSwitch} onResume={props.onResume}
         attention={team.attention}

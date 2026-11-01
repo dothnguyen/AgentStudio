@@ -103,4 +103,18 @@ describe('member details v7 styles', () => {
   it('does not double the padding inside the legacy live-agent card', () => {
     expect(rule('.section-card .teams-live-actions')).toContain('padding: 0;');
   });
+
+  it('styles the v7 Agents card rows and the Edit agent options dialog', () => {
+    parts('.teams-agents-card .section-card-body', ['padding: 0']);
+    parts('.teams-agent-row', ['display: flex', 'align-items: center', 'gap: 12px', 'padding: 13px 18px']);
+    parts('.teams-agent-row.is-active', ['background: rgba(91, 156, 255, 0.06)']);
+    parts('.teams-agent-mark', ['width: 34px', 'height: 34px', 'border-radius: 8px', '#1f2630', '#9ec3ff']);
+    parts('.teams-agent-tag.is-default', ['color: #9ec3ff', 'background: rgba(91, 156, 255, 0.12)']);
+    parts('.teams-agent-tag.is-live', ['color: #6fd38b', 'background: rgba(74, 194, 107, 0.12)']);
+    parts('.teams-agents-diff', ['background: rgba(240, 180, 83, 0.07)', 'color: #f0b453', 'font-size: 12px']);
+    parts('.member-agent-options-row', ['display: flex', 'align-items: center', 'gap: 10px', 'padding: 10px 12px', 'background: #121418']);
+    parts('.member-agent-options-mark', ['width: 30px', 'height: 30px', 'border-radius: 7px']);
+    parts('.member-agent-options-icon', ['width: 28px', 'height: 28px', 'border-radius: 6px']);
+    parts('.member-agent-options-add', ['border: 1px dashed #343a43', 'border-radius: 8px']);
+  });
 });

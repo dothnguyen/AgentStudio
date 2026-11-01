@@ -93,6 +93,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       connection={props.connection}
       onViewRole={(roleId) => navigate('roles', { roleId })}
       onOpenBoard={items.some((i) => i.id === 'boards' && i.disabled !== true) ? () => navigate('boards') : undefined}
+      onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
       createTeamRequested={createTeamRequested}
       onCreateTeamRequestedChange={setCreateTeamRequested}
       onTeamsWritePendingChange={setTeamsWritePending}
