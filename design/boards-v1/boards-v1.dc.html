@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Boards — current phase</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+.nav-link:hover{background:#181b20}
+.btn-sec:hover{background:#222831 !important}
+.btn-ghost:hover{background:#1b1f24 !important}
+.ticket-card:hover{background:#20242a !important;border-color:#343a43 !important}
+.crumb:hover{color:#e7e9ec !important;text-decoration:underline}
+.chip-btn:hover{background:#222831 !important}
+.att-row+.att-row{border-top:1px solid #1f2328}
+.ev-row+.ev-row{border-top:1px solid #1f2328}
+.dep-row+.dep-row{border-top:1px solid #1f2328}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #5b9cff;outline-offset:2px}
+.ticket-card:focus-visible{outline-offset:1px}
+input::placeholder{color:#8d949e}
+.board-scroll::-webkit-scrollbar{height:10px}.board-scroll::-webkit-scrollbar-thumb{background:#2a2e35;border-radius:5px}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 1.45">
+
+  <!-- Sidebar -->
+  <nav aria-label="Primary" style="flex: 1 1 240px; max-width: 260px; min-width: 220px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 2px 8px">
+      <div style="width: 26px; height: 26px; border-radius: 7px; background: #5b9cff; display: flex; align-items: center; justify-content: center">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d0f12" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6"></path><path d="M12 19h8"></path></svg>
+      </div>
+      <span style="font-weight: 600; font-size: 14px">Agent Studio</span>
+    </div>
+    <button type="button" class="btn-ghost" style="all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #23262c; border-radius: 8px; background: #14171b">
+      <span style="width: 28px; height: 28px; border-radius: 6px; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 11px; display: flex; align-items: center; justify-content: center">AS</span>
+      <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+        <span style="font-weight: 600; font-size: 13px">Agent Studio</span>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">/mnt/c/Works/Projects/AgentStudio</span>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15l5 5 5-5"></path><path d="M7 9l5-5 5 5"></path></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Home</a>
+      <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path><path d="M16 4.5a3.5 3.5 0 0 1 0 7"></path><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"></path></svg>
+        <span style="flex: 1">Teams</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid #23262c">
+        <a class="nav-link" href="Main.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ac26b; flex: none" aria-hidden="true"></span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Agent Studio Dev Team</span>
+          <span style="font-size: 11px; color: #a3a9b2">6</span>
+        </a>
+      </div>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Agents</a>
+      <a class="nav-link" href="Roles.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"></path></svg>Roles</a>
+      <a class="nav-link" href="Skills.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>Skills</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #e7e9ec; background: #181b20; font-weight: 500">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16M15 4v16"></path></svg>
+        <span style="flex: 1">Boards</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <div style="display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px 18px; padding-left: 10px; border-left: 1px solid #23262c">
+        <a class="nav-link" href="#" aria-current="page" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #e7e9ec; background: rgba(91,156,255,0.14)">
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Current Phase</span>
+          <span style="font-size: 11px; color: #a3a9b2">{{totalCount}}</span>
+        </a>
+        <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2"><span style="flex: 1">Backlog</span></a>
+        <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; color: #a3a9b2"><span style="flex: 1">Phases</span></a>
+      </div>
+      <a class="nav-link" href="Routing.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.5"></circle><circle cx="6" cy="18" r="2.5"></circle><circle cx="18" cy="8" r="2.5"></circle><path d="M6 8.5v7M18 10.5c0 4-7 3-11 6.2"></path></svg>Routing</a>
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>Configuration</a>
+    </div>
+    <div style="margin-top: auto; border-top: 1px solid #23262c; padding-top: 12px">
+      <a class="nav-link" href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #b9bec6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3"></path></svg>Switch workspace</a>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 40px 56px">
+    <div style="max-width: 1480px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+      <!-- ================= BOARD ================= -->
+      <sc-if value="{{isBoard}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <div style="font-size: 12px; color: #8d949e; display: flex; gap: 6px; align-items: center">Boards<span aria-hidden="true">/</span><span style="color: #e7e9ec">Current Phase</span></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between">
+            <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0; max-width: 760px">
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+                <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">Phase 06 - Roles, Routing and Skills redesign</h1>
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px; font-weight: 500">Current</span>
+              </div>
+              <p style="margin: 0; color: #a3a9b2; font-size: 12.5px">Redesign the Roles screen, move Routing to its own screen, and add a Skills screen, in the style of the Teams screen.</p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; min-width: 240px">
+              <span style="display: flex; justify-content: space-between; font-size: 12px; color: #a3a9b2"><span>{{progressText}}</span><span>{{progressPct}}</span></span>
+              <span style="display: block; height: 8px; border-radius: 999px; background: #1e2228; overflow: hidden"><span style="display: block; height: 100%; width: {{progressWidth}}; background: #4ac26b; border-radius: 999px"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border: 1px solid #23262c; border-radius: 8px; background: #14171a; color: #a3a9b2; font-size: 12.5px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ec3ff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+          <span>While a team is running, tickets in this phase are worked automatically by the routing rules. Tickets in other phases wait until their phase is current.</span>
+        </div>
+
+        <!-- Needs attention -->
+        <sc-if value="{{hasAttention}}" hint-placeholder-val="{{true}}">
+          <section aria-labelledby="att-h" style="background: #16191d; border: 1px solid #4a3d1e; border-radius: 12px; overflow: hidden">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #2a2417; background: rgba(240,180,83,0.05)">
+              <h2 id="att-h" style="margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #f0b453"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>Needs attention · {{attentionCount}}</h2>
+            </div>
+            <ul style="list-style: none; margin: 0; padding: 0">
+              <sc-for list="{{attention}}" as="a" hint-placeholder-count="2">
+                <li class="att-row" style="display: flex; align-items: center; gap: 12px; padding: 11px 18px">
+                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4cad2; flex: none">{{a.key}}</span>
+                  <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                    <span style="font-weight: 500">{{a.title}}</span>
+                    <span style="font-size: 12px; color: #a3a9b2">{{a.detail}}</span>
+                  </span>
+                  <button type="button" class="btn-sec" onClick="{{a.open}}" aria-label="Open {{a.key}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 28px; padding: 0 12px; display: inline-flex; align-items: center; border: 1px solid #2f343c; border-radius: 7px; color: #e7e9ec; background: #1b1f24; font-size: 12.5px; font-weight: 500">Open</button>
+                </li>
+              </sc-for>
+            </ul>
+          </section>
+        </sc-if>
+
+        <!-- Toolbar -->
+        <div style="display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between">
+          <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+            <label style="display: flex; align-items: center; gap: 8px; height: 36px; width: min(300px, 100%); box-sizing: border-box; padding: 0 12px; border: 1px solid #2f343c; border-radius: 8px; background: #121418">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8d949e" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+              <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Search tickets</span>
+              <input type="text" value="{{query}}" onChange="{{setQuery}}" placeholder="Search tickets" style="all: unset; flex: 1; min-width: 0; color: #e7e9ec">
+            </label>
+            <button type="button" class="chip-btn" role="switch" aria-checked="{{blockedOnlyStr}}" onClick="{{toggleBlocked}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid {{blockedBorder}}; border-radius: 999px; background: {{blockedBg}}; color: {{blockedColor}}; font-size: 12.5px; font-weight: 500">Blocked only</button>
+            <button type="button" class="chip-btn" role="switch" aria-checked="{{workingOnlyStr}}" onClick="{{toggleWorking}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid {{workingBorder}}; border-radius: 999px; background: {{workingBg}}; color: {{workingColor}}; font-size: 12.5px; font-weight: 500">Working now</button>
+            <button type="button" class="chip-btn" role="switch" aria-checked="{{hideEmptyStr}}" onClick="{{toggleEmpty}}" style="all: unset; cursor: pointer; box-sizing: border-box; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid {{emptyBorder}}; border-radius: 999px; background: {{emptyBg}}; color: {{emptyColor}}; font-size: 12.5px; font-weight: 500">Hide empty columns</button>
+          </div>
+          <span style="font-size: 12px; color: #8d949e">{{shownText}}</span>
+        </div>
+
+        <!-- Kanban -->
+        <div class="board-scroll" role="region" aria-label="Board columns (scrollable)" tabindex="0" style="overflow-x: auto; padding-bottom: 12px; margin: 0 -4px; padding-left: 4px">
+          <div style="display: flex; gap: 26px; align-items: flex-start; width: max-content">
+            <sc-for list="{{lanes}}" as="l" hint-placeholder-count="3">
+              <section aria-label="{{l.name}} lane" style="display: flex; flex-direction: column; gap: 10px; flex: none">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px">
+                  <span style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #a3a9b2">{{l.name}}<span style="font-weight: 500; letter-spacing: 0; text-transform: none; color: #8d949e">{{l.count}}</span></span>
+                  <button type="button" class="btn-ghost" onClick="{{l.toggle}}" aria-expanded="{{l.expanded}}" aria-label="{{l.toggleLabel}}" style="all: unset; cursor: pointer; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; color: #a3a9b2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{l.chevron}}"></path></svg></button>
+                </div>
+                <sc-if value="{{l.open}}" hint-placeholder-val="{{true}}">
+                  <div style="display: flex; gap: 12px; align-items: flex-start">
+                    <sc-for list="{{l.columns}}" as="c" hint-placeholder-count="2">
+                      <section aria-label="{{c.name}} column" style="width: 276px; flex: none; box-sizing: border-box; background: #14171a; border: 1px solid #23262c; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px">
+                        <div style="display: flex; align-items: center; gap: 8px; padding: 2px 4px">
+                          <span style="width: 8px; height: 8px; border-radius: 50%; background: {{c.dot}}; flex: none" aria-hidden="true"></span>
+                          <span style="font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.name}}</span>
+                          <span style="font-size: 12px; color: #a3a9b2; font-variant-numeric: tabular-nums">{{c.count}}</span>
+                        </div>
+                        <sc-if value="{{c.hasWorker}}" hint-placeholder-val="{{true}}">
+                          <span style="display: inline-flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; background: #181b20; color: #a3a9b2; font-size: 11.5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3"></rect><path d="M12 4v4M9 13h.01M15 13h.01"></path></svg>{{c.worker}}</span>
+                        </sc-if>
+                        <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+                          <sc-for list="{{c.cards}}" as="t" hint-placeholder-count="3">
+                            <li>
+                              <button type="button" class="ticket-card" onClick="{{t.open}}" aria-label="Open {{t.key}}: {{t.title}}" style="all: unset; cursor: pointer; box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 11px 12px; background: #1a1d22; border: 1px solid #262a30; border-left: 3px solid {{t.edge}}; border-radius: 10px">
+                                <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+                                  <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #8d949e">{{t.key}}</span>
+                                  <sc-if value="{{t.hasPriority}}" hint-placeholder-val="{{false}}"><span style="font-size: 11px; color: #9ec3ff; background: rgba(91,156,255,0.12); padding: 1px 7px; border-radius: 4px">Priority {{t.priority}}</span></sc-if>
+                                </span>
+                                <span style="font-weight: 500; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{t.title}}</span>
+                                <sc-if value="{{t.isBlocked}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #f0b453; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{t.reason}}</span></sc-if>
+                                <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                                  <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: {{t.actColor}}; background: {{t.actBg}}; padding: 2px 8px; border-radius: 999px"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{t.actDot}}" aria-hidden="true"></span>{{t.act}}</span>
+                                  <sc-if value="{{t.hasOwner}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: #a3a9b2; margin-left: auto"><span style="width: 20px; height: 20px; border-radius: 50%; background: #1f2630; color: #9ec3ff; font-weight: 600; font-size: 9.5px; display: inline-flex; align-items: center; justify-content: center">{{t.ownerInitials}}</span>{{t.owner}}</span></sc-if>
+                                </span>
+                              </button>
+                            </li>
+                          </sc-for>
+                        </ul>
+                        <sc-if value="{{c.hasMore}}" hint-placeholder-val="{{false}}">
+                          <button type="button" class="btn-ghost" onClick="{{c.more}}" style="all: unset; cursor: pointer; box-sizing: border-box; padding: 7px 10px; border: 1px dashed #343a43; border-radius: 8px; color: #c4cad2; font-size: 12.5px; text-align: center">{{c.moreLabel}}</button>
+                        </sc-if>
+                        <sc-if value="{{c.isEmpty}}" hint-placeholder-val="{{false}}"><span style="padding: 14px 8px; text-align: center; color: #8d949e; font-size: 12px; border: 1px dashed #262a30; border-radius: 8px">No tickets</span></sc-if>
+                      </section>
+                    </sc-for>
+                    <sc-if value="{{l.hasHidden}}" hint-placeholder-val="{{false}}"><span style="align-self: flex-start; padding: 8px 12px; border: 1px dashed #2f343c; border-radius: 10px; color: #8d949e; font-size: 12px; max-width: 150px">{{l.hiddenText}}</span></sc-if>
+                  </div>
+                </sc-if>
+              </section>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{noMatches}}" hint-placeholder-val="{{false}}"><p style="margin: 0; color: #a3a9b2">No ticket matches the filters.</p></sc-if>
+      </sc-if>
+
+      <!-- ================= TICKET PAGE ================= -->
+      <sc-if value="{{isTicket}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 14px">
+          <div style="font-size: 12px; color: #8d949e; display: flex; gap: 6px; align-items: center; flex-wrap: wrap">
+            <span>Boards</span><span aria-hidden="true">/</span>
+            <button type="button" onClick="{{backToBoard}}" class="crumb" style="all: unset; cursor: pointer; color: #a3a9b2; border-radius: 3px">Current Phase</button><span aria-hidden="true">/</span><span style="color: #e7e9ec; font-family: 'JetBrains Mono', monospace">{{tKey}}</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+              <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #c4cad2; background: #1e2228; border: 1px solid #2a2e35; border-radius: 5px; padding: 1px 8px">{{tKey}}</span>
+              <span style="display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border-radius: 999px; background: #1e2228; border: 1px solid #2a2e35; font-size: 12px; font-weight: 500"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{tDot}}" aria-hidden="true"></span>{{tStatus}}</span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: {{tActBg}}; color: {{tActColor}}; font-size: 12px; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{tActDot}}" aria-hidden="true"></span>{{tAct}}</span>
+              <sc-if value="{{tHasPriority}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #9ec3ff; background: rgba(91,156,255,0.12); padding: 3px 10px; border-radius: 999px">Priority {{tPriority}}</span></sc-if>
+            </div>
+            <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; max-width: 980px">{{tTitle}}</h1>
+          </div>
+          <sc-if value="{{tBlocked}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; border-radius: 8px; background: rgba(240,180,83,0.07); border: 1px solid #4a3d1e; color: #f0b453; font-size: 12.5px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+              <span><strong style="font-weight: 600">Blocked.</strong> {{tReason}} It returns to {{tReturn}} when it is unblocked.</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start">
+          <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+            <section aria-labelledby="desc-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <h2 id="desc-h" style="margin: 0; font-size: 14px; font-weight: 600">Description</h2>
+                <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">The ticket body. The next agent receives it as its task.</p>
+              </div>
+              <div style="padding: 16px 18px">
+                <div style="max-height: 420px; overflow: auto; padding: 14px 16px; white-space: pre-wrap; border: 1px solid #23262c; border-radius: 8px; background: #121418; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #c4cad2">{{tBody}}</div>
+              </div>
+            </section>
+
+            <section aria-labelledby="tl-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <h2 id="tl-h" style="margin: 0; font-size: 14px; font-weight: 600">Timeline</h2>
+                <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">What happened to this ticket, oldest first.</p>
+              </div>
+              <ol style="list-style: none; margin: 0; padding: 0">
+                <sc-for list="{{events}}" as="e" hint-placeholder-count="4">
+                  <li class="ev-row" style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 18px">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: {{e.dot}}; margin-top: 6px; flex: none" aria-hidden="true"></span>
+                    <span style="display: flex; flex-direction: column; min-width: 0; flex: 1">
+                      <span style="font-weight: 500">{{e.text}}</span>
+                      <sc-if value="{{e.hasNote}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: #a3a9b2">{{e.note}}</span></sc-if>
+                    </span>
+                    <span style="font-size: 12px; color: #8d949e; white-space: nowrap">{{e.at}}</span>
+                  </li>
+                </sc-for>
+              </ol>
+            </section>
+          </div>
+
+          <div style="flex: 1 1 320px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+            <section aria-labelledby="work-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <h2 id="work-h" style="margin: 0; font-size: 14px; font-weight: 600">Work</h2>
+                <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">Who is on it now.</p>
+              </div>
+              <dl style="margin: 0; padding: 16px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 18px">
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Owner</dt><dd style="margin: 0; font-weight: 500">{{tOwnerText}}</dd></div>
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Round</dt><dd style="margin: 0; font-weight: 500">{{tRound}}</dd></div>
+                <div style="grid-column: 1 / -1"><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Branch</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4cad2; word-break: break-all">{{tBranch}}</dd></div>
+                <div style="grid-column: 1 / -1"><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Run</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4cad2">{{tRun}}</dd></div>
+              </dl>
+            </section>
+
+            <section aria-labelledby="dep-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c">
+                <h2 id="dep-h" style="margin: 0; font-size: 14px; font-weight: 600">Dependencies</h2>
+                <p style="margin: 2px 0 0; font-size: 12px; color: #8d949e">A ticket is not claimed until everything it waits for is done.</p>
+              </div>
+              <div style="padding: 12px 18px 4px; font-size: 12px; color: #8d949e; font-weight: 500">Waits for</div>
+              <ul style="list-style: none; margin: 0; padding: 0 0 8px">
+                <sc-for list="{{waitsFor}}" as="d" hint-placeholder-count="1">
+                  <li class="dep-row" style="display: flex; align-items: center; gap: 10px; padding: 8px 18px">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: {{d.dot}}; flex: none" aria-hidden="true"></span>
+                    <button type="button" onClick="{{d.open}}" class="crumb" style="all: unset; cursor: pointer; display: flex; flex-direction: column; min-width: 0; flex: 1; border-radius: 4px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7fb2ff">{{d.key}}</span><span style="font-size: 12px; color: #a3a9b2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{d.title}}</span></button>
+                    <span style="font-size: 11.5px; color: #8d949e; white-space: nowrap">{{d.status}}</span>
+                  </li>
+                </sc-for>
+                <sc-if value="{{noWaits}}" hint-placeholder-val="{{false}}"><li style="padding: 4px 18px 8px; color: #a3a9b2">Nothing. It can be claimed as soon as a member is free.</li></sc-if>
+              </ul>
+              <div style="padding: 8px 18px 4px; border-top: 1px solid #23262c; font-size: 12px; color: #8d949e; font-weight: 500">Blocks</div>
+              <ul style="list-style: none; margin: 0; padding: 0 0 8px">
+                <sc-for list="{{blocksList}}" as="d" hint-placeholder-count="1">
+                  <li class="dep-row" style="display: flex; align-items: center; gap: 10px; padding: 8px 18px">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: {{d.dot}}; flex: none" aria-hidden="true"></span>
+                    <button type="button" onClick="{{d.open}}" class="crumb" style="all: unset; cursor: pointer; display: flex; flex-direction: column; min-width: 0; flex: 1; border-radius: 4px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7fb2ff">{{d.key}}</span><span style="font-size: 12px; color: #a3a9b2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{d.title}}</span></button>
+                    <span style="font-size: 11.5px; color: #8d949e; white-space: nowrap">{{d.status}}</span>
+                  </li>
+                </sc-for>
+                <sc-if value="{{noBlocks}}" hint-placeholder-val="{{false}}"><li style="padding: 4px 18px 8px; color: #a3a9b2">No ticket waits for this one.</li></sc-if>
+              </ul>
+            </section>
+
+            <section aria-labelledby="det-h" style="background: #16191d; border: 1px solid #262a30; border-radius: 12px; overflow: hidden">
+              <div style="padding: 14px 18px; border-bottom: 1px solid #23262c"><h2 id="det-h" style="margin: 0; font-size: 14px; font-weight: 600">Details</h2></div>
+              <dl style="margin: 0; padding: 16px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 18px">
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Phase</dt><dd style="margin: 0; font-weight: 500">Phase 06</dd></div>
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Priority</dt><dd style="margin: 0; font-weight: 500">{{tPriority}}</dd></div>
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Created</dt><dd style="margin: 0; font-weight: 500">{{tCreated}}</dd></div>
+                <div><dt style="font-size: 12px; color: #8d949e; margin-bottom: 3px">Updated</dt><dd style="margin: 0; font-weight: 500">{{tUpdated}}</dd></div>
+              </dl>
+            </section>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"startView":{"editor":"enum","options":["board","ticket"],"default":"board"},"startTicket":{"editor":"enum","options":["T-114","T-118","T-136","T-112"],"default":"T-114"},"hideEmpty":{"editor":"boolean","default":true},"showFinished":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const T = (key, title, status, o) => Object.assign({ key: key, title: title, status: status, priority: 100, owner: '', act: 'idle', round: '', reason: '', waits: [], branch: '', run: '', created: 'Sun 13:57', updated: 'Sun 21:12', body: '', events: null }, o || {});
+    const bodyOf = (title, extra) => '# ' + title + '\n\n## Goal\n' + (extra || 'Implement as described in the design folder referenced below. Match the design as closely as possible.') + '\n\n## Done when\n- [ ] The behaviour above exists and is covered by tests.\n- [ ] `test-ui` passes.\n\n## Constraints\nNo backend change; no new dependency.';
+    const tickets = [
+      T('T-112', 'Roles v2 (1/4): roles table and list / role-page navigation instead of the master-detail layout', 'done', { owner: 'dev', act: 'done', branch: 'ticket/t-112', run: '—', updated: 'Sun 21:02' }),
+      T('T-113', 'Roles v2 (2/4): role page with section cards (overview, instructions, skills, used by) and delete', 'review-ready', { owner: 'reviewer', act: 'working', round: '1 of 3', branch: 'ticket/t-113', run: '5f1c…a20e', waits: ['T-112'] }),
+      T('T-114', 'Roles v2 (3/4): edit dialogs for overview, skills and instructions, and the New role dialog', 'dev-ready', { owner: 'dev', act: 'working', round: '2 of 6', branch: 'ticket/t-114', run: '9a77…c3d1', waits: ['T-113'],
+        body: '# Roles v2 (3/4): edit dialogs and New role\n\n## Goal\nReplace the old full-form role editor (`RoleForm.tsx`, `RoleSkillEditor.tsx`, `useRoleEditing` in `RolesScreen.tsx`) with one dialog per section of the role page, and restyle New role, as in `design/roles-catalog-v2/edit-overview.png`, `edit-skills.png`, `edit-instructions.png` and `new-role.png`.\n\n## Do not duplicate\nThe save sequence lives in `app/src/renderer/roles/roleSave.ts`; every role write goes through it.\n\n## Dialogs\n1. Edit overview (width 560)\n2. Edit skills (width 560)\n3. Edit instructions (width 780)\n4. New role (width 560)\n\n## Done when\n- [ ] Every section of the role page edits through its own dialog matching the design.\n- [ ] All role writes go through the shared save module.\n- [ ] Tests above exist and pass; `test-ui` passes.',
+        events: [['Created', 'Sun 13:57', '#8d949e', ''], ['Depends on T-113', 'Sun 13:57', '#8d949e', ''], ['Moved to dev-ready', 'Sun 14:04', '#5b9cff', 'Moved by operator'], ['Claimed by dev', 'Sun 21:03', '#4ac26b', 'Round 1'], ['Command requested: test-ui', 'Sun 21:31', '#f0b453', 'Waiting for the coordinator to run it'], ['Command finished: test-ui', 'Sun 21:46', '#4ac26b', 'Passed in 14 min'], ['Committed', 'Sun 21:47', '#4ac26b', 'Roles v2 (3/4): edit dialogs'], ['Outcome applied: dev-ready', 'Sun 21:48', '#f0b453', 'Round 1 failed: 2 findings; going round 2'], ['Claimed by dev', 'Sun 21:52', '#4ac26b', 'Round 2']] }),
+      T('T-115', 'Roles v2 (4/4): remove the old roles layout and finish (a11y, responsive, design check)', 'dev-ready', { act: 'waiting', waits: ['T-112', 'T-113', 'T-114'] }),
+      T('T-116', 'Routing v1 (1/4): Routing becomes its own screen with a sidebar item and leaves the team page', 'dev-ready', { act: 'queued', waits: [] }),
+      T('T-117', 'Routing v1 (2/4): summary cards and the redesigned rules table', 'dev-ready', { act: 'waiting', waits: ['T-116'] }),
+      T('T-118', 'Routing v1 (3/4): edit, add and remove rules and edit worktrees in dialogs', 'dev-ready', { act: 'waiting', waits: ['T-117'], priority: 50 }),
+      T('T-119', 'Routing v1 (4/4): remove the old routing panel code and finish', 'dev-ready', { act: 'waiting', waits: ['T-116', 'T-117', 'T-118'] }),
+      T('T-120', 'Skills 1/12 (backend): read the skill catalog (skill.list and skill.show)', 'dev-ready', { act: 'queued', waits: [] }),
+      T('T-121', 'Skills 2/12 (backend): create and update a skill file', 'dev-ready', { act: 'waiting', waits: ['T-120'] }),
+      T('T-134', 'Boards Phase A: Current Phase board and ticket page', 'backlog', { act: 'idle' }),
+      T('T-135', 'Boards Phase B: Backlog list and Phases view', 'backlog', { act: 'idle' }),
+      T('T-133', 'Document the bridge allowlist in scripts/README', 'refine-ready', { owner: 'lead', act: 'working', round: '1 of 2', branch: 'ticket/t-133', run: '0c2e…71ab' }),
+      T('T-136', 'Fix flaky teamsA11y focus test after the dialog change', 'qa-ready', { act: 'blocked', owner: 'qa', reason: 'The run was stopped when the team stopped. Unblock it to continue.', branch: 'ticket/t-136', run: '—', events: [['Created', 'Sun 19:10', '#8d949e', ''], ['Moved to dev-ready', 'Sun 19:12', '#5b9cff', ''], ['Claimed by dev', 'Sun 19:30', '#4ac26b', 'Round 1'], ['Outcome applied: qa-ready', 'Sun 20:02', '#5b9cff', 'Dev passed; tests verified'], ['Claimed by qa', 'Sun 20:10', '#4ac26b', 'Round 1'], ['Run cancelled', 'Sun 20:41', '#f0b453', 'The team was stopped'], ['Blocked', 'Sun 20:41', '#f0b453', 'Returns to qa-ready when unblocked']] }),
+      T('T-137', 'Escalated: backend test_p04_s10 scheduler failures on main', 'need-escalate', { owner: 'senior', act: 'working', round: '3 of 3', branch: 'ticket/t-137', run: 'b4d9…e015' }),
+      T('T-138', 'Merge conflict in design/README after the Skills export', 'merge-conflict', { owner: 'lead', act: 'working', round: '1 of 3', branch: 'ticket/t-138', run: '77aa…12fe' })
+    ];
+    const open = props && props.startView === 'ticket';
+    this.state = { tickets: tickets, view: open ? 'ticket' : 'board', selected: (props && props.startTicket) || 'T-114', query: '', blockedOnly: false, workingOnly: false,
+      hideEmpty: props && props.hideEmpty === false ? false : true, collapsed: { finished: !(props && props.showFinished) }, expanded: {} };
+  }
+  bodyOf(title) {
+    return '# ' + title + '\n\n## Goal\nImplement as described in the design folder referenced below. Match the design as closely as possible.\n\n## Done when\n- [ ] The behaviour above exists and is covered by tests.\n- [ ] `test-ui` passes.\n\n## Constraints\nNo backend change; no new dependency.';
+  }
+  statusInfo() {
+    return {
+      'backlog': ['Backlog', '#8d949e', ''], 'unpack-ready': ['Unpack ready', '#5b9cff', 'ProductOwner works this'], 'refine-ready': ['Refine ready', '#5b9cff', 'TeamLead works this'],
+      'dev-ready': ['Dev ready', '#5b9cff', 'Developer works this'], 'qa-ready': ['QA ready', '#5b9cff', 'QA works this'], 'need-escalate': ['Needs escalation', '#f0b453', 'SeniorDeveloper works this'],
+      'review-ready': ['Review ready', '#5b9cff', 'Reviewer works this'], 'plan-merge-ready': ['Plan merge ready', '#5b9cff', 'Merges automatically'], 'plan-merge-conflict': ['Plan merge conflict', '#e5736a', 'TeamLead works this'],
+      'merge-ready': ['Merge ready', '#5b9cff', 'Merges automatically'], 'merge-conflict': ['Merge conflict', '#e5736a', 'TeamLead works this'], 'done': ['Done', '#4ac26b', ''], 'close': ['Closed', '#8d949e', '']
+    };
+  }
+  actView(t) {
+    const m = {
+      working: { text: 'Working' + (t.round ? ' · round ' + t.round.replace(' of ', '/') : ''), color: '#6fd38b', bg: 'rgba(74,194,107,0.12)', dot: '#4ac26b', edge: '#4ac26b' },
+      blocked: { text: 'Blocked', color: '#f0b453', bg: 'rgba(240,180,83,0.12)', dot: '#f0b453', edge: '#f0b453' },
+      waiting: { text: 'Waits for ' + (t.waits.length ? t.waits[t.waits.length - 1] : 'a dependency') + (t.waits.length > 1 ? ' +' + (t.waits.length - 1) : ''), color: '#a3a9b2', bg: '#1e2228', dot: '#8d949e', edge: '#262a30' },
+      queued: { text: 'Ready, queued', color: '#9ec3ff', bg: 'rgba(91,156,255,0.12)', dot: '#5b9cff', edge: '#262a30' },
+      idle: { text: 'Not started', color: '#a3a9b2', bg: '#1e2228', dot: '#8d949e', edge: '#262a30' },
+      done: { text: 'Merged', color: '#6fd38b', bg: 'rgba(74,194,107,0.12)', dot: '#4ac26b', edge: '#262a30' }
+    };
+    return m[t.act];
+  }
+  renderVals() {
+    const s = this.state;
+    const info = this.statusInfo();
+    const q = s.query.trim().toLowerCase();
+    const matches = (t) => (q === '' || t.key.toLowerCase().indexOf(q) !== -1 || t.title.toLowerCase().indexOf(q) !== -1)
+      && (!s.blockedOnly || t.act === 'blocked') && (!s.workingOnly || t.act === 'working');
+    const total = s.tickets.length;
+    const doneCount = s.tickets.filter((t) => t.status === 'done' || t.status === 'close').length;
+    const byKey = {};
+    s.tickets.forEach((t) => { byKey[t.key] = t; });
+    const initials = (n) => n.slice(0, 2).toUpperCase();
+    const laneDefs = [
+      ['intake', 'Intake', ['backlog', 'unpack-ready', 'refine-ready']],
+      ['build', 'Build', ['dev-ready', 'qa-ready', 'need-escalate']],
+      ['review', 'Review and merge', ['review-ready', 'plan-merge-ready', 'plan-merge-conflict', 'merge-ready', 'merge-conflict']],
+      ['finished', 'Finished', ['done', 'close']]
+    ];
+    let shown = 0;
+    const lanes = laneDefs.map((ld) => {
+      const cols = ld[2].map((sid) => {
+        const all = s.tickets.filter((t) => t.status === sid);
+        const vis = all.filter(matches);
+        shown += vis.length;
+        const limit = s.expanded[sid] ? 99 : 6;
+        const cards = vis.slice(0, limit).map((t) => {
+          const a = this.actView(t);
+          return { key: t.key, title: t.title, edge: a.edge, hasPriority: t.priority !== 100, priority: t.priority, isBlocked: t.act === 'blocked', reason: t.reason,
+            act: a.text, actColor: a.color, actBg: a.bg, actDot: a.dot, hasOwner: !!t.owner, owner: t.owner, ownerInitials: initials(t.owner || '?'),
+            open: () => this.setState({ view: 'ticket', selected: t.key }) };
+        });
+        const hidden = vis.length - cards.length;
+        const inf = info[sid];
+        return { sid: sid, name: inf[0], dot: inf[1], worker: inf[2], hasWorker: inf[2] !== '', count: vis.length === all.length ? String(all.length) : vis.length + ' of ' + all.length, cards: cards,
+          hasMore: hidden > 0 || (s.expanded[sid] && vis.length > 6), moreLabel: s.expanded[sid] ? 'Show fewer' : 'Show ' + hidden + ' more',
+          more: () => { const e = Object.assign({}, this.state.expanded); e[sid] = !e[sid]; this.setState({ expanded: e }); }, isEmpty: vis.length === 0, rawEmpty: all.length === 0 };
+      });
+      const keep = s.hideEmpty ? cols.filter((c) => !c.rawEmpty) : cols;
+      const hiddenNames = cols.filter((c) => s.hideEmpty && c.rawEmpty).map((c) => c.name);
+      const laneTotal = cols.reduce((n, c) => n + (c.rawEmpty ? 0 : s.tickets.filter((t) => t.status === c.sid).length), 0);
+      const isCollapsed = !!s.collapsed[ld[0]];
+      return { name: ld[1], count: laneTotal + (laneTotal === 1 ? ' ticket' : ' tickets'), open: !isCollapsed, expanded: isCollapsed ? 'false' : 'true',
+        toggleLabel: (isCollapsed ? 'Expand ' : 'Collapse ') + ld[1] + ' lane', chevron: isCollapsed ? 'M9 6l6 6-6 6' : 'M6 9l6 6 6-6',
+        toggle: () => { const c = Object.assign({}, this.state.collapsed); c[ld[0]] = !c[ld[0]]; this.setState({ collapsed: c }); },
+        columns: keep, hasHidden: hiddenNames.length > 0, hiddenText: hiddenNames.length + ' empty hidden: ' + hiddenNames.join(', ') };
+    });
+    const blocked = s.tickets.filter((t) => t.act === 'blocked');
+    const attention = blocked.map((t) => ({ key: t.key, title: t.title, detail: t.reason, open: () => this.setState({ view: 'ticket', selected: t.key }) }))
+      .concat([{ key: 'T-124', title: 'A delegated command waits for approval: app-dev-dependency-add', detail: 'Requested by dev. It needs a human to approve it before the ticket can continue.', open: () => this.setState({ view: 'ticket', selected: 'T-114' }) }]);
+    const chip = (on) => on ? ['#3d6bb3', 'rgba(91,156,255,0.12)', '#9ec3ff'] : ['#2f343c', '#1b1f24', '#c4cad2'];
+    const cb = chip(s.blockedOnly), cw = chip(s.workingOnly), ce = chip(s.hideEmpty);
+    const out = {
+      isBoard: s.view === 'board', isTicket: s.view === 'ticket',
+      totalCount: total, progressText: doneCount + ' of ' + total + ' tickets done', progressPct: Math.round(doneCount * 100 / total) + '%', progressWidth: Math.round(doneCount * 100 / total) + '%',
+      hasAttention: attention.length > 0, attentionCount: attention.length, attention: attention,
+      query: s.query, setQuery: (e) => this.setState({ query: e.target.value }),
+      blockedOnlyStr: s.blockedOnly ? 'true' : 'false', blockedBorder: cb[0], blockedBg: cb[1], blockedColor: cb[2], toggleBlocked: () => this.setState({ blockedOnly: !this.state.blockedOnly }),
+      workingOnlyStr: s.workingOnly ? 'true' : 'false', workingBorder: cw[0], workingBg: cw[1], workingColor: cw[2], toggleWorking: () => this.setState({ workingOnly: !this.state.workingOnly }),
+      hideEmptyStr: s.hideEmpty ? 'true' : 'false', emptyBorder: ce[0], emptyBg: ce[1], emptyColor: ce[2], toggleEmpty: () => this.setState({ hideEmpty: !this.state.hideEmpty }),
+      shownText: shown === total ? total + ' tickets' : shown + ' of ' + total + ' tickets', noMatches: shown === 0, lanes: lanes
+    };
+    const t = byKey[s.selected] || s.tickets[0];
+    const a = this.actView(t);
+    const inf = info[t.status];
+    const link = (k) => { const x = byKey[k]; const xi = x ? info[x.status] : ['Unknown', '#8d949e']; return { key: k, title: x ? x.title : 'Not found', status: xi[0], dot: xi[1], open: () => { if (x) this.setState({ selected: k }); } }; };
+    const blocks = s.tickets.filter((x) => x.waits.indexOf(t.key) !== -1).map((x) => link(x.key));
+    const events = (t.events || [['Created', t.created, '#8d949e', ''], t.waits.length ? ['Depends on ' + t.waits.join(', '), t.created, '#8d949e', ''] : null, ['Moved to ' + inf[0].toLowerCase(), t.updated, '#5b9cff', '']].filter((x) => !!x));
+    Object.assign(out, {
+      backToBoard: () => this.setState({ view: 'board' }),
+      tKey: t.key, tTitle: t.title, tStatus: inf[0], tDot: inf[1], tAct: a.text, tActColor: a.color, tActBg: a.bg, tActDot: a.dot,
+      tHasPriority: t.priority !== 100, tPriority: t.priority, tBlocked: t.act === 'blocked', tReason: t.reason, tReturn: inf[0],
+      tBody: t.body || this.bodyOf(t.title), tOwnerText: t.owner ? t.owner : 'Nobody yet', tRound: t.round || '—', tBranch: t.branch || 'No branch yet', tRun: t.run || '—',
+      tCreated: t.created, tUpdated: t.updated,
+      events: events.map((e) => ({ text: e[0], at: e[1], dot: e[2], hasNote: !!e[3], note: e[3] })),
+      waitsFor: t.waits.map(link), noWaits: t.waits.length === 0, blocksList: blocks, noBlocks: blocks.length === 0
+    });
+    return out;
+  }
+}
+</script>
+</body>
+</html>
