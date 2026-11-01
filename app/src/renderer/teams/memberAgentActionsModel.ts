@@ -41,6 +41,35 @@ function liveWorkText(work: OverviewMember['work']): string | null {
   if (work.assignment !== null && work.assignment.goal.trim() !== '') return work.assignment.goal;
   return 'Working';
 }
+/**
+ * The live option rows shared by the member detail's Live section and the row
+ * actions menu: label, active marker, hold text and the reason switching or
+ * resuming is unavailable. Pure so both presentations use exactly one rule set.
+ */
+export function memberAgentActionRows(team: OverviewTeam, member: OverviewMember, catalog: AgentDef[] | null, connected: boolean, inFlight: MemberActionInFlight): AgentActionOption[] {
+  const r = member.runtime;
+  if (!r) return [];
+  const inline = member.agentMode === 'inline' || member.source === 'inline';
+  const unknownEligibility = r.configuredAgents === null;
+  const frozen = [...new Set(r.configuredAgents ?? [])];
+  const switchTargets = inline || unknownEligibility ? [] : frozen;
+  const isHeld = (id: string) => Object.prototype.hasOwnProperty.call(r.quotaHolds, id);
+  const label = (id: string) => catalog?.find(a => a.id === id)?.name || id;
+  const base = !connected ? 'Backend disconnected; live actions are disabled.' : team.runtime.state !== 'running' ? 'The team is not running.' : r.stale ? 'Live member state is stale; refresh before switching or resuming.' : null;
+  const paneAlive = r.paneState === 'alive';
+  const locked = inFlight?.memberId === member.memberId;
+  const ids = [...new Set([...switchTargets, ...Object.keys(r.quotaHolds)])];
+  return ids.map(id => {
+    const held = isHeld(id);
+    const missing = catalog !== null && !catalog.some(a => a.id === id);
+    const reason = base ?? (!paneAlive ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled.' : inline ? 'Live switching is unavailable for inline members.' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : missing ? `Agent '${id}' is missing from the catalog.` : held && frozen.includes(id) ? `Agent '${id}' is on quota hold.` : id === r.activeAgent && frozen.includes(id) ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
+    const active = id === r.activeAgent;
+    const canSwitch = reason === null;
+    const state: AgentActionState = active ? 'active' : r.pendingAgent === id ? 'pending' : held ? 'held' : missing ? 'missing_catalog' : !paneAlive ? 'pane_dead' : canSwitch ? 'switchable' : 'ineligible';
+    return { id, label: label(id), active, state, holdText: held ? formatResetAt(r.quotaHolds[id]) : null, canSwitch, canResume: held && !base && paneAlive && !locked && !r.pendingAgent, disabledReason: reason };
+  });
+}
+
 export function memberAgentActions(team: OverviewTeam, member: OverviewMember, catalog: AgentDef[] | null, connected: boolean, inFlight: MemberActionInFlight): MemberAgentActionsView {
   const r = member.runtime;
   if (!r) return { visible: false, activeText: '', availabilityText: '', paneText: '', staleText: null, assignmentText: '', workText: null, pendingText: null, lastResultText: null, notice: null, allHeld: false, options: [] };
@@ -52,17 +81,7 @@ export function memberAgentActions(team: OverviewTeam, member: OverviewMember, c
   const label = (id: string) => catalog?.find(a => a.id === id)?.name || id;
   const base = !connected ? 'Backend disconnected; live actions are disabled.' : team.runtime.state !== 'running' ? 'The team is not running.' : r.stale ? 'Live member state is stale; refresh before switching or resuming.' : null;
   const paneAlive = r.paneState === 'alive';
-  const locked = inFlight?.memberId === member.memberId;
-  const ids = [...new Set([...switchTargets, ...Object.keys(r.quotaHolds)])];
-  const options: AgentActionOption[] = ids.map(id => {
-    const held = isHeld(id);
-    const missing = catalog !== null && !catalog.some(a => a.id === id);
-    const reason = base ?? (!paneAlive ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled.' : inline ? 'Live switching is unavailable for inline members.' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : missing ? `Agent '${id}' is missing from the catalog.` : held && frozen.includes(id) ? `Agent '${id}' is on quota hold.` : id === r.activeAgent && frozen.includes(id) ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
-    const active = id === r.activeAgent;
-    const canSwitch = reason === null;
-    const state: AgentActionState = active ? 'active' : r.pendingAgent === id ? 'pending' : held ? 'held' : missing ? 'missing_catalog' : !paneAlive ? 'pane_dead' : canSwitch ? 'switchable' : 'ineligible';
-    return { id, label: label(id), active, state, holdText: held ? formatResetAt(r.quotaHolds[id]) : null, canSwitch, canResume: held && !base && paneAlive && !locked && !r.pendingAgent, disabledReason: reason };
-  });
+  const options = memberAgentActionRows(team, member, catalog, connected, inFlight);
   const alternatives = switchTargets.filter(id => id !== r.activeAgent);
   const allHeld = alternatives.length > 0 && alternatives.every(isHeld);
   const s = r.lastSwitch;

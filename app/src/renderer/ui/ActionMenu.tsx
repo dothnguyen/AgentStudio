@@ -42,7 +42,13 @@ export interface ActionMenuProps {
   align?: MenuAlign;
   triggerClassName?: string;
   triggerRef?: RefObject<HTMLButtonElement | null>;
+  /** Controlled open state; omit to let the trigger manage it. */
+  open?: boolean;
   onOpenChange?(open: boolean): void;
+  /** Open at a viewport point (the pointer) instead of under the trigger. */
+  anchorPoint?: { x: number; y: number };
+  /** Element to focus when the menu closes with Escape/Tab; defaults to the trigger. */
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 interface PendingFocus {
@@ -99,7 +105,11 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
   const triggerId = `${menuId}-trigger`;
   const levelId = useCallback((level: number) => (level === 0 ? menuId : `${menuId}-${level}`), [menuId]);
 
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = props.open ?? internalOpen;
+  const setOpen = useCallback((next: boolean) => {
+    if (props.open === undefined) setInternalOpen(next);
+  }, [props.open]);
   const [openPath, setOpenPath] = useState<string[]>([]);
   const [placed, setPlaced] = useState<MenuPlacement | null>(null);
   const [submenuPlacements, setSubmenuPlacements] = useState<Record<number, MenuPlacement>>({});
@@ -137,17 +147,18 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
 
   const reset = useCallback(() => {
     resetTypeahead();
+    pendingFocus.current = null;
     setOpen(false);
     setOpenPath([]);
     setPlaced(null);
     setSubmenuPlacements({});
-  }, [resetTypeahead]);
+  }, [resetTypeahead, setOpen]);
 
   const close = useCallback((refocusTrigger: boolean) => {
     clearHoverTimer();
     reset();
     props.onOpenChange?.(false);
-    if (refocusTrigger) triggerElement.current?.focus();
+    if (refocusTrigger) (props.returnFocusRef?.current ?? triggerElement.current)?.focus();
   }, [clearHoverTimer, props, reset]);
 
   const openMenu = useCallback((focus: 'first' | 'last') => {
@@ -159,16 +170,38 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
     pendingFocus.current = { level: 0, index: focus === 'first' ? 0 : 'last' };
     setFocusTick((tick) => tick + 1);
     props.onOpenChange?.(true);
-  }, [disabled, props, resetTypeahead]);
+  }, [disabled, props, resetTypeahead, setOpen]);
+
+  const wasOpen = useRef(false);
+  // A controlled `open` can turn true without the trigger (right-click or the
+  // Menu key): close any other open menu and focus the first item. This effect
+  // runs before this instance registers itself as the active menu, so the
+  // close call can only reach a different menu.
+  useEffect(() => {
+    if (!open) {
+      wasOpen.current = false;
+      return;
+    }
+    if (!wasOpen.current && pendingFocus.current === null) {
+      activeMenuClose?.();
+      resetTypeahead();
+      pendingFocus.current = { level: 0, index: 0 };
+      setFocusTick((tick) => tick + 1);
+    }
+    wasOpen.current = true;
+  }, [open, resetTypeahead]);
 
   useEffect(() => {
     if (!open) return;
-    const closeOther = (): void => reset();
+    const closeOther = (): void => {
+      reset();
+      props.onOpenChange?.(false);
+    };
     activeMenuClose = closeOther;
     return () => {
       if (activeMenuClose === closeOther) activeMenuClose = null;
     };
-  }, [open, reset]);
+  }, [open, reset, props]);
 
   useEffect(() => {
     if (disabled && open) close(false);
@@ -188,9 +221,12 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
       return;
     }
     const viewport = viewportSize();
-    if (triggerElement.current !== null) {
+    const anchor = props.anchorPoint;
+    const anchorRect = anchor === undefined ? null : { left: anchor.x, top: anchor.y, width: 0, height: 0 };
+    const triggerRect = anchorRect ?? (triggerElement.current !== null ? rectOf(triggerElement.current) : null);
+    if (triggerRect !== null) {
       const rootElement = levelElements.current.get(0) ?? null;
-      setPlaced(placeMenu(rectOf(triggerElement.current), measureSize(rootElement, items, viewport.height), viewport, align));
+      setPlaced(placeMenu(triggerRect, measureSize(rootElement, items, viewport.height), viewport, anchorRect !== null ? 'start' : align));
     }
     const next: Record<number, MenuPlacement> = {};
     for (let depth = 0; depth < openPath.length; depth += 1) {
@@ -203,7 +239,7 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
     setSubmenuPlacements(next);
     // openPathKey and focusTick are the intentional triggers; items are read through the closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, openPathKey, align, focusTick]);
+  }, [open, openPathKey, align, focusTick, props.anchorPoint?.x, props.anchorPoint?.y]);
 
   // Focus is requested explicitly so opening a submenu can move focus into it.
   // A level is only focused once it has a placement: the first commit renders

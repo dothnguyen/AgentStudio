@@ -9,7 +9,7 @@ import { RUNNING_TEAM_NOTICE } from '../src/renderer/teams/teamEditModel';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { readyApi, workspaceA } from './dashboardFixtures';
 import {
-  catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, field,
+  catalogFixture, deferred, fakeManagement, member, overviewFixture, team, twoTeams, openMember, showMembers, memberRow, memberOpen, field,
   boardSettingsFixture, boardRunnerFixture, chooseDeleteTeam, catalogReferenceOverview, runtimeMemberState, RUN_TEAM_ID, connectionFixture, coordinatorStopped, emptyRoster, emptyWorkspace, invalidBoardSettings, invalidRoleCatalog,
   teamDefinition, teamRolesFixture, longContentOverview, managementError, memberTruncatedOverview, missingBoardSettings, partialOverview, runtimeUnavailable, truncatedOverview, LONG_UNBROKEN,
 } from './teamsFixtures';
@@ -958,13 +958,13 @@ describe('member roster', () => {
   it('keyboard_enter_and_space_open_the_exact_member', async () => {
     const user = userEvent.setup();
     await renderScreen({overview: [{ok: true, data: overviewFixture([team({members: [member(), member({memberId: 'qa', name: 'qa'})]})])}]});
-    memberRow('qa').focus(); await user.keyboard('{Enter}');
+    memberOpen('qa').focus(); await user.keyboard('{Enter}');
     const detail = screen.getByRole('region', {name: 'qa'});
     expect(detail.textContent).not.toContain('dev');
     expect(screen.queryByRole('list', {name: /^Members of /})).toBeNull();
     fireEvent.click(screen.getByRole('button', {name: 'Back to members'}));
-    expect(document.activeElement).toBe(memberRow('qa')); expect(memberRow('qa').getAttribute('aria-current')).toBe('true');
-    memberRow('dev').focus(); await user.keyboard(' '); expect(screen.getByRole('region', {name: 'dev'})).toBeTruthy();
+    expect(document.activeElement).toBe(memberOpen('qa')); expect(memberOpen('qa').getAttribute('aria-current')).toBe('true');
+    memberOpen('dev').focus(); await user.keyboard(' '); expect(screen.getByRole('region', {name: 'dev'})).toBeTruthy();
   });
   it('refresh_keeps_detail_on_the_same_stable_member_and_removal_shows_notice', async () => {
     const dev = member(), qa = member({memberId: 'qa', name: 'qa'});
@@ -1022,14 +1022,14 @@ describe('v4 members card', () => {
   const roster = (members: ReturnType<typeof member>[], extra: Partial<ReturnType<typeof team>> = {}) => ({ ok: true as const, data: overviewFixture([team({ members, ...extra })]) });
   const trio = () => [member({ memberId: 'a', name: 'Alpha', presence: 'busy' }), member({ memberId: 'b', name: 'Bravo', presence: 'idle' }), member({ memberId: 'c', name: 'Charlie', presence: 'busy' })];
   const card = (r: { getByRole: (role: string, o: { name: string }) => HTMLElement }) => r.getByRole('region', { name: 'Members' });
-  const EXPECTED_CELLS = ['name', 'role', 'agent', 'availability', 'work', 'chevron-right'];
+  const EXPECTED_CELLS = ['name', 'role', 'agent', 'availability', 'work', null, 'chevron-right'];
   function expectMatchingCells(region: HTMLElement): HTMLElement[] {
     const head = region.querySelector('.teams-member-list-head')!;
-    expect(head.children).toHaveLength(6);
-    expect(Array.from(head.children).map(el => el.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '']);
+    expect(head.children).toHaveLength(7);
+    expect(Array.from(head.children).map(el => el.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '', '']);
     const rows = Array.from(region.querySelectorAll<HTMLElement>('.teams-member-row'));
     for (const row of rows) {
-      expect(row.children).toHaveLength(6);
+      expect(row.children).toHaveLength(7);
       expect(Array.from(row.children).map(el => el.getAttribute('data-field') ?? el.getAttribute('data-icon'))).toEqual(EXPECTED_CELLS);
     }
     return rows;
@@ -1056,7 +1056,7 @@ describe('v4 members card', () => {
     const { result } = await renderScreen({ overview: [roster(trio())] });
     const head = card(result).querySelector('.teams-member-list-head')!;
     expect(head.getAttribute('aria-hidden')).toBe('true');
-    expect(Array.from(head.querySelectorAll('span')).map(s => s.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '']);
+    expect(Array.from(head.querySelectorAll('span')).map(s => s.textContent)).toEqual(['Member', 'Role', 'Live agent', 'Status', 'Current work', '', '']);
   });
 
   it('member_list_header_and_rows_have_matching_cells', async () => {
@@ -1065,7 +1065,7 @@ describe('v4 members card', () => {
       member({ memberId: null, name: 'Anonymous', source: 'runtime' }),
     ])] });
     const rows = expectMatchingCells(card(result));
-    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+    expect(rows.map(row => row.tagName)).toEqual(['DIV', 'DIV']);
   });
 
   it('member_header_and_rows_share_one_table_so_the_grid_template_is_inherited', async () => {
@@ -1087,7 +1087,7 @@ describe('v4 members card', () => {
     expect(list.parentElement).toBe(table);
     expect(table.contains(head)).toBe(true);
     const rows = Array.from(table.querySelectorAll<HTMLElement>('.teams-member-row'));
-    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+    expect(rows.map(row => row.tagName)).toEqual(['DIV', 'DIV']);
     for (const row of rows) {
       expect(table.contains(row)).toBe(true);
       expect(row.classList.contains('teams-member-row')).toBe(true);
@@ -1116,7 +1116,7 @@ describe('v4 members card', () => {
       roles: [{ ok: true, data: rolesFixture({ items: [roleItem(roleId, { name: `Role ${LONG}` })] }) }],
     });
     const rows = expectMatchingCells(card(result));
-    expect(rows.map(row => row.tagName)).toEqual(['BUTTON', 'DIV']);
+    expect(rows.map(row => row.tagName)).toEqual(['DIV', 'DIV']);
     const [longRow, staticRow] = rows as [HTMLElement, HTMLElement];
     expect(longRow.querySelector('[data-field="name"]')!.textContent).toContain(LONG);
     expect(longRow.querySelector('[data-field="role"]')!.textContent).toContain(`Role ${LONG}`);
@@ -1129,8 +1129,8 @@ describe('v4 members card', () => {
   it('rows_render_avatar_role_chip_status_dot_and_chevron', async () => {
     await renderScreen({ overview: [roster([member({ memberId: 'dev-1', name: 'dev-1', presence: 'idle', work: { state: 'none' } })])] });
     const row = memberRow('dev-1');
-    expect(row.tagName).toBe('BUTTON');
-    expect(row.getAttribute('data-member-row')).toBe('dev-1');
+    expect(row.tagName).toBe('DIV');
+    expect(memberOpen('dev-1').getAttribute('data-member-row')).toBe('dev-1');
     const avatar = row.querySelector('.teams-member-avatar')!;
     expect(avatar.textContent).toBe('D1');
     expect(avatar.getAttribute('aria-hidden')).toBe('true');
@@ -1214,16 +1214,20 @@ describe('v4 members card', () => {
     expect(region.querySelector('.teams-members-count')!.textContent).toBe('3');
   });
 
-  it('rows_render_six_columns_in_order_and_static_rows_stay_non_interactive', async () => {
+  it('rows_render_seven_columns_in_order_and_static_rows_stay_non_interactive', async () => {
     await renderScreen({ overview: [roster([
       member({ memberId: 'dev-1', name: 'dev-1' }),
       member({ memberId: null, name: 'Anonymous', source: 'runtime' }),
     ])] });
     const row = memberRow('dev-1');
-    expect(Array.from(row.children).map(el => el.getAttribute('data-field') ?? el.getAttribute('data-icon'))).toEqual(['name', 'role', 'agent', 'availability', 'work', 'chevron-right']);
+    expect(Array.from(row.children).map(el => el.getAttribute('data-field') ?? el.getAttribute('data-icon'))).toEqual(['name', 'role', 'agent', 'availability', 'work', null, 'chevron-right']);
+    expect(row.querySelector('.teams-member-open')).toBeTruthy();
+    expect(row.querySelector('.teams-member-menu-trigger')).toBeTruthy();
     const staticRow = memberRow('Anonymous');
     expect(staticRow.tagName).toBe('DIV');
     expect(staticRow.hasAttribute('data-member-row')).toBe(false);
+    expect(staticRow.querySelector('.teams-member-open')).toBeNull();
+    expect(staticRow.querySelector('.teams-member-menu-trigger')).toBeNull();
     expect(staticRow.querySelector('.teams-member-id')).toBeNull();
     expect(staticRow.querySelector('[data-field="name"] .teams-cell-note')!.textContent).toBe('No member id returned');
     expect(staticRow.querySelector('svg[data-icon="chevron-right"]')).toBeTruthy();
@@ -1842,7 +1846,7 @@ describe('T-082 states', () => {
     expect(document.activeElement).toBe(heading);
     expect(heading.getAttribute('tabindex')).toBe('-1');
     fireEvent.click(screen.getByRole('button', { name: 'Back to members' })); await act(async () => {});
-    expect(document.activeElement).toBe(memberRow('dev'));
+    expect(document.activeElement).toBe(memberOpen('dev'));
     fireEvent.click(memberRow('dev')); await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Edit saved configuration' })); await act(async () => {});
     fireEvent.change(screen.getByLabelText('Member name'), { target: { value: '' } });
@@ -2482,14 +2486,14 @@ describe('T-090 state and roster completion', () => {
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
     await userEvent.keyboard('{ArrowLeft}');
     expect(overviewTab.getAttribute('aria-selected')).toBe('true');
-    const row = memberRow('dev');
+    const row = memberOpen('dev');
     row.focus();
     await userEvent.keyboard('{Enter}');
     const back = screen.getByRole('button', { name: 'Back to members' });
     expect(screen.queryByRole('list', { name: /^Members of / })).toBeNull();
     await userEvent.click(back);
-    expect(document.activeElement).toBe(memberRow('dev'));
-    expect(memberRow('dev').getAttribute('aria-current')).toBe('true');
+    expect(document.activeElement).toBe(memberOpen('dev'));
+    expect(memberOpen('dev').getAttribute('aria-current')).toBe('true');
     openMember('dev');
     const link = screen.queryByRole('button', { name: /Developer.*Roles|View .*role|in Roles/i });
     if (link) { link.focus(); await userEvent.keyboard('{Enter}'); expect(onViewRole).toHaveBeenCalledWith('Developer'); }

@@ -44,6 +44,9 @@ export interface TeamActions {
   resetUsage(team: OverviewTeam, provider: string): Promise<boolean>;
   unblockTicket(key: string, to?: string): Promise<boolean>;
   retryPausedRuns(runs: AttentionRun[]): Promise<boolean>;
+  retryRun(run: AttentionRun): Promise<boolean>;
+  requeueTicket(key: string): Promise<boolean>;
+  stopRun(run: AttentionRun): Promise<boolean>;
   approveCommand(id: string): Promise<boolean>;
   rejectCommand(id: string, reason?: string): Promise<boolean>;
   cancelCommand(id: string, reason?: string): Promise<boolean>;

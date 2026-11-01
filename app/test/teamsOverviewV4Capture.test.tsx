@@ -107,8 +107,8 @@ describe('Teams v4 capture fixture', () => {
     render(<TeamsCaptureApp />);
     await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 3000 });
 
-    const rows = [...document.querySelectorAll<HTMLElement>('[data-member-row]')];
-    expect(rows.map((row) => row.getAttribute('data-member-row'))).toEqual([...TEAMS_V4_MEMBER_IDS]);
+    const rows = [...document.querySelectorAll<HTMLElement>('.teams-member-row:not(.teams-member-row-static)')];
+    expect(rows.map((row) => row.querySelector('[data-member-row]')?.getAttribute('data-member-row'))).toEqual([...TEAMS_V4_MEMBER_IDS]);
 
     const lead = rows[0]!.textContent ?? '';
     expect(lead).toContain('Codex 5.6 Sol medium');

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef, useState, type JSX } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ActionMenu } from '../src/renderer/ui/ActionMenu';
 import type { MenuItem } from '../src/renderer/ui/actionMenuModel';
@@ -474,5 +475,56 @@ describe('ActionMenu dynamic content and activation', () => {
     expect(screen.getAllByRole('menu')).toHaveLength(1);
     fireEvent.click(parent); await flush();
     expect(screen.getAllByRole('menu')).toHaveLength(1);
+  });
+});
+
+describe('ActionMenu controlled opening and anchors', () => {
+  it('opens and closes through the open prop and reports every change', async () => {
+    const onOpenChange = vi.fn();
+    function Controlled(): JSX.Element {
+      const [open, setOpen] = useState(false);
+      return <ActionMenu
+        label="Team actions"
+        items={makeItems()}
+        open={open}
+        onOpenChange={(next) => { onOpenChange(next); setOpen(next); }}
+      />;
+    }
+    render(<Controlled />);
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(trigger());
+    await flush();
+    expect(menu()).toBeTruthy();
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(document.activeElement).toBe(item('One'));
+    fireEvent.click(item('One'));
+    await flush();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('opens at the given pointer point instead of under the trigger', async () => {
+    render(<ActionMenu label="Team actions" items={makeItems()} open anchorPoint={{ x: 300, y: 200 }} />);
+    await flush();
+    expect(menu().style.left).toBe('304px');
+    expect(menu().style.top).toBe('200px');
+  });
+
+  it('closes back to the supplied return-focus element', async () => {
+    const returnRef = createRef<HTMLButtonElement>();
+    function Controlled(): JSX.Element {
+      const [open, setOpen] = useState(true);
+      return <>
+        <button type="button" ref={returnRef}>Opener</button>
+        <ActionMenu label="Team actions" items={makeItems()} open={open} onOpenChange={setOpen} returnFocusRef={returnRef} />
+      </>;
+    }
+    render(<Controlled />);
+    await flush();
+    expect(menu()).toBeTruthy();
+    fireEvent.keyDown(item('One'), { key: 'Escape' });
+    await flush();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(returnRef.current);
   });
 });

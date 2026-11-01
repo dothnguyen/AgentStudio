@@ -128,7 +128,8 @@ Global: every item that changes something is disabled when the app is disconnect
 | Retry stage | the member's run is `paused`, or its assignment is `waiting_input` / `reconciling` | disabled: "The current stage is not stuck." |
 | Requeue ticket… / Stop run and block ticket… | the member has a run or a claimed ticket | group hidden |
 | Unblock ▸ | ≥ 1 blocked ticket whose last member is this one | hidden |
-| Remove member… | always offered when the team is editable (`canEditTeam`) | the existing backend refusal (team running) is shown as feedback |
+| Edit configuration… | the member has saved configuration and the team is editable (`canEditMember`) | disabled: the team's `uneditableNote`, or "Saved configuration and removal are not available for runtime-only members." |
+| Remove member… | the member has saved configuration and the team is editable (`canEditMember`) | disabled with the same reason as Edit configuration; when the team is running the existing backend refusal is shown as feedback |
 
 ## 4. Confirmations and safety
 

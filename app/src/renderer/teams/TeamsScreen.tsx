@@ -1,6 +1,7 @@
 import { SectionError } from './SectionError';
 import { TeamOverviewPanel } from './TeamOverviewPanel';
 import { MembersView } from './MembersView';
+import type { MemberListActions } from './MemberList';
 import { RoutingSettingsPanel } from './RoutingSettingsPanel';
 import { TeamViewTabs } from './TeamViewTabs';
 import { INITIAL_TEAMS_VIEW, TEAMS_CHILD_VIEWS, selectChildView, selectTeamView, teamsPanelId, teamsTabId, type TeamsChildView, type TeamsViewState } from './teamsViewModel';
@@ -102,7 +103,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const actionLocks = useRef(new Set<string>());
   const [actions, setActions] = useState<Record<string, MemberActionInFlight>>({});
   const [polling, setPolling] = useState<Record<string, boolean>>({});
-  const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; assignmentId: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; changed: boolean; fromRow?: boolean } | null>(null);
   const alertSource = confirmation?.changed ? 'confirmation' : createError !== null && props.createTeamRequested ? 'create' : formAlert ? 'form' : feedback?.kind === 'error' ? 'feedback' : routingError ? 'routing' : overview.state === 'error' ? 'overview' : roleCatalog.error !== null ? 'roles' : agents.error !== null ? 'agents' : board.error !== null ? 'board' : null;
   const confirmationGeneration = useRef(0);
   const selectionIdentity = JSON.stringify([props.workspace.id, navigation.selectedKey, navigation.selectionVersion, viewState.teamKey, viewState.view, selectedMember?.teamKey, selectedMember?.memberId]);
@@ -201,7 +202,11 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     }
   }, [confirmation, connected, confirmationActionInFlight]);
   useEffect(() => {
-    if (confirmation && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey || navigation.selectedKey !== confirmation.selectionKey || viewState.view !== 'overview')) {
+    if (confirmation && (
+      (!confirmation.fromRow && (selectedMember?.memberId !== confirmation.memberId || selectedMember?.teamKey !== confirmation.selectionKey))
+      || navigation.selectedKey !== confirmation.selectionKey
+      || viewState.view !== 'overview'
+    )) {
       confirmationGeneration.current++;
       restoreFocus.current = null;
       setConfirmation(null);
@@ -276,6 +281,15 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     retryPausedRuns: (runs) => runWrite('Paused runs were not retried.', () => retryRuns(runs), (d) => ({
       text: `Retried ${plural(d.retried, 'paused run', 'paused runs')}.`,
     })),
+    retryRun: (run) => runWrite('Run was not retried.', () => mgmt.retryRun(ws, run.workflowRunId), () => ({
+      text: `Retried the ${run.stage ?? 'current'} stage of ${run.ticketKey ?? run.workflowRunId}.`,
+    })),
+    requeueTicket: (key) => runWrite('Ticket was not requeued.', () => mgmt.retryTicket(ws, key), () => ({
+      text: `Requeued ${key}.`,
+    })),
+    stopRun: (run) => runWrite('Run was not stopped.', () => mgmt.cancelRun(ws, run.workflowRunId), () => ({
+      text: `Stopped the run for ${run.ticketKey ?? run.workflowRunId}; the ticket is blocked.`,
+    })),
     approveCommand: (id) => runWrite('Command was not approved.', () => mgmt.approveCommand(ws, id), () => ({
       text: `Approved ${commandText(id)}.`,
     })),
@@ -305,6 +319,16 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     copy,
   };
 
+  const memberActions: MemberListActions = {
+    onRetryRun: (run) => { void teamActions.retryRun(run); },
+    onRequeueTicket: (key) => { void teamActions.requeueTicket(key); },
+    onStopRun: (run) => { void teamActions.stopRun(run); },
+    onUnblockTicket: (key, to) => { void teamActions.unblockTicket(key, to); },
+    onApproveCommand: (id) => { void teamActions.approveCommand(id); },
+    onRejectCommand: (id, reason) => { void teamActions.rejectCommand(id, reason); },
+    onCancelCommand: (id, reason) => { void teamActions.cancelCommand(id, reason); },
+  };
+
   function lock(teamDefId: string, memberId: string, agentId: string, kind: 'switch' | 'resume'): boolean {
     const key = memberActionKey(teamDefId, memberId);
     if (actionLocks.current.has(key)) return false;
@@ -329,7 +353,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
     actionRefreshQueue.current = refresh.then(() => undefined, () => undefined);
     return refresh;
   }
-  async function switchAgent(context: { teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string }, assignmentId?: string): Promise<void> {
+  async function switchAgent(context: { teamDefId: string; memberId: string; memberName: string; agentId: string; agentLabel: string; trigger: HTMLButtonElement; signature: string | null; selectionKey: string; fromRow?: boolean }, assignmentId?: string): Promise<void> {
     if (readOnlyRef.current || !connectedRef.current) return;
     if (!lock(context.teamDefId, context.memberId, context.agentId, 'switch')) return;
     const generation = confirmationGeneration.current;
@@ -343,7 +367,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
         const match = assignmentConfirmation(result.error);
         if (match && (assignmentId === undefined || match.assignmentId !== assignmentId)) {
           if (confirmationGeneration.current !== generation || !connectedRef.current) return;
-          if (selectedMemberRef.current?.memberId !== context.memberId || selectedMemberRef.current?.teamKey !== context.selectionKey) return;
+          if (!context.fromRow && (selectedMemberRef.current?.memberId !== context.memberId || selectedMemberRef.current?.teamKey !== context.selectionKey)) return;
           setConfirmation({ ...context, assignmentId: match.assignmentId, changed: assignmentId !== undefined });
         } else {
           if (assignmentId !== undefined && confirmationGeneration.current === generation) closeConfirmation(context.trigger);
@@ -623,8 +647,10 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             connected={connected}
             actions={actions}
             polling={polling}
-            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, selectionKey: selectedMember?.teamKey ?? '', signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null) }); }}
+            onSwitch={(team, member, agentId, agentLabel, trigger) => { if (team.id && member.memberId) void switchAgent({ teamDefId: team.id, memberId: member.memberId, memberName: memberName(member), agentId, agentLabel, trigger, selectionKey: selected.key, signature: lastSwitchSignature(member.runtime?.lastSwitch ?? null), fromRow: selectedMember === null }); }}
             onResume={(team, member, agentId, label) => { if (team.id && member.memberId) void resumeAgent(team.id, member.memberId, agentId, label); }}
+            memberActions={memberActions}
+            copy={copy}
             pending={pending}
             announce={announceChild}
             onMemberNoticeChange={setMemberNotice}
@@ -665,6 +691,8 @@ function TeamDetailPanel(props: {
   polling: Record<string, boolean>;
   onSwitch(team: OverviewTeam, member: OverviewMember, id: string, label: string, trigger: HTMLButtonElement): void;
   onResume(team: OverviewTeam, member: OverviewMember, id: string, label: string): void;
+  memberActions: MemberListActions;
+  copy(text: string, label: string): void;
   announce: boolean;
   onMemberNoticeChange(active: boolean): void;
   readOnly: boolean;
@@ -695,6 +723,11 @@ function TeamDetailPanel(props: {
         agents={props.agents} agentsFresh={props.agentsFresh} rolesFresh={props.rolesFresh} readOnly={props.readOnly} roleItems={props.roleItems} roleCatalogMessage={props.roleCatalogMessage} onViewRole={props.onViewRole}
         writes={writes} pending={pending} announce={props.announce} onNoticeChange={props.onMemberNoticeChange} connected={props.connected && !props.readOnly} actions={props.actions} polling={props.polling}
         onSwitch={props.onSwitch} onResume={props.onResume}
+        attention={team.attention}
+        blockedTickets={overview.blockedTickets}
+        boardStatuses={props.board.section.data?.statuses ?? props.board.lastSettings?.statuses ?? null}
+        memberActions={props.memberActions}
+        copy={props.copy}
         summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} pending={pending} board={board} />} />
     );
     return null;

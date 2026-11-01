@@ -52,8 +52,10 @@ function readMaxWidthBlocks(text: string): MediaBlock[] {
 describe('dashboard styles', () => {
   it('member_roster_styles_have_focus_and_selection', () => {
     const flat = squash(css);
-    expect(flat).toContain('.teams-member-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
-    expect(flat).toContain('.teams-screen .teams-member-row[aria-current="true"] {');
+    // One focus ring only: the row ring (covering the whole row), not the button's.
+    expect(flat).toContain('.teams-screen button.teams-member-open:focus-visible { outline-color: transparent; }');
+    expect(flat).toContain('.teams-screen .teams-member-row:has(.teams-member-open:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }');
+    expect(flat).toContain('.teams-screen .teams-member-row[data-current="true"] {');
     expect(flat).toContain('.teams-members-scroll { overflow-x: auto; max-width: 100%; }');
     expect(flat).toMatch(/\.teams-members-table \{[^}]*min-width: 820px;/);
     expect(flat).not.toMatch(/\.teams-member-list-head \{[^}]*display: none/);
@@ -61,20 +63,20 @@ describe('dashboard styles', () => {
   it('members_card_uses_v4_values', () => {
     const flat = squash(css);
     expect(flat).toContain('.teams-roster { display: flex; flex-direction: column; min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden; }');
-    expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px;');
+    expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px 28px;');
     expect(flat).toContain('grid-template-columns: var(--teams-members-cols); gap: 16px;');
     expect(flat).toContain('text-transform: uppercase; letter-spacing: 0.04em;');
     expect(flat).toContain('background: #5b9cff; color: #0b1220;');
     expect(flat).toContain('color: #f0b453; background: rgba(240, 180, 83, 0.12);');
     expect(flat).toContain('background: #1f2630; color: #9ec3ff;');
-    expect(flat).toContain('.teams-screen button.teams-member-row:hover:not(:disabled) { background: #1b1f25;');
+    expect(flat).toContain('.teams-screen .teams-member-row:has(.teams-member-open):hover { background: #1b1f25;');
   });
   it('member_rows_fill_the_table_and_share_the_header_columns', () => {
     const flat = squash(css);
-    const template = 'minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px';
+    const template = 'minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px 28px';
     expect(flat.split(template)).toHaveLength(2);
     expect(template.match(/minmax\(0, [\d.]+fr\)|\d+px/g)).toEqual([
-      'minmax(0, 2fr)', 'minmax(0, 1.2fr)', 'minmax(0, 2.2fr)', 'minmax(0, 1fr)', 'minmax(0, 1.1fr)', '28px',
+      'minmax(0, 2fr)', 'minmax(0, 1.2fr)', 'minmax(0, 2.2fr)', 'minmax(0, 1fr)', 'minmax(0, 1.1fr)', '28px', '28px',
     ]);
     const table = /\.teams-members-table \{([^}]*)\}/.exec(flat);
     expect(table).toBeTruthy();
@@ -100,7 +102,8 @@ describe('dashboard styles', () => {
     // override; P05-S59 step 6 replaced it with horizontal scrolling. Nothing below
     // 820px may collapse the shared template, so every row stays as wide as the
     // table (width: 100%) and scrolls with it inside .teams-members-scroll.
-    expect(flat).toContain('@media (max-width: 700px) { .routing-table-wrap { overflow-x: auto; max-width: 100%; } }');
+    // One narrow-width block holds both the routing table scroll and the row menu.
+    expect(flat).toMatch(/@media \(max-width: 700px\) \{ [^@]*\.routing-table-wrap \{ overflow-x: auto; max-width: 100%; \} [^@]*\.teams-row-menu \{ position: absolute; top: 8px; right: 8px; \} [^@]*\.teams-member-chevron \{ visibility: hidden; \} \}/);
     expect(flat).not.toMatch(/@media \(max-width: 700px\) \{[^}]*\.teams-member-(row|list-head)/);
     const scroll = /\.teams-members-scroll \{([^}]*)\}/.exec(flat);
     expect(scroll).toBeTruthy();
@@ -109,15 +112,27 @@ describe('dashboard styles', () => {
   });
   it('member_selection_and_hover_paint_the_full_row_without_changing_other_values', () => {
     const flat = squash(css);
-    const selected = /\.teams-screen \.teams-member-row\[aria-current="true"\] \{([^}]*)\}/.exec(flat);
+    const selected = /\.teams-screen \.teams-member-row\[data-current="true"\] \{([^}]*)\}/.exec(flat);
     expect(selected).toBeTruthy();
     expect(selected![1]).toContain('background: #1b1f25;');
     expect(selected![1]).toContain('box-shadow: inset 2px 0 0 #5b9cff;');
     expect(selected![1]).not.toMatch(/(^| )(width|max-width|margin|padding):/);
-    const hover = /\.teams-screen button\.teams-member-row:hover:not\(:disabled\) \{([^}]*)\}/.exec(flat);
+    const hover = /\.teams-screen \.teams-member-row:has\(\.teams-member-open\):hover \{([^}]*)\}/.exec(flat);
     expect(hover).toBeTruthy();
     expect(hover![1]).toContain('background: #1b1f25;');
     expect(hover![1]).not.toMatch(/(^| )(width|max-width|margin|padding):/);
+    // The row is clickable through the open button's positioned pseudo-element;
+    // the menu trigger sits above it so a click on ⋯ does not open the detail.
+    expect(flat).toContain('.teams-member-open::after { content: ""; position: absolute; inset: 0; }');
+    expect(flat).toContain('.teams-row-menu { position: relative; z-index: 1;');
+    // Raised specificity so the 28px trigger is not stretched by the shared
+    // .teams-screen button min-height: 36px rule.
+    const menuTrigger = /\.teams-screen \.teams-row-menu \.teams-member-menu-trigger \{([^}]*)\}/.exec(flat);
+    expect(menuTrigger).toBeTruthy();
+    expect(menuTrigger![1]).toContain('inline-size: 28px; block-size: 28px;');
+    expect(menuTrigger![1]).toContain('min-height: 0;');
+    expect(flat).toContain('.teams-row-menu { position: absolute; top: 8px; right: 8px; }');
+    expect(flat).toContain('.teams-member-chevron { visibility: hidden; }');
     // long text wraps inside its own grid cell instead of pushing the next column across
     expect(flat).toContain('.teams-member-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }');
     expect(flat).toMatch(/\.teams-member-name \{[^}]*overflow-wrap: anywhere;/);

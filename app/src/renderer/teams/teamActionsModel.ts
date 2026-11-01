@@ -1,4 +1,4 @@
-import type { AttentionRun, BlockedTicket, BoardSettings, OverviewMember, OverviewTeam } from '../api';
+import type { AttentionCommandRequest, AttentionRun, BlockedTicket, BoardSettings, OverviewMember, OverviewTeam } from '../api';
 import type { MenuItem } from '../ui/actionMenuModel';
 import { shortenText } from '../ui/actionMenuModel';
 import { canEditTeam, uneditableNote } from './teamEditModel';
@@ -94,6 +94,119 @@ function workingStatuses(statuses: readonly BoardStatus[] | null): BoardStatus[]
   return statuses.filter((status) => status.kind !== 'done' && status.kind !== 'closed');
 }
 
+/** "Unblock to <return status>" / "Unblock to…" items for one blocked ticket. */
+export function buildUnblockItems(
+  ticket: BlockedTicket,
+  statuses: readonly BoardStatus[] | null,
+  disabledReason: string | null | undefined,
+  unblockTicket: (key: string, to?: string) => void,
+): MenuItem[] {
+  const statusItems: MenuItem[] = [];
+  if (ticket.returnStatus !== null) {
+    statusItems.push({
+      kind: 'action',
+      id: `unblock-${ticket.key}-return`,
+      label: `Unblock to ${ticket.returnStatus}`,
+      disabledReason: disabledReason ?? undefined,
+      onSelect: () => unblockTicket(ticket.key, ticket.returnStatus ?? undefined),
+    });
+  }
+  const working = workingStatuses(statuses);
+  if (working.length > 0) {
+    statusItems.push({
+      kind: 'submenu',
+      id: `unblock-${ticket.key}-choose`,
+      label: 'Unblock to…',
+      items: working.map((status) => ({
+        kind: 'action' as const,
+        id: `unblock-${ticket.key}-${status.id}`,
+        label: `Unblock to ${status.id}`,
+        disabledReason: disabledReason ?? undefined,
+        onSelect: () => unblockTicket(ticket.key, status.id),
+      })),
+    });
+  }
+  if (statusItems.length === 0) {
+    statusItems.push({
+      kind: 'action',
+      id: `unblock-${ticket.key}-none`,
+      label: 'No target status is available.',
+      disabledReason: 'The board has no working statuses and the ticket has no return status.',
+      onSelect: () => undefined,
+    });
+  }
+  return statusItems;
+}
+
+/** One blocked ticket as a submenu, shared by the team and member menus. */
+export function buildUnblockTicketMenu(
+  ticket: BlockedTicket,
+  statuses: readonly BoardStatus[] | null,
+  disabledReason: string | null | undefined,
+  unblockTicket: (key: string, to?: string) => void,
+): MenuItem {
+  return {
+    kind: 'submenu',
+    id: `ticket-${ticket.key}`,
+    label: `${ticket.key} · ${shortenText(ticket.title, 40)}${ticket.reason === null ? '' : ` · ${ticket.reason}`}`,
+    disabledReason: disabledReason ?? undefined,
+    items: buildUnblockItems(ticket, statuses, disabledReason, unblockTicket),
+  };
+}
+
+export interface CommandMenuActions {
+  approveCommand(id: string): void;
+  rejectCommand(id: string): void;
+  cancelCommand(id: string): void;
+}
+
+/** One submenu per command request, shared by the team and member menus. */
+export function buildCommandRequestItems(
+  requests: readonly AttentionCommandRequest[],
+  runs: readonly AttentionRun[],
+  disabledReason: string | null | undefined,
+  actions: CommandMenuActions,
+): MenuItem[] {
+  return requests.map((request) => {
+    const run = runs.find((entry) => entry.workflowRunId === request.workflowRunId);
+    const where = run?.ticketKey ?? request.memberId ?? request.workflowRunId;
+    const commandItems: MenuItem[] = [
+      {
+        kind: 'action',
+        id: `approve-${request.id}`,
+        label: 'Approve',
+        disabledReason: disabledReason ?? undefined,
+        onSelect: () => actions.approveCommand(request.id),
+      },
+      {
+        kind: 'action',
+        id: `reject-${request.id}`,
+        label: 'Reject…',
+        disabledReason: disabledReason ?? undefined,
+        onSelect: () => actions.rejectCommand(request.id),
+      },
+    ];
+    if (request.status === 'running') {
+      commandItems.push({
+        kind: 'action',
+        id: `cancel-${request.id}`,
+        label: 'Cancel running command…',
+        danger: true,
+        disabledReason: disabledReason ?? undefined,
+        onSelect: () => actions.cancelCommand(request.id),
+      });
+    }
+    return {
+      kind: 'submenu' as const,
+      id: `command-${request.id}`,
+      label: `${request.command} · ${where}`,
+      description: request.reason ?? undefined,
+      disabledReason: disabledReason ?? undefined,
+      items: commandItems,
+    };
+  });
+}
+
 export function buildTeamMenu(input: BuildTeamMenuInput): MenuItem[] {
   const { team, actions } = input;
   const globalReason = input.disabledReason ?? null;
@@ -126,49 +239,7 @@ export function buildTeamMenu(input: BuildTeamMenuInput): MenuItem[] {
     });
   }
 
-  const ticketItems: MenuItem[] = input.blockedTickets.map((ticket) => {
-    const statusItems: MenuItem[] = [];
-    if (ticket.returnStatus !== null) {
-      statusItems.push({
-        kind: 'action',
-        id: `unblock-${ticket.key}-return`,
-        label: `Unblock to ${ticket.returnStatus}`,
-        disabledReason: globalReason ?? undefined,
-        onSelect: () => actions.unblockTicket(ticket.key, ticket.returnStatus ?? undefined),
-      });
-    }
-    const statuses = workingStatuses(input.statuses);
-    if (statuses.length > 0) {
-      statusItems.push({
-        kind: 'submenu',
-        id: `unblock-${ticket.key}-choose`,
-        label: 'Unblock to…',
-        items: statuses.map((status) => ({
-          kind: 'action' as const,
-          id: `unblock-${ticket.key}-${status.id}`,
-          label: `Unblock to ${status.id}`,
-          disabledReason: globalReason ?? undefined,
-          onSelect: () => actions.unblockTicket(ticket.key, status.id),
-        })),
-      });
-    }
-    if (statusItems.length === 0) {
-      statusItems.push({
-        kind: 'action',
-        id: `unblock-${ticket.key}-none`,
-        label: 'No target status is available.',
-        disabledReason: 'The board has no working statuses and the ticket has no return status.',
-        onSelect: () => undefined,
-      });
-    }
-    return {
-      kind: 'submenu' as const,
-      id: `ticket-${ticket.key}`,
-      label: `${ticket.key} · ${shortenText(ticket.title, 40)}${ticket.reason === null ? '' : ` · ${ticket.reason}`}`,
-      disabledReason: globalReason ?? undefined,
-      items: statusItems,
-    };
-  });
+  const ticketItems: MenuItem[] = input.blockedTickets.map((ticket) => buildUnblockTicketMenu(ticket, input.statuses, globalReason, actions.unblockTicket));
   if (input.blockedTicketsTruncated) ticketItems.push({ kind: 'heading', label: 'Showing the 25 most recent' });
 
   const blockedMenu: MenuItem = {
@@ -204,44 +275,7 @@ export function buildTeamMenu(input: BuildTeamMenuInput): MenuItem[] {
       id: 'command-approvals',
       label: `Command approvals (${attention.commandRequests.length})`,
       disabledReason: globalReason ?? undefined,
-      items: attention.commandRequests.map((request) => {
-        const run = attention.runs.find((entry) => entry.workflowRunId === request.workflowRunId);
-        const where = run?.ticketKey ?? request.memberId ?? request.workflowRunId;
-        const commandItems: MenuItem[] = [
-          {
-            kind: 'action',
-            id: `approve-${request.id}`,
-            label: 'Approve',
-            disabledReason: globalReason ?? undefined,
-            onSelect: () => actions.approveCommand(request.id),
-          },
-          {
-            kind: 'action',
-            id: `reject-${request.id}`,
-            label: 'Reject…',
-            disabledReason: globalReason ?? undefined,
-            onSelect: () => actions.rejectCommand(request.id),
-          },
-        ];
-        if (request.status === 'running') {
-          commandItems.push({
-            kind: 'action',
-            id: `cancel-${request.id}`,
-            label: 'Cancel running command…',
-            danger: true,
-            disabledReason: globalReason ?? undefined,
-            onSelect: () => actions.cancelCommand(request.id),
-          });
-        }
-        return {
-          kind: 'submenu' as const,
-          id: `command-${request.id}`,
-          label: `${request.command} · ${where}`,
-          description: request.reason ?? undefined,
-          disabledReason: globalReason ?? undefined,
-          items: commandItems,
-        };
-      }),
+      items: buildCommandRequestItems(attention.commandRequests, attention.runs, globalReason, actions),
     });
   }
 

@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import { TeamsHarness } from './teamsHarness';
 import { workspaceA } from './dashboardFixtures';
 import {
-  LONG_UNBROKEN, fakeManagement, longContentOverview, longRoutingSettings, managementError, member, memberRow, openMember, overviewFixture, team, twoTeams,
+  LONG_UNBROKEN, fakeManagement, longContentOverview, longRoutingSettings, managementError, member, memberRow, memberOpen, openMember, overviewFixture, team, twoTeams,
 } from './teamsFixtures';
 
 afterEach(cleanup);
@@ -181,10 +181,10 @@ async function mountSidebar(opts: Parameters<typeof fakeManagement>[0] = {}) {
 it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved_role_and_destructive_controls', async () => {
   const { view } = await mountSidebar({ overview: [{ ok: true, data: runningLive() }] });
   view.getByRole('button', { name: 'Teams' }).focus();
-  const overviewOrder = await tabNames(22);
-  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdevDeveloper/]);
+  const overviewOrder = await tabNames(30);
+  inOrder(overviewOrder, [/^Open Dev Team,/, /^Open Second Team,/, 'New team', 'Rename team', 'Overview', 'Run board', /^Filter members/, 'Add member', /^DEdevdev/]);
     // Enter opens the exact member; detail order reaches Back, live Switch, Saved configuration, role link and Remove
-  const row = memberRow('dev');
+  const row = memberOpen('dev');
   row.focus();
   await userEvent.keyboard('{Enter}');
   await act(async () => {});
@@ -193,7 +193,7 @@ it('v4_v6_keyboard_order_reaches_sidebar_create_tabs_filters_row_back_live_saved
   inOrder(detailOrder, ['Back to members', 'Switch', /^View .* in Roles$/, 'Edit saved configuration', 'Remove dev']);
   // Back restores the invoking row
   await userEvent.click(view.getByRole('button', { name: 'Back to members' }));
-  expect(document.activeElement).toBe(memberRow('dev'));
+  expect(document.activeElement).toBe(memberOpen('dev'));
 });
 
 it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantics', async () => {
@@ -251,7 +251,7 @@ it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_co
   // structural CSS contract per breakpoint
   expect(flat).toMatch(/\.teams-overview-summaries \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(220px, 1fr\)\);/);
   expect(flat).toMatch(/\.teams-member-list-head, \.teams-member-row \{ display: grid; grid-template-columns: var\(--teams-members-cols\); gap: 16px;/);
-  expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px;');
+  expect(flat).toContain('--teams-members-cols: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.1fr) 28px 28px;');
   expect(flat).toMatch(/@media \(max-width: 900px\) \{ \.teams-overview-summaries \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
   expect(flat).toMatch(/\.teams-members-scroll \{ overflow-x: auto; max-width: 100%; \}/);
   expect(flat).toMatch(/\.team-nav :is\(\.team-nav-item, \.team-nav-label[^)]*\), [^{]*\{ overflow-wrap: anywhere; min-width: 0; max-width: 100%; \}/);
@@ -275,7 +275,7 @@ it('v4_v6_dialogs_are_viewport_bounded_and_reduced_motion_preserves_focus_visibi
   expect(flat).toMatch(/@media \(max-width: 560px\) \{[^@]*\.teams-create-dialog \{ width: calc\(100vw - 32px\); max-height: calc\(100vh - 32px\); overflow-y: auto; overflow-x: hidden; \}/);
   expect(flat).toMatch(/\.teams-create-dialog \{ width: min\(480px, 100%\); max-height: 100%;/);
   expect(flat).toMatch(/\.team-nav :is\(button\):focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
-  expect(flat).toMatch(/\.teams-member-row:focus-visible \{ outline: 2px solid var\(--focus\); outline-offset: 2px; \}/);
+  expect(flat).toMatch(/\.teams-screen \.teams-member-row:has\(\.teams-member-open:focus-visible\) \{ outline: 2px solid var\(--focus\); outline-offset: -2px; \}/);
   // reduced motion only suppresses motion globally: no outline, border, display or text changes
   const reduced = /@media \(prefers-reduced-motion: reduce\) \{([^@]*?)\}\s*\}/.exec(flat) ?? /@media \(prefers-reduced-motion: reduce\) \{(.*?\})\s*\}/.exec(flat);
   expect(reduced).toBeTruthy();

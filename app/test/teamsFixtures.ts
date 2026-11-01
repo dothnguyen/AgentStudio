@@ -263,8 +263,13 @@ export function memberRow(name: string, root: HTMLElement = document.body): HTML
   return row;
 }
 export function openMember(name: string, root: HTMLElement = document.body): HTMLElement {
-  fireEvent.click(memberRow(name, root));
+  fireEvent.click(memberOpen(name, root));
   return within(root).getByRole('region', { name });
+}
+export function memberOpen(name: string, root: HTMLElement = document.body): HTMLButtonElement {
+  const open = memberRow(name, root).querySelector<HTMLButtonElement>('.teams-member-open');
+  if (!open) throw new Error(`Member row ${name} has no open button`);
+  return open;
 }
 export function field(row: HTMLElement, f: string): string { return row.querySelector(`[data-field="${f}"]`)?.textContent ?? ''; }
 

@@ -10,6 +10,9 @@ export interface MemberDetailPanelProps {
   onViewRole?(roleId: string): void; writes: TeamWrites; pending: boolean; connected: boolean;
   agentsFresh?: boolean; rolesFresh?: boolean; readOnly?: boolean;
   liveActions: JSX.Element; onBack(): void; onRemoved(): void;
+  /** One-shot intent from the row actions menu. */
+  intent?: 'edit' | 'remove';
+  onIntentConsumed?(): void;
 }
 function useTicketPermission(props: MemberDetailPanelProps, retry: number): TicketPermissionState {
   const { workspaceId, management, team, member, savedRevision } = props;
@@ -41,12 +44,32 @@ export function MemberDetailPanel(props: MemberDetailPanelProps): JSX.Element {
   const [retry, setRetry] = useState(0);
   const [focusTarget, setFocusTarget] = useState<'edit' | 'remove' | 'confirm' | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null), editRef = useRef<HTMLButtonElement>(null), removeRef = useRef<HTMLButtonElement>(null), cancelRemoveRef = useRef<HTMLButtonElement>(null), confirmRemoveRef = useRef<HTMLButtonElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const intentApplied = useRef(false);
+  const focusFirstField = useRef(false);
   const permission = useTicketPermission(props, retry);
   useEffect(() => { headingRef.current?.focus(); }, [member.memberId]);
+  useEffect(() => {
+    if (intentApplied.current || props.intent === undefined) return;
+    if (props.intent === 'edit' && permission.state === 'loading') return;
+    intentApplied.current = true;
+    if (props.intent === 'edit') {
+      focusFirstField.current = true;
+      setEditing(memberFormInitial(member, permission.state === 'ready' ? permission.canAddTickets : null));
+    } else setConfirmingRemove(true);
+    props.onIntentConsumed?.();
+    // The menu intent is consumed exactly once per mounted member panel.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.intent, permission.state]);
+  useEffect(() => {
+    if (editing === null || !focusFirstField.current) return;
+    focusFirstField.current = false;
+    sectionRef.current?.querySelector<HTMLElement>('.teams-edit-form input, .teams-edit-form select, .teams-edit-form textarea')?.focus();
+  }, [editing]);
   useEffect(() => { if (!focusTarget) return; const el = focusTarget === 'edit' ? editRef.current : focusTarget === 'confirm' ? confirmRemoveRef.current : removeRef.current; if (el?.isConnected && !el.disabled) { el.focus(); setFocusTarget(null); } }, [focusTarget, pending, editing]);
   useEffect(() => { if (confirmingRemove) cancelRemoveRef.current?.focus(); }, [confirmingRemove]);
   const catalogRole = member.roleState === 'undefined' || props.roleItems === null ? null : findCatalogRole(props.roleItems, member.role);
-  return <section className="teams-member-detail" aria-labelledby="teams-member-detail-title">
+  return <section className="teams-member-detail" aria-labelledby="teams-member-detail-title" ref={sectionRef}>
     <button type="button" className="teams-back-button" onClick={props.onBack}>Back to members</button>
     <nav className="breadcrumb" aria-label="Member location"><ol><li>{teamLabel(team)}</li><li>Members</li><li aria-current="page">{name}</li></ol></nav>
     <h2 id="teams-member-detail-title" ref={headingRef} tabIndex={-1}>{name}</h2>
