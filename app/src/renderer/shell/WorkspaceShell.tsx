@@ -6,6 +6,7 @@ import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
 import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
+import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
 import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
@@ -196,6 +197,13 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         navigate('teams');
       }}
       onOpenTeams={() => navigate('teams')}
+    />
+  ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
+    <CurrentPhaseScreen
+      key={props.workspace.id}
+      workspace={props.workspace}
+      management={props.management}
+      onOpenPhases={() => navigate('boards/phases')}
     />
   ) : ticketKey !== null ? (
     <SectionPlaceholder

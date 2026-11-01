@@ -577,7 +577,7 @@ describe('T-135 sidebar Boards group and routes', () => {
     fireEvent.click(view.getByRole('button', { name: 'Boards' }));
     await settle();
     const current = view.getByRole('button', { name: 'Current Phase' });
-    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe(phases.currentPhase.name);
     expect(current.getAttribute('aria-current')).toBe('page');
     expect(current.classList.contains('boards-nav-item-selected')).toBe(true);
     expect(view.getByRole('button', { name: 'Boards' }).classList.contains('nav-item-open')).toBe(true);
@@ -798,7 +798,7 @@ describe('T-084 sidebar team navigation', () => {
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Open board' }));
     await settle();
-    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Current Phase');
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Phase 05');
     expect(view.getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBe('page');
     expect(view.getByRole('button', { name: 'Boards' }).getAttribute('aria-current')).toBeNull();
   });

@@ -2,12 +2,13 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import { vi } from 'vitest';
 import { roleItem, rolesFixture } from './rolesFixtures';
 import { fakeSkillManagement } from './skillFixtures';
-import { boardPhasesFixture } from './boardFixtures';
+import { boardPhasesFixture, boardTicketListFixture } from './boardFixtures';
 import type {
   AgentCatalogList,
   BoardPhases,
   BoardRunner,
   BoardSettings,
+  BoardTicketList,
   ManagementApi,
   OverviewMember,
   OverviewTeam,
@@ -170,6 +171,7 @@ export function fakeManagement(opts: {
   agents?: Array<Response<AgentCatalogList>>;
   boardSettings?: Array<Response<BoardSettings>>;
   boardPhases?: Array<Response<BoardPhases>>;
+  boardTickets?: Array<Response<BoardTicketList>>;
   roles?: Array<Response<RoleCatalogList>>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   calls?: Partial<Record<keyof ManagementApi, (...args: any[]) => unknown>>;
@@ -178,21 +180,24 @@ export function fakeManagement(opts: {
   const agentList = opts.agents ?? [{ ok: true, data: catalogFixture() }];
   const boardList = opts.boardSettings ?? [{ ok: true, data: boardSettingsFixture() }];
   const phaseList = opts.boardPhases ?? [{ ok: true, data: boardPhasesFixture() }];
+  const ticketList = opts.boardTickets ?? [{ ok: true, data: boardTicketListFixture() }];
   const roleList = opts.roles ?? [{ ok: true, data: teamRolesFixture() }];
   let rl = 0;
   let b = 0;
   let o = 0;
   let a = 0;
   let p = 0;
+  let t = 0;
   const overview = vi.fn((_id: string) => Promise.resolve(overviewList[Math.min(o++, overviewList.length - 1)]!));
   const agents = vi.fn((_id: string) => Promise.resolve(agentList[Math.min(a++, agentList.length - 1)]!));
   const boardSettings = vi.fn((_id: string) => Promise.resolve(boardList[Math.min(b++, boardList.length - 1)]!));
   const boardPhases = vi.fn((_id: string) => Promise.resolve(phaseList[Math.min(p++, phaseList.length - 1)]!));
+  const boardTickets = vi.fn((_id: string) => Promise.resolve(ticketList[Math.min(t++, ticketList.length - 1)]!));
   const roles = vi.fn((_id: string) => Promise.resolve(roleList[Math.min(rl++, roleList.length - 1)]!));
   const skillFake = fakeSkillManagement();
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
   const api = new Proxy({
-    overview, agents, boardSettings, boardPhases, roles,
+    overview, agents, boardSettings, boardPhases, boardTickets, roles,
     skills: skillFake.skills,
     skill: skillFake.skill,
     createSkill: skillFake.createSkill,
@@ -203,7 +208,7 @@ export function fakeManagement(opts: {
   } as Record<string, unknown>, {
     get: (target, prop: string) => target[prop] ?? (target[prop] = unused()),
   }) as unknown as ManagementApi;
-  return { api, overview, agents, boardSettings, boardPhases, roles, skillFake };
+  return { api, overview, agents, boardSettings, boardPhases, boardTickets, roles, skillFake };
 }
 
 export function teamDefinition(overrides: Partial<TeamDefinition> = {}): TeamDefinition {
