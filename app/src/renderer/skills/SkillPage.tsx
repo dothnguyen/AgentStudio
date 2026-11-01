@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react';
-import type { ManagementApi, ManagementError, ManagementResult, SkillDetail, SkillItem } from '../api';
+import type {
+  ManagementApi,
+  ManagementError,
+  ManagementResult,
+  RoleCatalogList,
+  SkillCatalogList,
+  SkillDetail,
+  SkillItem,
+  SkillRolesResult,
+} from '../api';
 import { Icon } from '../icons/Icon';
 import { ShellIcon } from '../shell/ShellIcon';
 import { SectionCard } from '../teams/SectionCard';
 import { SkillContentDialog } from './SkillContentDialog';
+import {
+  SKILL_ROLES_REASON_ID,
+  SkillRolesDialog,
+  skillRolesEditReason,
+  type SkillCatalogsReload,
+} from './SkillRolesDialog';
 import {
   formatRoleContext,
   formatSkillStats,
@@ -30,6 +45,18 @@ export interface SkillPageProps {
   createPending?: boolean;
   /** False while the backend is connecting or lost; editing is unavailable. */
   connected?: boolean;
+  /** The roles catalog loaded for the Roles screen; the dialog lists every role from it. */
+  rolesCatalog?: RoleCatalogList | null;
+  /** True when the skills list section is fresh. */
+  skillsReady?: boolean;
+  /** True when the roles catalog section is fresh. */
+  rolesReady?: boolean;
+  /** The roles section failure, so the disabled reason names the real cause. */
+  rolesError?: ManagementError | null;
+  /** The roles.json token carried by the skills list. */
+  rolesSha256?: string | null;
+  /** Re-reads the skills list and roles catalog after a roles write or conflict. */
+  onReloadRolesCatalogs?(): Promise<SkillCatalogsReload>;
   headingRef?: RefObject<HTMLHeadingElement | null>;
 }
 
@@ -40,6 +67,7 @@ type DetailState =
 
 const NOTICE = 'Saved changes apply to new assignments. Assignments already running keep the skills they started with.';
 const CREATE_REASON_ID = 'skills-page-create-reason';
+const MISSING_ROLES_REASON_ID = 'skills-missing-roles-reason';
 
 function detailError(reason: unknown): ManagementError {
   return {
@@ -58,9 +86,15 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
   const [attempt, setAttempt] = useState(0);
   const [contentOpen, setContentOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [savingRoles, setSavingRoles] = useState(false);
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const rolesCardButtonRef = useRef<HTMLButtonElement>(null);
+  const rolesRowButtonRef = useRef<HTMLButtonElement>(null);
+  const rolesTrigger = useRef<'card' | 'row'>('card');
   const refocusEdit = useRef(false);
+  const refocusRoles = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -94,11 +128,30 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     editButtonRef.current?.focus();
   }, [detail, saving]);
 
+  // The roles catalog and skills list reload after a roles save, which disables
+  // the Edit button for a moment. Return focus once both are current again.
+  const rolesReason = skillRolesEditReason({
+    connected: props.connected !== false,
+    pending: saving || savingRoles,
+    skillsReady: props.skillsReady !== false,
+    rolesReady: props.rolesReady !== false,
+    roles: props.rolesCatalog ?? null,
+    rolesSha256: props.rolesSha256 ?? null,
+    rolesError: props.rolesError ?? null,
+  });
+  useEffect(() => {
+    if (!refocusRoles.current || savingRoles || rolesReason !== null) return;
+    refocusRoles.current = false;
+    const target = rolesTrigger.current === 'row' ? rolesRowButtonRef.current : rolesCardButtonRef.current;
+    target?.focus();
+  }, [rolesReason, savingRoles]);
+
   const canPreview = skill.state === 'ok' || skill.state === 'truncated';
   const text = detail.kind === 'ready' ? detail.text : null;
   const editReason = missing ? null
     : skill.state === 'truncated' || skill.state === 'unreadable' ? 'Shorten the file outside the app first.'
     : saving ? 'Saving the file; wait for it to finish.'
+    : savingRoles ? 'Saving the roles; wait for it to finish.'
     : props.connected === false ? 'Connect to the backend to edit this skill.'
     : detail.kind === 'loading' ? 'The content is still loading.'
     : detail.kind === 'error' || detail.text === null || skill.sha256 === null ? 'The content could not be loaded.' : null;
@@ -111,6 +164,26 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
     if (editReason !== null) return;
     setAnnouncement(null);
     setContentOpen(true);
+  }
+
+  function openRoles(source: 'card' | 'row' = 'card'): void {
+    if (rolesReason !== null) return;
+    rolesTrigger.current = source;
+    setAnnouncement(null);
+    setRolesOpen(true);
+  }
+
+  async function savedRoles(_result: SkillRolesResult): Promise<void> {
+    setRolesOpen(false);
+    setSavingRoles(false);
+    setAnnouncement(`Saved roles for ${skill.id}.`);
+    refocusRoles.current = true;
+    try {
+      await props.onReloadRolesCatalogs?.();
+    } catch {
+      // The announcement still reports the write; a failed reload leaves the
+      // actions disabled with their own reason.
+    }
   }
 
   async function savedContent(): Promise<void> {
@@ -178,6 +251,9 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
         {missing ? <MissingCard
           createReason={createReason}
           onCreate={props.onCreateSkill}
+          rolesReason={rolesReason}
+          rolesButtonRef={rolesRowButtonRef}
+          onEditRoles={() => openRoles('row')}
         /> : <ContentCard
           skill={skill}
           limit={props.limits.skillBytes}
@@ -209,7 +285,16 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
           title="Used by roles"
           subtitle="Roles that load this skill."
           className="skills-usedby-card"
+          action={{
+            label: 'Edit',
+            ariaLabel: 'Edit roles that use this skill',
+            disabled: rolesReason !== null,
+            descriptionId: rolesReason !== null ? SKILL_ROLES_REASON_ID : undefined,
+            buttonRef: rolesCardButtonRef,
+            onClick: () => openRoles('card'),
+          }}
         >
+          {rolesReason !== null && <p id={SKILL_ROLES_REASON_ID} className="skills-roles-reason">{rolesReason}</p>}
           {skill.roles.length === 0
             ? <p className="skills-usedby-empty">No role uses this skill yet.</p>
             : <ul className="skills-usedby-list" aria-label="Roles that use this skill">{skill.roles.map(role => {
@@ -243,10 +328,27 @@ export function SkillPage(props: SkillPageProps): JSX.Element {
       onSaved={() => { void savedContent(); }}
       onPendingChange={setSaving}
     />}
+    {rolesOpen && props.rolesCatalog !== null && props.rolesCatalog !== undefined && <SkillRolesDialog
+      skill={skill}
+      roles={props.rolesCatalog}
+      rolesSha256={props.rolesSha256 ?? null}
+      management={props.management}
+      workspaceId={props.workspaceId}
+      onClose={() => { setRolesOpen(false); setSavingRoles(false); }}
+      onSaved={(result) => { void savedRoles(result); }}
+      onPendingChange={setSavingRoles}
+      reloadCatalogs={() => props.onReloadRolesCatalogs?.() ?? Promise.reject(new Error('The catalogs cannot be reloaded.'))}
+    />}
   </div>;
 }
 
-function MissingCard(props: { createReason: string | null; onCreate?: () => void }): JSX.Element {
+function MissingCard(props: {
+  createReason: string | null;
+  onCreate?: () => void;
+  rolesReason: string | null;
+  rolesButtonRef: RefObject<HTMLButtonElement | null>;
+  onEditRoles(): void;
+}): JSX.Element {
   return <SectionCard
     title="No SKILL.md yet"
     subtitle="Two ways to fix the roles that list this skill."
@@ -271,7 +373,16 @@ function MissingCard(props: { createReason: string | null; onCreate?: () => void
           <span className="skills-missing-option-title">Remove it from the roles</span>
           <span className="skills-missing-option-description">Stop listing a skill that does not exist.</span>
         </span>
+        <button
+          type="button"
+          ref={props.rolesButtonRef}
+          className="skills-edit-roles-button"
+          disabled={props.rolesReason !== null}
+          aria-describedby={props.rolesReason !== null ? MISSING_ROLES_REASON_ID : undefined}
+          onClick={props.onEditRoles}
+        >Edit roles</button>
       </div>
+      {props.rolesReason !== null && <p id={MISSING_ROLES_REASON_ID} className="skills-roles-reason">{props.rolesReason}</p>}
     </div>
   </SectionCard>;
 }

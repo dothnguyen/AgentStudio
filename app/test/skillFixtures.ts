@@ -3,6 +3,7 @@ import type {
   ManagementApi,
   ManagementResult,
   Problem,
+  RoleCatalogList,
   SkillCatalogList,
   SkillDeleteResult,
   SkillDetail,
@@ -109,7 +110,7 @@ export function skillDetail(id = 'code-search', overrides: Partial<SkillDetail> 
   return { workspace: catalog.workspace, skill, text, ...overrides };
 }
 
-export type SkillMethod = 'skills' | 'skill' | 'createSkill' | 'updateSkill' | 'deleteSkill' | 'updateSkillRoles';
+export type SkillMethod = 'skills' | 'skill' | 'createSkill' | 'updateSkill' | 'deleteSkill' | 'updateSkillRoles' | 'roles';
 export interface SkillCall {
   method: SkillMethod;
   args: unknown[];
@@ -353,6 +354,37 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
     });
   };
 
+  const roleCatalog = async (_workspaceId: string): Promise<ManagementResult<RoleCatalogList>> => {
+    log('roles', [_workspaceId]);
+    const availableSkills = [...skills.values()]
+      .filter((skill) => skill.text !== null)
+      .map((skill) => skill.id)
+      .sort();
+    return ok({
+      workspace,
+      state: 'ok',
+      sha256: rolesSha256,
+      items: [...roles.values()].map((role) => ({
+        id: role.id,
+        name: role.name ?? role.id,
+        description: null,
+        instructions: { state: 'none' as const, path: null, text: null, sha256: null, bytes: null },
+        skills: [...role.skills].sort().map((id) => ({
+          id,
+          state: (skills.get(id)?.text ?? null) === null ? 'missing' as const : 'ok' as const,
+        })),
+        warnings: [],
+        problems: [],
+        usage: {
+          members: [], boardRules: [], workflows: [], legacyRoster: [], liveRuntime: [],
+          count: 0, blocking: false, partial: false,
+        },
+      })),
+      problems: [],
+      availableSkills,
+    });
+  };
+
   return {
     calls,
     skills: skillsList,
@@ -361,5 +393,6 @@ export function fakeSkillManagement(initial: FakeSkillInitial = {}): FakeSkillMa
     updateSkill,
     deleteSkill,
     updateSkillRoles,
+    roles: roleCatalog,
   };
 }

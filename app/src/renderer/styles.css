@@ -2170,3 +2170,32 @@ ul[aria-label="Workspaces"] {
 .teams-member-work-muted { color: #8d949e; }
 .teams-member-chevron { stroke: #8d949e; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .teams-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); border: 0; }
+
+/* Skills roles dialog (T-129) */
+.skills-screen .section-card-action,
+.skills-screen .skills-edit-roles-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.skills-screen .section-card-action:hover:not(:disabled),
+.skills-screen .skills-edit-roles-button:hover:not(:disabled) { background: #222831; }
+.skills-screen .section-card-action:disabled,
+.skills-screen .skills-edit-roles-button:disabled { opacity: 0.45; cursor: default; }
+.skills-roles-reason { margin: 0; color: var(--warning); font-size: 12px; overflow-wrap: anywhere; }
+.skills-usedby-card .skills-roles-reason { padding: 0 18px 12px; }
+.skill-roles-dialog .dialog-body { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; }
+.skill-roles-options { display: flex; flex-direction: column; gap: 8px; }
+.skill-roles-option { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: 100%; min-height: 40px; padding: 10px 14px; border: 1px solid #262a30; border-radius: 9px; background: #121418; color: #e7e9ec; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.skill-roles-option.is-checked { border-color: #3d6bb3; background: rgba(91, 156, 255, 0.08); }
+.skill-roles-option.is-cannot-add { opacity: 0.6; }
+.skill-roles-option:disabled { cursor: default; }
+.skill-roles-option:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.skill-roles-check { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 18px; height: 18px; flex: none; border: 2px solid #4a5059; border-radius: 5px; background: transparent; }
+.skill-roles-option.is-checked .skill-roles-check { border-color: #5b9cff; background: #5b9cff; }
+.skill-roles-option-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.skill-roles-option-name { font-weight: 500; overflow-wrap: anywhere; }
+.skill-roles-option-state { color: #a3a9b2; font-size: 12px; }
+.skill-roles-option-note { color: var(--warning); font-size: 11.5px; }
+.skill-roles-empty { margin: 0; color: #a3a9b2; font-size: 12.5px; }
+.skill-roles-error { padding: 10px 12px; border: 1px solid #5a2e2e; border-radius: 8px; background: rgba(180, 60, 60, 0.08); color: #f0c7c0; font-size: 12.5px; overflow-wrap: anywhere; }
+.skill-roles-error p { margin: 2px 0; }
+.skill-roles-error button { margin-top: 6px; }
+.skill-roles-error:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.skill-roles-reloaded { margin: 0; color: #a3a9b2; font-size: 12px; }

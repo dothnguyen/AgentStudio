@@ -250,7 +250,10 @@ describe('Skill page missing state', () => {
     expect(within(missing).getByText('Remove it from the roles')).toBeTruthy();
     expect(within(missing).getByText('Stop listing a skill that does not exist.')).toBeTruthy();
     expect(page(view).getAllByRole('button', { name: 'Create this skill' })).toHaveLength(2);
-    expect(page(view).queryByRole('button', { name: /edit roles/i })).toBeNull();
+    // Both the Used by roles card header and the Remove it from the roles row
+    // open the same dialog for a missing skill.
+    expect(page(view).getAllByRole('button', { name: /edit roles/i })).toHaveLength(2);
+    expect(within(missing).getByRole('button', { name: 'Edit roles' })).toBeTruthy();
     expect(page(view).queryByRole('button', { name: /delete skill/i })).toBeNull();
     expect(page(view).queryByRole('button', { name: 'Edit' })).toBeNull();
   });

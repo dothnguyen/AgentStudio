@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { ConnectionStatus, ManagementApi, SkillCatalogList, SkillDetail, Workspace } from '../api';
+import type { ConnectionStatus, ManagementApi, ManagementResult, RoleCatalogList, SkillCatalogList, SkillDetail, Workspace } from '../api';
 import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { ShellIcon } from '../shell/ShellIcon';
 import { SkillCreateDialog } from './SkillCreateDialog';
 import { SkillPage } from './SkillPage';
+import type { SkillCatalogsReload } from './SkillRolesDialog';
 import { filterSkills, skillRoleNames, skillSize, skillSummary } from './skillsModel';
 
 export interface SkillsScreenProps {
@@ -22,6 +23,9 @@ export function SkillsScreen(props: SkillsScreenProps): JSX.Element {
 
 function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const catalog = useDashboardSection<SkillCatalogList>(props.management.skills, props.workspace.id);
+  // The roles dialog must list every role, including ones that do not use this
+  // skill, so it reads the same roles catalog the Roles screen uses.
+  const rolesSection = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
   const connected = !props.connection || props.connection.state === 'connected';
   const heading = useRef<HTMLHeadingElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -29,6 +33,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const skillHeading = useRef<HTMLHeadingElement>(null);
   const lastData = useRef<SkillCatalogList | null>(null);
+  const lastRoles = useRef<RoleCatalogList | null>(null);
   const [query, setQuery] = useState('');
   const [view, setView] = useState<SkillsView>({ kind: 'list' });
   const [focusRowId, setFocusRowId] = useState<string | null>(null);
@@ -41,8 +46,10 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   useEffect(() => { if (catalog.state === 'ready' && retried.current) { retried.current = false; heading.current?.focus(); } }, [catalog.state]);
 
   if (catalog.data) lastData.current = catalog.data;
+  if (rolesSection.data) lastRoles.current = rolesSection.data;
   const data = catalog.data ?? (catalog.loading ? lastData.current : null);
   const shown = data;
+  const rolesData = rolesSection.data ?? (rolesSection.loading ? lastRoles.current : null);
   const skills = shown?.skills ?? [];
   const visible = filterSkills(skills, query);
   const filtering = query.trim().length > 0;
@@ -70,6 +77,23 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
   const refreshCatalog = async (): Promise<void> => {
     if (catalog.reloadFresh !== undefined) await catalog.reloadFresh();
     else await catalog.reload();
+  };
+
+  const refreshCatalogs = async (): Promise<SkillCatalogsReload> => {
+    const skillsRequest = catalog.reloadFresh !== undefined
+      ? catalog.reloadFresh()
+      : catalog.reload().then(() => ({
+        ok: false as const,
+        error: { code: 'INTERNAL', message: 'The skills list cannot be refreshed.', retryable: true },
+      }));
+    const rolesRequest = rolesSection.reloadFresh !== undefined
+      ? rolesSection.reloadFresh()
+      : rolesSection.reload().then(() => ({
+        ok: false as const,
+        error: { code: 'INTERNAL', message: 'The roles catalog cannot be refreshed.', retryable: true },
+      }));
+    const [skills, roles] = await Promise.all([skillsRequest, rolesRequest]);
+    return { skills, roles } as SkillCatalogsReload;
   };
 
   const openCreate = (initialId: string | null = null) => {
@@ -150,6 +174,7 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
     {!connected && <p role="status">{props.connection?.state === 'lost' ? 'Connection to the backend was lost. Saved skill data stays visible but may be out of date.' : 'Connecting to the backend… Saved skill data may be out of date.'}</p>}
     {catalog.loading && <p role="status">Loading skills…</p>}
     {error && <div className="panel-error skills-error" role="alert"><p><code>{error.code}</code>: {error.message}</p>{error.remediation && <p>{error.remediation}</p>}<button type="button" onClick={() => { retried.current = true; void catalog.reload(); }}>Retry loading skills</button></div>}
+    {rolesSection.error && <div className="panel-error skills-roles-error" role="alert"><p>Roles catalog: <code>{rolesSection.error.code}</code>: {rolesSection.error.message}</p>{rolesSection.error.remediation && <p>{rolesSection.error.remediation}</p>}<button type="button" onClick={() => { void rolesSection.reload(); }}>Retry loading roles</button></div>}
     {view.kind === 'list' && shown && <>
       {shown.problems.length > 0 && <div className="panel-note skills-problems"><p>Skill catalog problems</p><ul>{shown.problems.map((problem, index) => <li key={index}>{problem.path ? `${problem.path}: ` : ''}{problem.message}</li>)}</ul></div>}
       {skills.length === 0 && <p className="skills-empty">No skills yet. A skill is a folder <code>.agent-studio/skills/&lt;id&gt;/SKILL.md</code>.</p>}
@@ -218,6 +243,12 @@ function SkillsBrowser(props: SkillsScreenProps): JSX.Element {
       onCreateSkill={() => openCreate(skillPage.id)}
       createPending={createPending}
       onReloadCatalog={refreshCatalog}
+      rolesCatalog={rolesData}
+      skillsReady={catalog.state === 'ready'}
+      rolesReady={rolesSection.state === 'ready'}
+      rolesError={rolesSection.error}
+      rolesSha256={shown.rolesSha256}
+      onReloadRolesCatalogs={refreshCatalogs}
       headingRef={skillHeading}
     />}
     {view.kind === 'skill' && skillRemoved && <div className="skills-page skills-removed" role="region" aria-label="Skill details">
