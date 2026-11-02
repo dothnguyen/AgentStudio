@@ -2458,3 +2458,15 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .boards-backlog-empty, .boards-backlog-more { margin: 0; padding: 14px 16px; border: 0; border-top: 1px solid var(--border-card); color: var(--text-muted); background: transparent; font-size: 12px; }
 .boards-backlog-more { width: 100%; text-align: left; cursor: pointer; color: #9ec3ff; }
 @media (max-width: 760px) { .boards-backlog-row { flex-wrap: wrap; } .boards-backlog-title { flex-basis: calc(100% - 84px); } .boards-backlog-counts { white-space: normal; text-align: right; } }
+
+.boards-backlog-toolbar { padding: 16px; border: 1px solid var(--border-card); border-radius: 12px; background: var(--surface); }
+.boards-backlog-toolbar-row { justify-content: flex-start; gap: 10px; }
+.boards-backlog-toolbar .boards-search { flex: 1 1 220px; max-width: 360px; }
+.boards-backlog-multi { position: relative; }
+.boards-backlog-popover { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 190px; max-height: 280px; overflow: auto; padding: 8px; border: 1px solid #2f343c; border-radius: 8px; background: #1b1f24; box-shadow: 0 8px 24px #0008; }
+.boards-backlog-popover label { display: flex; align-items: center; gap: 8px; padding: 6px; white-space: nowrap; }
+.boards-backlog-select { display: inline-flex; align-items: center; gap: 5px; color: #c4cad2; font-size: 12.5px; }
+.boards-backlog-select select { max-width: 180px; padding: 6px; border: 1px solid #2f343c; border-radius: 8px; background: #1b1f24; color: var(--text); }
+.boards-backlog-sort { margin-left: auto; }
+.boards-backlog-active { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.boards-backlog-active .boards-toolbar-count { margin-left: auto; }

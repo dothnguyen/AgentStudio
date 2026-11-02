@@ -256,4 +256,4 @@ The Backlog screen loads all ticket summaries, phases and board settings. It sho
 
 The backlog grouping model retains empty phases and orders the current phase first, then open and closed phases by position, with unassigned or unknown phases last. It calculates activity counts and sorts tickets within each group by priority, numeric key, update time, or the configured board status order.
 
-The independent backlog filter model supports search, status, phase, activity, owner, priority and open-dependency filters, and tracks the selected sort. It is not yet connected to the screen.
+The backlog toolbar filters by search, status, phase, activity, owner, priority and open dependencies, and sorts within each phase. Search is debounced by 150 ms; active filters can be removed individually or cleared together. Filtered groups show matching and total counts, and empty groups are hidden while filtering.

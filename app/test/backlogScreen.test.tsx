@@ -157,3 +157,86 @@ describe('BacklogScreen', () => {
     expect(fake.boardSettings).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('backlog toolbar', () => {
+  it('filters, removes chips, clears filters and hides empty groups', async () => {
+    const settings = boardSettingsFixture();
+    settings.statuses = [{ id: 'dev-ready', name: 'Dev ready', kind: null }, { id: 'backlog', name: 'Backlog', kind: null }];
+    const tickets = [
+      boardTicketSummary({ key: 'T-1', status: 'dev-ready', activity: { state: 'working', agent: 'Alex' } }),
+      boardTicketSummary({ key: 'T-2', status: 'backlog' }),
+      boardTicketSummary({ key: 'T-3', phase: 'phase-06', status: 'backlog' }),
+    ];
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
+    await settle();
+    const user = userEvent.setup();
+    await user.click(view.getByRole('button', { name: 'Status' }));
+    await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
+    expect(view.getByRole('button', { name: 'Status · 1' }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByText('1 of 3 tickets')).toBeTruthy();
+    expect(view.getByRole('button', { name: /Phase 05 Current 1 of 2 tickets/ })).toBeTruthy();
+    expect(view.queryByRole('button', { name: /Phase 06/ })).toBeNull();
+    await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
+    expect(view.queryByText('1 of 3 tickets')).toBeNull();
+    expect(view.getByRole('button', { name: 'Status' })).toBeTruthy();
+    await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
+    await user.click(view.getByRole('button', { name: 'Remove Status: Dev ready' }));
+    expect(view.queryByText('1 of 3 tickets')).toBeNull();
+    await user.selectOptions(view.getByLabelText('Owner'), 'Alex');
+    await user.selectOptions(view.getByLabelText('Priority'), 'low');
+    expect(view.getByText('No tickets match these filters')).toBeTruthy();
+    await user.click(view.getByRole('button', { name: 'Clear filters' }));
+    expect(view.queryByText('No tickets match these filters')).toBeNull();
+    await user.selectOptions(view.getByLabelText('Dependencies'), 'yes');
+    await user.click(view.getByRole('button', { name: 'Clear all' }));
+    expect(view.getByLabelText<HTMLSelectElement>('Dependencies').value).toBe('any');
+  });
+
+  it('supports keyboard selection and returns focus on Escape', async () => {
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement().api} />);
+    await settle();
+    const user = userEvent.setup();
+    const button = view.getByRole('button', { name: 'Activity' });
+    await user.click(button);
+    await user.keyboard('{ArrowDown} ');
+    expect(view.getByRole<HTMLInputElement>('checkbox', { name: 'Working' }).checked).toBe(true);
+    await user.keyboard('{ArrowDown} ');
+    expect(view.getByRole<HTMLInputElement>('checkbox', { name: 'Blocked' }).checked).toBe(true);
+    await user.keyboard(' ');
+    expect(view.getByRole<HTMLInputElement>('checkbox', { name: 'Blocked' }).checked).toBe(false);
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(button);
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('debounces search and changes the sort order', async () => {
+    vi.useFakeTimers();
+    const tickets = [boardTicketSummary({ key: 'T-1', title: 'Alpha', priority: 1 }), boardTicketSummary({ key: 'T-2', title: 'Beta', priority: 2 })];
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    fireEvent.change(view.getByLabelText('Sort'), { target: { value: 'key' } });
+    expect(view.getAllByRole('button', { name: /Open T-/ })[0]?.getAttribute('aria-label')).toContain('T-2');
+    fireEvent.change(view.getByLabelText('Search tickets'), { target: { value: 'Alpha' } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(149); });
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(view.queryByRole('button', { name: /Open T-2/ })).toBeNull();
+    expect(view.getByText('1 of 2 tickets')).toBeTruthy();
+  });
+
+  it('sorts by recently updated time and configured status order', async () => {
+    const tickets = [
+      boardTicketSummary({ key: 'T-1', status: 'backlog', updatedAt: '2026-10-01T00:00:00Z', priority: 30 }),
+      boardTicketSummary({ key: 'T-2', status: 'dev-ready', updatedAt: '2026-10-03T00:00:00Z', priority: 20 }),
+      boardTicketSummary({ key: 'T-3', status: 'backlog', updatedAt: '2026-10-02T00:00:00Z', priority: 10 }),
+    ];
+    const listData = boardTicketListFixture({ tickets, statuses: ['dev-ready', 'backlog'] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(listData)] }).api} />);
+    await settle();
+    const keys = () => Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-row')).map(row => row.getAttribute('aria-label')?.match(/^Open (T-\d+)/)?.[1]);
+    fireEvent.change(view.getByLabelText('Sort'), { target: { value: 'updated' } });
+    expect(keys()).toEqual(['T-2', 'T-3', 'T-1']);
+    fireEvent.change(view.getByLabelText('Sort'), { target: { value: 'status' } });
+    expect(keys()).toEqual(['T-2', 'T-3', 'T-1']);
+  });
+});
