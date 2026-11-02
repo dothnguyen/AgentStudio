@@ -113,7 +113,7 @@ class TicketAddRules(ServerCase):
         got = self.add(self.asg_ok, "review findings: errors are swallowed")
         ticket = got["ticket"]
         self.assertEqual((ticket["status"], ticket["phase"], ticket["createdByMember"],
-                          ticket["createdByAssignment"]), ("open", "default", "allowed", self.asg_ok))
+                          ticket["createdByAssignment"]), ("none", "default", "allowed", self.asg_ok))
         self.assertEqual(got["dependsOn"], [])
 
     def test_worktree_caller_still_writes_to_the_teams_canonical_board(self):

@@ -67,12 +67,12 @@ class ConfigTests(BoardCase):
             self.assertIn(fragment, paths)
 
     def test_both_status_sets_load_with_kinds_resolved(self):
-        for config, initial, terminal in ((CONFIG_A, "open", {"finished"}), (CONFIG_B, "todo", {"done", "dropped"})):
+        for config, initial, terminal in ((CONFIG_A, "none", {"finished"}), (CONFIG_B, "none", {"merged", "dropped"})):
             self.write_config(config)
             model = boardmodel.load_config(self.ws)
             self.assertEqual(model["initial"], initial)
             self.assertEqual(model["terminal"], frozenset(terminal))
-            self.assertEqual([s["id"] for s in model["statuses"]], [s["id"] for s in config["statuses"]])
+            self.assertEqual([s["id"] for s in model["statuses"]], [model["upgradedFrom"][s["id"]] for s in config["statuses"]])
 
     def test_p03_shape_is_rejected(self):
         self.check_problems(P03_SHAPE, "version", "root")
@@ -139,7 +139,7 @@ class TicketTests(BoardCase):
         phase = self.conn.execute("SELECT * FROM phases").fetchone()
         self.assertEqual((phase["slug"], phase["name"], phase["position"], phase["status"]),
                          ("default", "Default", 0, "open"))
-        self.assertEqual((first["key"], first["status"], first["phase"]), ("T-001", "open", "default"))
+        self.assertEqual((first["key"], first["status"], first["phase"]), ("T-001", "none", "default"))
         self.assertIsNone(first["assignee"])
         second = self.add("two")
         self.assertEqual((self.count("board_state"), self.count("phases")), (1, 1))
@@ -155,12 +155,12 @@ class TicketTests(BoardCase):
     def test_two_status_sets_drive_tickets_without_code_change(self):
         self.write_config(CONFIG_B)
         ticket = self.add("b")
-        self.assertEqual(ticket["status"], "todo")
+        self.assertEqual(ticket["status"], "none")
         self.move("T-001", "doing")
-        self.move("T-001", "done")
+        self.move("T-001", "merged")
         shown = boardmodel.board_show(self.conn, self.ws)
         columns = shown["phases"][0]["columns"]  # the default phase holds every ticket
-        self.assertEqual([c["status"] for c in columns], ["todo", "doing", "review", "done", "dropped"])
+        self.assertEqual([c["status"] for c in columns], ["none", "doing", "review", "merged", "dropped"])
         self.assertEqual(columns[3]["tickets"][0]["key"], "T-001")
         self.assertEqual(shown["currentPhase"]["slug"], "default")
 
@@ -169,9 +169,9 @@ class TicketTests(BoardCase):
         with self.assertRaises(AsError) as caught:
             self.move("T-001", "nowhere")
         self.assertEqual(caught.exception.code, "BOARD_STATUS_UNKNOWN")
-        self.assertEqual(caught.exception.data["statuses"], ["open", "wip", "finished"])
+        self.assertEqual(caught.exception.data["statuses"], ["none", "wip", "finished"])
         with self.assertRaises(AsError) as caught:
-            self.move("T-001", "open")
+            self.move("T-001", "none")
         self.assertEqual(caught.exception.code, "TICKET_TRANSITION_INVALID")
         self.move("T-001", "finished")
         before = self.count("ticket_events")
@@ -184,8 +184,8 @@ class TicketTests(BoardCase):
         self.assertEqual((moved["from"], moved["ticket"]["status"]), ("finished", "wip"))
         events = self.events("T-001")
         self.assertEqual([(e["name"], e["from_status"], e["to_status"], e["actor"]) for e in events],
-                         [("ticket.created", None, "open", "operator"),
-                          ("ticket.moved", "open", "finished", "operator"),
+                         [("ticket.created", None, "none", "operator"),
+                          ("ticket.moved", "none", "finished", "operator"),
                           ("ticket.moved", "finished", "wip", "operator")])
 
     def test_claimed_ticket_cannot_move_to_another_status(self):
@@ -195,7 +195,7 @@ class TicketTests(BoardCase):
         with self.assertRaises(AsError) as caught:
             self.move("T-001", "wip")
         self.assertEqual(caught.exception.code, "TICKET_BUSY")
-        self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "open")
+        self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "none")
         self.assertEqual([event["name"] for event in self.events("T-001")], ["ticket.created"])
 
     def test_move_to_coordinator_merge_status_reports_activity(self):
@@ -213,9 +213,9 @@ class TicketTests(BoardCase):
         self.add("a")
         self.move("T-001", "dropped")
         with self.assertRaises(AsError) as caught:
-            self.move("T-001", "todo")
+            self.move("T-001", "none")
         self.assertEqual(caught.exception.code, "TICKET_TRANSITION_INVALID")
-        self.move("T-001", "todo", force=True)
+        self.move("T-001", "none", force=True)
 
     def test_unknown_ticket_and_dependencies(self):
         with self.assertRaises(AsError) as caught:
@@ -250,7 +250,7 @@ class TicketTests(BoardCase):
         self.move("T-002", "wip")
         listed = boardmodel.ticket_list(self.conn, self.ws)
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-002", "T-003", "T-001"])  # wip first
-        self.assertEqual([t["key"] for t in boardmodel.ticket_list(self.conn, self.ws, "open")["tickets"]],
+        self.assertEqual([t["key"] for t in boardmodel.ticket_list(self.conn, self.ws, "none")["tickets"]],
                          ["T-003", "T-001"])
         with self.assertRaises(AsError) as caught:
             boardmodel.ticket_list(self.conn, self.ws, "nowhere")
@@ -263,7 +263,7 @@ class TicketTests(BoardCase):
         shown = boardmodel.board_show(self.conn, self.ws)
         self.assertEqual([(p["slug"], p["ticketCount"]) for p in shown["phases"]], [("default", 2)])
         columns = shown["phases"][0]["columns"]
-        self.assertEqual([c["status"] for c in columns], ["open", "wip", "finished"])
+        self.assertEqual([c["status"] for c in columns], ["none", "wip", "finished"])
         self.assertEqual([(c["count"], [t["key"] for t in c["tickets"]]) for c in columns],
                          [(1, ["T-001"]), (0, []), (1, ["T-002"])])
         self.assertTrue(shown["phases"][0]["current"])
@@ -395,6 +395,9 @@ class NoNamesInBoardCode(unittest.TestCase):
             path = os.path.join(os.path.dirname(agent_studio.__file__), name)
             with open(path, encoding="utf-8") as f:
                 tree = ast.parse(f.read(), filename=name)
+            # The migration must name the legacy status IDs it translates.
+            tree.body = [node for node in tree.body if not (isinstance(node, ast.FunctionDef)
+                                                              and node.name == "upgrade_config")]
             hits = sorted({m.group(0) for w in self.words(tree) for m in [self.FORBIDDEN.search(w)] if m})
             self.assertEqual(hits, [], name)
 

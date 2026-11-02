@@ -99,7 +99,7 @@ class RecoveryCase(unittest.TestCase):
         self.assertEqual(out["errors"], [])
         ticket = self.ticket()
         self.assertEqual((ticket["status"], ticket["assignee"], ticket["active_run_id"]),
-                         ("build", None, None))
+                         ("none", None, None))
         self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
         self.assertEqual(names, ["ticket.created", "ticket.claim_released", "ticket.lease_expired"])
@@ -132,7 +132,7 @@ class RecoveryCase(unittest.TestCase):
         self.make_unavailable(limit=True)  # report_rules marks the member limit_reached in reality
         self.tick()
         ticket = self.ticket()
-        self.assertEqual((ticket["status"], ticket["assignee"]), ("build", None))
+        self.assertEqual((ticket["status"], ticket["assignee"]), ("none", None))
         self.assertIsNone(ticket["rounds_json"])  # no round counted
         self.assertEqual(ticket["run_id"], run)
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
@@ -143,7 +143,7 @@ class RecoveryCase(unittest.TestCase):
         self.claim(run, lease_in_past=False)
         with self.store.transaction() as tx:
             got = boardsched.ticket_retry(tx, self.ws, {"key": "T-001"}, self.ctx)
-        self.assertEqual(got["ticket"]["status"], "build")
+        self.assertEqual(got["ticket"]["status"], "none")
         ticket = self.ticket()
         self.assertEqual((ticket["assignee"], ticket["active_run_id"], ticket["run_id"]),
                          (None, None, run))

@@ -382,7 +382,14 @@ The config parser also accepts version 3: `workflowStatuses` replaces `statuses`
 agent rule `when` statuses and `todoDefault` is one of those entries. Agent rules require `during`;
 action rules may provide it. Each `during` must be a distinct kindless workflow status that no rule
 uses as `when`. The parser exposes the fixed Kanban columns and workflow routing metadata; board
-execution has not yet been migrated to this schema. Version 2 remains supported unchanged.
+execution has not yet been migrated to this schema. Loading a version 2 file upgrades it in memory:
+the initial status becomes `none`, `done` becomes `merged`, and `close` becomes `closed` when they
+have the corresponding terminal kinds. Rule references are updated, active statuses are added,
+and the parsed configuration exposes the old-to-new status mapping as `upgradedFrom`. The file is
+not changed. A compatible existing active status is reused; if its ID is already assigned to a
+rule or a status with a kind, a unique suffixed ID is generated. Version 3 files have no
+`upgradedFrom` field. If a required renamed ID is already in use, the existing status receives a
+unique suffixed ID and references follow the mapping.
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
 statuses use `in-progress`, and other working statuses retain `in-progress` or otherwise use `todo`.

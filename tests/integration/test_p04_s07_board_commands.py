@@ -40,20 +40,20 @@ class BoardCommands(unittest.TestCase):
     def test_tickets_and_board_show_end_to_end(self):
         first = self.ok("ticket", "add", "--workspace", self.ws, "--title", "First", "--priority", "10")
         self.assertEqual((first["ticket"]["key"], first["ticket"]["status"], first["phase"]["slug"]),
-                         ("T-001", "todo", "default"))
+                         ("T-001", "none", "default"))
         second = self.ok("ticket", "add", "--workspace", self.ws, "--title", "Second")
         self.assertEqual(second["ticket"]["key"], "T-002")
 
         moved = self.ok("ticket", "move", "--workspace", self.ws, "T-002", "--to", "doing")
-        self.assertEqual((moved["from"], moved["ticket"]["status"]), ("todo", "doing"))
-        blocked = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "done")
-        self.assertEqual(blocked["ticket"]["status"], "done")
-        rc, out, err = self.cli("ticket", "move", "--workspace", self.ws, "T-001", "--to", "todo")
+        self.assertEqual((moved["from"], moved["ticket"]["status"]), ("none", "doing"))
+        blocked = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "merged")
+        self.assertEqual(blocked["ticket"]["status"], "merged")
+        rc, out, err = self.cli("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none")
         self.assertEqual(rc, 1)
         self.assertTrue(err.startswith("TICKET_TRANSITION_INVALID:"), err)
         self.assertIn("--force", err)
-        forced = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "todo", "--force")
-        self.assertEqual(forced["ticket"]["status"], "todo")
+        forced = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none", "--force")
+        self.assertEqual(forced["ticket"]["status"], "none")
 
         self.ok("ticket", "depend", "--workspace", self.ws, "T-001", "--on", "T-002")
         detail = self.ok("ticket", "show", "--workspace", self.ws, "T-001")
@@ -61,21 +61,21 @@ class BoardCommands(unittest.TestCase):
         self.assertEqual([e["name"] for e in detail["events"]],
                          ["ticket.created", "ticket.moved", "ticket.moved", "ticket.depends"])
 
-        listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "todo")
+        listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "none")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-001"])  # T-002 is in doing
         self.assertEqual([t["key"] for t in self.ok("ticket", "list", "--workspace", self.ws)["tickets"]],
                          ["T-001", "T-002"])  # T-001 first: priority 10
 
         board = self.ok("board", "show", "--workspace", self.ws)
         self.assertEqual([c["status"] for c in board["phases"][0]["columns"]],
-                         ["todo", "doing", "done", "dropped"])
+                         ["none", "doing", "merged", "dropped"])
         self.assertEqual(board["currentPhase"]["slug"], "default")
 
         rc, out, err = self.cli("board", "show", "--workspace", self.ws)  # human form
         self.assertEqual(rc, 0, err)
         self.assertIn("current phase: Default", out)
         self.assertIn("default  Default  (current)", out)
-        self.assertIn("todo (1) [initial]", out)
+        self.assertIn("none (1) [initial]", out)
         self.assertIn("T-001", out)
 
         conn = sqlite3.connect(os.path.join(self.sb.state_dir, "state.db"))
@@ -89,7 +89,7 @@ class BoardCommands(unittest.TestCase):
         original_hash = hashlib.sha256(b"Original").hexdigest()
         updated = self.ok("ticket", "edit", "--workspace", self.ws, ticket["ticket"]["key"],
                           "--body", "Updated\nRequirements", "--expected-body-sha256", original_hash)
-        self.assertEqual((updated["ticket"]["status"], updated["ticket"]["body"]), ("todo", "Updated\nRequirements"))
+        self.assertEqual((updated["ticket"]["status"], updated["ticket"]["body"]), ("none", "Updated\nRequirements"))
         rc, _, err = self.cli("ticket", "edit", "--workspace", self.ws, "T-001", "--body", "Lost update",
                               "--expected-body-sha256", original_hash)
         self.assertEqual(rc, 1)

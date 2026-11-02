@@ -42,7 +42,7 @@ class RoleListDispatchTests(unittest.TestCase):
         usage = data['items'][0]['usage']
         self.assertEqual((usage['count'], usage['liveRuntime']['state'], usage['partial']), (5, 'disconnected', False))
         self.assertIsNotNone(usage['members'][0]['live'])
-        self.assertEqual(usage['boardRules'], [{'index': 0, 'status': 'todo', 'workflow': 'first',
+        self.assertEqual(usage['boardRules'], [{'index': 0, 'status': 'none', 'workflow': 'first',
                                                 'path': 'rules[0].role'}])
         self.assertEqual(usage['workflows'], [
             {'name': 'first', 'path': '.agent-studio/workflows/first.json', 'stageId': 'work'},

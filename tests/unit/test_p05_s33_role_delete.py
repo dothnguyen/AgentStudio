@@ -101,7 +101,7 @@ class RoleDeleteTests(fixture.TeamOverviewTests):
     def test_board_rule_blocks_delete(self):
         self.write("board.json", BOARD)
         u = self.usage(self.rejected("ROLE_IN_USE"))
-        self.assertEqual((u["boardRules"][0]["index"], u["boardRules"][0]["status"]), (0, "todo"))
+        self.assertEqual((u["boardRules"][0]["index"], u["boardRules"][0]["status"]), (0, "none"))
 
     def test_json_workflow_stage_blocks_delete(self):
         self.workflows()

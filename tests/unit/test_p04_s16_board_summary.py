@@ -47,17 +47,17 @@ class BoardSummaryTests(BoardCase):
         agent = self.make_agent()
         self.set_ticket(assigned["key"], status="doing", assignee=agent)
         self.set_ticket(blocked["key"], status="blocked")
-        self.set_ticket(done["key"], status="done")
+        self.set_ticket(done["key"], status="merged")
         self.set_ticket(closed["key"], status="dropped")
 
         summary = boardmodel.board_summary(self.conn, self.ws)
 
         self.assertEqual(summary["currentPhase"], {"slug": "phase-05", "name": "Phase 05", "status": "open"})
         self.assertEqual(summary["columns"], [
-            {"status": "todo", "kind": "initial", "title": "Ideas", "count": 1},
+            {"status": "none", "kind": "initial", "title": "Ideas", "count": 1},
             {"status": "doing", "kind": None, "title": "In progress", "count": 1},
             {"status": "review", "kind": None, "title": "Review ready", "count": 0},
-            {"status": "done", "kind": "done", "title": "Shipped", "count": 1},
+            {"status": "merged", "kind": "done", "title": "Shipped", "count": 1},
             {"status": "dropped", "kind": "closed", "title": "Won't do", "count": 1},
             {"status": "blocked", "kind": None, "title": "blocked", "count": 1},
         ])
@@ -71,7 +71,7 @@ class BoardSummaryTests(BoardCase):
             "workspace": self.ws,
             "currentPhase": {"slug": "default", "name": "Default", "status": "open"},
             "columns": [
-                {"status": "open", "kind": "initial", "title": "open", "count": 0},
+                {"status": "none", "kind": "initial", "title": "none", "count": 0},
                 {"status": "wip", "kind": None, "title": "wip", "count": 0},
                 {"status": "finished", "kind": "done", "title": "finished", "count": 0},
             ],
@@ -103,7 +103,7 @@ class BoardSummaryTests(BoardCase):
         self.set_ticket(blocked["key"], status="blocked", created_at="2026-01-01T00:00:00Z")
         self.set_ticket(assigned["key"], status="doing", assignee=agent, created_at="2026-01-01T00:00:00Z")
         self.set_ticket(later["key"], status="review", assignee=agent, created_at="2026-01-01T00:00:02Z")
-        self.set_ticket(terminal["key"], status="done")
+        self.set_ticket(terminal["key"], status="merged")
         # Force reverse insertion order so the final tie-break is proven to be key, not row order.
         self.conn.execute("UPDATE tickets SET key = ? WHERE key = ?", ("T-020", blocked["key"]))
         self.conn.execute("UPDATE tickets SET key = ? WHERE key = ?", ("T-010", assigned["key"]))
@@ -130,7 +130,7 @@ class BoardSummaryTests(BoardCase):
         terminal = self.add("assigned terminal", priority=0)
         working = self.add("working", priority=1)
         agent = self.make_agent()
-        self.set_ticket(terminal["key"], status="done", assignee=agent)
+        self.set_ticket(terminal["key"], status="merged", assignee=agent)
         self.set_ticket(working["key"], status="doing", assignee=agent)
 
         tickets = boardmodel.board_summary(self.conn, self.ws, limit=1)["tickets"]
@@ -140,7 +140,7 @@ class BoardSummaryTests(BoardCase):
     def test_blocked_column_is_omitted_when_empty(self):
         self.add("open")
         columns = boardmodel.board_summary(self.conn, self.ws)["columns"]
-        self.assertEqual([column["status"] for column in columns], ["open", "wip", "finished"])
+        self.assertEqual([column["status"] for column in columns], ["none", "wip", "finished"])
         self.assertEqual([column["count"] for column in columns], [1, 0, 0])
 
     def test_dispatch_registration_default_and_limit_validation(self):

@@ -384,7 +384,10 @@ class BoardSettingsTests(unittest.TestCase):
         self.assertTrue(r["ok"], r)
 
     def test_parse_config_matches_load_config(self):
-        self.assertEqual(boardmodel.parse_config(self.read_json("board.json")), boardmodel.load_config(self.ws))
+        raw, mapping = boardmodel.upgrade_config(self.read_json("board.json"))
+        parsed = boardmodel.parse_config(raw)
+        parsed["upgradedFrom"] = mapping
+        self.assertEqual(parsed, boardmodel.load_config(self.ws))
 
     def test_boardsettings_imports_no_scheduler_or_tmux(self):
         with open(boardsettings.__file__, encoding="utf-8") as f:

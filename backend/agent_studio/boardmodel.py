@@ -9,6 +9,7 @@ carry all of that. The coordinator is the only writer; every ticket change appen
 from __future__ import annotations
 
 import json
+import copy
 import os
 import re
 
@@ -64,6 +65,79 @@ def _slug(value, path, problems):
     return value
 
 
+def upgrade_config(raw_v2):
+    """Return a v3 document and its old-to-new status IDs without modifying the input."""
+    if not isinstance(raw_v2, dict) or raw_v2.get("version") != 2:
+        return raw_v2, {}
+    raw = copy.deepcopy(raw_v2)
+    statuses = raw.pop("statuses")
+    desired = {}
+    for status in statuses:
+        old = status["id"]
+        desired[old] = ("none" if status.get("kind") == "initial" else
+               "merged" if old == "done" and status.get("kind") == "done" else
+               "closed" if old == "close" and status.get("kind") == "closed" else old)
+    # Required names take precedence; move any displaced legacy IDs to unused names.
+    claimed = set(desired.values())
+    id_map = {}
+    for status in statuses:
+        old = status["id"]
+        new = desired[old]
+        if new == old and any(other != old and target == new for other, target in desired.items()):
+            suffix = 2
+            while f"{old}-{suffix}" in claimed:
+                suffix += 1
+            new = f"{old}-{suffix}"
+            claimed.add(new)
+        id_map[old] = new
+        status["id"] = new
+
+    def rewrite(value):
+        return id_map.get(value, value)
+
+    active_ids = {"unpack-ready": "unpacking", "refine-ready": "refining",
+                  "dev-ready": "deving", "qa-ready": "qa-ing", "review-ready": "reviewing",
+                  "need-escalate": "escalating", "merge-conflict": "fixing-conflict",
+                  "plan-merge-conflict": "fixing-plan-conflict"}
+    merge_ids = {"merge-ready": "merging", "plan-merge-ready": "plan-merging"}
+    reserved = {rewrite(rule["when"]["status"]) for rule in raw.get("rules", [])}
+    reserved.update(rewrite(rule["during"]) for rule in raw.get("rules", []) if rule.get("during") is not None)
+    todo = []
+    for rule in raw.get("rules", []):
+        when = rule["when"]["status"]
+        rule["when"]["status"] = rewrite(when)
+        for key in ("onPass", "onFail", "onBlocked", "createdTicketStatus", "during"):
+            if key in rule and rule[key] is not None:
+                rule[key] = rewrite(rule[key])
+        for key, fields in (("onFailureLimit", ("status",)), ("onPassCreatedTickets", ("from", "to"))):
+            if key in rule:
+                for field in fields:
+                    rule[key][field] = rewrite(rule[key][field])
+        agent = "action" not in rule
+        if agent:
+            todo.append(rule["when"]["status"])
+        if "during" not in rule:
+            active = active_ids.get(when, when + "-active") if agent else merge_ids.get(when) if rule.get("action") == "merge" else None
+            if active is not None:
+                base = active
+                suffix = 2
+                while active in reserved or any(s["id"] == active and s.get("kind") is not None for s in statuses):
+                    active = f"{base}-{suffix}"
+                    suffix += 1
+                reserved.add(active)
+                rule["during"] = active
+                existing = next((s for s in statuses if s["id"] == active), None)
+                if existing is not None:
+                    statuses.remove(existing)
+                index = next(i for i, status in enumerate(statuses) if status["id"] == rule["when"]["status"])
+                statuses.insert(index + 1, existing if existing is not None else {"id": active})
+    if "agentTicketStatus" in raw and raw["agentTicketStatus"] is not None:
+        raw["agentTicketStatus"] = rewrite(raw["agentTicketStatus"])
+    raw.update(version=3, workflowStatuses=statuses, todoEntry=todo,
+               todoDefault="dev-ready" if "dev-ready" in todo else (todo[0] if todo else None))
+    return raw, id_map
+
+
 def load_config(workspace: str) -> dict:
     """Read and validate <workspace>/.agent-studio/board.json (§D). -> the normalized board model."""
     path = os.path.join(workspace, CONFIG_DIR, CONFIG_NAME)
@@ -76,6 +150,12 @@ def load_config(workspace: str) -> dict:
                                             "(see phases/phase-04/README.md section D)")
     except (OSError, ValueError) as e:
         raise _invalid([("root", f"cannot be read or is not valid JSON: {e}")])
+    if isinstance(raw, dict) and raw.get("version") == 2:
+        parse_config(raw)  # Validate the legacy shape before converting it.
+        raw, id_map = upgrade_config(raw)
+        result = parse_config(raw)
+        result["upgradedFrom"] = id_map
+        return result
     return parse_config(raw)
 
 
@@ -282,16 +362,16 @@ def parse_config(raw) -> dict:
                 problems.append((path, "must be unique across rules"))
             during_seen.add(during)
         todo_entry = raw.get("todoEntry")
-        if not isinstance(todo_entry, list) or not todo_entry:
-            problems.append(("todoEntry", "must be a non-empty list"))
-            todo_entry = []
         agent_whens = [r["when"].get("status") for r in rules
                        if isinstance(r, dict) and "action" not in r and isinstance(r.get("when"), dict)]
+        if not isinstance(todo_entry, list) or (agent_whens and not todo_entry):
+            problems.append(("todoEntry", "must be a non-empty list when agent rules exist"))
+            todo_entry = []
         for i, value in enumerate(todo_entry):
             if not isinstance(value, str) or value not in agent_whens or value not in known:
                 problems.append((f"todoEntry[{i}]", "must be the when status of an agent rule"))
         todo_default = raw.get("todoDefault")
-        if not isinstance(todo_default, str) or todo_default not in todo_entry:
+        if not (not agent_whens and not todo_entry and todo_default is None) and (not isinstance(todo_default, str) or todo_default not in todo_entry):
             problems.append(("todoDefault", "must be in todoEntry"))
     if problems:
         raise _invalid(problems)

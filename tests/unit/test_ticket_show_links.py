@@ -30,7 +30,7 @@ class TicketShowLinks(BoardCase):
         self.assertEqual(detail["dependents"], ["T-003"])
         self.assertEqual(detail["links"], {
             "dependsOn": [{"key": "T-002", "title": "dependency", "status": "wip", "phase": "alpha"}],
-            "dependents": [{"key": "T-003", "title": "blocker of dependent", "status": "open",
+            "dependents": [{"key": "T-003", "title": "blocker of dependent", "status": "none",
                             "phase": "default"}],
         })
 

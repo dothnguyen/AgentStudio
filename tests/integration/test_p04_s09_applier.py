@@ -66,7 +66,7 @@ class Applier(unittest.TestCase):
                    == "succeeded", timeout=90, message="run to succeed")
 
         ticket = self.cli("ticket", "add", "--workspace", self.ws, "--title", "Real run", "--json")["data"]
-        self.assertEqual(ticket["ticket"]["status"], "todo")
+        self.assertEqual(ticket["ticket"]["status"], "none")
         applied = self.cli("ticket", "apply", "--workspace", self.ws, ticket["ticket"]["key"], run,
                            "--json")["data"]
         self.assertEqual((applied["applied"], applied["outcome"], applied["ticket"]["status"]),
@@ -97,7 +97,7 @@ class Applier(unittest.TestCase):
         blocked = self.cli("ticket", "list", "--workspace", self.ws, "--status", "blocked", "--json")["data"]
         self.assertEqual([t["key"] for t in blocked["tickets"]], [ticket["key"]])
         unblocked = self.cli("ticket", "unblock", "--workspace", self.ws, ticket["key"], "--json")["data"]
-        self.assertEqual(unblocked["ticket"]["status"], "todo")
+        self.assertEqual(unblocked["ticket"]["status"], "none")
 
 
 if __name__ == "__main__":

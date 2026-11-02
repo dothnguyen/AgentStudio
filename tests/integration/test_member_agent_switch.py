@@ -165,7 +165,7 @@ class BoardAgentSwitchTests(test_p04_s10_run_board.RunBoardCase):
         rc, result, process = self.sb.run("team", "switch-agent", "--workspace", self.ws, "--team", "alpha",
                                           "--member", "ryan", "--agent", "backup", "--cancel-active", "--json")
         self.assertEqual(rc, 0, (result, process.stderr))
-        self.wait_status("T-001", ("done",), timeout=120)
+        self.wait_status("T-001", ("merged",), timeout=120)
         events = self.board_json("ticket", "show", "T-001")["events"]
         claims = [e for e in events if e["name"] == "ticket.claimed"]
         self.assertGreaterEqual(len(claims), 2, events)

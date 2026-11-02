@@ -55,7 +55,7 @@ class RoleReferenceTests(fixture.TeamOverviewTests):
         with open(os.path.join(folder, 'second.yaml'), 'w') as f:
             f.write("version: 1\nstages:\n- id: work\n  role: developer\n  permission: read_only\n  prompt: '{{task}}'\n  next: {done: '$succeed'}\n")
         u = self.usage()
-        self.assertEqual(u['boardRules'], [{'index': 0, 'status': 'todo', 'workflow': 'builtin', 'path': 'rules[0].role'}])
+        self.assertEqual(u['boardRules'], [{'index': 0, 'status': 'none', 'workflow': 'builtin', 'path': 'rules[0].role'}])
         self.assertEqual([(w['name'], w['stageId']) for w in u['workflows']], [('first', 'work'), ('second', 'work')])
         self.assertEqual([w['path'] for w in u['workflows']],
                          ['.agent-studio/workflows/first.json', '.agent-studio/workflows/second.yaml'])

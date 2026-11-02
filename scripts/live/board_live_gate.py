@@ -184,9 +184,9 @@ class Gate:
         self.record("5-other-team-ask", "PASS", status=str(asked.get("status"))[:40])
 
         timeout = 300 if self.dry else 5400
-        self.wait_status(ws, one["key"], ("done",), timeout)
-        self.wait_status(ws, two["key"], ("done",), timeout)
-        self.wait_status(ws, three["key"], ("done",), timeout)
+        self.wait_status(ws, one["key"], ("merged",), timeout)
+        self.wait_status(ws, two["key"], ("merged",), timeout)
+        self.wait_status(ws, three["key"], ("merged",), timeout)
         self.record("6-three-done", "PASS")
 
         two_detail = self.ticket(ws, two["key"])
@@ -208,7 +208,7 @@ class Gate:
 
         untouched = self.ticket(ws, out_of_phase["key"])
         cli("team", "stop-board", "--workspace", ws, "--team", "main", "--json")
-        if untouched["ticket"]["status"] != "build" or untouched["ticket"]["assignee"] is not None \
+        if untouched["ticket"]["status"] != "none" or untouched["ticket"]["assignee"] is not None \
                 or any(e["name"] == "ticket.claimed" for e in untouched["events"]):
             raise Fail(f"the other-phase ticket was not left alone: "
                        f"{json.dumps(untouched['ticket'])[:500]}")

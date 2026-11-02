@@ -135,10 +135,10 @@ class CoordinatorKilled(DrillCase):
         rc, r, p = self.sb.run("coordinator", "start", "--enable-debug")
         self.assertTrue(r["ok"], p.stderr)
 
-        self.wait_status("T-001", ("done",), timeout=120)  # the report is applied once, the board carries on
+        self.wait_status("T-001", ("merged",), timeout=120)  # the report is applied once, the board carries on
         outcome = [e for e in self.events("T-001") if e["name"] == "ticket.outcome_applied"]
         self.assertEqual(len(outcome), 1, self.events("T-001"))
-        self.assertEqual(outcome[0]["to"], "done")
+        self.assertEqual(outcome[0]["to"], "merged")
 
 
 class RunnerKilled(DrillCase):
@@ -200,12 +200,12 @@ class MergeConflict(DrillCase):
         self.assertTrue(r["ok"], r)
         self.seed(first["worktreePath"], "from first\n")
         self.seed(second["worktreePath"], "from second\n")
-        self.wait_status("T-001", ("done",), timeout=180)
+        self.wait_status("T-001", ("merged",), timeout=180)
         conflict = self.wait_for(
             lambda: next((e for e in self.events("T-002") if e["name"] == "ticket.merge_conflict"), None),
             120, "merge conflict")
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket("T-002")["status"], "build")
+        self.assertEqual(self.ticket("T-002")["status"], "none")
         with open(os.path.join(self.ws, "shared.txt")) as f:
             self.assertEqual(f.read(), "from first\n")
 
@@ -224,12 +224,12 @@ class RoundLimit(DrillCase):
             time.sleep(0.5)
         ticket = self.ticket("T-001")
         self.assertEqual(ticket["status"], "blocked")
-        self.assertEqual(ticket["blockedReason"], "ROUND_LIMIT:build")
-        self.assertEqual(ticket["rounds"], {"build": 2})
+        self.assertEqual(ticket["blockedReason"], "ROUND_LIMIT:none")
+        self.assertEqual(ticket["rounds"], {"none": 2})
         rc, r, p = self.sb.run("team", "stop-board", "--workspace", self.ws, "--json")
         self.assertTrue(r["ok"], r)
         unblocked = self.json_cmd("ticket", "unblock", "T-001")
-        self.assertEqual(unblocked["ticket"]["status"], "build")
+        self.assertEqual(unblocked["ticket"]["status"], "none")
 
 
 class UsageLimit(DrillCase):
@@ -252,14 +252,14 @@ class UsageLimit(DrillCase):
         conn.commit()
 
         released = self.wait_for(lambda: self.ticket("T-001") if self.ticket("T-001")["assignee"] is None
-                                 and self.ticket("T-001")["status"] == "build" else None, 60, "release")
+                                 and self.ticket("T-001")["status"] == "none" else None, 60, "release")
         self.assertIsNone(released["rounds"])  # the round was not counted
         self.assertEqual(released["runId"], run)
 
         rc, resumed, p = self.sb.run("board", "resume", "--workspace", self.ws, "--member", "Ryan")
         self.assertTrue(resumed["ok"], (resumed, p.stderr))
         self.assertTrue(resumed["data"]["resumed"])
-        self.wait_status("T-001", ("done",), timeout=180)  # eligible again: the board finishes the ticket
+        self.wait_status("T-001", ("merged",), timeout=180)  # eligible again: the board finishes the ticket
 
 
 class StuckClaim(DrillCase):
@@ -269,12 +269,12 @@ class StuckClaim(DrillCase):
         claimed = self.wait_claimed("T-001")
         run = claimed["activeRunId"]
         released = self.json_cmd("ticket", "retry", "T-001")
-        self.assertEqual(released["ticket"]["status"], "build")
+        self.assertEqual(released["ticket"]["status"], "none")
         self.assertIsNone(released["ticket"]["assignee"])
         self.wait_for(lambda: self.db().execute(
             "SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0] in ("cancelled", "failed"),
             60, "run cancelled")
-        self.wait_status("T-001", ("done",), timeout=180)  # claimed again and finished
+        self.wait_status("T-001", ("merged",), timeout=180)  # claimed again and finished
 
 
 if __name__ == "__main__":

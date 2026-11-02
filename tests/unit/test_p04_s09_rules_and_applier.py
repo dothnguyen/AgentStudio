@@ -58,7 +58,7 @@ class RulesCase(BoardCase):
 class RulesSchema(RulesCase):
     def test_good_rules_load_and_index_by_status(self):
         model = boardmodel.load_config(self.ws)
-        self.assertEqual(set(model["rulesByStatus"]), {"todo", "review", "dropped"})
+        self.assertEqual(set(model["rulesByStatus"]), {"none", "review", "dropped"})
         self.assertEqual(self.check(), [])
 
     def test_created_ticket_policies_are_status_validated_and_rule_scoped(self):
@@ -190,18 +190,18 @@ class OutcomeApplier(ApplierCase):
         self.move("T-001", "review")
         for failure in range(1, 4):
             result = self.apply("T-001", self.make_run("failed"))
-            self.assertEqual(result["ticket"]["status"], "hold" if failure == 3 else "todo")
+            self.assertEqual(result["ticket"]["status"], "hold" if failure == 3 else "none")
             if failure < 3:
                 self.move("T-001", "review")
         self.assertEqual(result["reason"], "FAILURE_LIMIT:review")
         self.move("T-001", "review")
         result = self.apply("T-001", self.make_run("failed"))
-        self.assertEqual(result["ticket"]["status"], "todo")
+        self.assertEqual(result["ticket"]["status"], "none")
         self.move("T-001", "review")
         self.apply("T-001", self.make_run("succeeded"))
         self.move("T-001", "review", force=True)
         result = self.apply("T-001", self.make_run("failed"))
-        self.assertEqual(result["ticket"]["status"], "todo")
+        self.assertEqual(result["ticket"]["status"], "none")
 
     def test_failure_limit_schema_rejects_invalid_threshold_and_status(self):
         config = json.loads(json.dumps(RULES_CONFIG))
@@ -219,7 +219,7 @@ class OutcomeApplier(ApplierCase):
         self.assertEqual(self.apply("T-001", self.make_run("paused"))["ticket"]["status"], "hold")
         self.move("T-001", "review")
         first = self.make_run("failed")
-        self.assertEqual(self.apply("T-001", first)["ticket"]["status"], "todo")
+        self.assertEqual(self.apply("T-001", first)["ticket"]["status"], "none")
         self.assertFalse(self.apply("T-001", first)["applied"])
         self.move("T-001", "review")
         self.assertEqual(self.apply("T-001", self.make_run("failed"))["ticket"]["status"], "hold")
@@ -229,19 +229,19 @@ class OutcomeApplier(ApplierCase):
         run = self.make_run("succeeded")
         got = self.apply("T-001", run)
         self.assertEqual((got["applied"], got["outcome"], got["ticket"]["status"], got["rounds"]),
-                         (True, "pass", "done", 1))
+                         (True, "pass", "merged", 1))
         self.assertEqual(got["ticket"]["runId"], run)
 
         self.add("retry me")
-        for round_no, expected in ((1, "todo"), (2, "blocked")):
+        for round_no, expected in ((1, "none"), (2, "blocked")):
             run = self.make_run("failed")
             got = self.apply("T-002", run)
             self.assertEqual(got["ticket"]["status"], expected, round_no)
             self.assertEqual(got["rounds"], round_no)
         row = self.conn.execute("SELECT return_status, blocked_reason, rounds_json FROM tickets WHERE key = 'T-002'"
                                 ).fetchone()
-        self.assertEqual((row["return_status"], row["blocked_reason"]), ("todo", "ROUND_LIMIT:todo"))
-        self.assertEqual(json.loads(row["rounds_json"]), {"todo": 2})
+        self.assertEqual((row["return_status"], row["blocked_reason"]), ("none", "ROUND_LIMIT:none"))
+        self.assertEqual(json.loads(row["rounds_json"]), {"none": 2})
 
     def test_blocked_outcomes(self):
         self.add("paused one")
@@ -285,7 +285,7 @@ class OutcomeApplier(ApplierCase):
             self.apply("T-001", run)
         self.assertEqual(caught.exception.code, "TICKET_BUSY")
         done = self.make_run("succeeded")
-        self.move("T-001", "done")  # no rule works the done status
+        self.move("T-001", "merged")  # no rule works the done status
         with self.assertRaises(AsError) as caught:
             self.apply("T-001", done)
         self.assertEqual(caught.exception.code, "BOARD_RULE_MISSING")
@@ -297,8 +297,8 @@ class OutcomeApplier(ApplierCase):
         self.apply("T-001", run)
         events = self.events("T-001")
         self.assertEqual([(e["name"], e["from_status"], e["to_status"], e["actor"]) for e in events],
-                         [("ticket.created", None, "todo", "operator"),
-                          ("ticket.outcome_applied", "todo", "todo", "coordinator")])
+                         [("ticket.created", None, "none", "operator"),
+                          ("ticket.outcome_applied", "none", "none", "coordinator")])
         self.assertEqual(json.loads(events[-1]["payload_json"])["rounds"], 1)
 
 
@@ -311,10 +311,10 @@ class Unblock(ApplierCase):
         self.assertEqual(row["status"], "blocked")
         with self.store.transaction() as tx:
             got = boardmodel.ticket_unblock(tx, self.ws, {"key": "T-001"})
-        self.assertEqual(got["ticket"]["status"], "todo")
+        self.assertEqual(got["ticket"]["status"], "none")
         row = self.conn.execute("SELECT status, return_status, blocked_reason FROM tickets WHERE key = 'T-001'"
                                 ).fetchone()
-        self.assertEqual((row["status"], row["return_status"], row["blocked_reason"]), ("todo", None, None))
+        self.assertEqual((row["status"], row["return_status"], row["blocked_reason"]), ("none", None, None))
         self.assertEqual([e["name"] for e in self.events("T-001")][-1], "ticket.unblocked")
         with self.assertRaises(AsError) as caught:  # only a blocked ticket can be unblocked
             with self.store.transaction() as tx:
@@ -327,8 +327,8 @@ class Unblock(ApplierCase):
             self.apply("T-001", self.make_run("failed"))
         shown = boardmodel.board_show(self.conn, self.ws)
         columns = shown["phases"][0]["columns"]
-        self.assertEqual([c["status"] for c in columns], ["todo", "done", "blocked"])
-        self.assertEqual(columns[2]["tickets"][0]["key"], "T-001")
+        self.assertEqual([c["status"] for c in columns], ["none", "todo-active", "merged", "blocked"])
+        self.assertEqual(columns[3]["tickets"][0]["key"], "T-001")
 
 
 if __name__ == "__main__":

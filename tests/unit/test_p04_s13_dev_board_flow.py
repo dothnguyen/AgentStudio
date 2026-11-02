@@ -53,7 +53,7 @@ class FailureHandoff(ApplierCase):
 
     def test_pass_changes_neither_priority_nor_body(self):
         self.apply("T-001", self.finished_run("succeeded"))
-        self.assertEqual(self.body_priority(), ("original brief", 100, "done"))
+        self.assertEqual(self.body_priority(), ("original brief", 100, "merged"))
 
     def test_failed_ticket_is_picked_before_an_older_one_in_the_same_status(self):
         self.add("older")
@@ -162,7 +162,7 @@ class AgentStatusAndUpdate(ServerCase):
         self.assertEqual(got["ticket"]["status"], "refine-ready")
         with self.store.transaction() as tx:
             mine = boardmodel.ticket_add(tx, self.ws, {"title": "by hand", "priority": 100})
-        self.assertEqual(mine["ticket"]["status"], "backlog")
+        self.assertEqual(mine["ticket"]["status"], "none")
 
     def test_agent_status_defaults_to_initial_and_cannot_be_terminal(self):
         for value, ok in (("done", False), ("close", False), ("nope", False), ("dev-ready", True)):
@@ -181,7 +181,7 @@ class AgentStatusAndUpdate(ServerCase):
         cfg["rules"] = []
         with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
             json.dump(cfg, f)
-        self.assertEqual(boardmodel.load_config(self.ws)["agentStatus"], "backlog")
+        self.assertEqual(boardmodel.load_config(self.ws)["agentStatus"], "none")
 
     def claim(self, key, agent):
         self.conn.execute("UPDATE tickets SET assignee = ? WHERE key = ?", (agent, key))
@@ -247,7 +247,7 @@ class TicketActivity(ApplierCase):
         self.assertEqual(text, "working: " + agent["display_name"])
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET assignee = NULL WHERE key = 'T-001'")
-        self.move("T-001", "done")
+        self.move("T-001", "merged")
         self.assertEqual(self.activity()[0]["state"], "finished")
 
     def test_a_failed_start_is_shown_as_a_note(self):
@@ -348,7 +348,7 @@ class SyncBase(unittest.TestCase):
         rule["workspace"] = "worktree"
         with open(path, "w") as f:
             json.dump(config, f)
-        self.assertTrue(boardmodel.load_config(root)["rulesByStatus"]["a"]["syncBase"])
+        self.assertTrue(boardmodel.load_config(root)["rulesByStatus"]["none"]["syncBase"])
 
 
 class CommitLeftovers(CommitWorktree):
