@@ -3,31 +3,10 @@ import type { BoardRuleView, BoardTicketSummary } from '../api';
 /** How many cards a column shows before its "Show N more" button. */
 export const BOARD_CARD_LIMIT = 6;
 
-/** The reserved status for blocked tickets; they normally sit in their return status' column. */
+/** The reserved workflow status for blocked tickets. */
 export const BLOCKED_STATUS: string = 'blocked';
-export const BLOCKED_COLUMN_LABEL = 'Blocked';
 
 export type BoardStatusTone = 'neutral' | 'blue' | 'amber' | 'red' | 'green';
-
-export interface LaneDefinition {
-  id: string;
-  name: string;
-  statuses: readonly string[];
-}
-
-/** Lane order and membership from design/boards-v1. A status that is not in this table lands in Other. */
-export const BOARD_LANES: readonly LaneDefinition[] = [
-  { id: 'intake', name: 'Intake', statuses: ['backlog', 'unpack-ready', 'refine-ready'] },
-  { id: 'build', name: 'Build', statuses: ['dev-ready', 'qa-ready', 'need-escalate'] },
-  {
-    id: 'review',
-    name: 'Review and merge',
-    statuses: ['review-ready', 'plan-merge-ready', 'plan-merge-conflict', 'merge-ready', 'merge-conflict'],
-  },
-  { id: 'finished', name: 'Finished', statuses: ['done', 'close'] },
-];
-
-export const OTHER_LANE: LaneDefinition = { id: 'other', name: 'Other', statuses: [] };
 
 /** A board status as returned by board.settings, or a name-less status from ticket.list. */
 export interface BoardStatusInfo {
@@ -37,33 +16,15 @@ export interface BoardStatusInfo {
 }
 
 export interface BoardColumn {
-  /** The column key: a board status id, or the reserved Blocked fallback. */
   id: string;
-  /** The ticket status this column shows. */
-  status: string;
   label: string;
   tone: BoardStatusTone;
-  /** "Developer works this" or "Merges automatically"; null when no board rule applies. */
-  worker: string | null;
-  /** True for the extra Blocked column at the end of Build. */
-  fallback: boolean;
   tickets: BoardTicketSummary[];
 }
 
-export interface BoardLane {
-  id: string;
-  name: string;
-  /** Every ticket in the lane, including tickets in hidden columns. */
-  total: number;
-  columns: BoardColumn[];
-  /** Columns hidden because they hold no tickets (only with hideEmpty). */
-  hiddenColumns: BoardColumn[];
-}
-
 export interface BuildLanesOptions {
-  /** Hide columns without tickets; defaults to true. Emptiness is measured before filtering. */
+  /** Hide empty Backlog and Closed columns, based on unfiltered tickets. */
   hideEmpty?: boolean;
-  /** A toolbar filter; matching tickets feed cards and counts, non-matching ones are left out. */
   matches?(ticket: BoardTicketSummary): boolean;
 }
 
@@ -130,128 +91,38 @@ export function workerLineForStatus(status: string, rules: readonly BoardRuleVie
   return `${action.charAt(0).toUpperCase()}${action.slice(1)} runs automatically`;
 }
 
-function statusMap(statuses: readonly BoardStatusInfo[], tickets: readonly BoardTicketSummary[]): Map<string, BoardStatusInfo> {
-  const entries = new Map<string, BoardStatusInfo>();
-  for (const status of statuses) {
-    if (!entries.has(status.id)) entries.set(status.id, status);
+/** Legacy workflow statuses can still arrive before the backend migrates a workspace. */
+function ticketColumn(ticket: BoardTicketSummary): string {
+  // Older workspaces may return statuses outside the current API union.
+  const status: string = ticket.status;
+  switch (status) {
+    case 'backlog': case 'todo': case 'in-progress': case 'done': case 'closed':
+      return status;
+    case 'close':
+      return 'closed';
+    case 'blocked':
+      return 'in-progress';
+    default:
+      return ticket.activity?.state === 'working' ? 'in-progress' : 'todo';
   }
-  // ticket.list also carries the configured statuses. Use them when board.settings is unavailable,
-  // and keep a ticket visible even if the board config changed underneath it.
-  for (const ticket of tickets) {
-    if (ticket.status === BLOCKED_STATUS || entries.has(ticket.status)) continue;
-    entries.set(ticket.status, { id: ticket.status, name: null, kind: null });
-  }
-  return entries;
 }
 
-function laneForStatus(status: string): LaneDefinition | null {
-  return BOARD_LANES.find((lane) => lane.statuses.includes(status)) ?? null;
-}
-
-function blockedTarget(ticket: BoardTicketSummary, known: Map<string, BoardStatusInfo>): string {
-  const returnStatus = ticket.returnStatus?.trim() ?? '';
-  return returnStatus !== '' && known.has(returnStatus) ? returnStatus : BLOCKED_STATUS;
-}
-
-function groupTickets(tickets: readonly BoardTicketSummary[], known: Map<string, BoardStatusInfo>): Map<string, BoardTicketSummary[]> {
-  const byColumn = new Map<string, BoardTicketSummary[]>();
-  for (const ticket of tickets) {
-    const target = ticket.status === BLOCKED_STATUS ? blockedTarget(ticket, known) : ticket.status;
-    const bucket = byColumn.get(target);
-    if (bucket === undefined) byColumn.set(target, [ticket]);
-    else bucket.push(ticket);
-  }
-  return byColumn;
-}
-
-function columnFor(
-  status: BoardStatusInfo,
-  tickets: BoardTicketSummary[],
-  rules: readonly BoardRuleView[],
-): BoardColumn {
-  return {
-    id: status.id,
-    status: status.id,
-    label: statusLabel(status),
-    tone: statusTone(status),
-    worker: workerLineForStatus(status.id, rules),
-    fallback: false,
-    tickets,
-  };
-}
-
-/**
- * Groups the phase's tickets into the four design lanes, honouring the board's status list.
- * Blocked tickets move to their return status' column; unknown return statuses get one Blocked
- * column at the end of Build.
- */
+/** Fixed Kanban columns use the ticket's board status, with a fallback for legacy statuses. */
 export function buildBoardLanes(
-  statuses: readonly BoardStatusInfo[],
-  rules: readonly BoardRuleView[],
   tickets: readonly BoardTicketSummary[],
   options: BuildLanesOptions = {},
-): BoardLane[] {
-  const hideEmpty = options.hideEmpty ?? true;
-  const matches = options.matches ?? (() => true);
-  const known = statusMap(statuses, tickets);
-  const byColumn = groupTickets(tickets, known);
-  const needsBlockedColumn = (byColumn.get(BLOCKED_STATUS)?.length ?? 0) > 0;
-  const ticketsIn = (status: string): BoardTicketSummary[] =>
-    (byColumn.get(status) ?? []).filter(matches);
-  const isRawEmpty = (status: string): boolean => (byColumn.get(status)?.length ?? 0) === 0;
-
-  const lanes: BoardLane[] = BOARD_LANES.map((lane) => {
-    const laneStatuses = lane.statuses
-      .filter((status) => known.has(status))
-      .map((status) => known.get(status)!);
-    const columns = laneStatuses.map((status) => columnFor(status, ticketsIn(status.id), rules));
-    if (lane.id === 'build' && needsBlockedColumn) {
-      columns.push({
-        id: BLOCKED_STATUS,
-        status: BLOCKED_STATUS,
-        label: BLOCKED_COLUMN_LABEL,
-        tone: 'amber',
-        worker: workerLineForStatus(BLOCKED_STATUS, rules),
-        fallback: true,
-        tickets: ticketsIn(BLOCKED_STATUS),
-      });
-    }
-    return finishLane(lane, columns, hideEmpty, isRawEmpty);
+): BoardColumn[] {
+  const definitions: ReadonlyArray<{ id: string; label: string; tone: BoardStatusTone }> = [
+    { id: 'backlog', label: 'Backlog', tone: 'neutral' },
+    { id: 'todo', label: 'Todo', tone: 'blue' },
+    { id: 'in-progress', label: 'In Progress', tone: 'blue' },
+    { id: 'done', label: 'Done', tone: 'green' },
+    { id: 'closed', label: 'Closed', tone: 'neutral' },
+  ];
+  return definitions.flatMap((definition) => {
+    const rawTickets = tickets.filter((ticket) => ticketColumn(ticket) === definition.id);
+    if ((options.hideEmpty ?? true) && rawTickets.length === 0 &&
+        (definition.id === 'backlog' || definition.id === 'closed')) return [];
+    return [{ ...definition, tickets: rawTickets.filter(options.matches ?? (() => true)) }];
   });
-
-  const otherStatuses = Array.from(known.values()).filter((status) => laneForStatus(status.id) === null);
-  if (otherStatuses.length > 0) {
-    const columns = otherStatuses.map((status) => columnFor(status, ticketsIn(status.id), rules));
-    lanes.push(finishLane(OTHER_LANE, columns, hideEmpty, isRawEmpty));
-  }
-
-  return lanes;
-}
-
-function finishLane(
-  lane: LaneDefinition,
-  columns: BoardColumn[],
-  hideEmpty: boolean,
-  isRawEmpty: (status: string) => boolean,
-): BoardLane {
-  const total = columns.reduce((count, column) => count + column.tickets.length, 0);
-  if (!hideEmpty) return { id: lane.id, name: lane.name, total, columns, hiddenColumns: [] };
-  return {
-    id: lane.id,
-    name: lane.name,
-    total,
-    columns: columns.filter((column) => !isRawEmpty(column.id)),
-    hiddenColumns: columns.filter((column) => isRawEmpty(column.id)),
-  };
-}
-
-/** "1 ticket" / "3 tickets" for a lane header. */
-export function laneCountLabel(total: number): string {
-  return `${total} ${total === 1 ? 'ticket' : 'tickets'}`;
-}
-
-/** "1 empty hidden: Unpack ready" for the dashed placeholder at the end of a lane. */
-export function hiddenColumnsLabel(columns: readonly BoardColumn[]): string | null {
-  if (columns.length === 0) return null;
-  return `${columns.length} empty hidden: ${columns.map((column) => column.label).join(', ')}`;
 }

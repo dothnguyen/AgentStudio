@@ -1,7 +1,7 @@
 import type { BoardPhase, BoardPhaseRef, BoardPhases, BoardTicketSummary } from '../api';
 
 /** Statuses that count as finished for the Current Phase progress. */
-export const DONE_TICKET_STATUSES: readonly string[] = ['done', 'close'];
+export const DONE_TICKET_STATUSES: readonly string[] = ['done', 'closed', 'close'];
 
 export interface PhaseProgress {
   done: number;

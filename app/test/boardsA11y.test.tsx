@@ -44,7 +44,7 @@ async function renderBoard() {
   const view = render(
     <CurrentPhaseScreen
       workspace={workspaceA}
-      management={fakeManagement().api}
+      management={fakeManagement({ boardTickets: [{ ok: true, data: boardTicketListFixture({ tickets: boardTicketListFixture().tickets.map(ticket => ({ ...ticket, status: ticket.status === 'done' ? 'done' : 'in-progress' })) }) }] }).api}
       hideEmpty={false}
       refreshMs={0}
     />,
@@ -80,10 +80,6 @@ describe('Current Phase accessibility', () => {
     expectLogicalHeadings(view.container);
     expectNamedControls(view.container);
 
-    for (const lane of ['Intake', 'Build', 'Review and merge', 'Finished']) {
-      expect(view.getByRole('region', { name: `${lane} lane` })).toBeTruthy();
-      expect(view.getByRole('heading', { level: 2, name: new RegExp(`^${lane}`) })).toBeTruthy();
-    }
     expect(view.getByRole('region', { name: 'Backlog column' })).toBeTruthy();
     expect(view.getByRole('heading', { level: 2, name: 'Backlog' })).toBeTruthy();
   });
@@ -127,8 +123,6 @@ describe('Current Phase accessibility', () => {
     expect(document.activeElement).toBe(view.getByRole('button', { name: 'Hide empty columns' }));
     await user.tab();
     expect(document.activeElement).toBe(view.getByRole('region', { name: 'Board columns (scrollable)' }));
-    await user.tab();
-    expect(document.activeElement).toBe(view.getByRole('button', { name: 'Collapse Intake lane' }));
     await user.tab();
     expect(document.activeElement).toBe(view.container.querySelector('.boards-board [data-ticket-key]'));
   });

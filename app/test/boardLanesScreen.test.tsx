@@ -42,20 +42,22 @@ function ticket(status: string, key: string, overrides: NonNullable<Parameters<t
 
 const TICKETS = [
   ticket('backlog', 'T-100'),
-  ticket('refine-ready', 'T-101'),
-  ...Array.from({ length: 8 }, (_, index) => ticket('dev-ready', `T-${200 + index}`)),
-  ticket('blocked', 'T-300', {
+  ticket('todo', 'T-101'),
+  ...Array.from({ length: 8 }, (_, index) => ticket('in-progress', `T-${200 + index}`)),
+  ticket('todo', 'T-300', {
+    workflowStatus: 'blocked',
     returnStatus: 'qa-ready',
     blockedReason: 'A run stopped.',
     activity: { state: 'blocked', note: 'A run stopped.' },
   }),
-  ticket('need-escalate', 'T-301', {
+  ticket('todo', 'T-301', {
     title: 'Escalated: scheduler failures on main',
     activity: { state: 'working', agent: 'senior', role: 'SeniorDeveloper', run: 'run-t-301', workflow: 'board-senior' },
   }),
-  ticket('review-ready', 'T-302'),
+  ticket('todo', 'T-302'),
   ticket('done', 'T-303'),
-  ticket('blocked', 'T-304', {
+  ticket('todo', 'T-304', {
+    workflowStatus: 'blocked',
     returnStatus: 'gone',
     blockedReason: 'Unknown return status.',
     activity: { state: 'blocked', note: 'Unknown return status.' },
@@ -88,85 +90,28 @@ async function renderBoard(props: { hideEmpty?: boolean } = {}) {
 }
 
 describe('CurrentPhaseScreen lanes and columns', () => {
-  it('renders the four lanes, their counts and the board columns in design order', async () => {
-    const view = await renderBoard();
-
-    expect([...view.container.querySelectorAll('.boards-lane')].map((lane) => lane.getAttribute('aria-label'))).toEqual([
-      'Intake lane', 'Build lane', 'Review and merge lane', 'Finished lane',
-    ]);
-
-    const intake = view.getByLabelText('Intake lane');
-    expect(intake.textContent).toContain('Intake');
-    expect(intake.textContent).toContain('2 tickets');
-    expect(within(intake).getByLabelText('Backlog column')).toBeTruthy();
-    expect(within(intake).getByLabelText('Refine ready column')).toBeTruthy();
-
-    const build = view.getByLabelText('Build lane');
-    expect(build.textContent).toContain('Build');
-    expect(build.textContent).toContain('11 tickets');
-    expect(within(build).getAllByRole('region').map((column) => column.getAttribute('aria-label'))).toEqual([
-      'Dev ready column', 'QA ready column', 'Needs escalation column', 'Blocked column',
-    ]);
-  });
-
-  it('takes each worker line from the board rules and omits it when no rule applies', async () => {
-    const view = await renderBoard();
-    const built = view.getByLabelText('Build lane');
-    const intake = view.getByLabelText('Intake lane');
-
-    expect(within(built).getByLabelText('Dev ready column').textContent).toContain('Developer works this');
-    expect(within(built).getByLabelText('QA ready column').textContent).toContain('QA works this');
-    expect(within(built).getByLabelText('Needs escalation column').textContent).toContain('SeniorDeveloper works this');
-    expect(within(built).getByLabelText('Blocked column').textContent).not.toContain('works this');
-    expect(within(intake).getByLabelText('Backlog column').textContent).not.toContain('works this');
-  });
-
-  it('hides empty columns and names them in the lane placeholder', async () => {
-    const view = await renderBoard();
-
-    expect(view.queryByLabelText('Unpack ready column')).toBeNull();
-    expect(within(view.getByLabelText('Intake lane')).getByText('1 empty hidden: Unpack ready')).toBeTruthy();
-    expect(within(view.getByLabelText('Review and merge lane')).getByText(
-      '4 empty hidden: Plan merge ready, Plan merge conflict, Merge ready, Merge conflict',
-    )).toBeTruthy();
-  });
-
-  it('shows empty columns with No tickets when hideEmpty is off', async () => {
+  it('renders the fixed columns in order with counts', async () => {
     const view = await renderBoard({ hideEmpty: false });
-
-    const unpack = view.getByLabelText('Unpack ready column');
-    expect(unpack.textContent).toContain('No tickets');
-    expect(view.queryByText(/empty hidden/)).toBeNull();
+    const columns = [...view.container.querySelectorAll('.boards-column')];
+    expect(columns.map(column => column.getAttribute('aria-label'))).toEqual([
+      'Backlog column', 'Todo column', 'In Progress column', 'Done column', 'Closed column',
+    ]);
+    expect(columns.map(column => column.querySelector('.boards-column-count')?.textContent)).toEqual(['1', '5', '8', '1', '0']);
+    expect(view.container.querySelector('.boards-lane-header')).toBeNull();
+    expect(columns[4]!.textContent).toContain('No tickets');
   });
 
-  it('collapses Finished by default and expands it with the chevron', async () => {
+  it('keeps blocked tickets in their board status column', async () => {
     const view = await renderBoard();
-    const finished = view.getByLabelText('Finished lane');
-
-    const expand = within(finished).getByRole('button', { name: 'Expand Finished lane' });
-    expect(expand.getAttribute('aria-expanded')).toBe('false');
-    expect(within(finished).queryByLabelText('Done column')).toBeNull();
-    expect(finished.textContent).toContain('1 ticket');
-
-    fireEvent.click(expand);
-    const collapse = within(finished).getByRole('button', { name: 'Collapse Finished lane' });
-    expect(collapse.getAttribute('aria-expanded')).toBe('true');
-    expect(within(finished).getByLabelText('Done column')).toBeTruthy();
-  });
-
-  it('places blocked tickets in their return status column and falls back to a Blocked column', async () => {
-    const view = await renderBoard();
-    const build = view.getByLabelText('Build lane');
-
-    expect(within(build).getByLabelText('QA ready column').textContent).toContain('T-300');
-    const blocked = within(build).getByLabelText('Blocked column');
-    expect(blocked.textContent).toContain('T-304');
-    expect(blocked.textContent).not.toContain('T-300');
+    const todo = view.getByLabelText('Todo column');
+    expect(todo.textContent).toContain('T-300');
+    expect(todo.textContent).toContain('T-304');
+    expect(view.queryByLabelText('Blocked column')).toBeNull();
   });
 
   it('shows six cards and expands the rest with Show N more', async () => {
     const view = await renderBoard();
-    const devReady = within(view.getByLabelText('Build lane')).getByLabelText('Dev ready column');
+    const devReady = view.getByLabelText('In Progress column');
 
     expect(devReady.querySelectorAll('[data-ticket-key]')).toHaveLength(6);
     const more = within(devReady).getByRole('button', { name: 'Show 2 more' });
@@ -224,7 +169,7 @@ describe('CurrentPhaseScreen toolbar and filters', () => {
     expect(blocked.getAttribute('aria-pressed')).toBe('true');
     expect(countText(view)).toBe('2 tickets');
     expect(cards(view).sort()).toEqual(['T-300', 'T-304']);
-    expect(view.getByLabelText('Build lane').textContent).toContain('2 tickets');
+    expect(view.getByLabelText('Todo column').querySelector('.boards-column-count')?.textContent).toBe('2');
 
     fireEvent.click(blocked);
     expect(blocked.getAttribute('aria-pressed')).toBe('false');
@@ -240,24 +185,24 @@ describe('CurrentPhaseScreen toolbar and filters', () => {
     expect(working.getAttribute('aria-pressed')).toBe('true');
     expect(countText(view)).toBe('1 ticket');
     expect(cards(view)).toEqual(['T-301']);
-    expect(view.getByLabelText('Build lane').textContent).toContain('1 ticket');
+    expect(view.getByLabelText('Todo column').querySelector('.boards-column-count')?.textContent).toBe('1');
   });
 
   it('hides empty columns by default and toggles the chip off and on', async () => {
     const view = await renderBoard();
     const hideEmpty = chip(view, 'Hide empty columns');
     expect(hideEmpty.getAttribute('aria-pressed')).toBe('true');
-    expect(view.queryByLabelText('Unpack ready column')).toBeNull();
+    expect(view.queryByLabelText('Closed column')).toBeNull();
 
     fireEvent.click(hideEmpty);
     expect(hideEmpty.getAttribute('aria-pressed')).toBe('false');
-    const unpack = view.getByLabelText('Unpack ready column');
-    expect(unpack.textContent).toContain('No tickets');
+    const closed = view.getByLabelText('Closed column');
+    expect(closed.textContent).toContain('No tickets');
     expect(countText(view)).toBe('15 tickets');
 
     fireEvent.click(hideEmpty);
     expect(hideEmpty.getAttribute('aria-pressed')).toBe('true');
-    expect(view.queryByLabelText('Unpack ready column')).toBeNull();
+    expect(view.queryByLabelText('Closed column')).toBeNull();
   });
 
   it('combines search and chips with AND, keeps the progress unfiltered and clears to no match', async () => {
@@ -274,7 +219,7 @@ describe('CurrentPhaseScreen toolbar and filters', () => {
     fireEvent.click(chip(view, 'Blocked only'));
     expect(countText(view)).toBe('0 tickets');
     expect(view.getByText('No tickets match these filters')).toBeTruthy();
-    expect(view.queryByLabelText('Intake lane')).toBeNull();
+    expect(view.queryByLabelText('Todo column')).toBeNull();
 
     fireEvent.click(view.getByRole('button', { name: 'Clear filters' }));
     expect((view.getByPlaceholderText('Search tickets') as HTMLInputElement).value).toBe('');
@@ -283,7 +228,7 @@ describe('CurrentPhaseScreen toolbar and filters', () => {
     expect(chip(view, 'Hide empty columns').getAttribute('aria-pressed')).toBe('true');
     expect(countText(view)).toBe('15 tickets');
     expect(view.queryByText('No tickets match these filters')).toBeNull();
-    expect(view.getByLabelText('Intake lane')).toBeTruthy();
+    expect(view.getByLabelText('Todo column')).toBeTruthy();
   });
 
   it('resets the filter state when the screen is left and mounted again', async () => {

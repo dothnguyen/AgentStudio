@@ -648,7 +648,8 @@ describe('T-135 sidebar Boards group and routes', () => {
       ok: true as const,
       data: boardTicketDetailFixture(input.key),
     }));
-    const fake = fakeManagement({ boardPhases: [{ ok: true, data: phases }], calls: { boardTicket } });
+    const boardList = boardTicketListFixture();
+    const fake = fakeManagement({ boardPhases: [{ ok: true, data: phases }], boardTickets: [{ ok: true, data: { ...boardList, tickets: boardList.tickets.map(ticket => ({ ...ticket, status: ticket.status === 'done' ? 'done' : 'in-progress' })) } }], calls: { boardTicket } });
     const view = render(shell(fake));
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Boards' }));

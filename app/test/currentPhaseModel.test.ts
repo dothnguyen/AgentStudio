@@ -3,13 +3,14 @@ import { currentPhaseOf, phaseProgress } from '../src/renderer/boards/currentPha
 import { boardPhasesFixture, boardTicketSummary } from './boardFixtures';
 
 describe('phaseProgress', () => {
-  it('counts done and close tickets against every ticket in the phase', () => {
+  it('counts done and closed tickets against every ticket in the phase', () => {
     const tickets = [
       boardTicketSummary({ status: 'done' }),
+      boardTicketSummary({ status: 'closed' }),
       boardTicketSummary({ status: 'close' }),
       boardTicketSummary({ status: 'dev-ready' }),
     ];
-    expect(phaseProgress(tickets)).toEqual({ done: 2, total: 3, percent: 67 });
+    expect(phaseProgress(tickets)).toEqual({ done: 3, total: 4, percent: 75 });
   });
 
   it('renders one of sixteen as six percent', () => {

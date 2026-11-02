@@ -1,6 +1,9 @@
 import type { BoardPhase, BoardTicketSummary } from '../api';
-import { BLOCKED_STATUS, BOARD_LANES, type BoardStatusInfo } from './boardLaneModel';
-import { DONE_TICKET_STATUSES } from './currentPhaseModel';
+import { BLOCKED_STATUS, type BoardStatusInfo } from './boardLaneModel';
+const DONE_TICKET_STATUSES = ['done', 'close'];
+const REVIEW_STATUSES = ['review-ready', 'plan-merge-ready', 'plan-merge-conflict', 'merge-ready', 'merge-conflict'];
+const BUILD_STATUSES = ['dev-ready', 'qa-ready', 'need-escalate'];
+const INTAKE_STATUSES = ['backlog', 'unpack-ready', 'refine-ready'];
 
 export interface PhaseSegments {
   done: number;
@@ -18,10 +21,9 @@ export function phaseSegments(phase: BoardPhase, _statuses: readonly BoardStatus
     if (DONE_TICKET_STATUSES.includes(status)) segments.done += count;
     else if (status === BLOCKED_STATUS) segments.blocked += count;
     else {
-      const lane = BOARD_LANES.find(candidate => candidate.statuses.includes(status));
-      if (lane?.id === 'review') segments.inReview += count;
-      else if (lane?.id === 'build') segments.inProgress += count;
-      else if (lane?.id === 'intake') segments.intake += count;
+      if (REVIEW_STATUSES.includes(status)) segments.inReview += count;
+      else if (BUILD_STATUSES.includes(status)) segments.inProgress += count;
+      else if (INTAKE_STATUSES.includes(status)) segments.intake += count;
       else segments.other += count;
     }
   }
