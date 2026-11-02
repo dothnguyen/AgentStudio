@@ -6,11 +6,14 @@ import type {
   BoardTicketList,
   ManagementApi,
   Result,
+  TeamOverview,
   Workspace,
 } from '../api';
+import { buildAttentionRows } from './attentionModel';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
 import { BoardLanes } from './BoardLanes';
 import { BoardToolbar } from './BoardToolbar';
+import { NeedsAttentionCard } from './NeedsAttentionCard';
 import {
   DEFAULT_BOARD_FILTERS,
   filterBoardTickets,
@@ -26,6 +29,8 @@ export interface CurrentPhaseData {
   phases: BoardPhases;
   settings: BoardSettings;
   tickets: BoardTicketList | null;
+  /** Null when the team overview read failed; the board still renders without the attention card. */
+  overview: TeamOverview | null;
 }
 
 export type CurrentPhaseState = 'loading' | 'ready' | 'error';
@@ -97,11 +102,12 @@ export function useCurrentPhaseBoard(
     }
 
     const phase = currentPhaseOf(phases.data);
-    const [settings, tickets] = await Promise.all([
+    const [settings, tickets, overview] = await Promise.all([
       call(() => management.boardSettings(workspaceId)),
       phase === null
         ? Promise.resolve({ ok: true as const, data: emptyTicketList(workspaceId) })
         : call(() => management.boardTickets(workspaceId, { phase: phase.slug })),
+      call(() => management.overview(workspaceId)),
     ]);
     if (request !== sequence.current) return;
     if (!settings.ok) {
@@ -114,11 +120,20 @@ export function useCurrentPhaseBoard(
       setValue({ state: 'error', data: null, error: tickets.error });
       return;
     }
+    if (!overview.ok) {
+      // The attention card is supplementary: a failed overview read must not break the board.
+      console.warn('Could not load the team overview for the board:', overview.error.code, overview.error.message);
+    }
 
     hasData.current = true;
     setValue({
       state: 'ready',
-      data: { phases: phases.data, settings: settings.data, tickets: tickets.data },
+      data: {
+        phases: phases.data,
+        settings: settings.data,
+        tickets: tickets.data,
+        overview: overview.ok ? overview.data : null,
+      },
       error: null,
     });
   }, [management, workspaceId]);
@@ -212,6 +227,8 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
   }));
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
+  const overview = board.data?.overview ?? null;
+  const attentionRows = overview === null ? [] : buildAttentionRows(overview, tickets);
   const filteredTickets = filterBoardTickets(tickets, filters);
   const progress = phaseProgress(tickets);
   const settingsStatuses = board.data?.settings.statuses ?? [];
@@ -293,6 +310,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
         </div>
       </header>
       <Notice />
+      <NeedsAttentionCard rows={attentionRows} onOpenTicket={props.onOpenTicket} />
       {tickets.length > 0 && (
         <>
           <BoardToolbar filters={filters} resultCount={filteredTickets.length} onChange={setFilters} />

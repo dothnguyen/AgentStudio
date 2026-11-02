@@ -44,6 +44,16 @@ describe('Current Phase lane styles', () => {
   });
 });
 
+describe('Needs attention card styles', () => {
+  it('uses the amber card from the design with a warning header and compact rows', () => {
+    expect(flat).toContain('.boards-attention { background: #16191d; border: 1px solid #4a3d1e; border-radius: 12px; overflow: hidden; }');
+    expect(flat).toContain('.boards-attention-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #2a2417; background: rgba(240, 180, 83, 0.05); }');
+    expect(flat).toContain('.boards-attention-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #f0b453; font-size: 14px; font-weight: 600; }');
+    expect(flat).toContain('.boards-attention-row { display: flex; align-items: center; gap: 12px; padding: 11px 18px; }');
+    expect(flat).toContain('.boards-attention-open { flex: none; box-sizing: border-box; height: 28px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24;');
+  });
+});
+
 describe('Board toolbar styles', () => {
   it('uses the design search field, 32px chips and right-aligned count', () => {
     expect(flat).toContain('.boards-search { display: flex; align-items: center; gap: 8px; width: min(300px, 100%); height: 36px;');

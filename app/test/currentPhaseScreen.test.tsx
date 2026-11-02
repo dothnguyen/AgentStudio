@@ -1,14 +1,21 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BoardPhases, BoardPhase, BoardTicketList } from '../src/renderer/api';
+import type { BoardPhases, BoardPhase, BoardTicketList, TeamOverview } from '../src/renderer/api';
 import { CurrentPhaseScreen } from '../src/renderer/boards/CurrentPhaseScreen';
 import { workspaceA } from './dashboardFixtures';
-import { boardPhasesFixture, boardTicketListFixture, boardTicketSummary } from './boardFixtures';
-import { fakeManagement, managementError } from './teamsFixtures';
+import { boardTicketListFixture, boardTicketSummary } from './boardFixtures';
+import {
+  fakeManagement,
+  managementError,
+  member,
+  overviewFixture,
+  team,
+} from './teamsFixtures';
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -171,5 +178,85 @@ describe('CurrentPhaseScreen', () => {
     await settle();
     expect(fake.boardPhases).toHaveBeenCalledTimes(2);
     expect(view.getByText('2 of 16 tickets done')).toBeTruthy();
+  });
+
+  it('shows blocked tickets, command approvals and paused runs in the Needs attention card', async () => {
+    const overview: TeamOverview = overviewFixture([
+      team({
+        members: [member({ memberId: 'dev', name: 'dev', role: 'Developer' })],
+        attention: {
+          runs: [
+            { workflowRunId: 'run-command', status: 'running', stage: 'develop', memberId: 'dev', ticketKey: 'T-124', assignmentId: null, assignmentStatus: null, diagnosticCode: null, delegating: false },
+            { workflowRunId: 'run-paused', status: 'paused', stage: 'qa', memberId: 'qa', ticketKey: 'T-130', assignmentId: null, assignmentStatus: null, diagnosticCode: null, delegating: false },
+          ],
+          commandRequests: [
+            { id: 'cmd-1', command: 'app-dev-dependency-add', status: 'requested', reason: null, workflowRunId: 'run-command', memberId: 'dev' },
+          ],
+          truncated: { runs: false, commandRequests: false },
+        },
+      }),
+    ], {
+      blockedTickets: [{
+        key: 'T-136',
+        title: 'Fix flaky teamsA11y focus test after the dialog change',
+        reason: 'The run was stopped when the team stopped. Unblock it to continue.',
+        returnStatus: 'qa-ready',
+        memberId: 'dev',
+        updatedAt: '2026-11-01T10:41:00Z',
+      }],
+    });
+    const onOpenTicket = vi.fn();
+    const fake = fakeManagement({
+      boardPhases: [okR(PHASES)],
+      boardTickets: [okR(tickets(16, 1))],
+      overview: [okR(overview)],
+    });
+    const view = render(
+      <CurrentPhaseScreen workspace={workspaceA} management={fake.api} onOpenTicket={onOpenTicket} />,
+    );
+    await settle();
+
+    const heading = view.getByRole('heading', { name: 'Needs attention · 3' });
+    const card = heading.closest('section')!;
+    expect(within(card).getAllByRole('listitem').map((item) => item.querySelector('.boards-attention-key')?.textContent))
+      .toEqual(['T-136', 'T-124', 'T-130']);
+    expect(within(card).getByText('A delegated command waits for approval: app-dev-dependency-add')).toBeTruthy();
+    expect(within(card).getByText('A workflow run is paused')).toBeTruthy();
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Open T-130' }));
+    expect(onOpenTicket).toHaveBeenCalledWith('T-130');
+  });
+
+  it('hides the Needs attention card when nothing needs attention', async () => {
+    const fake = fakeManagement({
+      boardPhases: [okR(PHASES)],
+      boardTickets: [okR(tickets(16, 1))],
+      overview: [okR(overviewFixture([]))],
+    });
+    const view = render(<CurrentPhaseScreen workspace={workspaceA} management={fake.api} />);
+    await settle();
+
+    expect(view.queryByRole('heading', { name: /Needs attention/ })).toBeNull();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe(CURRENT.name);
+  });
+
+  it('keeps the board when the team overview fails and logs a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fake = fakeManagement({
+      boardPhases: [okR(PHASES)],
+      boardTickets: [okR(tickets(16, 1))],
+      overview: [managementError('OVERVIEW_DOWN', 'the team overview is unreadable')],
+    });
+    const view = render(<CurrentPhaseScreen workspace={workspaceA} management={fake.api} />);
+    await settle();
+
+    expect(view.queryByRole('heading', { name: /Needs attention/ })).toBeNull();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe(CURRENT.name);
+    expect(view.getByRole('region', { name: 'Board columns (scrollable)' })).toBeTruthy();
+    expect(warn).toHaveBeenCalledWith(
+      'Could not load the team overview for the board:',
+      'OVERVIEW_DOWN',
+      'the team overview is unreadable',
+    );
   });
 });
