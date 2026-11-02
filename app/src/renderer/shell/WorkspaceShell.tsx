@@ -8,6 +8,7 @@ import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { BacklogScreen } from '../boards/BacklogScreen';
+import { PhasesScreen } from '../boards/PhasesScreen';
 import { TicketScreen } from '../boards/TicketScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
@@ -212,6 +213,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     />
   ) : sectionId === 'boards/backlog' ? (
     <BacklogScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onOpenTicket={(key) => navigate(boardTicketRoute(key))} />
+  ) : sectionId === 'boards/phases' ? (
+    <PhasesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
   ) : ticketKey !== null ? (
     <TicketScreen
       key={`${props.workspace.id}:${ticketKey}`}

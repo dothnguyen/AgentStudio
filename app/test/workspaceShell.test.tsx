@@ -585,7 +585,7 @@ describe('T-135 sidebar Boards group and routes', () => {
     expect(view.container.querySelector('[data-section="boards/current"]')).toBeTruthy();
   });
 
-  it('backlog_opens_the_screen_and_phases_remains_a_placeholder', async () => {
+  it('backlog_and_phases_open_their_screens', async () => {
     const view = render(shell());
     await settle();
     for (const [label, route] of [['Backlog', 'boards/backlog'], ['Phases', 'boards/phases']] as const) {
@@ -593,7 +593,7 @@ describe('T-135 sidebar Boards group and routes', () => {
       fireEvent.click(child);
       await settle();
       expect(view.getByRole('heading', { level: 1 }).textContent).toBe(label);
-      if (label === 'Phases') expect(view.getByText('Coming in the next update')).toBeTruthy();
+      if (label === 'Phases') expect(view.getByText('Progress of each phase, by ticket counts.')).toBeTruthy();
       else expect(view.getByTestId('backlog-body')).toBeTruthy();
       expect(view.container.querySelector(`[data-section="${route}"]`)).toBeTruthy();
       expect(child.getAttribute('aria-current')).toBe('page');
