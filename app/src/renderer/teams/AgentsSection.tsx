@@ -3,7 +3,7 @@ import type { AgentDef, OverviewMember, OverviewTeam } from '../api';
 import { Icon } from '../icons/Icon';
 import { SectionCard } from './SectionCard';
 import { AgentOptionsDialog } from './AgentOptionsDialog';
-import { memberAgentActions, type MemberActionInFlight } from './memberAgentActionsModel';
+import { memberAgentActions, REMOVED_NOTE, type MemberActionInFlight } from './memberAgentActionsModel';
 import {
   AGENT_DIFFERS_NOTE, INLINE_AGENT_EXPLANATION, NO_RUNTIME_NOTE, NO_SAVED_OPTIONS_NOTE,
   inlineAgentSummary, liveAgentRow, liveDiffersFromDefault, savedAgentRows,
@@ -40,7 +40,7 @@ export function AgentsSection(props: AgentsSectionProps): JSX.Element {
   const uid = useId();
   const [dialogOpen, setDialogOpen] = useState(false);
   const inline = member.agentMode === 'inline' || member.source === 'inline';
-  const runtimeVisible = !inline && member.runtime !== null;
+  const runtimeVisible = !inline && member.runtime !== null && member.presence !== 'not_in_runtime' && team.runtime.state === 'running';
   const view = useMemo(
     () => memberAgentActions(team, member, catalog, props.connected, inFlight),
     [team, member, catalog, props.connected, inFlight],
@@ -65,9 +65,12 @@ export function AgentsSection(props: AgentsSectionProps): JSX.Element {
               {row.name}
               {row.isDefault && <span className="teams-agent-tag is-default">Default</span>}
               {option.active && <span className="teams-agent-tag is-live">Live</span>}
+              {option.state === 'not_live' && <span className="teams-agent-tag is-not-live">Not live yet</span>}
+              {option.state === 'removed' && <span className="teams-agent-tag is-removed">Removed</span>}
               {row.missing && <span className="teams-agent-tag is-missing">Missing from catalog</span>}
             </span>
             <span className="teams-agent-meta">{row.meta}</span>
+            {option.state === 'removed' && <span className="teams-agent-reason">{REMOVED_NOTE}</span>}
             {option.holdText !== null && <span className="teams-agent-hold">{option.holdText}</span>}
             {reason !== null && <span className="teams-agent-reason" id={reasonId}>{reason}</span>}
           </span>

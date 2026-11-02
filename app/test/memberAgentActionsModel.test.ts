@@ -1,12 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentConfirmation, formatResetAt, lastSwitchSignature, matchingTerminalSwitch, memberAgentActions } from '../src/renderer/teams/memberAgentActionsModel';
-import { member, switchStateOverview, team, twoTeams } from './teamsFixtures';
+import { member as fixtureMember, switchStateOverview, team, twoTeams } from './teamsFixtures';
 
+const member: typeof fixtureMember = (overrides = {}) => fixtureMember({ ...overrides, agentOptions: overrides.agentOptions ?? (overrides.runtime?.configuredAgents ?? []).map(id => ({ id, name: null, provider: null, model: null, reasoning: null, description: null, state: 'ok' as const })) });
 const runtime = { ...twoTeams().teams[1]!.members[0]!.runtime!, configuredAgents: ['primary', 'backup'], activeAgent: 'primary', paneState: 'alive', availability: 'idle' };
 const catalog = [{ id: 'primary', name: 'Primary', provider: 'p' }, { id: 'backup', name: 'Backup', provider: 'p' }];
 const running = team({ runtime: { state: 'running', teamId: 't', status: 'running' } });
 const view = (r = runtime, c: typeof catalog | null = catalog, connected = true) => memberAgentActions(running, member({runtime: r}), c, connected, null);
 describe('member agent actions', () => {
+  it('merges saved and frozen options in stable order and marks changes', () => {
+    const options = ['primary', 'backup', 'third', 'new'].map(id => ({id, name: id, provider: 'p', model: 'm', reasoning: null, description: null, state: 'ok' as const}));
+    const m = member({runtime: {...runtime, configuredAgents: ['primary', 'backup', 'third']}, agentOptions: options});
+    const agents = [...catalog, {id: 'third', name: 'Third', provider: 'p'}, {id: 'new', name: 'New', provider: 'p'}];
+    const rows = memberAgentActions(running, m, agents, true, null).options;
+    expect(rows.map(row => row.id)).toEqual(['primary', 'backup', 'third', 'new']);
+    expect(rows[3]).toMatchObject({state: 'not_live', canSwitch: false, canResume: false, disabledReason: 'Not live yet. Restart the team to use this agent.'});
+    expect(memberAgentActions(running, {...m, agentOptions: options.filter(o => o.id !== 'backup')}, agents, true, null).options[1]).toMatchObject({state: 'removed', canSwitch: true});
+    expect(memberAgentActions(team(), m, agents, true, null).options.every(row => row.state !== 'not_live' && row.state !== 'removed')).toBe(true);
+    expect(memberAgentActions(running, {...m, presence: 'not_in_runtime'}, agents, true, null).options.every(row => row.state !== 'not_live' && row.state !== 'removed')).toBe(true);
+    const refreshed = memberAgentActions({...running}, {...m, agentOptions: [...options]}, [...agents], true, null);
+    expect(refreshed.options.map(row => row.id)).toEqual(rows.map(row => row.id));
+    expect(memberAgentActions(running, {...m, runtime: {...m.runtime!, quotaHolds: {new: null}}}, agents, true, null).options.find(row => row.id === 'new')).toMatchObject({state: 'not_live', holdText: null, canResume: false});
+  });
   it('eligible_and_disabled_switch_states', () => {
     expect(view().options[1]!.canSwitch).toBe(true);
     expect(view().options[0]!.disabledReason).toBe('That agent is already active.');
@@ -179,7 +194,7 @@ describe('member agent actions', () => {
   it('uses_only_frozen_options_plus_recorded_holds', () => {
     const m = member({runtime: {...runtime, configuredAgents: ['primary', 'backup', 'backup'], quotaHolds: {extra: null}}, agentOptions: [{id: 'saved', name: null, provider: null, model: null, reasoning: null, description: null, state: 'ok'}], defaultAgent: 'saved'});
     const v = memberAgentActions(running, m, catalog, true, null);
-    expect(v.options.map(o => o.id)).toEqual(['primary', 'backup', 'extra']);
+    expect(v.options.map(o => o.id)).toEqual(['primary', 'backup', 'extra', 'saved']);
     expect(v.options[2]).toMatchObject({canSwitch: false, canResume: true, disabledReason: "Agent 'extra' is missing from the catalog."});
     const withExtra = memberAgentActions(running, m, [...catalog, {id: 'extra', name: 'Extra', provider: 'p'}], true, null);
     expect(withExtra.options[2]!.disabledReason).toBe("Agent 'extra' is not configured for this member.");

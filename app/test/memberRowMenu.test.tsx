@@ -204,6 +204,24 @@ describe('member row structure and opening the menu', () => {
 });
 
 describe('member row actions', () => {
+  it('shows saved-only agents disabled in the switch menu with the restart reason', async () => {
+    const savedOnly = { id: 'new-agent', name: 'New Agent', provider: 'new-provider', model: 'new-model', reasoning: null, description: null, state: 'ok' as const };
+    await renderScreen({ team: fixture({ members: [liveMember({
+      role: 'Reviewer',
+      agentOptions: [...AGENT_OPTIONS, savedOnly],
+    })] }) });
+    await openMenu();
+    await openSubmenu('Switch agent');
+    const option = menuItem('New Agent');
+    expect(option.getAttribute('aria-disabled')).toBe('true');
+    const reason = (option.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean)
+      .map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+    expect(reason).toBe('Not live yet. Restart the team to use this agent.');
+    fireEvent.click(option);
+    await flush();
+    expect(screen.queryByRole('dialog', { name: 'Confirm cancellation' })).toBeNull();
+  });
+
   it('opens the detail from the Open details item', async () => {
     await renderScreen();
     await openMenu();

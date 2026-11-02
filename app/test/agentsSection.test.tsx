@@ -81,6 +81,21 @@ describe('Agents card', () => {
     expect(rows[1]!.className).toContain('is-active');
   });
 
+  it('shows saved-only and removed rows in stable order', async () => {
+    const added: ResolvedAgentOption = { id: 'new-agent', name: 'New Agent', provider: 'new-provider', model: 'new-model', reasoning: null, description: null, state: 'ok' };
+    const reviewer = catalogMember({ role: 'Reviewer', agentOptions: [opencode, added], runtime: liveRuntime() as never });
+    await mount(runningOverview(reviewer));
+    const card = agentsCard(await open());
+    const rows = within(card).getAllByRole('listitem');
+    expect(rows.map(row => row.querySelector('.teams-agent-name')!.textContent)).toEqual(['OpenCode SonnetDefaultLive', 'Codex GPTRemoved', 'New AgentNot live yet']);
+    expect(rows[1]!.textContent).toContain('Removed from the saved list. It stays available until the team restarts.');
+    expect((within(rows[1]!).getByRole('button', {name: 'Switch live agent to Codex GPT'}) as HTMLButtonElement).disabled).toBe(false);
+    expect(rows[2]!.textContent).toContain('new-provider · new-model');
+    expect(rows[2]!.textContent).toContain('Not live yet. Restart the team to use this agent.');
+    expect((within(rows[2]!).getByRole('button', {name: 'Switch live agent to New Agent'}) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(rows[2]!).queryByRole('button', {name: /Resume/})).toBeNull();
+  });
+
   it('marks the Default tag by saved order, not by the runtime list order', async () => {
     // The runtime lists Codex first, but the saved options still start with
     // OpenCode Sonnet, so OpenCode Sonnet keeps the Default tag.
@@ -319,15 +334,12 @@ describe('Agents card', () => {
     expect(screen.getByRole('status').textContent).toBe('Quota hold cleared for inactive option Codex GPT; quota was not verified. The live agent and assignment were not changed.');
   });
 
-  it('keeps disabled Switch buttons and shows the reason next to the row', async () => {
+  it('shows saved options without runtime change tags when the team is stopped', async () => {
     await mount(runningOverview(catalogMember(), { state: 'stopped', teamId: 't-1', status: 'stopped' }));
     const card = agentsCard(await open());
-    const button = within(card).getByRole('button', { name: 'Switch live agent to Codex GPT' }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-    expect(within(card).getAllByText('The team is not running.').length).toBeGreaterThan(0);
-    const describedBy = button.getAttribute('aria-describedby');
-    expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy!)!.textContent).toBe('The team is not running.');
+    expect(within(card).getByRole('list', {name: 'Saved agent options'})).toBeTruthy();
+    expect(card.textContent).not.toContain('Not live yet');
+    expect(card.textContent).not.toContain('Removed');
   });
 
   it('shows the amber note only when the live agent differs from the saved default', async () => {

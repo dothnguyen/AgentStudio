@@ -206,7 +206,7 @@ Saved values are displayed with their original whitespace. When a new submission
 The Teams view shows each running catalog member's live agent options and quota holds
 from runtime state. Switch requests with an active assignment require confirmation of
 its exact ID. Resume clears a recorded hold; it does not verify provider quota. Saved
-options apply on the next team start and do not determine live switch eligibility.
+options apply on the next team start and do not determine live switch eligibility. The Agents card and switch menu show newly saved options as unavailable until restart; live options removed from the saved list remain available until restart.
 Switch evidence includes any backend code and message in every state, and a dead pane is
 reported even when no live options are available. Reset times without a valid explicit
 time zone are shown as unknown. Concurrent

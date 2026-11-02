@@ -1476,6 +1476,7 @@ ul[aria-label="Workspaces"] {
 .teams-agent-tag.is-default { color: #9ec3ff; background: rgba(91, 156, 255, 0.12); }
 .member-agent-options-tag.is-default { color: #9ec3ff; background: rgba(91, 156, 255, 0.12); }
 .teams-agent-tag.is-live { color: #6fd38b; background: rgba(74, 194, 107, 0.12); }
+.teams-agent-tag.is-not-live, .teams-agent-tag.is-removed { color: #b0b4bc; background: rgba(160, 166, 176, 0.12); }
 .teams-agent-tag.is-missing { color: #f0b453; background: rgba(240, 180, 83, 0.12); }
 .member-agent-options-tag.is-missing { color: #f0b453; background: rgba(240, 180, 83, 0.12); }
 .teams-agent-actions { display: flex; flex: none; align-items: center; gap: 8px; }

@@ -1,11 +1,13 @@
 import type { AgentDef, ManagementError, OverviewMember, OverviewTeam, RuntimeSwitchState } from '../../shared/management';
 import { delegationText } from './teamsModel';
 
+export const NOT_LIVE_REASON = 'Not live yet. Restart the team to use this agent.';
+export const REMOVED_NOTE = 'Removed from the saved list. It stays available until the team restarts.';
 export const SWITCH_REFRESH_LIMIT = 5;
 export const SWITCH_REFRESH_INTERVAL_MS = 250;
 export type MemberActionKind = 'switch' | 'resume';
 export type MemberActionInFlight = { memberId: string; agentId: string; kind: MemberActionKind } | null;
-export type AgentActionState = 'active' | 'switchable' | 'held' | 'missing_catalog' | 'pending' | 'pane_dead' | 'ineligible';
+export type AgentActionState = 'active' | 'switchable' | 'held' | 'missing_catalog' | 'pending' | 'pane_dead' | 'ineligible' | 'not_live' | 'removed';
 export interface AgentActionOption { id: string; label: string; active: boolean; state: AgentActionState; holdText: string | null; canSwitch: boolean; canResume: boolean; disabledReason: string | null }
 export interface MemberAgentActionsView { visible: boolean; activeText: string; availabilityText: string; paneText: string; staleText: string | null; assignmentText: string; workText: string | null; pendingText: string | null; lastResultText: string | null; notice: string | null; allHeld: boolean; options: AgentActionOption[] }
 export function formatResetAt(value: string | null): string {
@@ -54,18 +56,22 @@ export function memberAgentActionRows(team: OverviewTeam, member: OverviewMember
   const frozen = [...new Set(r.configuredAgents ?? [])];
   const switchTargets = inline || unknownEligibility ? [] : frozen;
   const isHeld = (id: string) => Object.prototype.hasOwnProperty.call(r.quotaHolds, id);
-  const label = (id: string) => catalog?.find(a => a.id === id)?.name || id;
+  const label = (id: string) => catalog?.find(a => a.id === id)?.name || member.agentOptions.find(a => a.id === id)?.name || id;
   const base = !connected ? 'Backend disconnected; live actions are disabled.' : team.runtime.state !== 'running' ? 'The team is not running.' : r.stale ? 'Live member state is stale; refresh before switching or resuming.' : null;
   const paneAlive = r.paneState === 'alive';
   const locked = inFlight?.memberId === member.memberId;
-  const ids = [...new Set([...switchTargets, ...Object.keys(r.quotaHolds)])];
+  const compareSaved = team.runtime.state === 'running' && member.presence !== 'not_in_runtime' && !inline && !unknownEligibility;
+  const saved = member.agentOptions.map(option => option.id);
+  const ids = [...new Set([...switchTargets, ...Object.keys(r.quotaHolds), ...(compareSaved ? saved : [])])];
   return ids.map(id => {
-    const held = isHeld(id);
+    const notLive = compareSaved && saved.includes(id) && !frozen.includes(id);
+    const removed = compareSaved && frozen.includes(id) && !saved.includes(id);
+    const held = !notLive && isHeld(id);
     const missing = catalog !== null && !catalog.some(a => a.id === id);
-    const reason = base ?? (!paneAlive ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled.' : inline ? 'Live switching is unavailable for inline members.' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : missing ? `Agent '${id}' is missing from the catalog.` : held && frozen.includes(id) ? `Agent '${id}' is on quota hold.` : id === r.activeAgent && frozen.includes(id) ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
-    const active = id === r.activeAgent;
+    const reason = notLive ? NOT_LIVE_REASON : base ?? (!paneAlive ? "The member's pane is not alive." : r.pendingAgent ? 'A switch is already pending for this member.' : locked ? 'Requesting…' : unknownEligibility ? 'Live agent eligibility is unavailable; switching is disabled.' : inline ? 'Live switching is unavailable for inline members.' : catalog === null ? 'Agent catalog unavailable; switching is disabled.' : missing ? `Agent '${id}' is missing from the catalog.` : held && frozen.includes(id) ? `Agent '${id}' is on quota hold.` : id === r.activeAgent && frozen.includes(id) ? 'That agent is already active.' : !frozen.includes(id) ? `Agent '${id}' is not configured for this member.` : !['idle', 'limit_reached'].includes(r.availability) && !r.assignment ? 'Member must be idle, quota-limited, or have an active assignment before switching.' : null);
+    const active = !notLive && id === r.activeAgent;
     const canSwitch = reason === null;
-    const state: AgentActionState = active ? 'active' : r.pendingAgent === id ? 'pending' : held ? 'held' : missing ? 'missing_catalog' : !paneAlive ? 'pane_dead' : canSwitch ? 'switchable' : 'ineligible';
+    const state: AgentActionState = notLive ? 'not_live' : removed ? 'removed' : active ? 'active' : r.pendingAgent === id ? 'pending' : held ? 'held' : missing ? 'missing_catalog' : !paneAlive ? 'pane_dead' : canSwitch ? 'switchable' : 'ineligible';
     return { id, label: label(id), active, state, holdText: held ? formatResetAt(r.quotaHolds[id]) : null, canSwitch, canResume: held && !base && paneAlive && !locked && !r.pendingAgent, disabledReason: reason };
   });
 }
