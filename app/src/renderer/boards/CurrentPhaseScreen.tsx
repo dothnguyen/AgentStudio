@@ -246,6 +246,12 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
   const statuses = settingsStatuses.length > 0
     ? settingsStatuses
     : (board.data?.tickets?.statuses ?? []).map((id) => ({ id, name: null, kind: null }));
+  const workflowStatuses = [...(board.data?.settings.workflowStatuses ?? [])];
+  for (const ticket of tickets) {
+    if (!workflowStatuses.some((status) => status.id === ticket.workflowStatus)) {
+      workflowStatuses.push({ id: ticket.workflowStatus, name: null, kind: null });
+    }
+  }
   const matches = (ticket: (typeof tickets)[number]): boolean => matchesBoardFilters(ticket, filters);
 
   if (board.state === 'loading') {
@@ -319,10 +325,11 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
       <NeedsAttentionCard rows={attentionRows} onOpenTicket={props.onOpenTicket} />
       {tickets.length > 0 && (
         <>
-          <BoardToolbar filters={filters} resultCount={filteredTickets.length} onChange={setFilters} />
+          <BoardToolbar workflowStatuses={workflowStatuses} filters={filters} resultCount={filteredTickets.length} onChange={setFilters} />
           {filteredTickets.length > 0 && (
             <BoardLanes
               statuses={statuses}
+              workflowStatuses={workflowStatuses}
               rules={board.data?.settings.rules ?? []}
               tickets={tickets}
               hideEmpty={filters.hideEmpty}

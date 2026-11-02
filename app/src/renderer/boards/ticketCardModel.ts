@@ -1,4 +1,14 @@
 import type { BoardRuleView, BoardTicketSummary } from '../api';
+import type { BoardStatusInfo, BoardStatusTone } from './boardLaneModel';
+
+export function workflowStatusChip(id: string, statuses: readonly BoardStatusInfo[], rules: readonly BoardRuleView[]): { label: string; tone: BoardStatusTone; tooltip: string | undefined } {
+  const status = statuses.find((entry) => entry.id === id);
+  const rule = rules.find((entry) => entry.status === id || entry.during === id);
+  const role = rule?.type === 'agent' ? rule.role?.trim() : undefined;
+  const tone: BoardStatusTone = id === 'blocked' ? 'red' : status?.kind === 'done' ? 'green' : rules.some((entry) => entry.during === id) ? 'amber' : 'blue';
+  return { label: status?.name?.trim() || id, tone, tooltip: role ? `${role} works this` : undefined };
+}
+
 
 /** The visual families of the activity chip; also drives the card's left edge. */
 export type TicketActivityTone = 'working' | 'blocked' | 'waiting' | 'queued' | 'idle' | 'done';

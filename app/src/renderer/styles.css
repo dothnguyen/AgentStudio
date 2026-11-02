@@ -2499,5 +2499,13 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 
 @media (max-width: 1100px) { .boards-backlog-toolbar-row { flex-wrap: wrap; } .boards-backlog-toolbar .boards-search { flex-basis: 100%; max-width: none; } }
 @media (max-width: 799px) { .boards-backlog-row .boards-ticket-owner, .boards-backlog-time { display: none; } }
+
+.boards-workflow-filter { display: flex; align-items: center; gap: 6px; color: #a3a9b2; font-size: 12px; }
+.boards-workflow-filter select { color: inherit; background: #1e2228; border: 1px solid #454b55; border-radius: 5px; max-height: 70px; }
+.boards-workflow-chip-blue { color: #9ec3ff; background: rgba(91, 156, 255, 0.12); }
+.boards-workflow-chip-amber { color: #f0b453; background: rgba(240, 180, 83, 0.12); }
+.boards-workflow-chip-red { color: #ff8b8b; background: rgba(240, 80, 80, 0.12); }
+.boards-workflow-chip-green { color: #6fd38b; background: rgba(74, 194, 107, 0.12); }
+
 .boards-backlog-row-wrap { display: flex; align-items: center; }
 .boards-backlog-row-wrap .boards-backlog-row { flex: 1; }

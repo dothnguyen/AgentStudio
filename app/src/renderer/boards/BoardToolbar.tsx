@@ -1,8 +1,10 @@
 import type { JSX } from 'react';
+import type { BoardStatusInfo } from './boardLaneModel';
 import { filteredCountLabel, type BoardFilters } from './boardFilters';
 
 export interface BoardToolbarProps {
   filters: BoardFilters;
+  workflowStatuses: readonly BoardStatusInfo[];
   /** The number of tickets that pass every filter. */
   resultCount: number;
   onChange(filters: BoardFilters): void;
@@ -32,6 +34,14 @@ export function BoardToolbar(props: BoardToolbarProps): JSX.Element {
             value={filters.query}
             onChange={(event) => { props.onChange({ ...filters, query: event.target.value }); }}
           />
+        </label>
+        <label className="boards-workflow-filter">
+          Workflow status
+          <select multiple value={filters.workflowStatuses} onChange={(event) => {
+            props.onChange({ ...filters, workflowStatuses: Array.from(event.currentTarget.selectedOptions, (option) => option.value) });
+          }}>
+            {props.workflowStatuses.map((status) => <option key={status.id} value={status.id}>{status.name?.trim() || status.id}</option>)}
+          </select>
         </label>
         <button
           type="button"

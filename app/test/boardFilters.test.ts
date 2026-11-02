@@ -43,6 +43,14 @@ describe('matchesBoardFilters', () => {
     expect(matchesBoardFilters(NOT_STARTED, { ...DEFAULT_BOARD_FILTERS, workingOnly: true })).toBe(false);
   });
 
+  it('matches any selected workflow status and combines it with other filters', () => {
+    const filters = { ...DEFAULT_BOARD_FILTERS, workflowStatuses: ['dev-ready', 'blocked'] };
+    expect(filterBoardTickets(TICKETS, filters)).toEqual(TICKETS);
+    expect(filterBoardTickets(TICKETS, { ...filters, workflowStatuses: ['blocked'] })).toEqual([BLOCKED]);
+    expect(filterBoardTickets(TICKETS, { ...filters, workflowStatuses: ['blocked'], workingOnly: true })).toEqual([]);
+    expect(filterBoardTickets(TICKETS, { ...filters, query: 'roles' })).toEqual([WORKING]);
+  });
+
   it('combines search and both chips with AND', () => {
     const filters = { ...DEFAULT_BOARD_FILTERS, query: 'roles', workingOnly: true, blockedOnly: true };
     expect(matchesBoardFilters(WORKING, filters)).toBe(false);

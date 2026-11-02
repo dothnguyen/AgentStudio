@@ -10,6 +10,7 @@ import { TicketCard } from './TicketCard';
 
 export interface BoardLanesProps {
   statuses: readonly BoardStatusInfo[];
+  workflowStatuses?: readonly BoardStatusInfo[];
   rules: readonly BoardRuleView[];
   tickets: readonly BoardTicketSummary[];
   /** Empty columns are hidden by default; the toolbar exposes this as a switch. */
@@ -22,6 +23,7 @@ export interface BoardLanesProps {
 
 function BoardColumnView(props: {
   column: BoardColumn;
+  workflowStatuses?: readonly BoardStatusInfo[];
   rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
 }): JSX.Element {
@@ -39,7 +41,7 @@ function BoardColumnView(props: {
       <ul className="boards-column-cards">
         {shown.map((ticket) => (
           <li key={ticket.id}>
-            <TicketCard ticket={ticket} rules={props.rules} onOpenTicket={props.onOpenTicket} />
+            <TicketCard ticket={ticket} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} />
           </li>
         ))}
       </ul>
@@ -68,7 +70,7 @@ export function BoardLanes(props: BoardLanesProps): JSX.Element {
     <div className="boards-board" role="region" aria-label="Board columns (scrollable)" tabIndex={0}>
       <div className="boards-board-lanes">
         {columns.map((column) => (
-          <BoardColumnView key={column.id} column={column} rules={props.rules} onOpenTicket={props.onOpenTicket} />
+          <BoardColumnView key={column.id} column={column} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} />
         ))}
       </div>
     </div>

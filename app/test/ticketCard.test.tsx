@@ -158,3 +158,30 @@ describe('TicketCard details', () => {
     expect(onOpenTicket).toHaveBeenLastCalledWith('T-114');
   });
 });
+
+
+describe('workflow status chip', () => {
+  it('shows configured names, status tones and the responsible role', () => {
+    const statuses = [
+      { id: 'dev-ready', name: 'Development ready', kind: null },
+      { id: 'developing', name: 'Developing', kind: null },
+      { id: 'blocked', name: 'Blocked', kind: null },
+      { id: 'complete', name: 'Complete', kind: 'done' },
+    ];
+    const rules = [rule('dev-ready', { during: 'developing' })];
+    for (const [id, label, tone, tooltip] of [
+      ['dev-ready', 'Development ready', 'blue', 'Developer works this'],
+      ['developing', 'Developing', 'amber', 'Developer works this'],
+      ['blocked', 'Blocked', 'red', null],
+      ['complete', 'Complete', 'green', null],
+      ['unknown', 'unknown', 'blue', null],
+    ]) {
+      const view = render(<TicketCard ticket={boardTicketSummary({ workflowStatus: id! })} rules={rules} workflowStatuses={statuses} />);
+      const chip = view.container.querySelector('[data-workflow-tone]');
+      expect(chip?.textContent).toBe(label);
+      expect(chip?.getAttribute('data-workflow-tone')).toBe(tone);
+      expect(chip?.getAttribute('title')).toBe(tooltip);
+      view.unmount();
+    }
+  });
+});

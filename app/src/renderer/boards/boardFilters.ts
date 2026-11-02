@@ -3,6 +3,7 @@ import type { BoardTicketSummary } from '../api';
 /** The board toolbar's local filter state. Reset whenever the screen is left. */
 export interface BoardFilters {
   query: string;
+  workflowStatuses: string[];
   blockedOnly: boolean;
   workingOnly: boolean;
   hideEmpty: boolean;
@@ -11,6 +12,7 @@ export interface BoardFilters {
 /** Empty search, no activity filters and the design's default of hiding empty columns. */
 export const DEFAULT_BOARD_FILTERS: BoardFilters = {
   query: '',
+  workflowStatuses: [],
   blockedOnly: false,
   workingOnly: false,
   hideEmpty: true,
@@ -19,7 +21,7 @@ export const DEFAULT_BOARD_FILTERS: BoardFilters = {
 /** True when the ticket passes the search and both activity chips (AND). */
 export function matchesBoardFilters(
   ticket: BoardTicketSummary,
-  filters: Pick<BoardFilters, 'query' | 'blockedOnly' | 'workingOnly'>,
+  filters: Pick<BoardFilters, 'query' | 'blockedOnly' | 'workingOnly' | 'workflowStatuses'>,
 ): boolean {
   const query = filters.query.trim().toLowerCase();
   if (query !== '') {
@@ -27,6 +29,7 @@ export function matchesBoardFilters(
     const title = ticket.title.toLowerCase();
     if (!key.includes(query) && !title.includes(query)) return false;
   }
+  if (filters.workflowStatuses.length > 0 && !filters.workflowStatuses.includes(ticket.workflowStatus)) return false;
   if (filters.blockedOnly && ticket.activity.state !== 'blocked') return false;
   if (filters.workingOnly && ticket.activity.state !== 'working') return false;
   return true;
