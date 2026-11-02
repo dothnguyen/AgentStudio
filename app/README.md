@@ -255,3 +255,5 @@ The selected team’s Overview shows its definition, runtime, returned-member av
 The Backlog screen loads all ticket summaries, phases and board settings. It shows the unfiltered ticket total, loading and retryable error states, and an empty-board message; its body shows collapsible phase groups with ticket status, activity, owner and update time. Groups initially show 50 tickets, with a button to reveal the rest; selecting a row opens the ticket. Like Current Phase, it refreshes every five seconds and on `board-changed`.
 
 The backlog grouping model retains empty phases and orders the current phase first, then open and closed phases by position, with unassigned or unknown phases last. It calculates activity counts and sorts tickets within each group by priority, numeric key, update time, or the configured board status order.
+
+The independent backlog filter model supports search, status, phase, activity, owner, priority and open-dependency filters, and tracks the selected sort. It is not yet connected to the screen.
