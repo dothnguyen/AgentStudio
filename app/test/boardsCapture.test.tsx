@@ -29,6 +29,7 @@ const read = (absolutePath: string) => fs.readFileSync(absolutePath, 'utf8');
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState({}, '', '/');
   delete document.documentElement.dataset.captureReady;
   delete document.documentElement.dataset.captureError;
 });
@@ -78,6 +79,24 @@ describe('boards v1 capture fixture', () => {
 });
 
 describe('boards v1 capture app', () => {
+  it.each(['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases'])('prepares the %s implementation capture', async (mode) => {
+    window.history.replaceState({}, '', `/?view=${mode}`);
+    const view = render(<BoardsCaptureApp />);
+    await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 5000 });
+    if (mode === 'phases') {
+      expect(view.getByText('Phase 07 - Upcoming')).toBeTruthy();
+      expect(view.getByText('No tickets yet')).toBeTruthy();
+      expect(view.getByRole('img', { name: /1 blocked/ })).toBeTruthy();
+    } else if (mode === 'backlog-collapsed') {
+      expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
+    } else if (mode === 'backlog-filtered') {
+      expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(1);
+      expect(view.container.querySelector('.boards-backlog-row')?.textContent).toContain('T-136');
+    } else {
+      expect(view.container.querySelectorAll('.boards-backlog-row').length).toBeGreaterThan(1);
+    }
+  });
+
   it('opens Current Phase in the real shell and marks the board ready', async () => {
     render(<BoardsCaptureApp />);
     await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 5000 });

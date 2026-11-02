@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { JSX, KeyboardEvent } from 'react';
 import type { BoardPhases, BoardSettings, BoardTicketSummary } from '../api';
 import { activeFilterCount, DEFAULT_BACKLOG_FILTERS, ownersOf, type BacklogFilters } from './backlogFilters';
@@ -10,6 +10,9 @@ function MultiSelect({ label, options, selected, onChange }: { label: string; op
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open) (panel.current?.querySelector<HTMLInputElement>('input') ?? panel.current)?.focus();
+  }, [open]);
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') { event.preventDefault(); setOpen(false); button.current?.focus(); }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -22,7 +25,7 @@ function MultiSelect({ label, options, selected, onChange }: { label: string; op
   };
   return <div className="boards-backlog-multi" onKeyDown={keyDown} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
     <button ref={button} type="button" className="boards-filter-chip" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>{label}{selected.length > 0 && ` · ${selected.length}`}</button>
-    {open && <div ref={panel} id={id} className="boards-backlog-popover" role="dialog" aria-label={`${label} options`}>
+    {open && <div ref={panel} id={id} className="boards-backlog-popover" role="dialog" aria-label={`${label} options`} tabIndex={-1}>
       {options.map(option => <label key={option.value}><input type="checkbox" checked={selected.includes(option.value)} onChange={() => onChange(selected.includes(option.value) ? selected.filter(value => value !== option.value) : [...selected, option.value])} />{option.label}</label>)}
     </div>}
   </div>;

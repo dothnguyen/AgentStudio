@@ -211,7 +211,9 @@ describe('backlog toolbar', () => {
     const user = userEvent.setup();
     const button = view.getByRole('button', { name: 'Activity' });
     await user.click(button);
-    await user.keyboard('{ArrowDown} ');
+    expect(document.activeElement).toBe(view.getByRole('checkbox', { name: 'Working' }));
+    expect(button.getAttribute('aria-controls')).toBe(view.getByRole('dialog', { name: 'Activity options' }).id);
+    await user.keyboard(' ');
     expect(view.getByRole<HTMLInputElement>('checkbox', { name: 'Working' }).checked).toBe(true);
     await user.keyboard('{ArrowDown} ');
     expect(view.getByRole<HTMLInputElement>('checkbox', { name: 'Blocked' }).checked).toBe(true);
