@@ -428,6 +428,11 @@ workflow and promote them only after its follow-up action succeeds. `ticket appl
 run through the rules (the board's scheduler does this itself for its claims). Recovery: see
 [RECOVERY.md](RECOVERY.md), section "The generic board (P04)".
 
+Merge rules select tickets by workflow status and use their `during`, `onPass` and `onFail` workflow statuses.
+Created-ticket promotion also compares workflow statuses. Operator tickets start at the initial workflow status in
+backlog; agent-created tickets use the parent rule's configured status, the agent default, or the initial status,
+with the board column derived from that workflow status.
+
 The scheduler picks unassigned tickets in the todo or in-progress column by their workflow status; backlog
 tickets are not claimed. Claims move the workflow to the rule's during status and the column to in-progress.
 Dependencies are finished when their column is done or closed; caps count assigned tickets in the during status.
@@ -440,8 +445,8 @@ six tools — `ticket_add`, `ticket_update`, `ticket_list`, `ticket_show`, `phas
 validated command path as the CLI: agents never touch the database, and the coordinator stays the only writer.
 `ticket_add` from an agent is checked by the coordinator: the assignment must be active and its member allowed
 (`FORBIDDEN`); a worktree assignment still targets the team's canonical board; the ticket lands in the claiming
-rule's `createdTicketStatus`, falling back to `agentTicketStatus`, and the requested phase (default when omitted). The
-an open ticket with the same title is refused
+rule's `createdTicketStatus`, falling back to `agentTicketStatus`, and the requested phase (default when omitted). An
+open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.
 

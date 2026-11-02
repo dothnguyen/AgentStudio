@@ -162,10 +162,10 @@ class AgentStatusAndUpdate(ServerCase):
 
     def test_agent_tickets_land_in_the_configured_status_and_operator_tickets_in_initial(self):
         got = self.add(self.asg_ok)
-        self.assertEqual(got["ticket"]["status"], "refine-ready")
+        self.assertEqual((got["ticket"]["workflowStatus"], got["ticket"]["status"]), ("refine-ready", "todo"))
         with self.store.transaction() as tx:
             mine = boardmodel.ticket_add(tx, self.ws, {"title": "by hand", "priority": 100})
-        self.assertEqual(mine["ticket"]["status"], "none")
+        self.assertEqual((mine["ticket"]["workflowStatus"], mine["ticket"]["status"]), ("none", "backlog"))
 
     def test_agent_status_defaults_to_initial_and_cannot_be_terminal(self):
         for value, ok in (("done", False), ("close", False), ("nope", False), ("dev-ready", True)):

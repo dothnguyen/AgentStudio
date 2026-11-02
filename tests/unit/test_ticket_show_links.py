@@ -29,8 +29,8 @@ class TicketShowLinks(BoardCase):
         self.assertEqual(detail["dependsOn"], ["T-002"])  # key lists stay backward compatible
         self.assertEqual(detail["dependents"], ["T-003"])
         self.assertEqual(detail["links"], {
-            "dependsOn": [{"key": "T-002", "title": "dependency", "status": "wip", "phase": "alpha"}],
-            "dependents": [{"key": "T-003", "title": "blocker of dependent", "status": "none",
+            "dependsOn": [{"key": "T-002", "title": "dependency", "status": "todo", "phase": "alpha"}],
+            "dependents": [{"key": "T-003", "title": "blocker of dependent", "status": "backlog",
                             "phase": "default"}],
         })
 

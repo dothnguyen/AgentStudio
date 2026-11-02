@@ -109,11 +109,22 @@ class Protocol(ServerCase):
 
 
 class TicketAddRules(ServerCase):
+    def test_agent_ticket_uses_configured_agent_status_when_parent_has_no_rule(self):
+        config = json.loads(json.dumps(CONFIG_A))
+        config["agentTicketStatus"] = "wip"
+        with open(os.path.join(self.ws, ".agent-studio", "board.json"), "w") as f:
+            json.dump(config, f)
+
+        ticket = self.add(self.asg_ok, "agent-created")["ticket"]
+
+        self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("wip", "todo"))
+
     def test_creates_ticket_with_created_by_initial_status_and_phase(self):
         got = self.add(self.asg_ok, "review findings: errors are swallowed")
         ticket = got["ticket"]
         self.assertEqual((ticket["status"], ticket["phase"], ticket["createdByMember"],
-                          ticket["createdByAssignment"]), ("none", "default", "allowed", self.asg_ok))
+                          ticket["createdByAssignment"]), ("backlog", "default", "allowed", self.asg_ok))
+        self.assertEqual(ticket["workflowStatus"], "none")
         self.assertEqual(got["dependsOn"], [])
 
     def test_worktree_caller_still_writes_to_the_teams_canonical_board(self):

@@ -139,7 +139,7 @@ class TicketTests(BoardCase):
         phase = self.conn.execute("SELECT * FROM phases").fetchone()
         self.assertEqual((phase["slug"], phase["name"], phase["position"], phase["status"]),
                          ("default", "Default", 0, "open"))
-        self.assertEqual((first["key"], first["status"], first["phase"]), ("T-001", "none", "default"))
+        self.assertEqual((first["key"], first["status"], first["workflowStatus"], first["phase"]), ("T-001", "backlog", "none", "default"))
         self.assertIsNone(first["assignee"])
         second = self.add("two")
         self.assertEqual((self.count("board_state"), self.count("phases")), (1, 1))
@@ -155,7 +155,7 @@ class TicketTests(BoardCase):
     def test_two_status_sets_drive_tickets_without_code_change(self):
         self.write_config(CONFIG_B)
         ticket = self.add("b")
-        self.assertEqual(ticket["status"], "none")
+        self.assertEqual((ticket["status"], ticket["workflowStatus"]), ("backlog", "none"))
         self.move("T-001", "doing")
         self.move("T-001", "merged")
         shown = boardmodel.board_show(self.conn, self.ws)
@@ -181,10 +181,10 @@ class TicketTests(BoardCase):
         self.assertIn("--force", caught.exception.remediation)
         self.assertEqual(self.count("ticket_events"), before)  # refused moves write nothing
         moved = self.move("T-001", "wip", force=True)
-        self.assertEqual((moved["from"], moved["ticket"]["status"]), ("finished", "wip"))
+        self.assertEqual((moved["from"], moved["ticket"]["workflowStatus"]), ("finished", "wip"))
         events = self.events("T-001")
         self.assertEqual([(e["name"], e["from_status"], e["to_status"], e["actor"]) for e in events],
-                         [("ticket.created", None, "none", "operator"),
+                         [("ticket.created", None, "backlog", "operator"),
                           ("ticket.moved", "none", "finished", "operator"),
                           ("ticket.moved", "finished", "wip", "operator")])
 
@@ -195,7 +195,7 @@ class TicketTests(BoardCase):
         with self.assertRaises(AsError) as caught:
             self.move("T-001", "wip")
         self.assertEqual(caught.exception.code, "TICKET_BUSY")
-        self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "none")
+        self.assertEqual(self.conn.execute("SELECT status FROM tickets WHERE key = 'T-001'").fetchone()[0], "backlog")
         self.assertEqual([event["name"] for event in self.events("T-001")], ["ticket.created"])
 
     def test_move_to_coordinator_merge_status_reports_activity(self):

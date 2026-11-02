@@ -79,7 +79,7 @@ def _merge_direct_worktree(tx: Tx, asg: dict, task: dict, report_body: dict, ctx
                     f"Original task:\n{task['goal']}\n\nConflicting files:\n" +
                     ("\n".join(f"- {name}" for name in files) if files else "- merge failed before Git listed files"))
             added = boardmodel.ticket_add(tx, main, {"title": title, "body": body, "priority": 0,
-                                                     "phase": phase["slug"], "status": status})["ticket"]
+                                                     "phase": phase["slug"], "_workflow_status": status})["ticket"]
             tx.conn.execute("UPDATE tickets SET branch = ?, worktree_path = ?, updated_at = ? WHERE id = ?",
                             (branch, path, utcnow(), added["id"]))
             boardmodel._ticket_event(tx.conn, added["id"], "ticket.direct_merge_conflict", "coordinator",

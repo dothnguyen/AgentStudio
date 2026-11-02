@@ -462,7 +462,7 @@ def _run_merge_actions(tx, workspace: str, ctx: dict) -> int:
         if rule.get("action") != "merge":
             continue
         rows = tx.conn.execute(
-            "SELECT * FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) = ? AND branch IS NOT NULL "
+            "SELECT * FROM tickets WHERE workspace = ? AND workflow_status = ? AND branch IS NOT NULL "
             "AND assignee IS NULL ORDER BY priority, created_at, key",
             (workspace, rule["when"]["status"])).fetchall()
         for row in rows:
@@ -494,6 +494,9 @@ def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) 
                                      ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
                                                         "reason": reason})
         return False
+    if rule.get("during"):
+        boardmodel.set_workflow(tx, ticket, rule["during"], "coordinator", None, config, claimed=True)
+        ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
     result = gitws.run(workspace, "merge", "--squash", ticket["branch"], check=False)
     if result.returncode != 0:
         raw = gitws.run(workspace, "diff", "--name-only", "--diff-filter=U", check=False).stdout
@@ -532,7 +535,7 @@ def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:
     rows = tx.conn.execute(
         "SELECT * FROM tickets WHERE created_by_assignment IN "
         "(SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id IS NOT NULL) "
-        "AND COALESCE(workflow_status, status) = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
+        "AND workflow_status = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
     keys = []
     for row in rows:
         child = dict(row)
@@ -561,14 +564,7 @@ def _move_by_rule(tx, workspace: str, ticket: dict, rule: dict, target_key: str,
 
 
 def _set_status(tx, ticket: dict, status: str) -> None:
-    if ticket.get("workflow_status") is not None:
-        config = boardmodel.load_config(ticket["workspace"])
-        column = boardmodel.column_for(config, ticket["status"], status, False)
-        tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ?, updated_at = ? WHERE id = ?",
-                        (column, status, utcnow(), ticket["id"]))
-    else:
-        tx.conn.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
-                        (status, utcnow(), ticket["id"]))
+    boardmodel.set_workflow(tx, ticket, status, "coordinator", None, boardmodel.load_config(ticket["workspace"]))
 
 
 # ---- lease helper ------------------------------------------------------------------------------------------

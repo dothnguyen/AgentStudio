@@ -620,7 +620,8 @@ def phase_clear_current(tx, workspace: str, args: dict) -> dict:
 
 def _phase_counts(conn, phase_id, config):
     return {r["status"]: r["n"] for r in conn.execute(
-        "SELECT status, COUNT(*) AS n FROM tickets WHERE phase_id = ? GROUP BY status", (phase_id,))}
+        "SELECT COALESCE(workflow_status, status) AS status, COUNT(*) AS n FROM tickets "
+        "WHERE phase_id = ? GROUP BY COALESCE(workflow_status, status)", (phase_id,))}
 
 
 def phase_list(conn, workspace: str) -> dict:
@@ -819,7 +820,7 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
     member_id = row["member_id"] or row["agent_id"]
     title = args["title"].strip()
-    terminal = {s["id"] for s in config["statuses"] if s["kind"] in TERMINAL_KINDS}
+    terminal = TERMINAL_KINDS
     duplicate = tx.conn.execute(
         "SELECT key FROM tickets WHERE workspace = ? AND title = ? AND status NOT IN "
         f"({','.join('?' * len(terminal))}) LIMIT 1", (workspace, title) + tuple(terminal)).fetchone()
@@ -831,15 +832,15 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
         else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     created_status = config["agentStatus"]
     parent = tx.conn.execute(
-        "SELECT COALESCE(t.workflow_status, t.status) AS status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
+        "SELECT t.workflow_status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
         "JOIN tickets t ON t.active_run_id = wr.id "
         "WHERE sa.assignment_id = ? AND t.workspace = ? LIMIT 1", (assignment_id, workspace)).fetchone()
     if parent is not None:
-        parent_rule = next((r for r in config["rules"] if r.get("during") == parent["status"]), None) \
-            or config["rulesByStatus"].get(parent["status"])
+        parent_rule = next((r for r in config["rules"] if r.get("during") == parent["workflow_status"]), None) \
+            or config["rulesByStatus"].get(parent["workflow_status"])
         if parent_rule is not None:
             created_status = parent_rule.get("createdTicketStatus", created_status)
-    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), status=created_status,
+    added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), _workflow_status=created_status,
                                            createdByMember=member_id, createdByAssignment=assignment_id))
     deps = []
     for key in list(dict.fromkeys(args.get("dependsOn") or [])):
@@ -861,12 +862,13 @@ def ticket_add(tx, workspace: str, args: dict) -> dict:
         phase = _target_phase(tx, workspace, args["phase"])
     else:
         phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
-    ident, key, status = new_id(), next_key(tx.conn, workspace), args.get("status") or config["initial"]
+    ident, key, workflow_status = new_id(), next_key(tx.conn, workspace), args.get("_workflow_status") or config["initial"]
+    status = column_for(config, "backlog", workflow_status, False)
     now = utcnow()
-    tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, status, priority, assignee, "
+    tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, status, workflow_status, priority, assignee, "
                     "lease_until, created_by_member, created_by_assignment, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
-                    (ident, workspace, key, args["title"], args.get("body"), phase["id"], status,
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
+                    (ident, workspace, key, args["title"], args.get("body"), phase["id"], status, workflow_status,
                      args["priority"], args.get("createdByMember"), args.get("createdByAssignment"), now, now))
     _ticket_event(tx.conn, ident, "ticket.created", "operator", None, status,
                   {"ticketId": ident, "key": key, "title": args["title"], "phase": phase["slug"],
@@ -1415,13 +1417,13 @@ def board_summary(conn, workspace: str, limit: int = 5) -> dict:
     active = 0
     if current["id"] is not None:
         active = conn.execute(
-            "SELECT COUNT(*) FROM tickets WHERE phase_id = ? AND assignee IS NOT NULL AND status <> ?",
+            "SELECT COUNT(*) FROM tickets WHERE phase_id = ? AND assignee IS NOT NULL AND COALESCE(workflow_status, status) <> ?",
             (current["id"], BLOCKED_STATUS)).fetchone()[0]
         terminal = sorted(config["terminal"])
         terminal_placeholders = ", ".join("?" for _ in terminal)
         rows = conn.execute(
             "SELECT * FROM tickets WHERE phase_id = ? AND "
-            f"(status = ? OR (assignee IS NOT NULL AND status NOT IN ({terminal_placeholders}))) "
+            f"(COALESCE(workflow_status, status) = ? OR (assignee IS NOT NULL AND COALESCE(workflow_status, status) NOT IN ({terminal_placeholders}))) "
             "ORDER BY priority, created_at, key LIMIT ?",
             (current["id"], BLOCKED_STATUS, *terminal, limit)).fetchall()
         for row in rows:
@@ -1433,7 +1435,7 @@ def board_summary(conn, workspace: str, limit: int = 5) -> dict:
                 for field in ("agent", "role"):
                     if activity.get(field) is not None:
                         compact_activity[field] = activity[field]
-            tickets.append({"key": row["key"], "title": row["title"], "status": row["status"],
+            tickets.append({"key": row["key"], "title": row["title"], "status": row["workflow_status"] or row["status"],
                             "priority": row["priority"], "phase": current["slug"],
                             "activity": compact_activity})
 

@@ -158,6 +158,14 @@ class RulesSchema(RulesCase):
 
 
 class ApplierCase(RulesCase):
+    def add(self, *args, **kwargs):
+        ticket = super().add(*args, **kwargs)
+        # These legacy applier tests exercise pre-migration status rows.
+        self.conn.execute("UPDATE tickets SET status = workflow_status, workflow_status = NULL WHERE id = ?",
+                          (ticket["id"],))
+        self.conn.commit()
+        return ticket
+
     def setUp(self):
         super().setUp()
         self.write_config(BLOCKABLE_CONFIG)
@@ -298,7 +306,7 @@ class OutcomeApplier(ApplierCase):
         self.apply("T-001", run)
         events = self.events("T-001")
         self.assertEqual([(e["name"], e["from_status"], e["to_status"], e["actor"]) for e in events],
-                         [("ticket.created", None, "none", "operator"),
+                         [("ticket.created", None, "backlog", "operator"),
                           ("ticket.outcome_applied", "none", "none", "coordinator")])
         self.assertEqual(json.loads(events[-1]["payload_json"])["rounds"], 1)
 

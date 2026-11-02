@@ -65,11 +65,13 @@ class SchedCase(unittest.TestCase):
 
     def add_ticket(self, title="a", **extra):
         with self.store.transaction() as tx:
-            ticket = boardmodel.ticket_add(tx, self.ws, dict({"title": title, "priority": 100}, **extra))["ticket"]
-            if "status" not in extra:
-                config = boardmodel.load_config(self.ws)
-                tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = ? WHERE id = ?",
-                                (config["rules"][0]["when"]["status"], ticket["id"]))
+            ticket = boardmodel.ticket_add(tx, self.ws, {"title": title, "priority": 100, **extra})["ticket"]
+            config = boardmodel.load_config(self.ws)
+            requested = extra.get("status", config["rules"][0]["when"]["status"])
+            target = config.get("upgradedFrom", {}).get(requested, requested)
+            column = boardmodel.column_for(config, "backlog", target, False)
+            tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ? WHERE id = ?",
+                            (column, target, ticket["id"]))
             return ticket
 
     def ticket(self, key):
@@ -147,6 +149,32 @@ class Binding(SchedCase):
 
 
 class TickRules(SchedCase):
+    def test_merge_conflict_uses_during_and_leaves_ticket_in_progress(self):
+        from types import SimpleNamespace
+        config = boardmodel.load_config(self.ws)
+        initial = config["initial"]
+        during = config["rules"][0]["during"]
+        config["byId"]["merge-conflict"] = {"id": "merge-conflict", "kind": "active"}
+        self.add_ticket(status=initial)
+        with self.store.transaction() as tx:
+            tx.conn.execute("UPDATE tickets SET branch = ? WHERE key = ?", ("feature", "T-001"))
+            ticket = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
+            rule = {"during": during, "onFail": "merge-conflict"}
+            results = [SimpleNamespace(returncode=0, stdout=config["baseBranch"].encode()),
+                       SimpleNamespace(returncode=1, stdout=b""),
+                       SimpleNamespace(returncode=0, stdout=b"shared.txt\n"),
+                       SimpleNamespace(returncode=0, stdout=b"")]
+            with patch.object(boardsched.tasks, "_mutating_in_workspace", return_value=None), \
+                 patch.object(boardsched.worktrees, "is_clean", return_value=True), \
+                 patch.object(boardsched.gitws, "run", side_effect=results), \
+                 patch.object(boardmodel, "load_config", return_value=config):
+                self.assertTrue(boardsched._merge_one(tx, self.ws, ticket, rule, config, self.ctx))
+            row = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
+            self.assertEqual((row["workflow_status"], row["status"]), ("merge-conflict", "in-progress"))
+            events = tx.conn.execute("SELECT from_status, to_status FROM ticket_events "
+                                     "WHERE name = 'ticket.workflow_changed' ORDER BY id").fetchall()
+            self.assertEqual([tuple(e) for e in events], [(initial, during), (during, "merge-conflict")])
+
     def test_routing_claim_and_start_failure_return_workflow(self):
         self.write_board({"version": 3, "workflowStatuses": [
             {"id": "none", "kind": "initial"}, {"id": "dev-ready"}, {"id": "deving"},
@@ -378,18 +406,25 @@ class TickRules(SchedCase):
             child = boardmodel.mcp_ticket_add(
                 tx, parent["worktree_path"],
                 {"assignment": assignment, "title": "first story", "priority": 100})["ticket"]
-        self.assertEqual((child["workspace"], child["status"]), (self.ws, "none"))
+            unchanged = boardmodel.mcp_ticket_add(
+                tx, parent["worktree_path"],
+                {"assignment": assignment, "title": "already triaged", "priority": 100})["ticket"]
+            boardmodel.set_workflow(tx, boardmodel.get_ticket(tx.conn, self.ws, unchanged["key"]),
+                                    "unpack-ready", "operator", None, boardmodel.load_config(self.ws))
+        self.assertEqual((child["workspace"], child["workflowStatus"], child["status"]), (self.ws, "none", "backlog"))
+        self.assertEqual((unchanged["workflowStatus"], unchanged["status"]), ("none", "backlog"))
         self.assertFalse(os.path.exists(os.path.join(self.ws, "plan.md")))
 
         self.finish(parent["active_run_id"])
-        self.free_member()
         self.tick()  # apply the run, merge its branch, then promote only tickets created by that run
-        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
-        self.assertEqual(self.ticket("T-002")["workflow_status"], "refine-ready")
+        self.assertEqual((self.ticket("T-001")["workflow_status"], self.ticket("T-001")["status"]), ("merged", "done"))
+        self.assertEqual((self.ticket("T-002")["workflow_status"], self.ticket("T-002")["status"]), ("refine-ready", "todo"))
+        self.assertEqual((self.ticket("T-003")["workflow_status"], self.ticket("T-003")["status"]),
+                         ("unpack-ready", "todo"))
         self.assertTrue(os.path.exists(os.path.join(self.ws, "plan.md")))
         child_events = [r[0] for r in self.conn.execute(
             "SELECT name FROM ticket_events WHERE ticket_id = ? ORDER BY id", (child["id"],)).fetchall()]
-        self.assertEqual(child_events, ["ticket.created", "ticket.migrated", "ticket.created_status_promoted"])
+        self.assertEqual(child_events, ["ticket.created", "ticket.workflow_changed", "ticket.created_status_promoted"])
 
     def test_only_the_effective_current_phase_is_claimed(self):
         with self.store.transaction() as tx:
@@ -467,6 +502,9 @@ class WorktreeRegistration(SchedCase):
         from agent_studio.protocol import AsError
 
         self.add_ticket()
+        state_home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, state_home, True)
+        self.enterContext(patch.dict(os.environ, {"XDG_STATE_HOME": state_home}))
         worktree = os.path.join(tempfile.mkdtemp(), "T-001")
         self.conn.execute("UPDATE tickets SET assignee = ?, worktree_path = ?, branch = 'ticket/T-001-a' "
                           "WHERE key = 'T-001'", (self.worker, worktree))

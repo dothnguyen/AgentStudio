@@ -21,6 +21,9 @@ class BoardSummaryTests(BoardCase):
             if value is not None:
                 sets.append(f"{field} = ?")
                 values.append(value)
+        if status is not None:
+            sets.append("workflow_status = ?")
+            values.append(status)
         values.append(key)
         self.conn.execute(f"UPDATE tickets SET {', '.join(sets)} WHERE key = ?", values)
 

@@ -39,8 +39,9 @@ class BoardCommands(unittest.TestCase):
 
     def test_tickets_and_board_show_end_to_end(self):
         first = self.ok("ticket", "add", "--workspace", self.ws, "--title", "First", "--priority", "10")
-        self.assertEqual((first["ticket"]["key"], first["ticket"]["status"], first["phase"]["slug"]),
-                         ("T-001", "none", "default"))
+        self.assertEqual((first["ticket"]["key"], first["ticket"]["workflowStatus"],
+                          first["ticket"]["status"], first["phase"]["slug"]),
+                         ("T-001", "none", "backlog", "default"))
         second = self.ok("ticket", "add", "--workspace", self.ws, "--title", "Second")
         self.assertEqual(second["ticket"]["key"], "T-002")
 
@@ -60,7 +61,7 @@ class BoardCommands(unittest.TestCase):
         detail = self.ok("ticket", "show", "--workspace", self.ws, "T-001")
         self.assertEqual(detail["dependsOn"], ["T-002"])
         self.assertEqual([e["name"] for e in detail["events"]],
-                         ["ticket.created", "ticket.migrated", "ticket.moved", "ticket.moved", "ticket.depends"])
+                         ["ticket.created", "ticket.moved", "ticket.moved", "ticket.depends"])
 
         listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "none")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-001"])  # T-002 is in doing

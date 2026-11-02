@@ -8,6 +8,13 @@ from agent_studio.protocol import AsError
 
 
 class WorkflowBackfillTests(BoardCase):
+    def add(self, *args, status=None, **kwargs):
+        ticket = super().add(*args, **kwargs)
+        if status is not None:
+            self.conn.execute("UPDATE tickets SET status = ?, workflow_status = NULL WHERE id = ?",
+                              (status, ticket['id']))
+        return ticket
+
     def test_legacy_statuses_claim_history_and_repeat(self):
         self.write_config({"version": 2, "statuses": [
             {"id": "backlog", "kind": "initial"}, {"id": "dev-ready"},

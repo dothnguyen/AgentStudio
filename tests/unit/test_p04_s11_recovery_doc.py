@@ -90,7 +90,7 @@ class RecoveryCase(unittest.TestCase):
         lease = "2000-01-01T00:00:00.000Z" if lease_in_past else "2099-01-01T00:00:00.000Z"
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, active_run_id = ?, "
-                            "status = 'in-progress' WHERE key = 'T-001'", (self.worker, lease, run))
+                            "status = 'in-progress', workflow_status = 'in-progress' WHERE key = 'T-001'", (self.worker, lease, run))
             ticket = boardmodel.get_ticket(tx.conn, self.ws, 'T-001')
             boardmodel._ticket_event(tx.conn, ticket['id'], 'ticket.claimed', 'coordinator', None, None, {})
 
@@ -104,7 +104,7 @@ class RecoveryCase(unittest.TestCase):
                          ("none", "backlog", None, None))
         self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.workflow_changed",
+        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.workflow_changed",
                                  "ticket.claim_released", "ticket.lease_expired"])
         again = self.tick()  # exactly once: nothing more to release
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
@@ -121,7 +121,7 @@ class RecoveryCase(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
                                            (run,)).fetchone()[0], "paused")
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
-                         ["ticket.created", "ticket.claimed", "ticket.migrated"])
+                         ["ticket.created", "ticket.claimed"])
 
     def test_usage_limit_releases_without_a_round(self):
         run = self.make_run("failed")
@@ -147,7 +147,7 @@ class RecoveryCase(unittest.TestCase):
         self.claim(run, lease_in_past=False)
         with self.store.transaction() as tx:
             got = boardsched.ticket_retry(tx, self.ws, {"key": "T-001"}, self.ctx)
-        self.assertEqual(got["ticket"]["status"], "in-progress")
+        self.assertEqual(got["ticket"]["status"], "backlog")
         ticket = self.ticket()
         self.assertEqual((ticket["assignee"], ticket["active_run_id"], ticket["run_id"]),
                          (None, None, run))
