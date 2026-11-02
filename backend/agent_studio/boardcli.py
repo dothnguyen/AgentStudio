@@ -68,6 +68,7 @@ def _parser(action, group="ticket"):
     elif action == "move":
         p.add_argument("ticket_key")
         p.add_argument("--to", required=True)
+        p.add_argument("--workflow-status")
         p.add_argument("--reason")
         p.add_argument("--force", action="store_true")
     elif action == "phase":
@@ -113,7 +114,8 @@ def _add(ns):
 
 def _move(ns):
     data = _write_call("ticket.move", {"workspace": _workspace(ns), "key": ns.ticket_key, "to": ns.to,
-                                       "force": ns.force, **({"reason": ns.reason} if ns.reason else {})})
+                                       "force": ns.force, **({"reason": ns.reason} if ns.reason else {}),
+                                       **({"workflowStatus": ns.workflow_status} if ns.workflow_status else {})})
     t = data["ticket"]
     return data, lambda d: f"{t['key']}: {d.get('from') or '?'} -> {t['status']}" + ("  (forced)" if ns.force else "")
 

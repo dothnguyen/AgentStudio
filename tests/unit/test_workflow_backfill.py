@@ -85,7 +85,7 @@ class WorkflowBackfillTests(BoardCase):
         self.assertEqual((result['ticket']['workflowStatus'], result['ticket']['status']), ('done', 'done'))
         with self.assertRaises(AsError):
             with self.store.transaction() as tx:
-                boardmodel.ticket_move(tx, self.ws, {'key': ticket['key'], 'to': 'ready'})
+                boardmodel.ticket_move(tx, self.ws, {'key': ticket['key'], 'to': 'todo'})
         self.assertEqual(len(boardmodel.ticket_list(self.conn, self.ws, status='done')['tickets']), 1)
         board = boardmodel.board_show(self.conn, self.ws)
         self.assertEqual(sum(sum(p['columns'].values()) for p in board['phases']), 1)

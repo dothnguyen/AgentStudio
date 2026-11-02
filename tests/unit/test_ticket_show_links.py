@@ -22,14 +22,14 @@ class TicketShowLinks(BoardCase):
         self.add("blocker of dependent")           # T-003
         self.depend("T-001", on=["T-002"])
         self.depend("T-003", on=["T-001"])
-        self.move("T-002", "wip")
+        self.move("T-002", "done")
 
         detail = boardmodel.ticket_detail(self.conn, self.ws, "T-001")
 
         self.assertEqual(detail["dependsOn"], ["T-002"])  # key lists stay backward compatible
         self.assertEqual(detail["dependents"], ["T-003"])
         self.assertEqual(detail["links"], {
-            "dependsOn": [{"key": "T-002", "title": "dependency", "status": "todo", "phase": "alpha"}],
+            "dependsOn": [{"key": "T-002", "title": "dependency", "status": "done", "phase": "alpha"}],
             "dependents": [{"key": "T-003", "title": "blocker of dependent", "status": "backlog",
                             "phase": "default"}],
         })

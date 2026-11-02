@@ -248,9 +248,9 @@ OPERATOR_WRITE_TOOLS = [
                                 "priority": {"type": "integer", "minimum": 0, "maximum": 1000},
                                 "phase": {"type": "string", "description": "phase slug; the default phase when omitted"}},
                                ["title"])},
-    {"name": "ticket_move", "description": "Move a ticket to another status (finished tickets need force).",
+    {"name": "ticket_move", "description": "Move a ticket to another Kanban column (finished tickets need force).",
      "inputSchema": _op_schema(dict(_KEY, to={"type": "string"}, reason={"type": "string", "maxLength": 500},
-                                    force={"type": "boolean"}), ["key", "to"])},
+                                    workflowStatus={"type": "string"}, force={"type": "boolean"}), ["key", "to"])},
     {"name": "ticket_depend", "description": "Add (on) or remove (remove) ticket dependencies.",
      "inputSchema": _op_schema(dict(_KEY, on={"type": "array", "items": {"type": "string"}},
                                     remove={"type": "array", "items": {"type": "string"}}), ["key"])},
@@ -365,7 +365,7 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         t = data["ticket"]
         return text(f"added {t['key']} in phase {t['phase']} (status {t['status']})", ticket=t)
     if name == "ticket_move":
-        extra = dict(_optional(args, "reason"), key=_need(args, "key"), to=_need(args, "to"),
+        extra = dict(_optional(args, "reason", "workflowStatus"), key=_need(args, "key"), to=_need(args, "to"),
                      force=args.get("force") is True)
         data = call("ticket.move", extra, True)
         return text(f"moved {data['ticket']['key']} to {data['ticket']['status']}", ticket=data["ticket"])

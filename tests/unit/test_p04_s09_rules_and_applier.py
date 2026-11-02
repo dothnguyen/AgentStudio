@@ -196,19 +196,19 @@ class OutcomeApplier(ApplierCase):
         config["rules"][1]["onFailureLimit"] = {"count": 3, "status": "hold"}
         self.write_config(config)
         self.add("escalation")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         for failure in range(1, 4):
             result = self.apply("T-001", self.make_run("failed"))
             self.assertEqual(result["ticket"]["status"], "hold" if failure == 3 else "none")
             if failure < 3:
-                self.move("T-001", "review")
+                self.legacy_status("T-001", "review")
         self.assertEqual(result["reason"], "FAILURE_LIMIT:review")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         result = self.apply("T-001", self.make_run("failed"))
         self.assertEqual(result["ticket"]["status"], "none")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         self.apply("T-001", self.make_run("succeeded"))
-        self.move("T-001", "review", force=True)
+        self.legacy_status("T-001", "review")
         result = self.apply("T-001", self.make_run("failed"))
         self.assertEqual(result["ticket"]["status"], "none")
 
@@ -224,13 +224,13 @@ class OutcomeApplier(ApplierCase):
         config["rules"][1]["onFailureLimit"] = {"count": 2, "status": "hold"}
         self.write_config(config)
         self.add("pause and retry")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         self.assertEqual(self.apply("T-001", self.make_run("paused"))["ticket"]["status"], "hold")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         first = self.make_run("failed")
         self.assertEqual(self.apply("T-001", first)["ticket"]["status"], "none")
         self.assertFalse(self.apply("T-001", first)["applied"])
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         self.assertEqual(self.apply("T-001", self.make_run("failed"))["ticket"]["status"], "hold")
 
     def test_pass_fail_and_round_limit(self):
@@ -266,7 +266,7 @@ class OutcomeApplier(ApplierCase):
     def test_on_blocked_rule_target_is_used_when_configured(self):
         self.write_config(RULES_CONFIG)
         self.add("to review")
-        self.move("T-001", "review")
+        self.legacy_status("T-001", "review")
         run = self.make_run("paused")
         got = self.apply("T-001", run)
         self.assertEqual((got["outcome"], got["ticket"]["status"]), ("blocked", "hold"))
@@ -294,11 +294,11 @@ class OutcomeApplier(ApplierCase):
             self.apply("T-001", run)
         self.assertEqual(caught.exception.code, "TICKET_BUSY")
         done = self.make_run("succeeded")
-        self.move("T-001", "merged")  # no rule works the done status
+        self.legacy_status("T-001", "merged")  # no rule works the done status
         with self.assertRaises(AsError) as caught:
             self.apply("T-001", done)
         self.assertEqual(caught.exception.code, "BOARD_RULE_MISSING")
-        self.assertEqual(self.count("ticket_events"), 2)  # created + moved only
+        self.assertEqual(self.count("ticket_events"), 1)  # created only
 
     def test_events_written_per_apply(self):
         self.add("tracked")

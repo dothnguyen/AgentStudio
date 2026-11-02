@@ -34,7 +34,7 @@ class TicketListSummary(BoardCase):
         self.add("done dependency")
         self.add("open dependency")
         self.depend("T-001", on=["T-002", "T-003"])
-        self.move("T-002", "finished")
+        self.move("T-002", "done")
 
         listed = boardmodel.ticket_list(self.conn, self.ws, summary=True)
         by_key = {ticket["key"]: ticket for ticket in listed["tickets"]}

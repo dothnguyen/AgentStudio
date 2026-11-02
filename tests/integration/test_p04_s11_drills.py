@@ -88,7 +88,7 @@ class DrillCase(unittest.TestCase):
 
     def add_ticket(self, title="drill"):
         ticket = self.json_cmd("ticket", "add", "--title", title)["ticket"]
-        self.json_cmd("ticket", "move", ticket["key"], "--to", "build")
+        self.json_cmd("ticket", "move", ticket["key"], "--to", "todo", "--workflow-status", "build")
         return ticket
 
     def start_and_run(self):

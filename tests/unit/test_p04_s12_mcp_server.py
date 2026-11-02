@@ -170,7 +170,7 @@ class TicketAddRules(ServerCase):
         self.assertEqual(caught.exception.code, "TICKET_DUPLICATE")
         # a terminal twin does not block a new ticket
         with self.store.transaction() as tx:
-            boardmodel.ticket_move(tx, self.ws, {"key": got["ticket"]["key"], "to": "finished",
+            boardmodel.ticket_move(tx, self.ws, {"key": got["ticket"]["key"], "to": "done",
                                                  "force": True})
         again = self.add(self.asg_ok, "same title")
         self.assertNotEqual(again["ticket"]["key"], got["ticket"]["key"])

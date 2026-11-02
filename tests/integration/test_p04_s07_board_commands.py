@@ -10,7 +10,7 @@ from tests.helpers import SHIM, Sandbox
 
 CONFIG = {"version": 2, "statuses": [{"id": "todo", "kind": "initial"}, {"id": "doing"},
                                      {"id": "done", "kind": "done"}, {"id": "dropped", "kind": "closed"}],
-          "ticketFields": [], "rules": []}
+          "ticketFields": [], "rules": [{"when": {"status": "doing"}, "role": "Developer", "workflow": "develop", "onPass": "done", "onFail": "doing"}]}
 
 
 class BoardCommands(unittest.TestCase):
@@ -45,23 +45,23 @@ class BoardCommands(unittest.TestCase):
         second = self.ok("ticket", "add", "--workspace", self.ws, "--title", "Second")
         self.assertEqual(second["ticket"]["key"], "T-002")
 
-        moved = self.ok("ticket", "move", "--workspace", self.ws, "T-002", "--to", "doing")
+        moved = self.ok("ticket", "move", "--workspace", self.ws, "T-002", "--to", "in-progress", "--workflow-status", "doing")
         self.assertEqual((moved["from"], moved["ticket"]["workflowStatus"], moved["ticket"]["status"]),
-                         ("none", "doing", "todo"))
-        blocked = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "merged")
+                         ("backlog", "doing", "in-progress"))
+        blocked = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "done")
         self.assertEqual((blocked["ticket"]["workflowStatus"], blocked["ticket"]["status"]), ("merged", "done"))
-        rc, out, err = self.cli("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none")
+        rc, out, err = self.cli("ticket", "move", "--workspace", self.ws, "T-001", "--to", "backlog")
         self.assertEqual(rc, 1)
         self.assertTrue(err.startswith("TICKET_TRANSITION_INVALID:"), err)
         self.assertIn("--force", err)
-        forced = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none", "--force")
+        forced = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "backlog", "--force")
         self.assertEqual((forced["ticket"]["workflowStatus"], forced["ticket"]["status"]), ("none", "backlog"))
 
         self.ok("ticket", "depend", "--workspace", self.ws, "T-001", "--on", "T-002")
         detail = self.ok("ticket", "show", "--workspace", self.ws, "T-001")
         self.assertEqual(detail["dependsOn"], ["T-002"])
         self.assertEqual([e["name"] for e in detail["events"]],
-                         ["ticket.created", "ticket.moved", "ticket.moved", "ticket.depends"])
+                         ["ticket.created", "ticket.moved", "ticket.workflow_changed", "ticket.moved", "ticket.workflow_changed", "ticket.depends"])
 
         listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "backlog")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-001"])  # T-002 is in doing

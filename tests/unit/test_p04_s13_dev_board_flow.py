@@ -36,7 +36,7 @@ class FailureHandoff(ApplierCase):
         super().setUp()
         self.write_config(FLOW)
         self.ticket = self.add("work", body="original brief")
-        self.move("T-001", "qa-ready")
+        self.legacy_status("T-001", "qa-ready")
 
     def body_priority(self):
         row = self.conn.execute("SELECT body, priority, status FROM tickets WHERE key = 'T-001'").fetchone()
@@ -57,7 +57,7 @@ class FailureHandoff(ApplierCase):
 
     def test_failed_ticket_is_picked_before_an_older_one_in_the_same_status(self):
         self.add("older")
-        self.move("T-002", "dev-ready")
+        self.legacy_status("T-002", "dev-ready")
         self.apply("T-001", self.finished_run("failed", ["x"]))
         rows = self.conn.execute("SELECT key FROM tickets WHERE status = 'dev-ready' ORDER BY priority, "
                                  "created_at, key").fetchall()
@@ -66,7 +66,7 @@ class FailureHandoff(ApplierCase):
     def test_blocked_by_round_limit_keeps_priority(self):
         for _ in range(3):
             self.apply("T-001", self.finished_run("failed", ["again"]))
-            self.move("T-001", "qa-ready") if self.body_priority()[2] == "dev-ready" else None
+            self.legacy_status("T-001", "qa-ready") if self.body_priority()[2] == "dev-ready" else None
         self.assertEqual(self.body_priority()[2], "blocked")
 
     def test_body_stays_under_the_cap(self):
@@ -92,12 +92,12 @@ class UnblockResetsRounds(ApplierCase):
         super().setUp()
         self.write_config(FLOW)
         self.add("work")
-        self.move("T-001", "qa-ready")
+        self.legacy_status("T-001", "qa-ready")
         for _ in range(3):
             self.apply("T-001", self.failed())
             row = self.conn.execute("SELECT status FROM tickets WHERE key='T-001'").fetchone()
             if row["status"] == "dev-ready":
-                self.move("T-001", "qa-ready")
+                self.legacy_status("T-001", "qa-ready")
         self.assertEqual(self.row()["status"], "blocked")
 
     def failed(self):
@@ -117,7 +117,7 @@ class UnblockResetsRounds(ApplierCase):
         self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("dev-ready", "todo"))
         row = self.row()
         self.assertEqual((row["rounds_json"], row["return_status"], row["blocked_reason"]), (None, None, None))
-        self.move("T-001", "qa-ready")
+        self.conn.execute("UPDATE tickets SET workflow_status = ? WHERE key = ?", ("qa-ready", "T-001"))
         self.apply("T-001", self.failed())            # the first failure after the reset is not a block
         row = self.conn.execute("SELECT workflow_status, status FROM tickets WHERE key = 'T-001'").fetchone()
         self.assertEqual((row["workflow_status"], row["status"]), ("dev-ready", "todo"))
@@ -132,7 +132,7 @@ class UnblockResetsRounds(ApplierCase):
         self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("qa-ready", "todo"))
 
     def test_operator_move_out_of_blocked_also_resets(self):
-        self.move("T-001", "dev-ready")
+        self.move("T-001", "backlog")
         row = self.row()
         self.assertEqual((row["rounds_json"], row["return_status"], row["blocked_reason"]), (None, None, None))
 
@@ -237,7 +237,7 @@ class TicketActivity(ApplierCase):
         return t["activity"], boardcli.activity_text(t)
 
     def test_not_started_working_blocked_and_finished(self):
-        self.move("T-001", "qa-ready")
+        self.legacy_status("T-001", "qa-ready")
         activity, text = self.activity()
         self.assertEqual((activity["state"], activity["waitingFor"]), ("not started", "worker"))
         self.assertEqual(text, "not started (waiting for worker)")
@@ -250,11 +250,11 @@ class TicketActivity(ApplierCase):
         self.assertEqual(text, "working: " + agent["display_name"])
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET assignee = NULL WHERE key = 'T-001'")
-        self.move("T-001", "merged")
+        self.legacy_status("T-001", "merged")
         self.assertEqual(self.activity()[0]["state"], "finished")
 
     def test_a_failed_start_is_shown_as_a_note(self):
-        self.move("T-001", "qa-ready")
+        self.legacy_status("T-001", "qa-ready")
         row = self.conn.execute("SELECT id FROM tickets WHERE key = 'T-001'").fetchone()
         boardmodel._ticket_event(self.conn, row["id"], "ticket.claim_released", "coordinator", "qa-ready",
                                  "qa-ready", {"reason": "start_failed:WORKSPACE_DIRTY"})

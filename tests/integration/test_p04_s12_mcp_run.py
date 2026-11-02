@@ -73,7 +73,7 @@ class McpRun(unittest.TestCase):
         self.assertTrue(r["ok"], (r, p.stderr))
 
         ticket = self.data("ticket", "add", "--title", "mcp host ticket")
-        self.data("ticket", "move", ticket["ticket"]["key"], "--to", "build")
+        self.data("ticket", "move", ticket["ticket"]["key"], "--to", "todo", "--workflow-status", "build")
         # the board claims it with the writer (canAddTickets) and the run calls the tools
         self.wait_for(lambda: ticket if self.data("ticket", "show", ticket["ticket"]["key"])
                       ["ticket"].get("activeRunId") else None, 120, "claim")

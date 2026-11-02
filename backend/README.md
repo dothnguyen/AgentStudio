@@ -400,6 +400,12 @@ configured outcome status. A blocked outcome without a target, or a round limit,
 The mutating `ticket.workflow` command accepts `workspace`, `key`, `to`, and optional `reason`.
 It changes an unclaimed ticket in `todo` or `in-progress` to a different kindless workflow status,
 excluding `blocked` and rule `during` statuses, while preserving the column.
+`ticket.move` takes a Kanban column as `to`, with optional `workflowStatus`, `reason`, and `force`
+(CLI: `--workflow-status`, `--reason`, `--force`). Moving to todo uses a configured todo entry,
+defaulting to `todoDefault`; in-progress requires a rule's waiting status. Backlog resets the
+workflow and round/blocking state. Done uses the first done status unless another is specified;
+closed uses the configured closed status. Leaving done or closed requires force and a target of
+todo or backlog. Each move records both column and workflow change events.
 
 ```bash
 agent-studio board rules check --workspace ~/work/project      # validate board.json against roles + workflows

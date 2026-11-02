@@ -96,7 +96,7 @@ class RunBoardCase(unittest.TestCase):
 
     def add_ticket(self, title="a"):
         ticket = self.board_json("ticket", "add", "--title", title)["ticket"]
-        self.board_json("ticket", "move", ticket["key"], "--to", "build")
+        self.board_json("ticket", "move", ticket["key"], "--to", "todo", "--workflow-status", "build")
         return ticket
 
     def start_team(self):
@@ -148,12 +148,12 @@ class ThreeRules(RunBoardCase):
         self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("merged", "done"))
         detail = self.board_json("ticket", "show", "T-001")
         names = [e["name"] for e in detail["events"]]
-        self.assertEqual(names, ["ticket.created", "ticket.moved", "ticket.workflow_changed",
+        self.assertEqual(names, ["ticket.created", "ticket.moved", "ticket.workflow_changed", "ticket.workflow_changed",
                                  "ticket.claimed", "ticket.workflow_changed", "ticket.outcome_applied",
                                  "ticket.workflow_changed", "ticket.claimed", "ticket.workflow_changed",
                                  "ticket.outcome_applied"])
         self.assertEqual([e["to"] for e in detail["events"]],
-                         ["backlog", "build", "build-active", "build-active", "verify", "verify",
+                         ["backlog", "todo", "build", "build-active", "build-active", "verify", "verify",
                           "verify-active", "verify-active", "merged", "merged"])
 
 

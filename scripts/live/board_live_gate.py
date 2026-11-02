@@ -173,7 +173,8 @@ class Gate:
         out_of_phase = cli("ticket", "add", "--workspace", ws, "--title", "Not in this phase",
                            "--json")["ticket"]
         for ticket in (one, two, three, out_of_phase):
-            cli("ticket", "move", ticket["key"], "--workspace", ws, "--to", "build", "--json")
+            cli("ticket", "move", ticket["key"], "--workspace", ws, "--to", "todo",
+                "--workflow-status", "build", "--json")
         cli("ticket", "depend", "--workspace", ws, two["key"], "--on", one["key"], "--json")
         self.record("3-tickets", "PASS", keys=f"{one['key']},{two['key']},{three['key']}+"
                                               f"{out_of_phase['key']}(other phase)")

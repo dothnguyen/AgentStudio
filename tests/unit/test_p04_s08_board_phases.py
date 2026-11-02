@@ -224,7 +224,7 @@ class TicketsInPhases(PhaseCase):
         self.add("one")
         self.add("two", phase="alpha")
         self.add("three", phase="alpha")
-        self.move("T-003", "finished")
+        self.move("T-003", "done")
         listed = boardmodel.ticket_list(self.conn, self.ws, phase="alpha")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-002", "T-003"])
         with self.assertRaises(AsError) as caught:

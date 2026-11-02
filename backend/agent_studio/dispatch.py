@@ -565,6 +565,9 @@ def _validate_ticket_move(args):
     reason = req_text(args, "reason", 500, required=False)
     if reason is not None:
         out["reason"] = reason
+    workflow_status = req_text(args, "workflowStatus", 64, required=False, allow_empty=False)
+    if workflow_status is not None:
+        out["workflowStatus"] = workflow_status
     return out
 
 

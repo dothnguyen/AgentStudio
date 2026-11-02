@@ -707,9 +707,9 @@ def backfill_workflow(tx, workspace: str) -> None:
 
 
 def set_workflow(tx, ticket: dict, to: str, actor: str, reason, config: dict, claimed: bool = False,
-                 outcome_values: tuple = None) -> None:
+                 outcome_values: tuple = None, column_override: str = None) -> None:
     try:
-        column = column_for(config, ticket["status"], to, claimed)
+        column = column_override or column_for(config, ticket["status"], to, claimed)
     except AsError as exc:
         if exc.code == BOARD_STATUS_UNKNOWN:
             exc.data["key"] = ticket["key"]
@@ -925,33 +925,51 @@ def ticket_workflow(tx, workspace: str, args: dict) -> dict:
 
 def ticket_move(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
+    backfill_workflow(tx, workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])
-    to = args["to"]
-    old = ticket.get("workflow_status") or ticket["status"]
-    if to not in config["byId"]:
-        raise AsError(BOARD_STATUS_UNKNOWN, f"Status {to!r} is not on this board.",
-                      data={"key": ticket["key"], "status": to, "statuses": config_status_ids(config)})
-    if to == old:
-        raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is already in status {to!r}.",
-                      data={"key": ticket["key"], "from": old, "to": to})
+    to, old = args["to"], ticket["status"]
+    if to not in KANBAN_COLUMNS:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Column {to!r} is not on this board.",
+                      data={"key": ticket["key"], "status": to, "statuses": list(KANBAN_COLUMNS)})
     if ticket["assignee"] is not None:
-        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; its status cannot change.",
-                      data={"key": ticket["key"], "assignee": ticket["assignee"]},
-                      remediation="wait for the current run to finish, or use ticket retry to release a stuck claim")
-    if old in config["terminal"] and not args.get("force"):
-        raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is in the terminal status "
-                                                 f"{ticket['status']!r}; moving it needs --force.",
+        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; it cannot move.",
+                      data={"key": ticket["key"], "assignee": ticket["assignee"]})
+    if old == to:
+        raise AsError(TICKET_TRANSITION_INVALID, "Ticket is already in that column.",
+                      data={"key": ticket["key"], "from": old, "to": to})
+    if old in ("done", "closed") and not args.get("force"):
+        raise AsError(TICKET_TRANSITION_INVALID, "Moving a finished ticket needs --force.",
                       data={"key": ticket["key"], "from": old, "to": to},
                       remediation="pass --force to move a finished ticket explicitly")
-    if old == BLOCKED_STATUS:  # an operator's move out of blocked also starts a fresh round budget
+    requested = args.get("workflowStatus")
+    target = None
+    if old in ("done", "closed") and to not in ("todo", "backlog"):
+        pass
+    elif to == "backlog":
+        target = config["initial"]
+    elif to == "todo":
+        target = requested if requested is not None else config["todoDefault"]
+        if target not in config["todoEntry"]:
+            target = None
+    elif to == "in-progress":
+        if requested in config["rulesByStatus"] and requested not in config["duringToRule"]:
+            target = requested
+    elif to == "done":
+        target = requested if requested is not None else config["doneStatuses"][0]
+        if target not in config["doneStatuses"]:
+            target = None
+    elif to == "closed":
+        target = config["closedStatus"]
+    if target is None:
+        raise AsError(TICKET_TRANSITION_INVALID, "Invalid column or workflow status transition.",
+                      data={"key": ticket["key"], "from": old, "to": to, "workflowStatus": requested})
+    if to == "backlog" or ticket["workflow_status"] == BLOCKED_STATUS:
         tx.conn.execute("UPDATE tickets SET return_status = NULL, blocked_reason = NULL, rounds_json = NULL "
                         "WHERE id = ?", (ticket["id"],))
-    column = column_for(config, ticket["status"], to, False) if ticket.get("workflow_status") is not None else to
-    tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ?, updated_at = ? WHERE id = ?",
-                    (column, to if ticket.get("workflow_status") is not None else None, utcnow(), ticket["id"]))
     _ticket_event(tx.conn, ticket["id"], "ticket.moved", "operator", old, to,
                   {"ticketId": ticket["id"], "key": ticket["key"], "from": old, "to": to,
-                   "reason": args.get("reason"), "force": bool(args.get("force")) and old in config["terminal"]})
+                   "reason": args.get("reason"), "force": bool(args.get("force"))})
+    set_workflow(tx, ticket, target, "operator", args.get("reason"), config, column_override=to)
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone()),
             "from": old}
