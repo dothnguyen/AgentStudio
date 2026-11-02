@@ -215,6 +215,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       management={props.management}
       ticketKey={ticketKey}
       onOpenBoard={() => navigate(BOARDS_DEFAULT_ROUTE)}
+      onOpenTicket={(key) => navigate(boardTicketRoute(key))}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />

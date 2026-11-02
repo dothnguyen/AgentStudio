@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardSettings, BoardTicketDetail, Result } from '../src/renderer/api';
 import { TicketScreen } from '../src/renderer/boards/TicketScreen';
@@ -40,6 +40,7 @@ function setupTicket(options: {
   settings?: BoardSettings;
   boardLabel?: string;
   onOpenBoard?: () => void;
+  onOpenTicket?: (key: string) => void;
 } = {}) {
   const key = options.key ?? 'T-114';
   const detail = options.detail ?? boardTicketDetailFixture(key);
@@ -57,6 +58,7 @@ function setupTicket(options: {
       ticketKey={key}
       boardLabel={options.boardLabel}
       onOpenBoard={options.onOpenBoard}
+      onOpenTicket={options.onOpenTicket}
     />,
   );
   return { view, fake, boardTicket, detail };
@@ -163,6 +165,135 @@ describe('TicketScreen description', () => {
     await settle();
 
     expect(view.getByText('This ticket has no body.')).toBeTruthy();
+  });
+});
+
+describe('TicketScreen timeline', () => {
+  const at = new Date(2026, 10, 1, 13, 57).toISOString();
+
+  function timelineDetail(): BoardTicketDetail {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.events = [
+      { id: 1, at, actor: 'operator', name: 'ticket.created', from: null, to: 'dev-ready', payload: { key: 'T-114' } },
+      { id: 2, at, actor: 'operator', name: 'ticket.moved', from: 'dev-ready', to: 'qa-ready', payload: {} },
+      { id: 3, at, actor: 'coordinator', name: 'ticket.some_new_event', from: null, to: null, payload: {} },
+    ];
+    detail.eventsTruncated = true;
+    return detail;
+  }
+
+  it('renders events oldest first with labels, details, times and the truncation notice', async () => {
+    const { view } = setupTicket({ detail: timelineDetail() });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Timeline' });
+    expect(card.textContent).toContain('What happened to this ticket, oldest first.');
+    expect(card.textContent).toContain('Showing the latest 3 events');
+    const rows = Array.from(card.querySelectorAll('.boards-event-row'));
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.querySelector('.boards-event-title')?.textContent)).toEqual([
+      'Created', 'Moved to qa-ready', 'ticket some new event',
+    ]);
+    expect(rows[1]!.querySelector('.boards-event-detail')?.textContent).toBe('Moved by operator');
+    expect(rows[0]!.querySelector('.boards-event-dot-grey')).toBeTruthy();
+    expect(rows[1]!.querySelector('.boards-event-dot-blue')).toBeTruthy();
+    expect(rows[0]!.querySelector('.boards-event-time')?.textContent).toBe('Sun 13:57');
+  });
+
+  it('does not show the truncation notice when every event is present', async () => {
+    const detail = timelineDetail();
+    detail.eventsTruncated = false;
+    const { view } = setupTicket({ detail });
+    await settle();
+    expect(view.queryByText(/Showing the latest/)).toBeNull();
+  });
+});
+
+describe('TicketScreen work card', () => {
+  it('shows the owner, round, branch and shortened run with the full id in title', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.activeRunId = '9a77ab12c3d1';
+    const { view } = setupTicket({ detail });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Work' });
+    expect(card.textContent).toContain('Who is on it now.');
+    expect(card.textContent).toContain('dev');
+    expect(card.textContent).toContain('2 of 6');
+    expect(card.textContent).toContain('ticket/t-114');
+    const run = card.querySelector('[title="9a77ab12c3d1"]');
+    expect(run?.textContent).toBe('9a77…c3d1');
+  });
+
+  it('explains that nobody is working on an idle ticket', async () => {
+    const detail = boardTicketDetailFixture('T-118');
+    detail.ticket.activity = { state: 'not started' };
+    detail.ticket.activeRunId = null;
+    detail.ticket.runId = null;
+    detail.ticket.branch = null;
+    detail.events = [];
+    const { view } = setupTicket({ detail });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Work' });
+    expect(card.textContent).toContain('Nobody is working on this ticket');
+    expect(card.textContent).toContain('No branch yet');
+    expect(card.textContent).toContain('—');
+  });
+});
+
+describe('TicketScreen dependencies card', () => {
+  it('links each waiting and blocking ticket with its status label', async () => {
+    const onOpenTicket = vi.fn();
+    const { view } = setupTicket({ onOpenTicket });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Dependencies' });
+    const waits = view.getByRole('heading', { name: 'Waits for' });
+    const blocks = view.getByRole('heading', { name: 'Blocks' });
+    expect(waits.compareDocumentPosition(blocks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.textContent).toContain('Dev ready');
+
+    fireEvent.click(within(card).getByRole('button', { name: /T-113/ }));
+    expect(onOpenTicket).toHaveBeenLastCalledWith('T-113');
+    fireEvent.click(within(card).getByRole('button', { name: /T-115/ }));
+    expect(onOpenTicket).toHaveBeenLastCalledWith('T-115');
+  });
+
+  it('shows None for both empty dependency lists', async () => {
+    const detail = boardTicketDetailFixture('T-138');
+    detail.links = { dependsOn: [], dependents: [] };
+    const { view } = setupTicket({ key: 'T-138', detail });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Dependencies' });
+    expect(within(card).getAllByText('None')).toHaveLength(2);
+    expect(within(card).queryByRole('button')).toBeNull();
+  });
+});
+
+describe('TicketScreen details and column order', () => {
+  it('shows the phase, priority and local created/updated times', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.createdAt = new Date(2026, 10, 1, 13, 57).toISOString();
+    detail.ticket.updatedAt = new Date(2026, 10, 1, 21, 12).toISOString();
+    const { view } = setupTicket({ detail });
+    await settle();
+
+    const card = view.getByRole('region', { name: 'Details' });
+    expect(card.textContent).toContain('Phase 05');
+    expect(card.textContent).toContain('20');
+    expect(card.textContent).toContain('Sun 13:57');
+    expect(card.textContent).toContain('Sun 21:12');
+  });
+
+  it('stacks Work, Dependencies and Details in that order on the right', async () => {
+    const { view } = setupTicket();
+    await settle();
+
+    const aside = view.getByRole('complementary', { name: 'Ticket details' });
+    const headings = Array.from(aside.querySelectorAll('h2')).map((heading) => heading.textContent);
+    expect(headings).toEqual(['Work', 'Dependencies', 'Details']);
   });
 });
 

@@ -15,8 +15,14 @@ import {
 } from './ticketCardModel';
 import {
   blockedReturnLabel,
+  blocksRows,
   ticketActivitySummary,
+  ticketDetails,
+  ticketEventRows,
   ticketStatusChip,
+  ticketWork,
+  waitsForRows,
+  type TicketDependencyRow,
 } from './ticketPageModel';
 
 export interface TicketScreenProps {
@@ -27,6 +33,8 @@ export interface TicketScreenProps {
   boardLabel?: string;
   /** Returns to the board; the breadcrumb and the not-found state both link back. */
   onOpenBoard?(): void;
+  /** Opens another ticket from the Dependencies card. */
+  onOpenTicket?(key: string): void;
 }
 
 export type TicketPageState = 'loading' | 'ready' | 'notfound' | 'error';
@@ -211,6 +219,148 @@ function DescriptionCard(props: { body: string | null }): JSX.Element {
   );
 }
 
+function TimelineCard(props: { detail: BoardTicketDetail }): JSX.Element {
+  const rows = ticketEventRows(props.detail.events);
+  return (
+    <SectionCard
+      title="Timeline"
+      subtitle="What happened to this ticket, oldest first."
+      className="boards-timeline-card"
+    >
+      {props.detail.eventsTruncated && (
+        <p className="boards-timeline-truncated" role="note">
+          Showing the latest {rows.length} events
+        </p>
+      )}
+      {rows.length === 0
+        ? <p className="boards-timeline-empty">No events yet.</p>
+        : (
+          <ol className="boards-timeline">
+            {rows.map((row) => (
+              <li key={row.id} className="boards-event-row">
+                <span className={`boards-event-dot boards-event-dot-${row.tone}`} aria-hidden="true" />
+                <span className="boards-event-main">
+                  <span className="boards-event-title">{row.title}</span>
+                  {row.detail !== null && <span className="boards-event-detail">{row.detail}</span>}
+                </span>
+                <time className="boards-event-time" dateTime={props.detail.events.find((event) => event.id === row.id)?.at}>
+                  {row.time}
+                </time>
+              </li>
+            ))}
+          </ol>
+        )}
+    </SectionCard>
+  );
+}
+
+function WorkCard(props: {
+  detail: BoardTicketDetail;
+  rules: readonly BoardRuleView[];
+}): JSX.Element {
+  const work = ticketWork(props.detail, props.rules);
+  const idle = work.owner === 'Nobody is working on this ticket';
+  return (
+    <SectionCard title="Work" subtitle="Who is on it now." className="boards-work-card">
+      <dl className="boards-work-grid">
+        <div>
+          <dt>Owner</dt>
+          <dd className={idle ? 'boards-work-idle' : undefined}>{work.owner}</dd>
+        </div>
+        <div>
+          <dt>Round</dt>
+          <dd>{work.round}</dd>
+        </div>
+        <div className="boards-work-wide">
+          <dt>Branch</dt>
+          <dd className="boards-work-mono">{work.branch}</dd>
+        </div>
+        <div className="boards-work-wide">
+          <dt>Run</dt>
+          <dd className="boards-work-mono" title={work.runId ?? undefined}>{work.run}</dd>
+        </div>
+      </dl>
+    </SectionCard>
+  );
+}
+
+function DependencyRow(props: {
+  row: TicketDependencyRow;
+  onOpenTicket?: (key: string) => void;
+}): JSX.Element {
+  return (
+    <li className="boards-dependency-row">
+      <span className={`boards-dependency-dot boards-event-dot-${props.row.statusTone === 'red' ? 'amber' : 'blue'}`} aria-hidden="true" />
+      <button
+        type="button"
+        className="boards-dep-link"
+        onClick={() => { props.onOpenTicket?.(props.row.key); }}
+      >
+        <span className="boards-dep-key">{props.row.key}</span>
+        {props.row.title !== null && props.row.title.trim() !== '' && (
+          <span className="boards-dep-title" title={props.row.title}>{props.row.title}</span>
+        )}
+      </button>
+      <span className="boards-dep-status">{props.row.statusLabel}</span>
+    </li>
+  );
+}
+
+function DependenciesCard(props: {
+  detail: BoardTicketDetail;
+  statuses: readonly BoardStatusInfo[];
+  onOpenTicket?: (key: string) => void;
+}): JSX.Element {
+  const waitsFor = waitsForRows(props.detail, props.statuses);
+  const blocks = blocksRows(props.detail, props.statuses);
+  return (
+    <SectionCard
+      title="Dependencies"
+      subtitle="A ticket is not claimed until everything it waits for is done."
+      className="boards-dependencies-card"
+    >
+      <div className="boards-dependency-group">
+        <h3 className="boards-dependency-heading">Waits for</h3>
+        {waitsFor.length === 0
+          ? <p className="boards-dependency-empty">None</p>
+          : (
+            <ul className="boards-dependency-list">
+              {waitsFor.map((row) => (
+                <DependencyRow key={row.key} row={row} onOpenTicket={props.onOpenTicket} />
+              ))}
+            </ul>
+          )}
+      </div>
+      <div className="boards-dependency-group">
+        <h3 className="boards-dependency-heading">Blocks</h3>
+        {blocks.length === 0
+          ? <p className="boards-dependency-empty">None</p>
+          : (
+            <ul className="boards-dependency-list">
+              {blocks.map((row) => (
+                <DependencyRow key={row.key} row={row} onOpenTicket={props.onOpenTicket} />
+              ))}
+            </ul>
+          )}
+      </div>
+    </SectionCard>
+  );
+}
+
+function DetailsCard(props: { detail: BoardTicketDetail }): JSX.Element {
+  const details = ticketDetails(props.detail);
+  return (
+    <SectionCard title="Details" className="boards-details-card">
+      <dl className="boards-details-grid">
+        <div><dt>Phase</dt><dd>{details.phase}</dd></div>
+        <div><dt>Priority</dt><dd>{details.priority}</dd></div>
+        <div><dt>Created</dt><dd>{details.created}</dd></div>
+        <div><dt>Updated</dt><dd>{details.updated}</dd></div>
+      </dl>
+    </SectionCard>
+  );
+}
+
 function LoadingState(): JSX.Element {
   return (
     <section className="boards-state-card" role="status" aria-live="polite">
@@ -285,8 +435,17 @@ export function TicketScreen(props: TicketScreenProps): JSX.Element {
       <div className="boards-ticket-layout">
         <div className="boards-ticket-main">
           <DescriptionCard body={ticket.detail.ticket.body} />
+          <TimelineCard detail={ticket.detail} />
         </div>
-        <aside className="boards-ticket-aside" aria-label="Ticket details" />
+        <aside className="boards-ticket-aside" aria-label="Ticket details">
+          <WorkCard detail={ticket.detail} rules={ticket.rules} />
+          <DependenciesCard
+            detail={ticket.detail}
+            statuses={ticket.statuses}
+            onOpenTicket={props.onOpenTicket}
+          />
+          <DetailsCard detail={ticket.detail} />
+        </aside>
       </div>
     </div>
   );
