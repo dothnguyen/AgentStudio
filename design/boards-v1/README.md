@@ -34,7 +34,7 @@ size and SHA-256 so `boardsCapture.test.tsx` fails when a capture is stale.
 
 ## Phase B
 
-There is no Phase B mockup. The capture harness records the implementation: `captures/backlog.png`, `captures/backlog-filtered.png`, `captures/backlog-collapsed.png`, and `captures/phases.png` (including blocked and empty phases).
+There is no Phase B mockup. The capture harness is configured to record the implementation as `captures/backlog.png`, `captures/backlog-filtered.png`, `captures/backlog-collapsed.png`, and `captures/phases.png` (including blocked and empty phases). These captures have not yet been generated.
 
 ## Intended differences from the design PNGs
 
