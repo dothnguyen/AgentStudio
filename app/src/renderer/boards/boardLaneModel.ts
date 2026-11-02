@@ -4,7 +4,7 @@ import type { BoardRuleView, BoardTicketSummary } from '../api';
 export const BOARD_CARD_LIMIT = 6;
 
 /** The reserved status for blocked tickets; they normally sit in their return status' column. */
-export const BLOCKED_STATUS = 'blocked';
+export const BLOCKED_STATUS: string = 'blocked';
 export const BLOCKED_COLUMN_LABEL = 'Blocked';
 
 export type BoardStatusTone = 'neutral' | 'blue' | 'amber' | 'red' | 'green';

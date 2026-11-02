@@ -22,7 +22,7 @@ const STATUSES: BoardSettings['statuses'] = STATUS_IDS.map((id) => ({
 
 function rule(status: string, role: string, index: number): BoardRuleView {
   return {
-    index, status, type: 'agent', role, workflow: 'board-develop', action: null,
+    index, status, type: 'agent', role, workflow: 'board-develop', during: null, action: null,
     onPass: 'done', onFail: 'dev-ready', onBlocked: null, workspace: 'worktree',
     syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
   };

@@ -79,11 +79,11 @@ describe('buildAttentionRows', () => {
   it('uses a blocked ticket on the board when the overview omits it, without duplicating the overview row', () => {
     const board = boardTicketSummary({
       key: 'T-200',
-      status: 'blocked',
+      status: 'in-progress', workflowStatus: 'blocked',
       blockedReason: 'QA stopped the run.',
       activity: { state: 'blocked', note: 'QA stopped the run.' },
     });
-    const duplicate = boardTicketSummary({ key: 'T-136', status: 'blocked' });
+    const duplicate = boardTicketSummary({ key: 'T-136', status: 'in-progress', workflowStatus: 'blocked' });
 
     const rows = buildAttentionRows(
       overview({ blocked: [blockedTicket()] }),

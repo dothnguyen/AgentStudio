@@ -38,6 +38,8 @@ export const MANAGEMENT_CHANNELS = {
   managementResetUsage: 'management:resetUsage',
   managementRetryRun: 'management:retryRun',
   managementCancelRun: 'management:cancelRun',
+  managementTicketMove: 'management:ticketMove',
+  managementTicketWorkflow: 'management:ticketWorkflow',
   managementRetryTicket: 'management:retryTicket',
   managementUnblockTicket: 'management:unblockTicket',
   managementApproveCommand: 'management:approveCommand',
@@ -75,7 +77,7 @@ const MAX_SKILL_ROLES = 100;
 type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
   | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull'
   | 'skillId' | 'skillText' | 'roleIds'
-  | 'ticketKey' | 'reason';
+  | 'ticketKey' | 'reason' | 'boardColumn' | 'workflowStatus';
 
 interface Field {
   kind: Kind;
@@ -96,6 +98,10 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
         : `${label}: ${field} must be a slug (lowercase letters, digits, '-'; at most 64 characters).`;
     case 'uuid':
       return typeof value === 'string' && UUID4.test(value) ? null : `${label}: ${field} must be a lowercase UUID v4.`;
+    case 'boardColumn':
+      return typeof value === 'string' && ['backlog', 'todo', 'in-progress', 'done', 'closed'].includes(value) ? null : `${label}: ${field} must be a board column.`;
+    case 'workflowStatus':
+      return typeof value === 'string' && value.length > 0 && value.length <= 64 && !LONE_SURROGATE.test(value) ? null : `${label}: ${field} must be a non-empty string of at most 64 characters.`;
     case 'ticketKey':
       return typeof value === 'string' && /^T-\d{3,}$/.test(value)
         ? null
@@ -465,6 +471,13 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   }, { mutating: true }),
   spec(C.managementCancelRun, 'cancelRun', 'workflow.cancel', {
     workflowRunId: { kind: 'uuid', required: true },
+  }, { mutating: true }),
+  spec(C.managementTicketMove, 'ticketMove', 'ticket.move', {
+    key: { kind: 'ticketKey', required: true }, to: { kind: 'boardColumn', required: true },
+    workflowStatus: { kind: 'workflowStatus' }, reason: { kind: 'reason' }, force: { kind: 'bool' },
+  }, { mutating: true }),
+  spec(C.managementTicketWorkflow, 'ticketWorkflow', 'ticket.workflow', {
+    key: { kind: 'ticketKey', required: true }, to: { kind: 'workflowStatus', required: true }, reason: { kind: 'reason' },
   }, { mutating: true }),
   spec(C.managementRetryTicket, 'retryTicket', 'ticket.retry', {
     key: { kind: 'ticketKey', required: true },

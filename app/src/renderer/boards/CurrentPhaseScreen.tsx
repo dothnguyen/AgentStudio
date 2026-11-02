@@ -72,7 +72,7 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
 }
 
 function emptyTicketList(workspaceId: string): BoardTicketList {
-  return { workspace: workspaceId, statuses: [], status: null, phase: null, tickets: [] };
+  return { workspace: workspaceId, statuses: [], status: null, workflowStatus: null, phase: null, tickets: [] };
 }
 
 /** Loads the phases, the current phase's tickets and the board rules, then refreshes in place. */

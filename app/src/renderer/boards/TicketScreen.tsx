@@ -199,7 +199,7 @@ function TicketHeader(props: {
         </div>
         <h1>{ticket.title}</h1>
       </div>
-      {ticket.status === 'blocked' && <BlockedBanner detail={props.detail} statuses={props.statuses} />}
+      {ticket.workflowStatus === 'blocked' && <BlockedBanner detail={props.detail} statuses={props.statuses} />}
     </header>
   );
 }

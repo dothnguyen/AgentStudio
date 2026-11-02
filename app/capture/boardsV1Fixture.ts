@@ -53,7 +53,7 @@ const READ_ONLY = {
 
 function rule(status: string, role: string, index: number, overrides: Partial<BoardRuleView> = {}): BoardRuleView {
   return {
-    index, status, type: 'agent', role, workflow: 'board-develop', action: null,
+    index, status, type: 'agent', role, workflow: 'board-develop', during: null, action: null,
     onPass: 'done', onFail: 'dev-ready', onBlocked: null, workspace: 'worktree',
     syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
     ...overrides,
@@ -82,6 +82,7 @@ export function boardsV1Settings(): BoardSettings {
     workspace: BOARDS_V1_WORKSPACE.path,
     board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: {} },
     statuses,
+    workflowStatuses: statuses, todoEntry: [], todoDefault: null,
     rules,
     actionRules: rules.filter((entry) => entry.type === 'action').map((entry) => ({
       status: entry.status, action: entry.action!, onPass: entry.onPass, onFail: entry.onFail, onPassCreatedTickets: null,
@@ -112,6 +113,7 @@ function summary(
     phase: BOARDS_V1_PHASE.slug,
     phaseName: BOARDS_V1_PHASE.name,
     status,
+    workflowStatus: status,
     priority: 100,
     assignee: null,
     leaseUntil: null,
@@ -131,7 +133,7 @@ function summary(
     dependsOn: [],
     openDependsOn: [],
     ...overrides,
-  };
+  } as BoardTicketSummary;
 }
 
 function working(agent: string, role: string, workflow: string, run: string, round?: { status: string; value: number }) {
@@ -209,6 +211,7 @@ export function boardsV1TicketList(): BoardTicketList {
     workspace: BOARDS_V1_WORKSPACE.path,
     statuses: STATUS_IDS,
     status: null,
+    workflowStatus: null,
     phase: BOARDS_V1_PHASE.slug,
     tickets: BOARDS_V1_TICKETS.map((ticket) => ({ ...ticket, dependsOn: [...ticket.dependsOn], openDependsOn: [...ticket.openDependsOn] })),
   };
@@ -347,7 +350,7 @@ export function createBoardsV1Apis(includeEmptyPhase = false): { dashboard: Retu
     'addMember', 'updateMember', 'removeMember', 'updateBoardSettings', 'createRole', 'updateRole',
     'updateRoleInstructions', 'deleteRole', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
     'runBoard', 'switchMemberAgent', 'resumeMemberAgent', 'stopBoard', 'resetUsage', 'retryRun', 'cancelRun',
-    'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'startTeam', 'stopTeam',
+    'ticketMove', 'ticketWorkflow', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'startTeam', 'stopTeam',
   ];
   const writes = Object.fromEntries(writeNames.map((name) => [name, async () => READ_ONLY]));
   const management = {

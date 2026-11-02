@@ -22,7 +22,7 @@ export const TICKET_CHIP_TONE_CLASS: Record<TicketActivityTone, string> = {
 const FINISHED_STATUSES: readonly string[] = ['done', 'close'];
 
 function isBlocked(ticket: BoardTicketSummary): boolean {
-  return ticket.activity.state === 'blocked' || ticket.status === 'blocked';
+  return ticket.activity.state === 'blocked' || ticket.workflowStatus === 'blocked';
 }
 
 function isFinished(ticket: BoardTicketSummary): boolean {
@@ -67,7 +67,7 @@ export function ticketActivityChip(
   }
   if (isBlocked(ticket)) return { tone: 'blocked', label: 'Blocked' };
   if (isFinished(ticket)) {
-    return { tone: 'done', label: ticket.status === 'close' ? 'Closed' : 'Merged' };
+    return { tone: 'done', label: (ticket.status as string) === 'close' ? 'Closed' : 'Merged' };
   }
 
   const waitingKey = firstWaitingKey(ticket);

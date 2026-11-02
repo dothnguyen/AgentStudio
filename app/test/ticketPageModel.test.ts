@@ -17,14 +17,14 @@ import {
 
 describe('ticket page status chip', () => {
   it('uses the return status for a blocked ticket', () => {
-    const ticket = { status: 'blocked', returnStatus: 'qa-ready' };
+    const ticket = { workflowStatus: 'blocked', returnStatus: 'qa-ready' };
     expect(ticketStatusId(ticket)).toBe('qa-ready');
     expect(ticketStatusChip(ticket)).toEqual({ id: 'qa-ready', label: 'QA ready', tone: 'blue' });
   });
 
   it('falls back to the blocked status when no return status is known', () => {
-    expect(ticketStatusId({ status: 'blocked', returnStatus: null })).toBe('blocked');
-    expect(ticketStatusChip({ status: 'blocked', returnStatus: '  ' })).toEqual({
+    expect(ticketStatusId({ workflowStatus: 'blocked', returnStatus: null })).toBe('blocked');
+    expect(ticketStatusChip({ workflowStatus: 'blocked', returnStatus: '  ' })).toEqual({
       id: 'blocked', label: 'Blocked', tone: 'red',
     });
   });
@@ -34,18 +34,18 @@ describe('ticket page status chip', () => {
       { id: 'dev-ready', name: 'Ready for dev', kind: null },
       { id: 'done', name: null, kind: 'done' },
     ];
-    expect(ticketStatusChip({ status: 'dev-ready', returnStatus: null }, statuses)).toEqual({
+    expect(ticketStatusChip({ workflowStatus: 'dev-ready', returnStatus: null }, statuses)).toEqual({
       id: 'dev-ready', label: 'Ready for dev', tone: 'blue',
     });
-    expect(ticketStatusChip({ status: 'done', returnStatus: null }, statuses)).toEqual({
+    expect(ticketStatusChip({ workflowStatus: 'done', returnStatus: null }, statuses)).toEqual({
       id: 'done', label: 'Done', tone: 'green',
     });
   });
 
   it('names the status a blocked ticket returns to', () => {
-    expect(blockedReturnLabel({ status: 'blocked', returnStatus: 'qa-ready' })).toBe('QA ready');
-    expect(blockedReturnLabel({ status: 'blocked', returnStatus: null })).toBeNull();
-    expect(blockedReturnLabel({ status: 'dev-ready', returnStatus: 'qa-ready' })).toBeNull();
+    expect(blockedReturnLabel({ workflowStatus: 'blocked', returnStatus: 'qa-ready' })).toBe('QA ready');
+    expect(blockedReturnLabel({ workflowStatus: 'blocked', returnStatus: null })).toBeNull();
+    expect(blockedReturnLabel({ workflowStatus: 'dev-ready', returnStatus: 'qa-ready' })).toBeNull();
   });
 });
 

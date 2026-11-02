@@ -302,6 +302,7 @@ export interface BoardRuleView {
   type: 'action' | 'agent';
   role: string | null;
   workflow: string | null;
+  during: string | null;
   action: string | null;
   onPass: string;
   onFail: string;
@@ -323,6 +324,9 @@ export interface BoardSettings {
     config: Record<string, unknown> | null;
   };
   statuses: Array<{ id: string; name: string | null; kind: string | null }>;
+  workflowStatuses: Array<{ id: string; name: string | null; kind: string | null }>;
+  todoEntry: string[];
+  todoDefault: string | null;
   rules: BoardRuleView[];
   actionRules: Array<{ status: string; action: string; onPass: string; onFail: string; onPassCreatedTickets: string | null }>;
   worktree: { baseBranch: string | null; worktreeStatuses: string[] };
@@ -344,7 +348,21 @@ export type BoardSettingsKey =
   | 'baseBranch'
   | 'agentTicketStatus';
 
-// board reads (phase.list, ticket.list summary mode, ticket.show)
+// board reads (phase.list, board.show, ticket.list summary mode, ticket.show)
+export type BoardColumn = 'backlog' | 'todo' | 'in-progress' | 'done' | 'closed';
+export type BoardColumnCounts = Record<BoardColumn, number>;
+export interface BoardShowPhase extends BoardPhaseRef {
+  current: boolean;
+  ticketCount: number;
+  columns: BoardColumnCounts;
+  workflow: Record<string, number>;
+  columnWorkflow: Record<BoardColumn, Record<string, number>>;
+}
+export interface BoardShow {
+  workspace: string;
+  currentPhase: BoardPhaseRef;
+  phases: BoardShowPhase[];
+}
 export interface BoardPhaseRef {
   id: string | null;
   slug: string;
@@ -382,7 +400,8 @@ export interface BoardTicket {
   body: string | null;
   phase: string | null;
   phaseName: string | null;
-  status: string;
+  status: BoardColumn;
+  workflowStatus: string;
   priority: number;
   assignee: string | null;
   leaseUntil: string | null;
@@ -407,7 +426,8 @@ export interface BoardTicketSummary extends Omit<BoardTicket, 'body'> {
 export interface BoardTicketList {
   workspace: string;
   statuses: string[];
-  status: string | null;
+  status: BoardColumn | null;
+  workflowStatus: string | null;
   phase: string | null;
   tickets: BoardTicketSummary[];
 }
@@ -679,6 +699,8 @@ export interface ManagementApi {
   resetUsage(workspaceId: string, teamDefId: string, provider: string): R<UsageResetResult>;
   retryRun(workspaceId: string, workflowRunId: string): R<RunRetryResult>;
   cancelRun(workspaceId: string, workflowRunId: string): R<RunCancelResult>;
+  ticketMove(workspaceId: string, input: { key: string; to: BoardColumn; workflowStatus?: string; reason?: string; force?: boolean }): R<TicketActionResult>;
+  ticketWorkflow(workspaceId: string, input: { key: string; to: string; reason?: string }): R<TicketActionResult>;
   retryTicket(workspaceId: string, key: string): R<TicketActionResult>;
   unblockTicket(workspaceId: string, key: string, to?: string): R<TicketActionResult>;
   approveCommand(workspaceId: string, requestId: string): R<CommandActionResult>;

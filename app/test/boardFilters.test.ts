@@ -8,7 +8,7 @@ import {
 } from '../src/renderer/boards/boardFilters';
 import { boardTicketSummary } from './boardFixtures';
 
-function ticket(key: string, title: string, overrides: Partial<BoardTicketSummary> = {}): BoardTicketSummary {
+function ticket(key: string, title: string, overrides: NonNullable<Parameters<typeof boardTicketSummary>[0]> = {}): BoardTicketSummary {
   return boardTicketSummary({ key, title, ...overrides });
 }
 

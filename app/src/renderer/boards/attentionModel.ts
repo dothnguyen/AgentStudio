@@ -74,7 +74,7 @@ function blockedRows(
   // The overview is the primary source, but a blocked ticket on the board is still attention
   // even when the overview read is partial or truncated.
   for (const ticket of boardTickets) {
-    if (ticket.status !== 'blocked') continue;
+    if (ticket.workflowStatus !== 'blocked') continue;
     const key = ticket.key.trim();
     if (key === '' || seen.has(key)) continue;
     seen.add(key);

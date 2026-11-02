@@ -6,14 +6,23 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(44);
+    expect(MANAGEMENT_SPECS).toHaveLength(46);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
       'management.resetUsage', 'management.resumeMemberAgent', 'management.retryRun', 'management.retryTicket',
       'management.runBoard', 'management.startTeam', 'management.stopBoard', 'management.stopTeam',
-      'management.switchMemberAgent', 'management.unblockTicket',
+      'management.switchMemberAgent', 'management.ticketMove', 'management.ticketWorkflow', 'management.unblockTicket',
     ]);
+  });
+
+
+  it('validates workflow and column moves against the dispatch request shapes', () => {
+    expect(parse('ticketMove', { key: 'T-100', to: 'todo' })).toEqual({ key: 'T-100', to: 'todo' });
+    expect(parse('ticketMove', { key: 'T-100', to: 'in-progress', workflowStatus: 'dev-ready', reason: '', force: false })).toEqual({ key: 'T-100', to: 'in-progress', workflowStatus: 'dev-ready', reason: '', force: false });
+    expect(parse('ticketWorkflow', { key: 'T-100', to: 'qa-ready', reason: 'next' })).toEqual({ key: 'T-100', to: 'qa-ready', reason: 'next' });
+    for (const request of [{ key: 'T-100', to: 'wrong' }, { key: 'T-100', to: 'todo', force: 'yes' }, { key: 'T-100', to: 'todo', workflowStatus: '' }, { key: 'T-100', to: 'todo', reason: 'x'.repeat(501) }, { key: 'T-100', to: 'todo', extra: true }]) expect(typeof parse('ticketMove', request)).toBe('string');
+    for (const request of [{ key: 'T-100', to: '' }, { key: 'T-100', to: 'x'.repeat(65) }, { key: 'T-100', to: 'qa', force: true }, { key: 'bad', to: 'qa' }]) expect(typeof parse('ticketWorkflow', request)).toBe('string');
   });
 
   it('isPlainObject accepts plain and null-prototype objects only', () => {

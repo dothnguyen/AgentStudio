@@ -19,7 +19,7 @@ export const BOARD_STATUSES = [
 const PHASE_05 = { id: 'phase-05-id', slug: 'phase-05', name: 'Phase 05', description: 'Helm and app work.', position: 0, status: 'open' as const };
 const PHASE_06 = { id: 'phase-06-id', slug: 'phase-06', name: 'Phase 06', description: 'Boards and ticket pages.', position: 1, status: 'open' as const };
 
-export function boardTicketSummary(overrides: Partial<BoardTicketSummary> = {}): BoardTicketSummary {
+export function boardTicketSummary(overrides: Omit<Partial<BoardTicketSummary>, 'status'> & { status?: string } = {}): BoardTicketSummary {
   const key = overrides.key ?? 'T-114';
   const phase = overrides.phase !== undefined ? overrides.phase : PHASE_05.slug;
   const phaseRef = phase === PHASE_06.slug ? PHASE_06 : PHASE_05;
@@ -50,7 +50,8 @@ export function boardTicketSummary(overrides: Partial<BoardTicketSummary> = {}):
     dependsOn: [],
     openDependsOn: [],
     ...overrides,
-  };
+    workflowStatus: overrides.workflowStatus ?? overrides.status ?? 'dev-ready',
+  } as BoardTicketSummary;
 }
 
 function working(agent: string, role: string, workflow: string, run: string) {
@@ -133,6 +134,7 @@ export function boardTicketListFixture(overrides: Partial<BoardTicketList> = {})
     workspace: BOARD_WORKSPACE,
     statuses: BOARD_STATUSES,
     status: null,
+    workflowStatus: null,
     phase: null,
     tickets: BOARD_TICKETS,
     ...overrides,

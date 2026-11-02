@@ -9,7 +9,9 @@ import {
   type CreateArgs,
   type DashboardActivity,
 } from '../src/renderer/api';
-import { boardPhasesFixture, boardTicketDetailFixture, fakeBoardManagement } from './boardFixtures';
+import { boardPhasesFixture, boardTicketDetailFixture, boardTicketSummary, fakeBoardManagement } from './boardFixtures';
+import type { BoardShow, BoardSettings } from '../src/renderer/api';
+import { boardSettingsFixture } from './teamsFixtures';
 
 describe('getConnectionApi', () => {
   it('getConnectionApi throws when the preload API is missing', () => {
@@ -138,7 +140,7 @@ describe('getManagementApi', () => {
     'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
     'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
     'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
-    'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
+    'resetUsage', 'retryRun', 'cancelRun', 'ticketMove', 'ticketWorkflow', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
     'startTeam', 'stopTeam',
   ];
   const fakes = () => {
@@ -183,6 +185,42 @@ describe('getManagementApi', () => {
     expect(board.phases).toHaveBeenCalledWith('ws');
     expect(board.tickets).toHaveBeenCalledWith('ws', { phase: 'phase-06' });
     expect(board.ticket).toHaveBeenCalledWith('ws', { key: 'T-114' });
+  });
+
+  it('models Kanban columns separately from workflow statuses and exposes workflow board settings', () => {
+    const ticket = boardTicketSummary({ status: 'todo', workflowStatus: 'dev-ready' });
+    expect(ticket.status).toBe('todo');
+    expect(ticket.workflowStatus).toBe('dev-ready');
+
+    const settings: BoardSettings = {
+      ...boardSettingsFixture(),
+      workflowStatuses: [{ id: 'dev-ready', name: 'Development ready', kind: null }],
+      todoEntry: ['dev-ready'],
+      todoDefault: 'dev-ready',
+      rules: [{
+        index: 0, status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', during: 'developing',
+        action: null, onPass: 'qa-ready', onFail: 'dev-ready', onBlocked: null, workspace: 'worktree', syncBase: false,
+        maxRounds: null, priority: null, onFailureLimit: null, protected: false,
+      }],
+    };
+    expect(settings.workflowStatuses[0]?.id).toBe('dev-ready');
+    expect(settings.todoEntry).toEqual(['dev-ready']);
+    expect(settings.todoDefault).toBe('dev-ready');
+    expect(settings.rules[0]?.during).toBe('developing');
+
+    const board: BoardShow = {
+      workspace: '/work/alpha',
+      currentPhase: { id: 'phase-06-id', slug: 'phase-06', name: 'Phase 06', description: null, position: 1, status: 'open' },
+      phases: [{
+        id: 'phase-06-id', slug: 'phase-06', name: 'Phase 06', description: null, position: 1, status: 'open', current: true,
+        ticketCount: 1,
+        columns: { backlog: 0, todo: 1, 'in-progress': 0, done: 0, closed: 0 },
+        workflow: { 'dev-ready': 1 },
+        columnWorkflow: { backlog: {}, todo: { 'dev-ready': 1 }, 'in-progress': {}, done: {}, closed: {} },
+      }],
+    };
+    expect(board.phases[0]?.columns.todo).toBe(1);
+    expect(board.phases[0]?.columnWorkflow.todo['dev-ready']).toBe(1);
   });
 
   it('forwards role methods with their arguments and returns success and error results unchanged', async () => {

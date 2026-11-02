@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 function rule(status: string, overrides: Partial<BoardRuleView> = {}): BoardRuleView {
   return {
-    index: 0, status, type: 'agent', role: 'Developer', workflow: 'board-develop', action: null,
+    index: 0, status, type: 'agent', role: 'Developer', workflow: 'board-develop', during: null, action: null,
     onPass: 'done', onFail: 'dev-ready', onBlocked: null, workspace: 'worktree',
     syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
     ...overrides,
@@ -84,7 +84,7 @@ describe('TicketCard activity chip', () => {
 
   it('shows grey Not started when no worker rule owns the status', () => {
     const withAction = cardChip({ status: 'plan-merge-ready', activity: { state: 'not started' } }, [
-      rule('plan-merge-ready', { type: 'action', role: null, workflow: null, action: 'merge' }),
+      rule('plan-merge-ready', { type: 'action', role: null, workflow: null, during: null, action: 'merge' }),
     ]);
     expect(withAction?.textContent).toBe('Not started');
     expect(withAction?.getAttribute('data-chip')).toBe('idle');

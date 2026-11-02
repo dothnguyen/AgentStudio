@@ -25,15 +25,15 @@ function statusInfo(id: string, statuses: readonly BoardStatusInfo[]): BoardStat
 }
 
 /** The visible status of a ticket: blocked tickets show the column they return to. */
-export function ticketStatusId(ticket: Pick<BoardTicket, 'status' | 'returnStatus'>): string {
-  if (ticket.status !== 'blocked') return ticket.status;
+export function ticketStatusId(ticket: Pick<BoardTicket, 'workflowStatus' | 'returnStatus'>): string {
+  if (ticket.workflowStatus !== 'blocked') return ticket.workflowStatus;
   const returnStatus = ticket.returnStatus?.trim() ?? '';
-  return returnStatus === '' ? ticket.status : returnStatus;
+  return returnStatus === '' ? ticket.workflowStatus : returnStatus;
 }
 
 /** The page's status chip. Board display names are honoured when the settings read succeeded. */
 export function ticketStatusChip(
-  ticket: Pick<BoardTicket, 'status' | 'returnStatus'>,
+  ticket: Pick<BoardTicket, 'workflowStatus' | 'returnStatus'>,
   statuses: readonly BoardStatusInfo[] = [],
 ): TicketStatusChip {
   const id = ticketStatusId(ticket);
@@ -65,11 +65,11 @@ export function ticketActivitySummary(detail: BoardTicketDetail): BoardTicketSum
 
 /** The human name of the status a blocked ticket returns to, or null when it is unknown. */
 export function blockedReturnLabel(
-  ticket: Pick<BoardTicket, 'status' | 'returnStatus'>,
+  ticket: Pick<BoardTicket, 'workflowStatus' | 'returnStatus'>,
   statuses: readonly BoardStatusInfo[] = [],
 ): string | null {
   const returnStatus = ticket.returnStatus?.trim() ?? '';
-  if (ticket.status !== 'blocked' || returnStatus === '') return null;
+  if (ticket.workflowStatus !== 'blocked' || returnStatus === '') return null;
   return statusLabel(statusInfo(returnStatus, statuses));
 }
 

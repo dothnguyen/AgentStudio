@@ -55,7 +55,7 @@ export function buildBacklogGroups(phases: BoardPhases, tickets: BoardTicketList
     });
     group.tickets.push(ticket);
     group.counts.total++;
-    if (ticket.status === 'done' || ticket.status === 'close') group.counts.done++;
+    if (ticket.status === 'done' || (ticket.status as string) === 'close') group.counts.done++;
     else if (ticket.activity?.state === 'working') group.counts.working++;
     else if (ticket.activity?.state === 'blocked') group.counts.blocked++;
     else if (ticket.activity?.state === 'not started' && ticket.activity.waitingFor) group.counts.waiting++;

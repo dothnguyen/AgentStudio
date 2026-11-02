@@ -25,7 +25,7 @@ const METHODS = [
   'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
   'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
   'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
-  'resetUsage', 'retryRun', 'cancelRun', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
+  'resetUsage', 'retryRun', 'cancelRun', 'ticketMove', 'ticketWorkflow', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
   'startTeam', 'stopTeam',
 ];
 
@@ -104,6 +104,8 @@ describe('preload', () => {
     m.resetUsage('ws', 'core', 'claude', x);
     m.retryRun('ws', uuid, x);
     m.cancelRun('ws', uuid, x);
+    m.ticketMove('ws', { key: 'T-100', to: 'todo', workflowStatus: 'dev-ready', reason: 'ready', force: true }, x);
+    m.ticketWorkflow('ws', { key: 'T-100', to: 'qa-ready', reason: 'next' }, x);
     m.retryTicket('ws', 'T-100', x);
     m.unblockTicket('ws', 'T-100', undefined, x);
     m.unblockTicket('ws', 'T-100', 'dev-ready', x);
@@ -159,6 +161,8 @@ describe('preload', () => {
       [P.managementResetUsage, 'ws', { teamDefId: 'core', provider: 'claude' }],
       [P.managementRetryRun, 'ws', { workflowRunId: uuid }],
       [P.managementCancelRun, 'ws', { workflowRunId: uuid }],
+      [P.managementTicketMove, 'ws', { key: 'T-100', to: 'todo', workflowStatus: 'dev-ready', reason: 'ready', force: true }],
+      [P.managementTicketWorkflow, 'ws', { key: 'T-100', to: 'qa-ready', reason: 'next' }],
       [P.managementRetryTicket, 'ws', { key: 'T-100' }],
       [P.managementUnblockTicket, 'ws', { key: 'T-100' }],
       [P.managementUnblockTicket, 'ws', { key: 'T-100', to: 'dev-ready' }],

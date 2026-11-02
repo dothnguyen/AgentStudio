@@ -61,7 +61,7 @@ it('adds an agent rule with sync base on by default and can turn it off', async 
   const update = vi.fn(async () => ({ ok: true as const, data: {} }));
   const addedRule = { when: { status: 'dev-ready' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', onPass: 'done', onFail: 'backlog' };
   const refreshed = withAddedRule(base, addedRule, {
-    index: 5, status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
+    index: 5, status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', during: null, action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
   });
   const { panel } = await setup({ updateBoardSettings: update }, [base, refreshed]);
   const view = await openAdd(panel);
@@ -83,7 +83,7 @@ it('adds a rule for a free protected status without locking it as a protected ro
   const refreshed = structuredClone(base);
   (refreshed.board.config!.rules as Array<Record<string, unknown>>).push(addedRule);
   refreshed.rules = [...refreshed.rules, {
-    index: refreshed.rules.length, status: 'merge-conflict', type: 'agent', role: 'TeamLead', workflow: 'board-resolve-merge', action: null,
+    index: refreshed.rules.length, status: 'merge-conflict', type: 'agent', role: 'TeamLead', workflow: 'board-resolve-merge', during: null, action: null,
     onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: true, maxRounds: null, priority: null, onFailureLimit: null, protected: true,
   }];
   const update = vi.fn(async () => ({ ok: true as const, data: {} }));
@@ -107,7 +107,7 @@ it('returns to the agent defaults when switching back from the merge action', as
   const update = vi.fn(async () => ({ ok: true as const, data: {} }));
   const addedRule = { when: { status: 'dev-ready' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', syncBase: true, onPass: 'done', onFail: 'backlog' };
   const refreshed = withAddedRule(base, addedRule, {
-    index: 5, status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: true, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
+    index: 5, status: 'dev-ready', type: 'agent', role: 'Developer', workflow: 'board-develop', during: null, action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: true, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
   });
   const { panel } = await setup({ updateBoardSettings: update }, [base, refreshed]);
   const view = await openAdd(panel);
@@ -139,7 +139,7 @@ it('switches to the built-in merge action and adds it without a role or workflow
   const update = vi.fn(async () => ({ ok: true as const, data: {} }));
   const addedRule = { when: { status: 'dev-ready' }, action: 'merge', onPass: 'done', onFail: 'backlog' };
   const refreshed = withAddedRule(base, addedRule, {
-    index: 5, status: 'dev-ready', type: 'action', role: null, workflow: null, action: 'merge', onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: null, syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
+    index: 5, status: 'dev-ready', type: 'action', role: null, workflow: null, during: null, action: 'merge', onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: null, syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
   });
   const { panel } = await setup({ updateBoardSettings: update }, [base, refreshed]);
   const view = await openAdd(panel);
@@ -163,7 +163,7 @@ it('changes the status to another free status', async () => {
   const update = vi.fn(async () => ({ ok: true as const, data: {} }));
   const addedRule = { when: { status: 'done' }, role: 'Developer', workflow: 'board-develop', workspace: 'worktree', syncBase: true, onPass: 'done', onFail: 'backlog' };
   const refreshed = withAddedRule(base, addedRule, {
-    index: 5, status: 'done', type: 'agent', role: 'Developer', workflow: 'board-develop', action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: true, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
+    index: 5, status: 'done', type: 'agent', role: 'Developer', workflow: 'board-develop', during: null, action: null, onPass: 'done', onFail: 'backlog', onBlocked: null, workspace: 'worktree', syncBase: true, maxRounds: null, priority: null, onFailureLimit: null, protected: false,
   });
   const { panel } = await setup({ updateBoardSettings: update }, [base, refreshed]);
   const view = await openAdd(panel);

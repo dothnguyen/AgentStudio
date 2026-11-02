@@ -35,6 +35,7 @@ export function boardSettingsFixture(r: BoardRunner = runner()): BoardSettings {
     workspace: '/work/alpha',
     board: { state: 'ok', sha256: 'a'.repeat(64), message: null, problems: [], config: {} },
     statuses: [],
+    workflowStatuses: [], todoEntry: [], todoDefault: null,
     rules: [],
     actionRules: [],
     worktree: { baseBranch: 'main', worktreeStatuses: [] },
@@ -238,7 +239,7 @@ export function routingSettingsFixture(overrides: Partial<BoardSettings> = {}): 
     statuses: ['backlog', 'dev-ready', 'merge-ready', 'merge-conflict', 'plan-merge-ready', 'plan-merge-conflict', 'done'].map(id => ({ id, name: id, kind: id === 'backlog' ? 'initial' : id === 'done' ? 'done' : null })),
     rules: raw.map((r, index) => {
       const status = (r.when as { status: string }).status;
-      return { index, status, type: 'action' in r ? 'action' as const : 'agent' as const, role: typeof r.role === 'string' ? r.role : null, workflow: typeof r.workflow === 'string' ? r.workflow : null, action: typeof r.action === 'string' ? r.action : null, onPass: r.onPass as string, onFail: r.onFail as string, onBlocked: null, workspace: typeof r.workspace === 'string' ? r.workspace : null, syncBase: !!r.syncBase, maxRounds: typeof r.maxRounds === 'number' ? r.maxRounds : null, priority: null, onFailureLimit: null, protected: status.includes('conflict') };
+      return { index, status, type: 'action' in r ? 'action' as const : 'agent' as const, role: typeof r.role === 'string' ? r.role : null, workflow: typeof r.workflow === 'string' ? r.workflow : null, during: null, action: typeof r.action === 'string' ? r.action : null, onPass: r.onPass as string, onFail: r.onFail as string, onBlocked: null, workspace: typeof r.workspace === 'string' ? r.workspace : null, syncBase: !!r.syncBase, maxRounds: typeof r.maxRounds === 'number' ? r.maxRounds : null, priority: null, onFailureLimit: null, protected: status.includes('conflict') };
     }),
     roles: { state: 'ok', sha256: 'b'.repeat(64), message: null, items: [{ id: 'Developer', description: 'Develops' }, { id: 'TeamLead', description: 'Leads' }] },
     workflows: [{ name: 'board-develop', builtin: true, roles: ['Developer'], errors: [] }, { name: 'board-resolve-merge', builtin: true, roles: ['TeamLead'], errors: [] }],
@@ -255,7 +256,7 @@ export function escalationSettingsFixture(): BoardSettings {
     { when: { status: 'need-escalate' }, role: 'SeniorDeveloper', workflow: 'board-senior-develop', workspace: 'worktree', syncBase: true, onPass: 'qa-ready', onFail: 'need-escalate', maxRounds: 3, priority: 0 },
   ];
   const view = (index: number, status: string, role: string, workflow: string, onPass: string, onFail: string, extra: Partial<BoardSettings['rules'][number]>): BoardSettings['rules'][number] => ({
-    index, status, type: 'agent', role, workflow, action: null, onPass, onFail, onBlocked: null, workspace: 'worktree',
+    index, status, type: 'agent', role, workflow, during: null, action: null, onPass, onFail, onBlocked: null, workspace: 'worktree',
     syncBase: false, maxRounds: null, priority: null, onFailureLimit: null, protected: false, ...extra,
   });
   return {
