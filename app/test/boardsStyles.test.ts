@@ -24,6 +24,17 @@ describe('Current Phase header styles', () => {
   });
 });
 
+describe('Phase milestone card styles', () => {
+  it('limits descriptions to two muted lines and uses an 8px full-width progress track', () => {
+    expect(flat).toContain('.boards-milestone-description { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;');
+    expect(flat).toContain('.boards-milestone-track { display: flex; width: 100%; height: 8px; border-radius: var(--radius-pill); background: var(--chip-bg); overflow: hidden; }');
+  });
+
+  it('styles card actions as secondary buttons', () => {
+    expect(flat).toContain('.boards-milestone-actions button { min-height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: 7px; background: #1b1f24; color: #e7e9ec;');
+  });
+});
+
 describe('Current Phase lane styles', () => {
   it('lets the board scroll horizontally while the page itself does not', () => {
     expect(flat).toContain('.boards-current-screen { display: flex; flex-direction: column; gap: 20px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-x: clip;');

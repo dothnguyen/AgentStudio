@@ -258,4 +258,4 @@ The backlog grouping model retains empty phases and orders the current phase fir
 
 The backlog toolbar filters by search, status, phase, activity, owner, priority and open dependencies, and sorts within each phase. Search is debounced by 150 ms; active filters can be removed individually or cleared together. Filtered groups show matching and total counts, and empty groups are hidden while filtering.
 
-The Phases screen loads phase names and board settings, and displays loading, retryable error, and empty states. It refreshes every five seconds and on `board-changed`.
+The Phases screen loads phase counts and board settings, and displays loading, retryable error, and empty states. Phase cards appear current first, then open and closed phases by position. Each card shows its description, completion, status segments and counts; empty phases show an empty track. View tickets and Open board actions are present, with navigation to be wired in a subsequent change. It refreshes every five seconds and on `board-changed`.
