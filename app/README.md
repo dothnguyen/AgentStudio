@@ -252,6 +252,6 @@ The Teams Members tab presents a compact roster of returned member identity, rol
 
 The selected team’s Overview shows its definition, runtime, returned-member availability, coordinator and live-state status, and board runner relationship. Member counts identify truncated results. Team rename and delete and board run and stop are available in Overview; team creation remains in the team browser.
 
-The Backlog screen loads all ticket summaries, phases and board settings. It shows the unfiltered ticket total, loading and retryable error states, and an empty-board message; its body is reserved for upcoming phase groups. Like Current Phase, it refreshes every five seconds and on `board-changed`.
+The Backlog screen loads all ticket summaries, phases and board settings. It shows the unfiltered ticket total, loading and retryable error states, and an empty-board message; its body shows collapsible phase groups with ticket status, activity, owner and update time. Groups initially show 50 tickets, with a button to reveal the rest; selecting a row opens the ticket. Like Current Phase, it refreshes every five seconds and on `board-changed`.
 
 The backlog grouping model retains empty phases and orders the current phase first, then open and closed phases by position, with unassigned or unknown phases last. It calculates activity counts and sorts tickets within each group by priority, numeric key, update time, or the configured board status order.

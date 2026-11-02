@@ -211,7 +211,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onOpenTicket={(key) => navigate(boardTicketRoute(key))}
     />
   ) : sectionId === 'boards/backlog' ? (
-    <BacklogScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
+    <BacklogScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onOpenTicket={(key) => navigate(boardTicketRoute(key))} />
   ) : ticketKey !== null ? (
     <TicketScreen
       key={`${props.workspace.id}:${ticketKey}`}

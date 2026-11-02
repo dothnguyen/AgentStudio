@@ -1,9 +1,11 @@
 import type { JSX } from 'react';
 import type { ManagementApi, Workspace } from '../api';
 import { BoardErrorCard, LoadingSkeleton } from './CurrentPhaseScreen';
+import { BacklogGroupCard } from './BacklogGroupCard';
+import { buildBacklogGroups } from './backlogModel';
 import { useBacklogData } from './useBacklogData';
 
-export function BacklogScreen({ workspace, management, refreshMs }: { workspace: Workspace; management: ManagementApi; refreshMs?: number }): JSX.Element {
+export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket }: { workspace: Workspace; management: ManagementApi; refreshMs?: number; onOpenTicket?: (key: string) => void }): JSX.Element {
   const board = useBacklogData(management, workspace.id, refreshMs);
   return (
     <div className="boards-current-screen" data-section="boards/backlog">
@@ -21,7 +23,7 @@ export function BacklogScreen({ workspace, management, refreshMs }: { workspace:
               <span className="boards-backlog-count">{board.data?.tickets.tickets.length ?? 0} tickets</span>
             </header>
             {board.data?.tickets.tickets.length === 0 && <section className="boards-state-card"><h2>No tickets yet</h2></section>}
-            <div data-testid="backlog-body" />
+            <div className="boards-backlog-groups" data-testid="backlog-body">{board.data && buildBacklogGroups(board.data.phases, board.data.tickets).map((group) => <BacklogGroupCard key={group.slug ?? "no-phase"} group={group} settings={board.data!.settings} onOpenTicket={onOpenTicket} />)}</div>
           </>}
     </div>
   );
