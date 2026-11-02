@@ -64,6 +64,13 @@
       "provider": "opencode",
       "model": "deepseek/deepseek-flash",
       "description": "Read-only and workspace-write roles; file tools stay inside the workspace."
+    },
+    {
+      "id": "codex-gpt-luna-6-medium",
+      "name": "Codex Luna 6  Medium",
+      "provider": "codex",
+      "model": "gpt-6-luna",
+      "reasoning": "medium"
     }
   ]
 }
