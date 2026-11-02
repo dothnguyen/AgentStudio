@@ -1240,12 +1240,7 @@ def ticket_unblock(tx, workspace: str, args: dict) -> dict:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {target!r} is not a working status on this board.",
                       data={"key": ticket["key"], "status": target, "statuses": config_status_ids(config)})
     # an operator's decision starts a fresh round budget (the limit that blocked the ticket is not carried over)
-    if ticket.get("workflow_status") is not None:
-        column = column_for(config, ticket["status"], target, False)
-        tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ? WHERE id = ?",
-                        (target, column, ticket["id"]))
-    else:
-        tx.conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (target, ticket["id"]))
+    set_workflow(tx, ticket, target, "operator", "unblock", config)
     tx.conn.execute("UPDATE tickets SET return_status = NULL, blocked_reason = NULL, "
                     "rounds_json = NULL, updated_at = ? WHERE id = ?", (utcnow(), ticket["id"]))
     _ticket_event(tx.conn, ticket["id"], "ticket.unblocked", "operator", BLOCKED_STATUS, target,

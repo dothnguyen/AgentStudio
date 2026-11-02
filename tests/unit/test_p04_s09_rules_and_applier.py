@@ -311,10 +311,10 @@ class Unblock(ApplierCase):
         self.assertEqual(row["status"], "blocked")
         with self.store.transaction() as tx:
             got = boardmodel.ticket_unblock(tx, self.ws, {"key": "T-001"})
-        self.assertEqual(got["ticket"]["status"], "none")
+        self.assertEqual((got["ticket"]["workflowStatus"], got["ticket"]["status"]), ("none", "backlog"))
         row = self.conn.execute("SELECT status, return_status, blocked_reason FROM tickets WHERE key = 'T-001'"
                                 ).fetchone()
-        self.assertEqual((row["status"], row["return_status"], row["blocked_reason"]), ("none", None, None))
+        self.assertEqual((row["status"], row["return_status"], row["blocked_reason"]), ("backlog", None, None))
         self.assertEqual([e["name"] for e in self.events("T-001")][-1], "ticket.unblocked")
         with self.assertRaises(AsError) as caught:  # only a blocked ticket can be unblocked
             with self.store.transaction() as tx:

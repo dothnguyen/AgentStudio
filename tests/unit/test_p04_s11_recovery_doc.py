@@ -104,7 +104,8 @@ class RecoveryCase(unittest.TestCase):
                          ("none", "backlog", None, None))
         self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.workflow_changed", "ticket.claim_released", "ticket.lease_expired"])
+        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.workflow_changed",
+                                 "ticket.claim_released", "ticket.lease_expired"])
         again = self.tick()  # exactly once: nothing more to release
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
                          names)

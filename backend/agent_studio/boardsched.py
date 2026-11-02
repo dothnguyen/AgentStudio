@@ -218,10 +218,7 @@ def _paused_on_usage_limit(tx, run_id: str) -> bool:
 
 def _release_with_run(tx, workspace: str, ticket: dict, reason: str, to_status=None):
     """Release a claim and record the run it was for, so a late report of that run is never re-applied."""
-    rule_to = to_status
-    if rule_to is None:
-        rule = _claiming_rule(tx, workspace, ticket)
-        rule_to = rule["when"]["status"] if rule else ticket["workflow_status"]
+    rule_to = to_status if to_status is not None else _return_status(tx, workspace, ticket)
     tx.conn.execute("UPDATE tickets SET run_id = ? WHERE id = ?", (ticket["active_run_id"], ticket["id"]))
     boardmodel.release_claim(tx, ticket, reason, to_status=rule_to)
 

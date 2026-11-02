@@ -113,12 +113,14 @@ class UnblockResetsRounds(ApplierCase):
 
     def test_unblock_to_a_chosen_status_resets_the_round_budget(self):
         self.assertEqual(json.loads(self.row()["rounds_json"]), {"qa-ready": 3})
-        self.assertEqual(self.unblock(to="dev-ready")["ticket"]["status"], "dev-ready")
+        ticket = self.unblock(to="dev-ready")["ticket"]
+        self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("dev-ready", "todo"))
         row = self.row()
         self.assertEqual((row["rounds_json"], row["return_status"], row["blocked_reason"]), (None, None, None))
         self.move("T-001", "qa-ready")
         self.apply("T-001", self.failed())            # the first failure after the reset is not a block
-        self.assertEqual(self.row()["status"], "dev-ready")
+        row = self.conn.execute("SELECT workflow_status, status FROM tickets WHERE key = 'T-001'").fetchone()
+        self.assertEqual((row["workflow_status"], row["status"]), ("dev-ready", "todo"))
 
     def test_default_target_is_the_recorded_status_and_bad_targets_are_refused(self):
         with self.assertRaises(AsError) as c:
@@ -126,7 +128,8 @@ class UnblockResetsRounds(ApplierCase):
         self.assertEqual(c.exception.code, "BOARD_STATUS_UNKNOWN")
         with self.assertRaises(AsError):
             self.unblock(to="nowhere")
-        self.assertEqual(self.unblock()["ticket"]["status"], "qa-ready")
+        ticket = self.unblock()["ticket"]
+        self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("qa-ready", "todo"))
 
     def test_operator_move_out_of_blocked_also_resets(self):
         self.move("T-001", "dev-ready")
