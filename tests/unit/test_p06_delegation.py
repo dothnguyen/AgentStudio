@@ -291,7 +291,7 @@ class Migration(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d)
         path = os.path.join(d, "s.db")
         conn = state.connect(path, role="coordinator", create=True)
-        self.assertEqual(state.migrate(conn, path), 18)
+        self.assertEqual(state.migrate(conn, path), 19)
         cols = {r[1] for r in conn.execute("PRAGMA table_info(command_requests)")}
         self.assertTrue({"command_id", "argv_json", "status", "result_json", "visit", "ordinal"} <= cols)
         conn.close()

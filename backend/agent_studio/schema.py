@@ -565,3 +565,9 @@ MIGRATION_18 = [
     "CREATE INDEX command_requests_by_run ON command_requests (workflow_run_id, status)",
     "CREATE INDEX command_requests_by_assignment ON command_requests (assignment_id)",
 ]
+
+# v19: reserve a nullable workflow status for tickets.
+MIGRATION_19 = [
+    "ALTER TABLE tickets ADD COLUMN workflow_status TEXT",
+    "CREATE INDEX tickets_by_workspace_workflow ON tickets (workspace, workflow_status)",
+]
