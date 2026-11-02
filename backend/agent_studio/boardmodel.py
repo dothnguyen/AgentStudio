@@ -22,7 +22,8 @@ from .store import new_id
 
 CONFIG_DIR = ".agent-studio"
 CONFIG_NAME = "board.json"
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
+KANBAN_COLUMNS = ("backlog", "todo", "in-progress", "done", "closed")
 STATUS_KINDS = ("initial", "done", "closed")
 TERMINAL_KINDS = ("done", "closed")
 DEFAULT_PHASE_SLUG = "default"
@@ -36,7 +37,8 @@ FINISHED_RUN_STATES = tuple(RUN_OUTCOMES)
 WORKSPACE_MODES = ("main", "worktree", "none")
 BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
-_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
+_V2_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
+_TOP_KEYS = _V2_TOP_KEYS + ("workflowStatuses", "todoEntry", "todoDefault")
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
@@ -82,19 +84,24 @@ def parse_config(raw) -> dict:
     if not isinstance(raw, dict):
         raise _invalid([("root", "must be a JSON object")])
     problems = []
-    unknown = sorted(set(raw) - set(_TOP_KEYS))
+    version = raw.get("version")
+    v3 = version == 3
+    allowed_keys = tuple(k for k in _TOP_KEYS if k != "statuses") if v3 else _V2_TOP_KEYS
+    unknown = sorted(set(raw) - set(allowed_keys))
     if unknown:
         problems.append(("root", f"unknown keys {', '.join(unknown)}; the P03 software-board shape is gone "
-                                 f"(expected version {CONFIG_VERSION} with {', '.join(k for k in _TOP_KEYS if k != 'version')})"))
-    if raw.get("version") != CONFIG_VERSION:
-        problems.append(("version", f"must be {CONFIG_VERSION}"))
-    statuses = raw.get("statuses")
+                                 f"(expected version {3 if v3 else 2} with "
+                                 f"{', '.join(k for k in allowed_keys if k != 'version')})"))
+    if version not in (2, CONFIG_VERSION) or isinstance(version, bool):
+        problems.append(("version", "must be 2 or 3"))
+    status_key = "workflowStatuses" if v3 else "statuses"
+    statuses = raw.get(status_key)
     if not isinstance(statuses, list) or not statuses:
-        problems.append(("statuses", "must be a non-empty list"))
+        problems.append((status_key, "must be a non-empty list"))
         statuses = []
     seen, initial, done, closed = [], [], [], []
     for i, entry in enumerate(statuses):
-        path = f"statuses[{i}]"
+        path = f"{status_key}[{i}]"
         if not isinstance(entry, dict):
             problems.append((path, "must be an object"))
             continue
@@ -113,17 +120,19 @@ def parse_config(raw) -> dict:
         kind = entry.get("kind")
         if kind is not None:
             if kind == "initial":
-                initial.append(ident or f"statuses[{i}]")
+                initial.append(ident or path)
             elif kind == "done":
-                done.append(ident or f"statuses[{i}]")
+                done.append(ident or path)
             elif kind == "closed":
-                closed.append(ident or f"statuses[{i}]")
+                closed.append(ident or path)
             else:
                 problems.append((f"{path}.kind", f"must be one of {list(STATUS_KINDS)} or omitted"))
     if len(initial) != 1:
-        problems.append(("statuses", f"exactly one status must have kind 'initial' (found {len(initial)})"))
+        problems.append((status_key, f"exactly one status must have kind 'initial' (found {len(initial)})"))
     if not done:
-        problems.append(("statuses", "at least one status must have kind 'done'"))
+        problems.append((status_key, "at least one status must have kind 'done'"))
+    if v3 and len(closed) > 1:
+        problems.append((status_key, "at most one status may have kind 'closed'"))
     fields = raw.get("ticketFields", [])
     if not isinstance(fields, list):
         problems.append(("ticketFields", "must be a list"))
@@ -227,8 +236,8 @@ def parse_config(raw) -> dict:
             problems.append((f"{path}.requiresDeps", "must be true or false"))
         if "workspace" in rule and rule["workspace"] not in WORKSPACE_MODES:
             problems.append((f"{path}.workspace", f"must be one of {list(WORKSPACE_MODES)}"))
-        if "during" in rule:
-            rule_status(rule["during"], f"{path}.during")
+        if "during" in rule or (v3 and not has_action):
+            rule_status(rule.get("during"), f"{path}.during")
         if "syncBase" in rule and (not isinstance(rule["syncBase"], bool) or rule.get("workspace") != "worktree"):
             problems.append((f"{path}.syncBase", 'must be true or false, and only on a rule with workspace "worktree"'))
         if "createdTicketStatus" in rule:
@@ -255,15 +264,50 @@ def parse_config(raw) -> dict:
     duplicates = sorted({s for s in rule_statuses if rule_statuses.count(s) > 1})
     for slug in duplicates:
         problems.append(("rules", f"more than one rule for status {slug!r}"))
+    if v3:
+        during_seen = set()
+        by_status = {s["id"]: s for s in seen}
+        for i, rule in enumerate(rules):
+            if not isinstance(rule, dict) or "during" not in rule:
+                continue
+            during = rule["during"]
+            path = f"rules[{i}].during"
+            if not isinstance(during, str):
+                continue
+            if during in by_status and by_status[during]["kind"] is not None:
+                problems.append((path, "must be a status with no kind"))
+            if during in rule_statuses:
+                problems.append((path, "must not be a rule's when status"))
+            if during in during_seen:
+                problems.append((path, "must be unique across rules"))
+            during_seen.add(during)
+        todo_entry = raw.get("todoEntry")
+        if not isinstance(todo_entry, list) or not todo_entry:
+            problems.append(("todoEntry", "must be a non-empty list"))
+            todo_entry = []
+        agent_whens = [r["when"].get("status") for r in rules
+                       if isinstance(r, dict) and "action" not in r and isinstance(r.get("when"), dict)]
+        for i, value in enumerate(todo_entry):
+            if not isinstance(value, str) or value not in agent_whens or value not in known:
+                problems.append((f"todoEntry[{i}]", "must be the when status of an agent rule"))
+        todo_default = raw.get("todoDefault")
+        if not isinstance(todo_default, str) or todo_default not in todo_entry:
+            problems.append(("todoDefault", "must be in todoEntry"))
     if problems:
         raise _invalid(problems)
     by_id = {s["id"]: s for s in seen}
-    return {"version": CONFIG_VERSION, "statuses": seen, "byId": by_id, "initial": initial[0],
+    result = {"version": version, "statuses": seen, "byId": by_id, "initial": initial[0],
             "terminal": frozenset(s["id"] for s in seen if s["kind"] in TERMINAL_KINDS),
             "ticketFields": fields, "rules": rules,
             "rulesByStatus": {r["when"]["status"]: r for r in rules},
             "leaseSeconds": lease_seconds, "baseBranch": base_branch,
             "agentStatus": agent_status or initial[0]}
+    if v3:
+        result.update({"workflowStatuses": seen, "initialStatus": initial[0], "doneStatuses": done,
+                       "closedStatus": closed[0] if closed else None,
+                       "duringToRule": {r["during"]: r for r in rules if "during" in r},
+                       "columns": KANBAN_COLUMNS, "todoEntry": todo_entry, "todoDefault": todo_default})
+    return result
 
 
 def config_status_ids(config: dict) -> list:

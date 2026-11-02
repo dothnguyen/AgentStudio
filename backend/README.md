@@ -376,6 +376,13 @@ The generic board is configured per workspace in `.agent-studio/board.json` (sta
 `initial`/`done`/`closed`, `ticketFields`, `rules`, optional `leaseSeconds` and `baseBranch`). Tickets live in the
 state DB and always belong to a phase; the default phase is worked when no other is current.
 
+The config parser also accepts version 3: `workflowStatuses` replaces `statuses`, with exactly one
+`initial`, at least one `done`, and at most one `closed` kind. `todoEntry` is a non-empty list of
+agent rule `when` statuses and `todoDefault` is one of those entries. Agent rules require `during`;
+action rules may provide it. Each `during` must be a distinct kindless workflow status that no rule
+uses as `when`. The parser exposes the fixed Kanban columns and workflow routing metadata; board
+execution has not yet been migrated to this schema. Version 2 remains supported unchanged.
+
 ```bash
 agent-studio board rules check --workspace ~/work/project      # validate board.json against roles + workflows
 agent-studio ticket add --workspace ~/work/project --title "Fix the flake" --priority 10
