@@ -162,7 +162,7 @@ def settings(conn, workspace, coordinator_running, runtime_error):
         for i, r in enumerate(cfg["rules"]):
             status = r["when"]["status"]
             rules.append({"index": i, "status": status, "type": "action" if "action" in r else "agent",
-                          "role": r.get("role"), "workflow": r.get("workflow"), "action": r.get("action"),
+                          "role": r.get("role"), "workflow": r.get("workflow"), "during": r.get("during"), "action": r.get("action"),
                           "onPass": r["onPass"], "onFail": r["onFail"], "onBlocked": r.get("onBlocked"),
                           "workspace": r.get("workspace"), "syncBase": r.get("syncBase", False),
                           "maxRounds": r.get("maxRounds"), "priority": r.get("priority"),
@@ -180,7 +180,9 @@ def settings(conn, workspace, coordinator_running, runtime_error):
                  for status, role in PROTECTED_ROUTES.items() if status in ids]
     workflows = [{"name": d["name"], "builtin": d["builtin"], "roles": d["roles"], "errors": d["errors"]}
                  for d in workflowdef.list_definitions(ws, boardmodel.BUILTIN_DEFINITIONS_DIR)]
-    return {"workspace": ws, "board": board, "statuses": statuses, "rules": rules, "actionRules": action_rules,
+    return {"workspace": ws, "board": board, "statuses": statuses, "workflowStatuses": statuses,
+            "todoEntry": cfg.get("todoEntry", []) if cfg else [],
+            "todoDefault": cfg.get("todoDefault") if cfg else None, "rules": rules, "actionRules": action_rules,
             "worktree": worktree, "protectedRoutes": protected, "roles": _roles_block(ws), "workflows": workflows,
             "runner": runner(conn, ws, coordinator_running, runtime_error)}
 

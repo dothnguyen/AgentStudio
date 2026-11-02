@@ -49,7 +49,7 @@ TOOLS = [
      "description": "List the workspace's tickets, optionally by status or phase. Summary omits bodies and adds "
                     "dependency keys.",
      "inputSchema": {"type": "object", "properties": {
-         "status": {"type": "string"}, "phase": {"type": "string"},
+         "status": {"type": "string"}, "workflowStatus": {"type": "string"}, "phase": {"type": "string"},
          "summary": {"type": "boolean", "description": "omit body and add dependsOn/openDependsOn"}}}},
     {"name": "ticket_show",
      "description": "One ticket with its status, phase, dependencies and event history.",
@@ -58,7 +58,7 @@ TOOLS = [
      "description": "The board's phases with the current one marked.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "board_show",
-     "description": "The whole board: phases with status columns and tickets.",
+     "description": "The board: phases with column and workflow counts.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "delegated_commands_list",
      "description": "The delegated commands this assignment may ask the Agent Studio coordinator to run for you "
@@ -172,7 +172,7 @@ def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: st
         lines = [f"current phase: {data['currentPhase']['name']}"]
         for phase in data["phases"]:
             lines.append(f"{phase['slug']}{' (current)' if phase['current'] else ''}: " + ", ".join(
-                f"{c['status']}({c['count']})" for c in phase["columns"]))
+                f"{column}({count})" for column, count in phase["columns"].items()))
         return {"content": [{"type": "text", "text": "\n".join(lines)}], **data}
     if name == "delegated_commands_list":
         data = _call("command.list", {"assignment": assignment, "agentId": agent}, write=False,
@@ -223,7 +223,7 @@ OPERATOR_READ_TOOLS = [
      "inputSchema": _op_schema()},
     {"name": "ticket_list", "description": "The workspace's tickets, optionally by status or phase; summary omits "
                                              "bodies and adds dependency keys.",
-     "inputSchema": _op_schema({"status": {"type": "string"}, "phase": {"type": "string"},
+     "inputSchema": _op_schema({"status": {"type": "string"}, "workflowStatus": {"type": "string"}, "phase": {"type": "string"},
                                 "summary": {"type": "boolean", "description": "omit body and add "
                                                                               "dependsOn/openDependsOn"}})},
     {"name": "ticket_show", "description": "One ticket with status, phase, body and event history.",
@@ -326,14 +326,14 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         lines = [f"current phase: {data['currentPhase']['name']}"]
         for phase in data["phases"]:
             lines.append(f"{phase['slug']}{' (current)' if phase['current'] else ''}: " + ", ".join(
-                f"{c['status']}({c['count']})" for c in phase["columns"]))
+                f"{column}({count})" for column, count in phase["columns"].items()))
         return text("\n".join(lines), **data)
     if name == "phase_list":
         data = call("phase.list", {})
         return text("\n".join(f"{p['slug']}{' (current)' if p['current'] else ''}: {p['name']} [{p['status']}] "
                               f"tickets {p['ticketCount']}" for p in data["phases"]), phases=data["phases"])
     if name == "ticket_list":
-        payload = _optional(args, "status", "phase")
+        payload = _optional(args, "status", "workflowStatus", "phase")
         if isinstance(args.get("summary"), bool):
             payload["summary"] = args["summary"]
         data = call("ticket.list", payload)

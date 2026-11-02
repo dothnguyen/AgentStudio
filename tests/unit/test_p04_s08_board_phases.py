@@ -235,9 +235,9 @@ class TicketsInPhases(PhaseCase):
         self.assertEqual([(p["slug"], p["current"], p["ticketCount"]) for p in shown["phases"]],
                          [("default", False, 1), ("alpha", True, 2)])
         alpha = shown["phases"][1]
-        self.assertEqual([(c["status"], c["count"]) for c in alpha["columns"]],
-                         [("none", 1), ("wip", 0), ("finished", 1)])
-        self.assertEqual([t["key"] for c in alpha["columns"] for t in c["tickets"]], ["T-002", "T-003"])
+        self.assertEqual(alpha["columns"]["backlog"], 1)
+        self.assertEqual(alpha["columns"]["done"], 1)
+        self.assertEqual(alpha["workflow"], {"none": 1, "wip": 0, "finished": 1})
 
 
 if __name__ == "__main__":

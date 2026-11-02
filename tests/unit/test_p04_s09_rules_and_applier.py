@@ -425,8 +425,8 @@ class Unblock(ApplierCase):
             self.apply("T-001", self.make_run("failed"))
         shown = boardmodel.board_show(self.conn, self.ws)
         columns = shown["phases"][0]["columns"]
-        self.assertEqual([c["status"] for c in columns], ["none", "todo-active", "merged", "blocked"])
-        self.assertEqual(columns[3]["tickets"][0]["key"], "T-001")
+        self.assertEqual(sum(columns.values()), 1)
+        self.assertEqual(shown["phases"][0]["workflow"]["blocked"], 1)
 
 
 if __name__ == "__main__":

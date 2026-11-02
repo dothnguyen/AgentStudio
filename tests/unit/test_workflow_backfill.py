@@ -88,4 +88,4 @@ class WorkflowBackfillTests(BoardCase):
                 boardmodel.ticket_move(tx, self.ws, {'key': ticket['key'], 'to': 'ready'})
         self.assertEqual(len(boardmodel.ticket_list(self.conn, self.ws, status='done')['tickets']), 1)
         board = boardmodel.board_show(self.conn, self.ws)
-        self.assertEqual(sum(c['count'] for p in board['phases'] for c in p['columns']), 1)
+        self.assertEqual(sum(sum(p['columns'].values()) for p in board['phases']), 1)

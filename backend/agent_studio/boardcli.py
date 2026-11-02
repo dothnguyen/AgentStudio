@@ -88,6 +88,7 @@ def _parser(action, group="ticket"):
             p.add_argument("--remove", action="append", default=[])
     elif action == "list":
         p.add_argument("--status")
+        p.add_argument("--workflow-status")
         p.add_argument("--phase")
         p.add_argument("--summary", action="store_true")
     return p
@@ -151,6 +152,8 @@ def _show(ns):
 
 def _list(ns):
     args = {"workspace": _workspace(ns)}
+    if ns.workflow_status is not None:
+        args["workflowStatus"] = ns.workflow_status
     if ns.status is not None:
         args["status"] = ns.status
     if ns.phase is not None:
@@ -363,13 +366,10 @@ def _render_board(d) -> str:
         if not phase["ticketCount"]:
             lines.append("  (no tickets)")
             continue
-        for column in phase["columns"]:
-            if not column["count"]:
-                continue
-            kind = f" [{column['kind']}]" if column["kind"] else ""
-            lines.append(f"  {column['title']} ({column['count']}){kind}")
-            for t in column["tickets"]:
-                lines.append(f"    {t['key']}  P{t['priority']:<4}  {t['title']}  <{activity_text(t)}>")
+        for column, count in phase["columns"].items():
+            if count:
+                lines.append(f"  {column} ({count})")
+        lines.append("  workflow: " + ", ".join(f"{status} ({count})" for status, count in phase["workflow"].items() if count))
     return "\n".join(lines)
 
 

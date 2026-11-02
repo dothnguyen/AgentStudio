@@ -95,7 +95,7 @@ class Applier(unittest.TestCase):
                        == "failed", timeout=90, message="run to fail")
             applied = self.cli("ticket", "apply", "--workspace", self.ws, ticket["key"], run, "--json")["data"]
             self.assertEqual((applied["outcome"], applied["rounds"]), ("fail", round_no))
-        blocked = self.cli("ticket", "list", "--workspace", self.ws, "--status", "blocked", "--json")["data"]
+        blocked = self.cli("ticket", "list", "--workspace", self.ws, "--workflow-status", "blocked", "--json")["data"]
         self.assertEqual([t["key"] for t in blocked["tickets"]], [ticket["key"]])
         unblocked = self.cli("ticket", "unblock", "--workspace", self.ws, ticket["key"], "--json")["data"]
         self.assertEqual((unblocked["ticket"]["workflowStatus"], unblocked["ticket"]["status"]),

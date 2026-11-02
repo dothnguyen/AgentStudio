@@ -370,7 +370,7 @@ class BoardSettingsTests(unittest.TestCase):
             r = self.call("board.settings", workspace=self.ws)
         self.assertTrue(r["ok"], r)
         self.assertEqual(set(r["data"]), {"workspace", "board", "statuses", "rules", "actionRules", "worktree",
-                                          "protectedRoutes", "roles", "workflows", "runner"})
+                                          "protectedRoutes", "roles", "workflows", "runner", "workflowStatuses", "todoEntry", "todoDefault"})
         self.assertEqual(count(), before)
         bad(self.call("board.settings.update", workspace=self.ws), "BAD_REQUEST",
             "Missing required argument 'changes'.")

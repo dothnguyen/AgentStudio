@@ -599,6 +599,9 @@ def _validate_ticket_list(args):
     status = req_text(args, "status", 64, required=False, allow_empty=False)
     if status is not None:
         out["status"] = status
+    workflow_status = req_text(args, "workflowStatus", 64, required=False, allow_empty=False)
+    if workflow_status is not None:
+        out["workflowStatus"] = workflow_status
     phase = req_text(args, "phase", 64, required=False, allow_empty=False)
     if phase is not None:
         out["phase"] = _slug_arg(phase, "phase")
@@ -688,7 +691,7 @@ def _ticket_list(args, req):
     conn = _reader()
     try:
         return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"), clean.get("phase"),
-                                      clean.get("summary", False))
+                                      clean.get("summary", False), clean.get("workflowStatus"))
     finally:
         conn.close()
 

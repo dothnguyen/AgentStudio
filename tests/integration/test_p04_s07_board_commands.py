@@ -63,22 +63,22 @@ class BoardCommands(unittest.TestCase):
         self.assertEqual([e["name"] for e in detail["events"]],
                          ["ticket.created", "ticket.moved", "ticket.moved", "ticket.depends"])
 
-        listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "none")
+        listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "backlog")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-001"])  # T-002 is in doing
         self.assertEqual([t["key"] for t in self.ok("ticket", "list", "--workspace", self.ws)["tickets"]],
                          ["T-001", "T-002"])  # T-001 first: priority 10
 
         board = self.ok("board", "show", "--workspace", self.ws)
-        self.assertEqual([c["status"] for c in board["phases"][0]["columns"]],
-                         ["none", "doing", "merged", "dropped"])
+        self.assertEqual(board["phases"][0]["columns"]["backlog"], 1)
+        self.assertEqual(board["phases"][0]["workflow"]["doing"], 1)
         self.assertEqual(board["currentPhase"]["slug"], "default")
 
         rc, out, err = self.cli("board", "show", "--workspace", self.ws)  # human form
         self.assertEqual(rc, 0, err)
         self.assertIn("current phase: Default", out)
         self.assertIn("default  Default  (current)", out)
-        self.assertIn("none (1) [initial]", out)
-        self.assertIn("T-001", out)
+        self.assertIn("backlog (1)", out)
+        self.assertIn("none (1)", out)
 
         conn = sqlite3.connect(os.path.join(self.sb.state_dir, "state.db"))
         self.addCleanup(conn.close)

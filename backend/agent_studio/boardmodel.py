@@ -620,8 +620,8 @@ def phase_clear_current(tx, workspace: str, args: dict) -> dict:
 
 def _phase_counts(conn, phase_id, config):
     return {r["status"]: r["n"] for r in conn.execute(
-        "SELECT COALESCE(workflow_status, status) AS status, COUNT(*) AS n FROM tickets "
-        "WHERE phase_id = ? GROUP BY COALESCE(workflow_status, status)", (phase_id,))}
+        "SELECT status, COUNT(*) AS n FROM tickets "
+        "WHERE phase_id = ? GROUP BY status", (phase_id,))}
 
 
 def phase_list(conn, workspace: str) -> dict:
@@ -631,7 +631,7 @@ def phase_list(conn, workspace: str) -> dict:
     if not rows:
         rows = [{"id": None, "slug": DEFAULT_PHASE_SLUG, "name": DEFAULT_PHASE_NAME, "description": None,
                  "position": 0, "status": "open"}]
-    counts = {s["id"]: 0 for s in config["statuses"]}
+    counts = {column: 0 for column in KANBAN_COLUMNS}
     phases = []
     for row in rows:
         per_status = dict(counts, **_phase_counts(conn, row["id"], config)) if row["id"] else dict(counts)
@@ -736,6 +736,7 @@ def get_ticket(conn, workspace: str, key: str) -> dict:
 
 def _ticket_json(conn, row, config=None) -> dict:
     out = _row_to_json(row)
+    out["workflowStatus"] = row["workflow_status"] or row["status"]
     phase = conn.execute("SELECT slug, name FROM phases WHERE id = ?", (row["phase_id"],)).fetchone()
     out["phase"] = phase["slug"] if phase else None
     out["phaseName"] = phase["name"] if phase else None
@@ -1351,15 +1352,21 @@ def _dependency_keys(conn, ticket_id: str, terminal) -> tuple:
     return keys, [r["key"] for r in rows if r["status"] not in terminal]
 
 
-def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = False) -> dict:
+def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = False, workflow_status=None) -> dict:
     config = load_config(workspace)
-    if status is not None and status not in config["byId"] and status != BLOCKED_STATUS:
+    if status is not None and status not in KANBAN_COLUMNS:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {status!r} is not on this board.",
                       data={"status": status, "statuses": config_status_ids(config)})
+    if workflow_status is not None and workflow_status not in config["byId"] and workflow_status != BLOCKED_STATUS:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Workflow status {workflow_status!r} is not on this board.",
+                      data={"status": workflow_status, "statuses": config_status_ids(config)})
     clauses, params = ["workspace = ?"], [workspace]
     if status is not None:
-        clauses.append("COALESCE(workflow_status, status) = ?")
+        clauses.append("status = ?")
         params.append(status)
+    if workflow_status is not None:
+        clauses.append("COALESCE(workflow_status, status) = ?")
+        params.append(workflow_status)
     if phase is not None:
         clauses.append("phase_id = ?")
         params.append(get_phase(conn, workspace, phase)["id"])
@@ -1372,13 +1379,12 @@ def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = F
             ticket.pop("body", None)
             ticket["dependsOn"], ticket["openDependsOn"] = _dependency_keys(conn, row["id"], config["terminal"])
         tickets.append(ticket)
-    return {"workspace": workspace, "statuses": config_status_ids(config), "status": status, "phase": phase,
+    return {"workspace": workspace, "statuses": config_status_ids(config), "status": status, "workflowStatus": workflow_status, "phase": phase,
             "tickets": tickets}
 
 
 def board_show(conn, workspace: str) -> dict:
-    """The whole board: phases in position order (the current one marked), each with every configured
-    status column and its tickets."""
+    """Return compact per-phase column and workflow counts."""
     config = load_config(workspace)
     current = effective_current_phase(conn, workspace)
     rows = _ordered_phases(conn, workspace)
@@ -1387,18 +1393,17 @@ def board_show(conn, workspace: str) -> dict:
                  "position": 0, "status": "open"}]
     phases = []
     for row in rows:
-        tickets = conn.execute("SELECT * FROM tickets WHERE phase_id = ? "
-                               "ORDER BY priority, created_at, key", (row["id"],)).fetchall() if row["id"] else []
-        by_status = {}
-        for ticket in tickets:
-            by_status.setdefault(ticket["workflow_status"] or ticket["status"], []).append(_ticket_json(conn, ticket, config))
-        columns = [{"status": s["id"], "kind": s["kind"], "title": s["name"], "count": len(by_status.get(s["id"], [])),
-                    "tickets": by_status.get(s["id"], [])} for s in config["statuses"]]
-        if BLOCKED_STATUS in by_status:  # the reserved blocked column appears only when tickets are blocked
-            columns.append({"status": BLOCKED_STATUS, "kind": None, "title": BLOCKED_STATUS,
-                            "count": len(by_status[BLOCKED_STATUS]), "tickets": by_status[BLOCKED_STATUS]})
+        columns = {column: 0 for column in KANBAN_COLUMNS}
+        workflow = {status: 0 for status in config_status_ids(config)}
+        if row["id"]:
+            for counts in conn.execute(
+                "SELECT status, COALESCE(workflow_status, status) AS workflow, COUNT(*) AS n "
+                "FROM tickets WHERE phase_id = ? GROUP BY status, COALESCE(workflow_status, status)",
+                (row["id"],)):
+                columns[counts["status"]] = columns.get(counts["status"], 0) + counts["n"]
+                workflow[counts["workflow"]] = workflow.get(counts["workflow"], 0) + counts["n"]
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
-                           ticketCount=len(tickets), columns=columns))
+                           ticketCount=sum(columns.values()), columns=columns, workflow=workflow))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}
 
 
@@ -1406,7 +1411,9 @@ def board_summary(conn, workspace: str, limit: int = 5) -> dict:
     """A compact, read-only view of the effective current phase for dashboard consumers."""
     config = load_config(workspace)
     current = effective_current_phase(conn, workspace)
-    counts = _phase_counts(conn, current["id"], config) if current["id"] is not None else {}
+    counts = {r["status"]: r["n"] for r in conn.execute(
+        "SELECT COALESCE(workflow_status, status) AS status, COUNT(*) AS n FROM tickets "
+        "WHERE phase_id = ? GROUP BY COALESCE(workflow_status, status)", (current["id"],))} if current["id"] is not None else {}
     columns = [{"status": status["id"], "kind": status["kind"], "title": status["name"],
                 "count": counts.get(status["id"], 0)} for status in config["statuses"]]
     blocked = counts.get(BLOCKED_STATUS, 0)

@@ -406,7 +406,7 @@ agent-studio board rules check --workspace ~/work/project      # validate board.
 agent-studio ticket add --workspace ~/work/project --title "Fix the flake" --priority 10
 agent-studio team run-board --team <teamId>                    # bind the running team and start claiming
 agent-studio team stop-board --team <teamId>                   # stop claiming; running work finishes
-agent-studio board show --workspace ~/work/project --pretty    # phases (current marked) with status columns
+agent-studio board show --workspace ~/work/project --pretty    # phases (current marked) with column and workflow counts
 agent-studio ticket list --workspace ~/work/project --summary  # no bodies; dependsOn + openDependsOn per ticket
 ```
 
@@ -414,7 +414,11 @@ agent-studio ticket list --workspace ~/work/project --summary  # no bodies; depe
 ticket keeps its usual fields (`key`, `title`, `status`, `priority`, `phase`, `phaseName`, `assignee`, `branch`,
 `rounds`, `blockedReason`, `returnStatus`, `activity`, `updatedAt`) but has no `body`, and gains `dependsOn` (all
 dependency keys) and `openDependsOn` (the dependency keys whose status is not a done/closed kind). The default
-output is unchanged. `status`, `phase` and `summary` combine.
+output is unchanged. `status` filters by column; `workflowStatus` (CLI `--workflow-status`) filters by workflow status.
+Both filters combine with `phase` and `summary`. Tickets expose the column as `status` and the workflow state as
+`workflowStatus`. `phase.list` and `phase.show` count columns; `board.show` returns per-phase `columns` and
+`workflow` count maps without ticket lists. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
+and each rule’s `during` value.
 
 `ticket.show` still returns the ticket with `dependsOn` and `dependents` key lists, and adds `links`
 (`{dependsOn, dependents}`) for the ticket page's Dependencies card: each item is `{key, title, status, phase}`

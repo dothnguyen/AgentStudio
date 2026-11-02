@@ -160,8 +160,8 @@ class TicketTests(BoardCase):
         self.move("T-001", "merged")
         shown = boardmodel.board_show(self.conn, self.ws)
         columns = shown["phases"][0]["columns"]  # the default phase holds every ticket
-        self.assertEqual([c["status"] for c in columns], ["none", "doing", "review", "merged", "dropped"])
-        self.assertEqual(columns[3]["tickets"][0]["key"], "T-001")
+        self.assertEqual(columns["done"], 1)
+        self.assertEqual(shown["phases"][0]["workflow"]["merged"], 1)
         self.assertEqual(shown["currentPhase"]["slug"], "default")
 
     def test_move_rules_and_events(self):
@@ -250,7 +250,7 @@ class TicketTests(BoardCase):
         self.move("T-002", "wip")
         listed = boardmodel.ticket_list(self.conn, self.ws)
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-002", "T-003", "T-001"])  # wip first
-        self.assertEqual([t["key"] for t in boardmodel.ticket_list(self.conn, self.ws, "none")["tickets"]],
+        self.assertEqual([t["key"] for t in boardmodel.ticket_list(self.conn, self.ws, workflow_status="none")["tickets"]],
                          ["T-003", "T-001"])
         with self.assertRaises(AsError) as caught:
             boardmodel.ticket_list(self.conn, self.ws, "nowhere")
@@ -263,9 +263,8 @@ class TicketTests(BoardCase):
         shown = boardmodel.board_show(self.conn, self.ws)
         self.assertEqual([(p["slug"], p["ticketCount"]) for p in shown["phases"]], [("default", 2)])
         columns = shown["phases"][0]["columns"]
-        self.assertEqual([c["status"] for c in columns], ["none", "wip", "finished"])
-        self.assertEqual([(c["count"], [t["key"] for t in c["tickets"]]) for c in columns],
-                         [(1, ["T-001"]), (0, []), (1, ["T-002"])])
+        self.assertEqual(columns, {"backlog": 1, "todo": 0, "in-progress": 0, "done": 1, "closed": 0})
+        self.assertEqual(shown["phases"][0]["workflow"], {"none": 1, "wip": 0, "finished": 1})
         self.assertTrue(shown["phases"][0]["current"])
 
 
@@ -345,18 +344,16 @@ class CliTests(BoardCase):
                 "phases": [
                     {"slug": "default", "name": "Default", "description": None, "position": 0, "status": "open",
                      "current": True, "ticketCount": 1,
-                     "columns": [{"status": "todo", "kind": "initial", "title": "todo", "count": 1,
-                                  "tickets": [ticket]},
-                                 {"status": "doing", "kind": None, "title": "doing", "count": 0, "tickets": []}]},
+                     "columns": {"todo": 1}, "workflow": {"ready": 1}},
                     {"slug": "later", "name": "Later", "description": None, "position": 1, "status": "closed",
-                     "current": False, "ticketCount": 0, "columns": []}]}
+                     "current": False, "ticketCount": 0, "columns": {}, "workflow": {}}]}
         rc, out, err = self.run_cli(lambda req: {"ok": True, "data": data}, "board", "show",
                                     "--workspace", self.ws)
         self.assertEqual((rc, err), (0, ""))
         self.assertIn("current phase: Default", out)
         self.assertIn("default  Default  (current)", out)
-        self.assertIn("todo (1) [initial]", out)
-        self.assertIn("T-001", out)
+        self.assertIn("todo (1)", out)
+        self.assertIn("ready (1)", out)
         self.assertIn("later  Later  [closed]", out)
         self.assertIn("(no tickets)", out)
 

@@ -91,7 +91,7 @@ USAGE = """agent-studio <command>
   ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
                                            move a ticket; finished tickets need --force
   ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)
-  ticket list [--status STATUS] [--phase ID] [--summary] (--workspace PATH | cwd)   the workspace's tickets (read-only; --summary omits bodies and adds dependencies)
+  ticket list [--status COLUMN] [--workflow-status STATUS] [--phase ID] [--summary] (--workspace PATH | cwd)   the workspace's tickets (read-only; --summary omits bodies and adds dependencies)
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies
   ticket phase (--workspace PATH | cwd) KEY ID   move a ticket to another open phase (not while claimed)
   ticket apply (--workspace PATH | cwd) KEY RUN   apply a finished workflow run's outcome to its ticket
@@ -99,7 +99,7 @@ USAGE = """agent-studio <command>
                                            (or to STATUS); starts a fresh round budget
   ticket retry (--workspace PATH | cwd) KEY   clear a stuck claim: release it and cancel its run
   board upgrade [--dry-run] [--workspace PATH]   persist a v2 board upgrade and print the status ID map
-  board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
+  board show (--workspace PATH | cwd)      phases (current marked) with column and workflow counts (read-only)
   board rules check (--workspace PATH | cwd)   validate the rules: statuses, roles, workflows, path to done
   board phase add (--workspace PATH | cwd) --id ID --name N [--description D] [--before ID]
                                            add a phase (appended, or inserted before another and renumbered)
