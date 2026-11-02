@@ -17,22 +17,22 @@ STRICT = {"version": 1, "description": "strict", "stages": [
     {"id": "work", "role": "worker", "permission": "read_only", "prompt": "Do.\n{{task}}",
      "next": {"done": "tests"}},
     {"id": "tests", "type": "validation", "next": {"pass": "$succeed", "fail": "$fail"}}]}
-DRILL_BOARD = {"version": 2, "leaseSeconds": 8,
-               "statuses": [{"id": "build", "kind": "initial"}, {"id": "in-progress"},
+DRILL_BOARD = {"version": 2, "leaseSeconds": 8, "agentTicketStatus": "build",
+               "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "in-progress"},
                             {"id": "done", "kind": "done"}],
                "ticketFields": [],
                "rules": [{"when": {"status": "build"}, "role": "worker", "workflow": "work",
                           "onPass": "done", "onFail": "build", "during": "in-progress",
                           "maxRounds": 2}]}
-STRICT_BOARD = {"version": 2, "leaseSeconds": 600,
-                "statuses": [{"id": "build", "kind": "initial"}, {"id": "in-progress"},
+STRICT_BOARD = {"version": 2, "leaseSeconds": 600, "agentTicketStatus": "build",
+                "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "in-progress"},
                              {"id": "done", "kind": "done"}],
                 "ticketFields": [],
                 "rules": [{"when": {"status": "build"}, "role": "worker", "workflow": "strict",
                            "onPass": "done", "onFail": "build", "during": "in-progress",
                            "maxRounds": 2}]}
-MERGE_BOARD = {"version": 2, "leaseSeconds": 600,
-               "statuses": [{"id": "build", "kind": "initial"}, {"id": "ready"},
+MERGE_BOARD = {"version": 2, "leaseSeconds": 600, "agentTicketStatus": "build",
+               "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "ready"},
                             {"id": "done", "kind": "done"}],
                "ticketFields": [],
                "rules": [
@@ -87,7 +87,9 @@ class DrillCase(unittest.TestCase):
         return self.json_cmd("ticket", "show", key)["events"]
 
     def add_ticket(self, title="drill"):
-        return self.json_cmd("ticket", "add", "--title", title)["ticket"]
+        ticket = self.json_cmd("ticket", "add", "--title", title)["ticket"]
+        self.json_cmd("ticket", "move", ticket["key"], "--to", "build")
+        return ticket
 
     def start_and_run(self):
         rc, r, p = self.sb.run("team", "start", "--workspace", self.ws, "--team", "alpha")
@@ -205,7 +207,7 @@ class MergeConflict(DrillCase):
             lambda: next((e for e in self.events("T-002") if e["name"] == "ticket.merge_conflict"), None),
             120, "merge conflict")
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket("T-002")["workflowStatus"], "none")
+        self.assertEqual(self.ticket("T-002")["workflowStatus"], "build")
         with open(os.path.join(self.ws, "shared.txt")) as f:
             self.assertEqual(f.read(), "from first\n")
 
@@ -224,12 +226,12 @@ class RoundLimit(DrillCase):
             time.sleep(0.5)
         ticket = self.ticket("T-001")
         self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("blocked", "in-progress"))
-        self.assertEqual(ticket["blockedReason"], "ROUND_LIMIT:none")
-        self.assertEqual(ticket["rounds"], {"none": 2})
+        self.assertEqual(ticket["blockedReason"], "ROUND_LIMIT:build")
+        self.assertEqual(ticket["rounds"], {"build": 2})
         rc, r, p = self.sb.run("team", "stop-board", "--workspace", self.ws, "--json")
         self.assertTrue(r["ok"], r)
         unblocked = self.json_cmd("ticket", "unblock", "T-001")
-        self.assertEqual((unblocked["ticket"]["workflowStatus"], unblocked["ticket"]["status"]), ("none", "backlog"))
+        self.assertEqual((unblocked["ticket"]["workflowStatus"], unblocked["ticket"]["status"]), ("build", "in-progress"))
 
 
 class UsageLimit(DrillCase):
@@ -252,7 +254,7 @@ class UsageLimit(DrillCase):
         conn.commit()
 
         released = self.wait_for(lambda: self.ticket("T-001") if self.ticket("T-001")["assignee"] is None
-                                 and self.ticket("T-001")["workflowStatus"] == "none" else None, 60, "release")
+                                 and self.ticket("T-001")["workflowStatus"] == "build" else None, 60, "release")
         self.assertIsNone(released["rounds"])  # the round was not counted
         self.assertEqual(released["runId"], run)
 
@@ -269,7 +271,7 @@ class StuckClaim(DrillCase):
         claimed = self.wait_claimed("T-001")
         run = claimed["activeRunId"]
         released = self.json_cmd("ticket", "retry", "T-001")
-        self.assertEqual((released["ticket"]["workflowStatus"], released["ticket"]["status"]), ("none", "backlog"))
+        self.assertEqual((released["ticket"]["workflowStatus"], released["ticket"]["status"]), ("build", "in-progress"))
         self.assertIsNone(released["ticket"]["assignee"])
         self.wait_for(lambda: self.db().execute(
             "SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0] in ("cancelled", "failed"),

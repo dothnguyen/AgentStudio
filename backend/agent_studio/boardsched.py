@@ -221,7 +221,7 @@ def _release_with_run(tx, workspace: str, ticket: dict, reason: str, to_status=N
     rule_to = to_status
     if rule_to is None:
         rule = _claiming_rule(tx, workspace, ticket)
-        rule_to = rule["when"]["status"] if rule else ticket["status"]
+        rule_to = rule["when"]["status"] if rule else ticket["workflow_status"]
     tx.conn.execute("UPDATE tickets SET run_id = ? WHERE id = ?", (ticket["active_run_id"], ticket["id"]))
     boardmodel.release_claim(tx, ticket, reason, to_status=rule_to)
 
@@ -257,7 +257,7 @@ def _recover(tx, workspace: str, ctx: dict) -> dict:
 
 def _return_status(tx, workspace: str, ticket: dict) -> str:
     rule = _claiming_rule(tx, workspace, ticket)
-    return rule["when"]["status"] if rule else ticket["status"]
+    return rule["when"]["status"] if rule else ticket["workflow_status"]
 
 
 def _ticket_event_note(tx, ticket: dict, name: str, payload: dict) -> None:
@@ -291,10 +291,8 @@ def _claiming_rule(tx, workspace: str, ticket: dict) -> dict:
     """The rule that claimed the ticket: the one whose `during` status it sits in, else the one for its
     status (a ticket worked without a `during` status stays in the rule's `when` status)."""
     config = boardmodel.load_config(workspace)
-    for rule in config["rules"]:
-        if rule.get("during") == (ticket.get("workflow_status") or ticket["status"]):
-            return rule
-    return config["rulesByStatus"].get(ticket.get("workflow_status") or ticket["status"])
+    status = ticket["workflow_status"]
+    return config["duringToRule"].get(status) or config["rulesByStatus"].get(status)
 
 
 def _rule_order(config):
@@ -302,13 +300,10 @@ def _rule_order(config):
 
 
 def _deps_open(tx, ticket_id: str, config) -> int:
-    """Dependencies not in a finished status (kind done or closed)."""
-    finished = {s["id"] for s in config["statuses"] if s["kind"] in boardmodel.TERMINAL_KINDS}
-    marks = ",".join("?" * len(finished)) or "NULL"
+    """Dependencies whose board column is not finished."""
     return tx.conn.execute(
-        f"SELECT COUNT(*) FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
-        f"WHERE d.ticket_id = ? AND COALESCE(t.workflow_status, t.status) NOT IN ({marks})",
-        (ticket_id,) + tuple(finished)).fetchone()[0]
+        "SELECT COUNT(*) FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+        "WHERE d.ticket_id = ? AND t.status NOT IN ('done', 'closed')", (ticket_id,)).fetchone()[0]
 
 
 def _free_members(tx, team_id: str, role: str) -> list:
@@ -322,11 +317,9 @@ def _free_members(tx, team_id: str, role: str) -> list:
 
 
 def _active_under_rule(tx, workspace: str, rule: dict) -> int:
-    statuses = [rule["during"]] if rule.get("during") else [rule["when"]["status"]]
-    marks = ",".join("?" * len(statuses))
     return tx.conn.execute(
-        f"SELECT COUNT(*) FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) IN ({marks}) AND assignee IS NOT NULL",
-        (workspace,) + tuple(statuses)).fetchone()[0]
+        "SELECT COUNT(*) FROM tickets WHERE workspace = ? AND workflow_status = ? AND assignee IS NOT NULL",
+        (workspace, rule["during"])).fetchone()[0]
 
 
 def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
@@ -358,7 +351,8 @@ def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
 
 def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, members=None):
     rows = tx.conn.execute(
-        "SELECT * FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) = ? AND assignee IS NULL "
+        "SELECT * FROM tickets WHERE workspace = ? AND workflow_status = ? "
+        "AND status IN ('todo', 'in-progress') AND assignee IS NULL "
         "ORDER BY priority, created_at, key", (workspace, rule["when"]["status"])).fetchall()
     for row in rows:
         ticket = dict(row)
@@ -382,11 +376,11 @@ def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, me
 def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, ticket: dict, config: dict,
                   ctx: dict):
     lease = lease_time(config)
-    status = rule.get("during") or rule["when"]["status"]
+    status = rule["during"]
     # claim first: the engine's run-workspace check accepts a ticket worktree only while it is claimed
-    column = boardmodel.column_for(config, ticket["status"], status, True) if ticket.get("workflow_status") is not None else status
-    tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, status = ?, workflow_status = ?, updated_at = ? "
-                    "WHERE id = ?", (member["id"], lease, column, status if ticket.get("workflow_status") is not None else None, utcnow(), ticket["id"]))
+    tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, updated_at = ? WHERE id = ?",
+                    (member["id"], lease, utcnow(), ticket["id"]))
+    boardmodel.set_workflow(tx, ticket, status, "coordinator", "claim", config, claimed=True)
     ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
     try:
         run_workspace = workspace

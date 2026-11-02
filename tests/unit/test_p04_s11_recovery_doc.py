@@ -104,7 +104,7 @@ class RecoveryCase(unittest.TestCase):
                          ("none", "backlog", None, None))
         self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.claim_released", "ticket.lease_expired"])
+        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.workflow_changed", "ticket.claim_released", "ticket.lease_expired"])
         again = self.tick()  # exactly once: nothing more to release
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
                          names)
@@ -146,7 +146,7 @@ class RecoveryCase(unittest.TestCase):
         self.claim(run, lease_in_past=False)
         with self.store.transaction() as tx:
             got = boardsched.ticket_retry(tx, self.ws, {"key": "T-001"}, self.ctx)
-        self.assertEqual(got["ticket"]["status"], "none")
+        self.assertEqual(got["ticket"]["status"], "in-progress")
         ticket = self.ticket()
         self.assertEqual((ticket["assignee"], ticket["active_run_id"], ticket["run_id"]),
                          (None, None, run))

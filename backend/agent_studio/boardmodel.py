@@ -1275,28 +1275,24 @@ def registered_worktree(conn_or_tx, team_workspace: str, path: str) -> str:
 
 def release_claim(tx, ticket: dict, reason: str, to_status=None, detail=None) -> None:
     """Give a claim back without applying anything (a start failure, or lease recovery in S11)."""
-    values = [utcnow(), ticket["id"]]
-    sets = "assignee = NULL, lease_until = NULL, active_run_id = NULL, updated_at = ?"
-    if to_status is not None and ticket.get("workflow_status") is not None:
-        config = load_config(ticket["workspace"])
-        column = column_for(config, ticket["status"], to_status, False)
-        sets += ", status = ?, workflow_status = ?"
-        values[1:1] = [column, to_status]
-    elif to_status is not None and to_status != ticket["status"]:
-        sets += ", status = ?"
-        values.insert(1, to_status)
-    tx.conn.execute(f"UPDATE tickets SET {sets} WHERE id = ?", values)
+    last = None
+    if reason.startswith("start_failed:"):
+        last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
+                               "AND name != 'ticket.workflow_changed' ORDER BY id DESC LIMIT 1",
+                               (ticket["id"],)).fetchone()
+    tx.conn.execute("UPDATE tickets SET assignee = NULL, lease_until = NULL, active_run_id = NULL, updated_at = ? "
+                    "WHERE id = ?", (utcnow(), ticket["id"]))
+    if to_status is not None:
+        set_workflow(tx, ticket, to_status, "coordinator", reason, load_config(ticket["workspace"]))
     payload = {"ticketId": ticket["id"], "key": ticket["key"], "reason": reason}
     payload.update(detail or {})
     if reason.startswith("start_failed:"):  # a start that keeps failing logs once, not once per tick
-        last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
-                               "ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
         if last is not None and last["name"] == "ticket.claim_released":
             before = json.loads(last["payload_json"])
             if before.get("reason") == reason and before.get("entries") == payload.get("entries"):
                 return
-    _ticket_event(tx.conn, ticket["id"], "ticket.claim_released", "coordinator", ticket["status"],
-                  to_status if to_status is not None else ticket["status"], payload)
+    _ticket_event(tx.conn, ticket["id"], "ticket.claim_released", "coordinator", ticket["workflow_status"],
+                  to_status if to_status is not None else ticket["workflow_status"], payload)
 
 
 # ---- read-only queries ------------------------------------------------------------------------------------

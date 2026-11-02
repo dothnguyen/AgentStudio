@@ -18,8 +18,8 @@ CHECK = {"version": 1, "description": "check", "stages": [
     {"id": "look", "role": "checker", "permission": "read_only", "prompt": "Look.\n{{task}}",
      "next": {"done": "$succeed"}}]}
 ROLES = {"version": 1, "roles": {"worker": {}, "checker": {}}}
-THREE_RULES = {"version": 2,
-               "statuses": [{"id": "build", "kind": "initial"}, {"id": "verify"},
+THREE_RULES = {"version": 2, "agentTicketStatus": "build",
+               "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "verify"},
                             {"id": "done", "kind": "done"}],
                "ticketFields": [],
                "rules": [
@@ -27,13 +27,13 @@ THREE_RULES = {"version": 2,
                     "onPass": "verify", "onFail": "build"},
                    {"when": {"status": "verify"}, "role": "checker", "workflow": "check",
                     "onPass": "done", "onFail": "build"}]}
-ONE_RULE = {"version": 2,
-            "statuses": [{"id": "build", "kind": "initial"}, {"id": "done", "kind": "done"}],
+ONE_RULE = {"version": 2, "agentTicketStatus": "build",
+            "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "done", "kind": "done"}],
             "ticketFields": [],
             "rules": [{"when": {"status": "build"}, "role": "worker", "workflow": "work",
                        "onPass": "done", "onFail": "build"}]}
-WORKTREE_BOARD = {"version": 2, "leaseSeconds": 600,
-                  "statuses": [{"id": "build", "kind": "initial"}, {"id": "ready"},
+WORKTREE_BOARD = {"version": 2, "leaseSeconds": 600, "agentTicketStatus": "build",
+                  "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "ready"},
                                {"id": "done", "kind": "done"}],
                   "ticketFields": [],
                   "rules": [
@@ -95,7 +95,9 @@ class RunBoardCase(unittest.TestCase):
         return self.board_json("ticket", "show", key)["ticket"]
 
     def add_ticket(self, title="a"):
-        return self.board_json("ticket", "add", "--title", title)["ticket"]
+        ticket = self.board_json("ticket", "add", "--title", title)["ticket"]
+        self.board_json("ticket", "move", ticket["key"], "--to", "build")
+        return ticket
 
     def start_team(self):
         rc, r, p = self.sb.run("team", "start", "--workspace", self.ws, "--team", "alpha")
@@ -146,10 +148,10 @@ class ThreeRules(RunBoardCase):
         self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("merged", "done"))
         detail = self.board_json("ticket", "show", "T-001")
         names = [e["name"] for e in detail["events"]]
-        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed", "ticket.outcome_applied",
-                                 "ticket.claimed", "ticket.outcome_applied"])
+        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.moved", "ticket.workflow_changed", "ticket.claimed", "ticket.outcome_applied",
+                                 "ticket.workflow_changed", "ticket.claimed", "ticket.outcome_applied"])
         self.assertEqual([e["to"] for e in detail["events"]],
-                         ["none", "none", "build-active", "verify", "verify-active", "merged"])
+                         ["none", "none", "build", "build-active", "build-active", "verify", "verify-active", "verify-active", "merged"])
 
 
 class BusyAndStop(RunBoardCase):
@@ -165,7 +167,7 @@ class BusyAndStop(RunBoardCase):
         self.run_board()
         time.sleep(4)  # the board is running, but Ryan is busy with an operator task
         ticket = self.ticket_json("T-001")
-        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("none", None))
+        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("build", None))
 
         rc, out, err = self.human("stop-board", "--team", "alpha")
         self.assertEqual(rc, 0, err)
@@ -177,7 +179,7 @@ class BusyAndStop(RunBoardCase):
             time.sleep(0.5)
         time.sleep(3)  # ...but the stopped board claims nothing
         ticket = self.ticket_json("T-001")
-        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("none", None))
+        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("build", None))
 
 
 class WorktreesAndMerge(RunBoardCase):
@@ -217,7 +219,7 @@ class WorktreesAndMerge(RunBoardCase):
 
         conflict = self.wait_event("T-002", "ticket.merge_conflict", timeout=90)  # the second conflicts
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket_json("T-002")["workflowStatus"], "none")  # onFail returned it to the queue
+        self.assertEqual(self.ticket_json("T-002")["workflowStatus"], "build")  # onFail returned it to the queue
         with open(os.path.join(self.ws, "shared.txt")) as f:
             self.assertEqual(f.read(), "from first\n")  # the base branch is untouched by the conflict
         self.assertTrue(os.path.isdir(second["worktreePath"]))  # kept for the fixing round

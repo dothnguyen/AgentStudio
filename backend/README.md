@@ -425,6 +425,10 @@ workflow and promote them only after its follow-up action succeeds. `ticket appl
 run through the rules (the board's scheduler does this itself for its claims). Recovery: see
 [RECOVERY.md](RECOVERY.md), section "The generic board (P04)".
 
+The scheduler picks unassigned tickets in the todo or in-progress column by their workflow status; backlog
+tickets are not claimed. Claims move the workflow to the rule's during status and the column to in-progress.
+Dependencies are finished when their column is done or closed; caps count assigned tickets in the during status.
+
 **Agents adding tickets over MCP.** A member with `"canAddTickets": true` in `teams/<id>.json` gets a per-assignment
 MCP server (`agent-studio mcp`, stdio JSON-RPC, standard library only) when the board works one of its tickets: the
 Claude adapter adds `--mcp-config <per-assignment file>` to its usual `--strict-mcp-config` (so *only* this server is

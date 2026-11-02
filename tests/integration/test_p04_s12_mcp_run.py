@@ -11,8 +11,8 @@ from tests.integration.test_p01_s04_start import git
 from tests.integration.test_p04_s10_run_board import WORK as IMPL
 
 ROLES = {"version": 1, "roles": {"writer": {}, "plain": {}}}
-BOARD = {"version": 2, "leaseSeconds": 600,
-         "statuses": [{"id": "build", "kind": "initial"}, {"id": "in-progress"},
+BOARD = {"version": 2, "leaseSeconds": 600, "agentTicketStatus": "build",
+         "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "in-progress"},
                       {"id": "done", "kind": "done"}],
          "ticketFields": [],
          "rules": [{"when": {"status": "build"}, "role": "writer", "workflow": "impl",
@@ -73,6 +73,7 @@ class McpRun(unittest.TestCase):
         self.assertTrue(r["ok"], (r, p.stderr))
 
         ticket = self.data("ticket", "add", "--title", "mcp host ticket")
+        self.data("ticket", "move", ticket["ticket"]["key"], "--to", "build")
         # the board claims it with the writer (canAddTickets) and the run calls the tools
         self.wait_for(lambda: ticket if self.data("ticket", "show", ticket["ticket"]["key"])
                       ["ticket"].get("activeRunId") else None, 120, "claim")
@@ -94,7 +95,6 @@ class McpRun(unittest.TestCase):
                                        if t["title"].startswith("Finding:")], 30, "agent tickets")
         self.assertEqual(len(added), 2, added)  # duplicate call collapsed by the idempotency key
         first = self.data("ticket", "show", added[0]["key"])
-        # The board may claim the new ticket asynchronously after it appears in the list.
         self.wait_for(lambda: self.data("ticket", "show", added[0]["key"])["ticket"]["status"] == "in-progress", 120, "created ticket claim")
         self.assertEqual(first["ticket"]["phase"], "default")
         self.assertEqual(first["ticket"]["createdByMember"], "scribe")

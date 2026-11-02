@@ -42,8 +42,8 @@ REVIEW_DONE = {"version": 1, "description": "one reviewer stage (verdict-free, f
      "You are reviewing one board ticket.\\n{{task}}", "next": {"done": "$succeed"}}]}
 ROLES = {"version": 1, "roles": {"Implementer": {"description": "works tickets"},
                                  "Reviewer": {"description": "reviews tickets"}}}
-BOARD = {"version": 2, "leaseSeconds": 1800, "statuses": [
-    {"id": "build", "kind": "initial"}, {"id": "review"}, {"id": "done", "kind": "done"}],
+BOARD = {"version": 2, "leaseSeconds": 1800, "agentTicketStatus": "build", "statuses": [
+    {"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "review"}, {"id": "done", "kind": "done"}],
     "ticketFields": [], "rules": [
         {"when": {"status": "build"}, "role": "Implementer", "workflow": "impl",
          "onPass": "review", "onFail": "build", "maxRounds": 3, "requiresDeps": True},
@@ -172,6 +172,8 @@ class Gate:
                     "--phase", "sprint-2", "--body", FAIL_ONCE_BODY, "--json")["ticket"]
         out_of_phase = cli("ticket", "add", "--workspace", ws, "--title", "Not in this phase",
                            "--json")["ticket"]
+        for ticket in (one, two, three, out_of_phase):
+            cli("ticket", "move", ticket["key"], "--workspace", ws, "--to", "build", "--json")
         cli("ticket", "depend", "--workspace", ws, two["key"], "--on", one["key"], "--json")
         self.record("3-tickets", "PASS", keys=f"{one['key']},{two['key']},{three['key']}+"
                                               f"{out_of_phase['key']}(other phase)")
@@ -208,7 +210,7 @@ class Gate:
 
         untouched = self.ticket(ws, out_of_phase["key"])
         cli("team", "stop-board", "--workspace", ws, "--team", "main", "--json")
-        if untouched["ticket"]["workflowStatus"] != "none" or untouched["ticket"]["assignee"] is not None \
+        if untouched["ticket"]["workflowStatus"] != "build" or untouched["ticket"]["assignee"] is not None \
                 or any(e["name"] == "ticket.claimed" for e in untouched["events"]):
             raise Fail(f"the other-phase ticket was not left alone: "
                        f"{json.dumps(untouched['ticket'])[:500]}")

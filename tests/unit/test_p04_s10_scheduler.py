@@ -18,8 +18,8 @@ ROLES = {"version": 1, "roles": {"worker": {}}}
 
 
 def rules_board_json(**rule_extra):
-    return {"version": 2,
-            "statuses": [{"id": "build", "kind": "initial"}, {"id": "in-progress"},
+    return {"version": 2, "agentTicketStatus": "build",
+            "statuses": [{"id": "backlog", "kind": "initial"}, {"id": "build"}, {"id": "in-progress"},
                          {"id": "done", "kind": "done"}],
             "ticketFields": [],
             "rules": [dict({"when": {"status": "build"}, "role": "worker", "workflow": "solo",
@@ -65,7 +65,12 @@ class SchedCase(unittest.TestCase):
 
     def add_ticket(self, title="a", **extra):
         with self.store.transaction() as tx:
-            return boardmodel.ticket_add(tx, self.ws, dict({"title": title, "priority": 100}, **extra))["ticket"]
+            ticket = boardmodel.ticket_add(tx, self.ws, dict({"title": title, "priority": 100}, **extra))["ticket"]
+            if "status" not in extra:
+                config = boardmodel.load_config(self.ws)
+                tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = ? WHERE id = ?",
+                                (config["rules"][0]["when"]["status"], ticket["id"]))
+            return ticket
 
     def ticket(self, key):
         return dict(self.conn.execute("SELECT * FROM tickets WHERE key = ?", (key,)).fetchone())
@@ -142,6 +147,66 @@ class Binding(SchedCase):
 
 
 class TickRules(SchedCase):
+    def test_routing_claim_and_start_failure_return_workflow(self):
+        self.write_board({"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "dev-ready"}, {"id": "deving"},
+            {"id": "merged", "kind": "done"}], "todoEntry": ["dev-ready"],
+            "todoDefault": "dev-ready", "ticketFields": [], "rules": [{"when": {"status": "dev-ready"},
+            "during": "deving", "role": "worker", "workflow": "solo", "onPass": "merged", "onFail": "dev-ready"}]})
+        self.add_ticket("backlog", status="none")
+        self.add_ticket("ready")
+        with patch("agent_studio.boardsched._start", side_effect=AsError("START_FAILED", "failed")):
+            self.tick()
+        self.assertEqual((self.ticket("T-001")["status"], self.ticket("T-001")["assignee"]), ("backlog", None))
+        failed = self.ticket("T-002")
+        self.assertEqual((failed["status"], failed["workflow_status"], failed["assignee"]),
+                         ("in-progress", "dev-ready", None))
+        self.tick()
+        claimed = self.ticket("T-002")
+        self.assertEqual((claimed["status"], claimed["workflow_status"], claimed["assignee"]),
+                         ("in-progress", "deving", self.worker))
+        event = self.conn.execute("SELECT from_status, to_status, payload_json FROM ticket_events "
+                                  "WHERE ticket_id = ? AND name = 'ticket.claimed'", (claimed["id"],)).fetchone()
+        self.assertEqual((event["from_status"], event["to_status"]), ("dev-ready", "deving"))
+        self.assertEqual(json.loads(event["payload_json"])["rule"], "dev-ready")
+
+        payload = json.loads(event["payload_json"])
+        self.assertEqual(payload, {"ticketId": claimed["id"], "key": "T-002", "agentId": self.worker,
+                                   "run": claimed["active_run_id"], "rule": "dev-ready", "workspace": None})
+
+    def test_picker_keeps_priority_order_and_skips_non_todo_columns(self):
+        self.write_board({"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "dev-ready"}, {"id": "deving"},
+            {"id": "merged", "kind": "done"}], "todoEntry": ["dev-ready"],
+            "todoDefault": "dev-ready", "ticketFields": [], "rules": [{"when": {"status": "dev-ready"},
+            "during": "deving", "role": "worker", "workflow": "solo", "onPass": "merged", "onFail": "dev-ready"}]})
+        self.add_ticket("first priority", priority=1)
+        self.add_ticket("second priority", priority=20)
+        self.add_ticket("backlog", status="none", priority=0)
+
+        result = self.tick()
+
+        self.assertEqual((result["claimed"], result["errors"]), (1, []))
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "deving")
+        self.assertIsNone(self.ticket("T-002")["active_run_id"])
+        self.assertIsNone(self.ticket("T-003")["active_run_id"])
+
+    def test_deps_and_cap_use_columns_and_workflow_status(self):
+        dep = self.add_ticket("dep")
+        waiting = self.add_ticket("waiting")
+        config = boardmodel.load_config(self.ws)
+        rule = config["rules"][0]
+        with self.store.transaction() as tx:
+            boardmodel.ticket_depend(tx, self.ws, {"key": "T-002", "on": ["T-001"], "remove": []})
+            tx.conn.execute("UPDATE tickets SET status = 'done', workflow_status = ? WHERE id = ?", (rule["when"]["status"], dep["id"]))
+            self.assertEqual(boardsched._deps_open(tx, waiting["id"], config), 0)
+            tx.conn.execute("UPDATE tickets SET status = 'closed', workflow_status = ? WHERE id = ?", (rule["during"], dep["id"]))
+            self.assertEqual(boardsched._deps_open(tx, waiting["id"], config), 0)
+            tx.conn.execute("UPDATE tickets SET status = 'in-progress', workflow_status = ?, assignee = ? WHERE id = ?", (rule["during"], self.worker, dep["id"]))
+            self.assertEqual(boardsched._deps_open(tx, waiting["id"], config), 1)
+            self.assertEqual(boardsched._active_under_rule(tx, self.ws, rule), 1)
+            self.assertEqual(boardsched._claiming_rule(tx, self.ws, dict(tx.conn.execute("SELECT * FROM tickets WHERE id = ?", (dep["id"],)).fetchone())), rule)
+
     @patch("agent_studio.providers.probe_many", return_value={"fake": {"available": True}})
     def test_quota_failover_reclaims_ticket_with_fallback_agent(self, probe):
         config = os.path.join(self.ws, ".agent-studio")
@@ -198,7 +263,7 @@ class TickRules(SchedCase):
                          "failed")
         self.assertIsNone(self.ticket("T-001")["rounds_json"])
         names = [r[0] for r in self.conn.execute("SELECT name FROM ticket_events ORDER BY id").fetchall()]
-        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed", "ticket.claim_released", "ticket.claimed"])
+        self.assertEqual(names, ["ticket.created", "ticket.workflow_changed", "ticket.claimed", "ticket.workflow_changed", "ticket.claim_released", "ticket.workflow_changed", "ticket.claimed"])
 
     def test_other_paused_failure_keeps_its_claim(self):
         self.add_ticket()
@@ -262,7 +327,7 @@ class TickRules(SchedCase):
         self.assertEqual(run["status"], "running")
         names = [e["name"] for e in self.conn.execute(
             "SELECT name FROM ticket_events ORDER BY id").fetchall()]
-        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed"])
+        self.assertEqual(names, ["ticket.created", "ticket.workflow_changed", "ticket.claimed"])
         assignment = self.conn.execute("SELECT agent_id FROM assignments ORDER BY created_at DESC").fetchone()
         self.assertEqual(assignment["agent_id"], self.worker)
 
