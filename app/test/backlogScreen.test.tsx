@@ -101,6 +101,10 @@ describe('BacklogScreen', () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} onOpenTicket={open} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     const row = view.getByRole('button', { name: 'Open T-1: Working title' });
+    expect(row.querySelectorAll('button, a, input, select, [tabindex]')).toHaveLength(0);
+    for (const chip of row.querySelectorAll('.boards-backlog-status, .boards-ticket-chip')) {
+      expect(chip.textContent?.trim().length).toBeGreaterThan(0);
+    }
     expect(row.textContent).toContain('Working');
     expect(row.textContent).toContain('Priority 10');
     expect(row.textContent).toContain('SDSenior Developer');
