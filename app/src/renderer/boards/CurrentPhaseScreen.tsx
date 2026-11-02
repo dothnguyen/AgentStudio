@@ -10,6 +10,13 @@ import type {
 } from '../api';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
 import { BoardLanes } from './BoardLanes';
+import { BoardToolbar } from './BoardToolbar';
+import {
+  DEFAULT_BOARD_FILTERS,
+  filterBoardTickets,
+  matchesBoardFilters,
+  type BoardFilters,
+} from './boardFilters';
 
 /** The board has no pushed change event today; a poll keeps the header and lanes current. */
 export const BOARD_CHANGED_EVENT = 'board-changed';
@@ -144,7 +151,7 @@ export interface CurrentPhaseScreenProps {
   management: ManagementApi;
   /** Opens the Phases screen from the "no current phase" state. */
   onOpenPhases?(): void;
-  /** Empty columns are hidden by default; the toolbar will expose this as a switch. */
+  /** Initial state of the Hide empty columns chip; defaults to on. */
   hideEmpty?: boolean;
   /** Opens the ticket page; omitted until the ticket-page story wires it in. */
   onOpenTicket?(key: string): void;
@@ -199,13 +206,19 @@ function LoadingSkeleton(): JSX.Element {
 
 export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element {
   const board = useCurrentPhaseBoard(props.management, props.workspace.id, { refreshMs: props.refreshMs });
+  const [filters, setFilters] = useState<BoardFilters>(() => ({
+    ...DEFAULT_BOARD_FILTERS,
+    hideEmpty: props.hideEmpty ?? DEFAULT_BOARD_FILTERS.hideEmpty,
+  }));
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
+  const filteredTickets = filterBoardTickets(tickets, filters);
   const progress = phaseProgress(tickets);
   const settingsStatuses = board.data?.settings.statuses ?? [];
   const statuses = settingsStatuses.length > 0
     ? settingsStatuses
     : (board.data?.tickets?.statuses ?? []).map((id) => ({ id, name: null, kind: null }));
+  const matches = (ticket: (typeof tickets)[number]): boolean => matchesBoardFilters(ticket, filters);
 
   if (board.state === 'loading') {
     return (
@@ -281,13 +294,27 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
       </header>
       <Notice />
       {tickets.length > 0 && (
-        <BoardLanes
-          statuses={statuses}
-          rules={board.data?.settings.rules ?? []}
-          tickets={tickets}
-          hideEmpty={props.hideEmpty}
-          onOpenTicket={props.onOpenTicket}
-        />
+        <>
+          <BoardToolbar filters={filters} resultCount={filteredTickets.length} onChange={setFilters} />
+          {filteredTickets.length > 0 && (
+            <BoardLanes
+              statuses={statuses}
+              rules={board.data?.settings.rules ?? []}
+              tickets={tickets}
+              hideEmpty={filters.hideEmpty}
+              matches={matches}
+              onOpenTicket={props.onOpenTicket}
+            />
+          )}
+          {filteredTickets.length === 0 && (
+            <section className="boards-no-match" role="status">
+              <p>No tickets match these filters</p>
+              <button type="button" onClick={() => { setFilters({ ...DEFAULT_BOARD_FILTERS }); }}>
+                Clear filters
+              </button>
+            </section>
+          )}
+        </>
       )}
       {tickets.length === 0 && (
         <section className="boards-state-card boards-empty-phase" aria-labelledby="boards-empty-title">

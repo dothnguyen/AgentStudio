@@ -44,6 +44,15 @@ describe('Current Phase lane styles', () => {
   });
 });
 
+describe('Board toolbar styles', () => {
+  it('uses the design search field, 32px chips and right-aligned count', () => {
+    expect(flat).toContain('.boards-search { display: flex; align-items: center; gap: 8px; width: min(300px, 100%); height: 36px;');
+    expect(flat).toContain('.boards-filter-chip { display: inline-flex; align-items: center; gap: 7px; box-sizing: border-box; height: 32px; padding: 0 12px; border: 1px solid #2f343c; border-radius: var(--radius-pill); background: #1b1f24;');
+    expect(flat).toContain('.boards-filter-chip[aria-pressed="true"] { border-color: #3d6bb3; background: rgba(91, 156, 255, 0.12); color: #9ec3ff; }');
+    expect(flat).toContain('.boards-toolbar-count { flex: none; color: #8d949e; font-size: 12px;');
+  });
+});
+
 describe('Ticket card styles', () => {
   it('colours the working and blocked left edges and shows a focus ring', () => {
     expect(flat).toContain('.boards-ticket-card[data-activity="working"] { border-left-color: #4ac26b; }');

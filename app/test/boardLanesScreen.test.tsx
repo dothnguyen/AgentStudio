@@ -44,11 +44,22 @@ const TICKETS = [
   ticket('backlog', 'T-100'),
   ticket('refine-ready', 'T-101'),
   ...Array.from({ length: 8 }, (_, index) => ticket('dev-ready', `T-${200 + index}`)),
-  ticket('blocked', 'T-300', { returnStatus: 'qa-ready', blockedReason: 'A run stopped.' }),
-  ticket('need-escalate', 'T-301'),
+  ticket('blocked', 'T-300', {
+    returnStatus: 'qa-ready',
+    blockedReason: 'A run stopped.',
+    activity: { state: 'blocked', note: 'A run stopped.' },
+  }),
+  ticket('need-escalate', 'T-301', {
+    title: 'Escalated: scheduler failures on main',
+    activity: { state: 'working', agent: 'senior', role: 'SeniorDeveloper', run: 'run-t-301', workflow: 'board-senior' },
+  }),
   ticket('review-ready', 'T-302'),
   ticket('done', 'T-303'),
-  ticket('blocked', 'T-304', { returnStatus: 'gone', blockedReason: 'Unknown return status.' }),
+  ticket('blocked', 'T-304', {
+    returnStatus: 'gone',
+    blockedReason: 'Unknown return status.',
+    activity: { state: 'blocked', note: 'Unknown return status.' },
+  }),
 ];
 
 function settings(overrides: Partial<BoardSettings> = {}): BoardSettings {
@@ -168,5 +179,123 @@ describe('CurrentPhaseScreen lanes and columns', () => {
 
     fireEvent.click(fewer);
     expect(devReady.querySelectorAll('[data-ticket-key]')).toHaveLength(6);
+  });
+});
+
+describe('CurrentPhaseScreen toolbar and filters', () => {
+  function cards(view: ReturnType<typeof render>): string[] {
+    return [...view.container.querySelectorAll('[data-ticket-key]')].map((card) => card.getAttribute('data-ticket-key') ?? '');
+  }
+
+  function countText(view: ReturnType<typeof render>): string {
+    return view.container.querySelector('.boards-toolbar-count')?.textContent ?? '';
+  }
+
+  function search(view: ReturnType<typeof render>, value: string): void {
+    fireEvent.change(view.getByPlaceholderText('Search tickets'), { target: { value } });
+  }
+
+  function chip(view: ReturnType<typeof render>, name: string): HTMLElement {
+    return view.getByRole('button', { name });
+  }
+
+  it('searches keys and titles case-insensitively and shows the filtered count', async () => {
+    const view = await renderBoard();
+    expect(countText(view)).toBe('15 tickets');
+
+    search(view, 't-20');
+    expect(countText(view)).toBe('8 tickets');
+    expect(cards(view).sort()).toEqual(['T-200', 'T-201', 'T-202', 'T-203', 'T-204', 'T-205']);
+    fireEvent.click(view.getByRole('button', { name: 'Show 2 more' }));
+    expect(cards(view).sort()).toEqual(['T-200', 'T-201', 'T-202', 'T-203', 'T-204', 'T-205', 'T-206', 'T-207']);
+    expect(view.queryByText('T-100')).toBeNull();
+
+    search(view, 'SCHEDULER');
+    expect(countText(view)).toBe('1 ticket');
+    expect(cards(view)).toEqual(['T-301']);
+  });
+
+  it('filters to blocked tickets with an aria-pressed chip and updates lane counts', async () => {
+    const view = await renderBoard();
+    const blocked = chip(view, 'Blocked only');
+    expect(blocked.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(blocked);
+    expect(blocked.getAttribute('aria-pressed')).toBe('true');
+    expect(countText(view)).toBe('2 tickets');
+    expect(cards(view).sort()).toEqual(['T-300', 'T-304']);
+    expect(view.getByLabelText('Build lane').textContent).toContain('2 tickets');
+
+    fireEvent.click(blocked);
+    expect(blocked.getAttribute('aria-pressed')).toBe('false');
+    expect(countText(view)).toBe('15 tickets');
+  });
+
+  it('filters to working tickets with an aria-pressed chip', async () => {
+    const view = await renderBoard();
+    const working = chip(view, 'Working now');
+    expect(working.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(working);
+    expect(working.getAttribute('aria-pressed')).toBe('true');
+    expect(countText(view)).toBe('1 ticket');
+    expect(cards(view)).toEqual(['T-301']);
+    expect(view.getByLabelText('Build lane').textContent).toContain('1 ticket');
+  });
+
+  it('hides empty columns by default and toggles the chip off and on', async () => {
+    const view = await renderBoard();
+    const hideEmpty = chip(view, 'Hide empty columns');
+    expect(hideEmpty.getAttribute('aria-pressed')).toBe('true');
+    expect(view.queryByLabelText('Unpack ready column')).toBeNull();
+
+    fireEvent.click(hideEmpty);
+    expect(hideEmpty.getAttribute('aria-pressed')).toBe('false');
+    const unpack = view.getByLabelText('Unpack ready column');
+    expect(unpack.textContent).toContain('No tickets');
+    expect(countText(view)).toBe('15 tickets');
+
+    fireEvent.click(hideEmpty);
+    expect(hideEmpty.getAttribute('aria-pressed')).toBe('true');
+    expect(view.queryByLabelText('Unpack ready column')).toBeNull();
+  });
+
+  it('combines search and chips with AND, keeps the progress unfiltered and clears to no match', async () => {
+    const view = await renderBoard();
+    const progress = view.getByRole('progressbar', { name: 'Phase progress' });
+    expect(progress.getAttribute('aria-valuetext')).toBe('1 of 15 tickets done');
+
+    search(view, 't-30');
+    fireEvent.click(chip(view, 'Working now'));
+    expect(countText(view)).toBe('1 ticket');
+    expect(cards(view)).toEqual(['T-301']);
+    expect(progress.getAttribute('aria-valuetext')).toBe('1 of 15 tickets done');
+
+    fireEvent.click(chip(view, 'Blocked only'));
+    expect(countText(view)).toBe('0 tickets');
+    expect(view.getByText('No tickets match these filters')).toBeTruthy();
+    expect(view.queryByLabelText('Intake lane')).toBeNull();
+
+    fireEvent.click(view.getByRole('button', { name: 'Clear filters' }));
+    expect((view.getByPlaceholderText('Search tickets') as HTMLInputElement).value).toBe('');
+    expect(chip(view, 'Blocked only').getAttribute('aria-pressed')).toBe('false');
+    expect(chip(view, 'Working now').getAttribute('aria-pressed')).toBe('false');
+    expect(chip(view, 'Hide empty columns').getAttribute('aria-pressed')).toBe('true');
+    expect(countText(view)).toBe('15 tickets');
+    expect(view.queryByText('No tickets match these filters')).toBeNull();
+    expect(view.getByLabelText('Intake lane')).toBeTruthy();
+  });
+
+  it('resets the filter state when the screen is left and mounted again', async () => {
+    const first = await renderBoard();
+    search(first, 'scheduler');
+    fireEvent.click(chip(first, 'Blocked only'));
+    expect(countText(first)).toBe('0 tickets');
+    first.unmount();
+
+    const second = await renderBoard();
+    expect((second.getByPlaceholderText('Search tickets') as HTMLInputElement).value).toBe('');
+    expect(countText(second)).toBe('15 tickets');
+    expect(chip(second, 'Blocked only').getAttribute('aria-pressed')).toBe('false');
   });
 });

@@ -15,8 +15,10 @@ export interface BoardLanesProps {
   statuses: readonly BoardStatusInfo[];
   rules: readonly BoardRuleView[];
   tickets: readonly BoardTicketSummary[];
-  /** Empty columns are hidden by default; the toolbar will expose this as a switch. */
+  /** Empty columns are hidden by default; the toolbar exposes this as a switch. */
   hideEmpty?: boolean;
+  /** The toolbar filter predicate; non-matching tickets are left out of cards and counts. */
+  matches?(ticket: BoardTicketSummary): boolean;
   /** Opens the ticket page; omitted until the ticket-page story wires it in. */
   onOpenTicket?(key: string): void;
 }
@@ -121,7 +123,10 @@ function BoardLaneView(props: {
 
 /** The Current Phase kanban: lanes, columns and cards. */
 export function BoardLanes(props: BoardLanesProps): JSX.Element {
-  const lanes = buildBoardLanes(props.statuses, props.rules, props.tickets, { hideEmpty: props.hideEmpty });
+  const lanes = buildBoardLanes(props.statuses, props.rules, props.tickets, {
+    hideEmpty: props.hideEmpty,
+    matches: props.matches,
+  });
   return (
     <div className="boards-board" role="region" aria-label="Board columns (scrollable)" tabIndex={0}>
       <div className="boards-board-lanes">

@@ -61,8 +61,10 @@ export interface BoardLane {
 }
 
 export interface BuildLanesOptions {
-  /** Hide columns without tickets; defaults to true. */
+  /** Hide columns without tickets; defaults to true. Emptiness is measured before filtering. */
   hideEmpty?: boolean;
+  /** A toolbar filter; matching tickets feed cards and counts, non-matching ones are left out. */
+  matches?(ticket: BoardTicketSummary): boolean;
 }
 
 const STATUS_TONE: Record<string, BoardStatusTone> = {
@@ -190,15 +192,19 @@ export function buildBoardLanes(
   options: BuildLanesOptions = {},
 ): BoardLane[] {
   const hideEmpty = options.hideEmpty ?? true;
+  const matches = options.matches ?? (() => true);
   const known = statusMap(statuses, tickets);
   const byColumn = groupTickets(tickets, known);
   const needsBlockedColumn = (byColumn.get(BLOCKED_STATUS)?.length ?? 0) > 0;
+  const ticketsIn = (status: string): BoardTicketSummary[] =>
+    (byColumn.get(status) ?? []).filter(matches);
+  const isRawEmpty = (status: string): boolean => (byColumn.get(status)?.length ?? 0) === 0;
 
   const lanes: BoardLane[] = BOARD_LANES.map((lane) => {
     const laneStatuses = lane.statuses
       .filter((status) => known.has(status))
       .map((status) => known.get(status)!);
-    const columns = laneStatuses.map((status) => columnFor(status, byColumn.get(status.id) ?? [], rules));
+    const columns = laneStatuses.map((status) => columnFor(status, ticketsIn(status.id), rules));
     if (lane.id === 'build' && needsBlockedColumn) {
       columns.push({
         id: BLOCKED_STATUS,
@@ -207,30 +213,35 @@ export function buildBoardLanes(
         tone: 'amber',
         worker: workerLineForStatus(BLOCKED_STATUS, rules),
         fallback: true,
-        tickets: byColumn.get(BLOCKED_STATUS) ?? [],
+        tickets: ticketsIn(BLOCKED_STATUS),
       });
     }
-    return finishLane(lane, columns, hideEmpty);
+    return finishLane(lane, columns, hideEmpty, isRawEmpty);
   });
 
   const otherStatuses = Array.from(known.values()).filter((status) => laneForStatus(status.id) === null);
   if (otherStatuses.length > 0) {
-    const columns = otherStatuses.map((status) => columnFor(status, byColumn.get(status.id) ?? [], rules));
-    lanes.push(finishLane(OTHER_LANE, columns, hideEmpty));
+    const columns = otherStatuses.map((status) => columnFor(status, ticketsIn(status.id), rules));
+    lanes.push(finishLane(OTHER_LANE, columns, hideEmpty, isRawEmpty));
   }
 
   return lanes;
 }
 
-function finishLane(lane: LaneDefinition, columns: BoardColumn[], hideEmpty: boolean): BoardLane {
+function finishLane(
+  lane: LaneDefinition,
+  columns: BoardColumn[],
+  hideEmpty: boolean,
+  isRawEmpty: (status: string) => boolean,
+): BoardLane {
   const total = columns.reduce((count, column) => count + column.tickets.length, 0);
   if (!hideEmpty) return { id: lane.id, name: lane.name, total, columns, hiddenColumns: [] };
   return {
     id: lane.id,
     name: lane.name,
     total,
-    columns: columns.filter((column) => column.tickets.length > 0),
-    hiddenColumns: columns.filter((column) => column.tickets.length === 0),
+    columns: columns.filter((column) => !isRawEmpty(column.id)),
+    hiddenColumns: columns.filter((column) => isRawEmpty(column.id)),
   };
 }
 

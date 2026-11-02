@@ -141,6 +141,26 @@ describe('buildBoardLanes', () => {
     expect(intake.hiddenColumns).toEqual([]);
     expect(intake.columns.every((column) => column.tickets.length === 0)).toBe(true);
   });
+
+  it('filters cards and counts while keeping hide-empty based on the unfiltered board', () => {
+    const tickets = [
+      ticket('backlog', { key: 'T-601' }),
+      ticket('dev-ready', { key: 'T-602' }),
+      ticket('blocked', { key: 'T-603', returnStatus: 'qa-ready', activity: { state: 'blocked', note: 'Stopped.' } }),
+    ];
+    const lanes = buildBoardLanes(STATUSES, RULES, tickets, {
+      matches: (entry) => entry.activity.state === 'blocked',
+    });
+
+    expect(lanes.map((lane) => lane.total)).toEqual([0, 1, 0, 0]);
+    const intake = lanes[0]!;
+    // Backlog still has a raw ticket, so the column stays visible with no matching card.
+    expect(intake.columns.map((column) => column.id)).toEqual(['backlog']);
+    expect(intake.columns[0]!.tickets).toEqual([]);
+    expect(intake.hiddenColumns.map((column) => column.id)).toEqual(['unpack-ready', 'refine-ready']);
+    expect(lanes.find((lane) => lane.id === 'build')!.columns.find((column) => column.id === 'qa-ready')!
+      .tickets.map((entry) => entry.key)).toEqual(['T-603']);
+  });
 });
 
 describe('column labels and worker lines', () => {
