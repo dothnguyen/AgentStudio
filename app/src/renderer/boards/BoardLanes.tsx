@@ -8,7 +8,7 @@ import {
   type BoardColumn,
   type BoardLane,
   type BoardStatusInfo,
-} from './boardLanes';
+} from './boardLaneModel';
 import { TicketCard } from './TicketCard';
 
 export interface BoardLanesProps {

@@ -10,7 +10,7 @@ import {
   statusTone,
   workerLineForStatus,
   type BoardStatusInfo,
-} from '../src/renderer/boards/boardLanes';
+} from '../src/renderer/boards/boardLaneModel';
 import { boardTicketSummary } from './boardFixtures';
 
 const STATUS_IDS = [
