@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from . import ops, procid, providers, tmuxctl
+from . import boardsched, ops, procid, providers, tmuxctl
 import re
 
 from .protocol import AsError, BAD_REQUEST, MEMBER_NOT_FOUND, TEAM_ALREADY_RUNNING, TEAM_NOT_RUNNING
@@ -563,6 +563,15 @@ def verify_team(tx_or_conn, team: dict, tmux: tmuxctl.Tmux) -> dict:
 
 # ---- team.stop ------------------------------------------------------------------------------------
 
+def _stop_team_board(tx, team):
+    row = tx.conn.execute("SELECT team_id, run_status FROM board_state WHERE workspace = ?",
+                          (team["workspace"],)).fetchone()
+    if row is None or row["team_id"] != team["id"] or row["run_status"] != "running":
+        return False
+    boardsched.stop_board(tx, team["workspace"])
+    return True
+
+
 def team_stop(tx: Tx, args: dict, ctx: dict):
     if args.get("teamId"):
         team = tx.get("team", args["teamId"])
@@ -574,7 +583,8 @@ def team_stop(tx: Tx, args: dict, ctx: dict):
             raise AsError(TEAM_NOT_RUNNING, f"Team {args['teamDefId']!r} is not running in this workspace.")
         team = tx.get("team", row["id"])
     if team["status"] == "stopped":
-        return {"teamId": team["id"], "stopped": True, "alreadyStopped": True}
+        return {"teamId": team["id"], "stopped": True, "alreadyStopped": True,
+                "boardStopped": _stop_team_board(tx, team)}
     tmux: tmuxctl.Tmux = ctx["tmux"]
     before = tmux.list_sessions() or []
     check = verify_team(tx, team, tmux)
@@ -613,7 +623,8 @@ def team_stop(tx: Tx, args: dict, ctx: dict):
                           payload={"reason": "team stopped"})
     tx.transition("team", team["id"], "stopped")
     after = tmux.list_sessions() or []
-    return {"teamId": team["id"], "stopped": True, "sessionWasPresent": check["state"] == "ok",
+    return {"teamId": team["id"], "stopped": True, "boardStopped": _stop_team_board(tx, team),
+            "sessionWasPresent": check["state"] == "ok",
             "tmuxInventory": {"before": before, "after": after}}
 
 

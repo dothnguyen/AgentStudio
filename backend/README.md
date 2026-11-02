@@ -242,6 +242,11 @@ agent-studio snapshot --team <teamId> --pretty           # status comes from her
 agent-studio team stop --team <teamId>
 ```
 
+Stopping a team also stops its running board, retaining the team as the last board runner. The
+`team.stop` result includes `boardStopped` to indicate whether it stopped the board; the CLI prints
+`Board stopped.` when true. An already-stopped team also repairs a board still marked running for it.
+Stopping the board prevents new claims while finished runs continue to be applied.
+
 From Windows, `team attach --print` (or the `team.start` receipt) gives a ready-made command, e.g.
 `wt.exe -w new wsl.exe -d Ubuntu --exec /usr/bin/tmux -L agent-studio attach-session -t =as-1a2b3c4d5e6f7a8b`.
 

@@ -749,6 +749,8 @@ def main(argv=None) -> int:
     wait = req.pop("_wait", False)
     wait_wf = req.pop("_wait_workflow", False)
     resp = dispatch.handle_request(req, require_id=False)
+    if req.get("command") == "team.stop" and resp.get("ok") and resp["data"].get("boardStopped"):
+        sys.stderr.write("Board stopped.\n")
     if wait_wf and resp.get("ok"):
         receipt = resp["data"]
         sys.stderr.write(f"accepted: workflow {receipt['workflowRunId']} (base {receipt['baseCommit'][:12]})\n")
