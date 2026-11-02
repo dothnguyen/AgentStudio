@@ -1,6 +1,12 @@
-ADD TESTS for the ticket. TASK is the ticket, with its implementation plan and "Done when" checklist; the developer's work is committed on this worktree's branch. See it with `git log main..HEAD --stat` and `git diff main...HEAD`.
+ADD TESTS for the ticket. TASK is the ticket; the developer's work is committed on this branch (`git log main..HEAD --stat`, `git diff main...HEAD`).
 
-For every acceptance criterion and edge case in the ticket that has no test (or only a weak one), add tests under tests/ in the project's style (unit tests where possible; integration tests only where the ticket needs them). Only add or change test files and test fixtures: do NOT change production code, even if you find a bug (the verdict stage reports it). Do not run git commands that change history or the working tree: the coordinator commits your work. Never delete, reinstall or rebuild dependencies yourself (`rm -rf node_modules`, `npm ci`, `npm install`, `npm rebuild`); if they are missing and DELEGATED_COMMANDS offers a command that fixes it, request it and end your turn with a short summary, and you will be re-dispatched with its result. Then have the tests run: request the test suite that fits the ticket's changes, using the files it changed (see DELEGATED_COMMANDS): `test-ui` when only `app/` changed, `test-backend` when only the backend (`backend/`, `tests/`) changed, otherwise `test-all` and end your turn with a short summary; you are re-dispatched with its result in a DELEGATED section. If a test you added is wrong, fix it and run the suite again; if production code fails a correct test, leave it failing for the verdict. Your sandbox cannot run the full suite, so never report results you did not get from a delegated run. Finish with a short list of the tests you added and the suite you ran with the result of its last run (failing tests quoted).
+For every acceptance criterion and edge case with no test or only a weak one, add tests in the project's style (backend: tests/, app: app/test/; unit tests where possible, integration tests only where the ticket needs them). Change only test files and fixtures, never production code, even if you find a bug: the verdict stage reports it.
+
+Then request the suite that fits the files the ticket changed (`test-ui`, `test-backend` or `test-all`, see DELEGATED_COMMANDS) and end your turn with a short summary; you are re-dispatched with the result. Fix a test that is wrong and run again; leave a correct test that production code fails as failing. Never report results you did not get from a delegated run.
+
+Do not delete, reinstall or rebuild dependencies (if broken, request a fix from DELEGATED_COMMANDS and end your turn), and do not run git commands that change history or the working tree: the coordinator commits your work.
+
+Finish with the tests you added and the suite you ran with its last result (quote failing tests).
 
 {{delegated_commands}}
 

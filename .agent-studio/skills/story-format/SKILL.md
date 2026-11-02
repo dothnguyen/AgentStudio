@@ -18,9 +18,6 @@ One paragraph.
 ## Done when
 - [ ] testable outcome
 - [ ] tests: which unit / integration tests prove it
-
-## Evidence
-(filled in when the story is done: commands run, results, links to evidence files)
 ```
 
-Rules: a story is Done only with evidence; mocks never prove a real provider; keep stories small (one developer session).
+Rules: a story is Done when every "Done when" item is proved by passing unit or integration tests; never require live checks, manual app runs, screenshots or other recorded evidence (list anything that needs a person as an operator check, outside "Done when"); mocks never prove a real provider; keep stories small (one developer session).
