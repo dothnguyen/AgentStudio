@@ -5,8 +5,10 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CurrentPhaseScreen } from '../src/renderer/boards/CurrentPhaseScreen';
+import { BacklogScreen } from '../src/renderer/boards/BacklogScreen';
+import { PhasesScreen } from '../src/renderer/boards/PhasesScreen';
 import { TicketScreen } from '../src/renderer/boards/TicketScreen';
-import { boardTicketDetailFixture } from './boardFixtures';
+import { boardPhasesFixture, boardTicketDetailFixture, boardTicketListFixture, boardTicketSummary } from './boardFixtures';
 import { workspaceA } from './dashboardFixtures';
 import { fakeManagement } from './teamsFixtures';
 
@@ -181,6 +183,36 @@ describe('Boards responsive contract', () => {
     expect(flat).toContain('.boards-board { max-width: 100%; min-width: 0; overflow-x: auto;');
     expect(flat).toContain('.boards-board-lanes { display: flex; align-items: flex-start; gap: 26px; width: max-content; min-width: 100%; }');
     expect(flat).toContain('.boards-current-screen { display: flex; flex-direction: column; gap: 20px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-x: clip;');
+  });
+});
+
+describe('Backlog and Phases accessibility', () => {
+  it('keeps headings at h1 or h2 and connects each group button to its panel', async () => {
+    const backlog = render(
+      <BacklogScreen
+        workspace={workspaceA}
+        management={fakeManagement({ boardTickets: [{ ok: true, data: boardTicketListFixture({ tickets: [boardTicketSummary()] }) }] }).api}
+      />,
+    );
+    await settle();
+    expect(backlog.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(backlog.container.querySelectorAll('h3, h4, h5, h6')).toHaveLength(0);
+    const groupButton = backlog.container.querySelector<HTMLButtonElement>('.boards-backlog-group-header')!;
+    expect(groupButton.getAttribute('aria-expanded')).toBe('true');
+    const controlledPanel = backlog.container.querySelector(`#${groupButton.getAttribute('aria-controls')}`)!;
+    expect(controlledPanel.id).toBe(groupButton.getAttribute('aria-controls'));
+    expect(controlledPanel.querySelector('.boards-backlog-row')).toBeTruthy();
+    backlog.unmount();
+
+    const phases = render(
+      <PhasesScreen workspace={workspaceA} management={fakeManagement({ boardPhases: [{ ok: true, data: boardPhasesFixture() }] }).api} />,
+    );
+    await settle();
+    expect(phases.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(phases.container.querySelectorAll('h3, h4, h5, h6')).toHaveLength(0);
+    for (const track of phases.container.querySelectorAll('[role="img"]')) {
+      expect(track.getAttribute('aria-label')?.trim().length).toBeGreaterThan(0);
+    }
   });
 });
 
