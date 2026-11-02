@@ -157,6 +157,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onOpenRouting={items.some((i) => i.id === 'routing' && i.disabled !== true) ? () => navigate('routing') : undefined}
       onOpenBoard={boardsEnabled ? () => navigate(BOARDS_DEFAULT_ROUTE) : undefined}
       onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
+      onOpenTicket={boardsEnabled ? (key) => navigate(boardTicketRoute(key)) : undefined}
       requestedMember={requestedMember}
       onRequestedMemberConsumed={() => setRequestedMember(null)}
       createTeamRequested={createTeamRequested}

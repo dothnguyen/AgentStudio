@@ -2298,6 +2298,39 @@ describe('v4 summary cards and running notice', () => {
     expect(banners).toHaveLength(2);
   });
 
+  it('member_current_work_ticket_opens_the_ticket_page_without_opening_the_member', async () => {
+    const onOpenTicket = vi.fn();
+    const data = overviewFixture([team({
+      members: [member({
+        memberId: 'dev-1', name: 'dev-1', presence: 'busy',
+        work: { state: 'working', assignment: null, ticket: { key: 'T-031', title: 'Teams screen', status: 'dev-ready', workflowRunId: null } },
+      })],
+    })]);
+    const fake = fakeManagement({ overview: [okR(data)] });
+    const result = render(<TeamsHarness sidebar workspace={workspaceA} management={fake.api} onOpenTicket={onOpenTicket} />);
+    await act(async () => {});
+
+    const work = result.container.querySelector('[data-field="work"]')!;
+    expect(work.textContent).toBe('T-031 Teams screen');
+    const key = within(work as HTMLElement).getByRole('button', { name: 'Open T-031' });
+    expect(key.textContent).toBe('T-031');
+    fireEvent.click(key);
+
+    expect(onOpenTicket).toHaveBeenCalledWith('T-031');
+    expect(result.queryByRole('heading', { level: 1, name: 'dev-1' })).toBeNull();
+  });
+
+  it('member_current_work_ticket_stays_plain_text_without_a_ticket_callback', async () => {
+    const data = overviewFixture([team({
+      members: [member({
+        memberId: 'dev-1', name: 'dev-1', presence: 'busy',
+        work: { state: 'working', assignment: null, ticket: { key: 'T-031', title: 'Teams screen', status: 'dev-ready', workflowRunId: null } },
+      })],
+    })]);
+    const { result } = await renderScreen({ overview: [okR(data)] });
+    expect(within(result.container.querySelector('[data-field="work"]') as HTMLElement).queryByRole('button')).toBeNull();
+  });
+
   it('open_board_link_calls_onOpenBoard_and_is_hidden_without_it', async () => {
     const onOpenBoard = vi.fn();
     const fake = fakeManagement();

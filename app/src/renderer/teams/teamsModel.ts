@@ -384,6 +384,25 @@ export function memberRowWork(work: MemberWork): { text: string; muted: boolean 
   return { text: workSummary(work), muted: false };
 }
 
+export interface MemberRowWorkParts {
+  /** The claimed ticket key, when this row's work points at one. */
+  ticketKey: string | null;
+  /** The visible text after the key, including its leading separator. */
+  rest: string;
+  text: string;
+  muted: boolean;
+}
+
+/** Splits a row's work summary so the ticket key can be a link without changing the text. */
+export function memberRowWorkParts(work: MemberWork): MemberRowWorkParts {
+  const summary = memberRowWork(work);
+  const key = work.state === 'working' && work.ticket !== null ? work.ticket.key : null;
+  if (key === null || !summary.text.startsWith(key)) {
+    return { ticketKey: null, rest: summary.text, ...summary };
+  }
+  return { ticketKey: key, rest: summary.text.slice(key.length), ...summary };
+}
+
 export const WORK_UNAVAILABLE_REASONS: Record<string, string> = {
   not_in_runtime: 'member is not in the running team',
   not_started: 'team not started',

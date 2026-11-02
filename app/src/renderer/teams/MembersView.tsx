@@ -27,6 +27,8 @@ export interface MembersViewProps extends Omit<MemberDetailPanelProps, 'member' 
   boardStatuses: readonly BoardStatus[] | null;
   memberActions: MemberListActions;
   copy(text: string, label: string): void;
+  /** Opens the read-only ticket page from the member's current work. */
+  onOpenTicket?(key: string): void;
 }
 export function MembersView(props: MembersViewProps): JSX.Element {
   const { team, teamKey, selection, onSelect } = props;
@@ -106,6 +108,7 @@ export function MembersView(props: MembersViewProps): JSX.Element {
         memberActions={props.memberActions}
         copy={props.copy}
         onViewRole={props.onViewRole}
+        onOpenTicket={props.onOpenTicket}
       />}
       {team.membersTruncated && <p className="panel-note teams-members-note teams-members-truncated">{`Showing ${filtered.length} of ${team.members.length} returned members. More members may exist; filters apply only to returned members.`}</p>}
     </section>

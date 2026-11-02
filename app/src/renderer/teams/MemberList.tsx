@@ -17,7 +17,7 @@ import { buildMemberMenu, memberClaimedTicket } from './memberActionsModel';
 import { memberActionKey, type MemberActionInFlight } from './memberAgentActionsModel';
 import { canEditMember } from './teamEditModel';
 import type { BoardStatus } from './teamActionsModel';
-import { memberIdentity, memberInitials, memberLiveAgent, memberRoleSummary, memberRowWork, presenceLabel, presenceTone, teamLabel } from './teamsModel';
+import { memberIdentity, memberInitials, memberLiveAgent, memberRoleSummary, memberRowWorkParts, presenceLabel, presenceTone, teamLabel } from './teamsModel';
 
 export interface MemberListActions {
   onRetryRun(run: AttentionRun): void;
@@ -49,6 +49,8 @@ export interface MemberListProps {
   memberActions: MemberListActions;
   copy(text: string, label: string): void;
   onViewRole?(roleId: string): void;
+  /** Opens the read-only ticket page for the current work key. */
+  onOpenTicket?(key: string): void;
 }
 
 type RowConfirm =
@@ -69,7 +71,7 @@ function MemberRow(props: MemberRowProps): JSX.Element {
   const identity = memberIdentity(member);
   const role = memberRoleSummary(member, roleItems);
   const live = memberLiveAgent(member, agents);
-  const work = memberRowWork(member.work);
+  const work = memberRowWorkParts(member.work);
   const interactive = member.memberId !== null;
   const catalog = props.roleItems;
   const roleId = catalog !== null && member.role !== null ? catalog.find((item) => item.id === member.role) ?? null : null;
@@ -202,7 +204,26 @@ function MemberRow(props: MemberRowProps): JSX.Element {
       {live.note && <span className="teams-cell-note" data-part="agent-note">{live.note}</span>}
     </span>
     <span className={`teams-member-field teams-member-status teams-tone-${presenceTone(member.presence)}`} id={`${props.rowId}-status`} data-field="availability"><span className="status-dot" aria-hidden="true" />{presenceLabel(member.presence)}</span>
-    <span className={`teams-member-field teams-member-work${work.muted ? ' teams-member-work-muted' : ''}`} id={`${props.rowId}-work`} data-field="work">{work.text}</span>
+    <span className={`teams-member-field teams-member-work${work.muted ? ' teams-member-work-muted' : ''}`} id={`${props.rowId}-work`} data-field="work">
+      {work.ticketKey !== null && props.onOpenTicket !== undefined
+        ? (
+          <>
+            <button
+              type="button"
+              className="teams-member-work-ticket"
+              aria-label={`Open ${work.ticketKey}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onOpenTicket?.(work.ticketKey!);
+              }}
+            >
+              {work.ticketKey}
+            </button>
+            {work.rest}
+          </>
+        )
+        : work.text}
+    </span>
     {interactive
       ? <span className="teams-row-menu">
           <ActionMenu

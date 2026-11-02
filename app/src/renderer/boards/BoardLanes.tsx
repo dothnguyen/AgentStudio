@@ -53,7 +53,7 @@ function BoardColumnView(props: {
     <section className="boards-column" aria-label={`${column.label} column`} data-status={column.id}>
       <div className="boards-column-header">
         <span className={`boards-status-dot boards-status-dot-${column.tone}`} aria-hidden="true" />
-        <span className="boards-column-name" title={column.label}>{column.label}</span>
+        <h3 className="boards-column-name" title={column.label}>{column.label}</h3>
         <span className="boards-column-count">{column.tickets.length}</span>
       </div>
       {column.worker !== null && (
@@ -95,10 +95,10 @@ function BoardLaneView(props: {
   return (
     <section className="boards-lane" aria-label={`${lane.name} lane`}>
       <div className="boards-lane-header">
-        <span className="boards-lane-name">
+        <h2 className="boards-lane-name">
           {lane.name}
           <span className="boards-lane-count">{laneCountLabel(lane.total)}</span>
-        </span>
+        </h2>
         <button
           type="button"
           className="boards-lane-toggle"

@@ -31,7 +31,7 @@ describe('Current Phase lane styles', () => {
   });
 
   it('uses the design lane header and 276px column card', () => {
-    expect(flat).toContain('.boards-lane-name { display: inline-flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }');
+    expect(flat).toContain('.boards-lane-name { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: #a3a9b2; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }');
     expect(flat).toContain('.boards-lane-count { color: #8d949e; font-weight: 500; letter-spacing: 0; text-transform: none; }');
     expect(flat).toContain('.boards-column { display: flex; flex-direction: column; gap: 10px; flex: none; width: 276px; padding: 10px; border: 1px solid #23262c; border-radius: 12px; background: #14171a; }');
   });
@@ -84,6 +84,10 @@ describe('Ticket page styles', () => {
   it('makes the breadcrumb board name a link and the key monospace', () => {
     expect(flat).toContain('.boards-breadcrumb .boards-crumb { all: unset; cursor: pointer; color: #a3a9b2; border-radius: 3px; }');
     expect(flat).toContain('.boards-breadcrumb-key { color: #e7e9ec; font-family: var(--font-mono); }');
+  });
+
+  it('stacks the right column under the description at 1100px', () => {
+    expect(flat).toContain('@media (max-width: 1100px) { .boards-ticket-layout { flex-direction: column; } .boards-ticket-main, .boards-ticket-aside { flex: none; width: 100%; max-width: none; } }');
   });
 });
 

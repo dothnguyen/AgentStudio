@@ -4,6 +4,7 @@ import '@fontsource/jetbrains-mono/500.css';
 import '../src/renderer/styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BoardsCaptureApp } from './BoardsCaptureApp';
 import { RolesCaptureApp } from './RolesCaptureApp';
 import { RoutingCaptureApp } from './RoutingCaptureApp';
 import { SkillsCaptureApp } from './SkillsCaptureApp';
@@ -13,13 +14,15 @@ import { TeamsCaptureApp } from './TeamsCaptureApp';
 // capture:skills load the same built page with ?app=roles, ?app=routing or
 // ?app=skills so they share one entry.
 const captureApp = new URLSearchParams(window.location.search).get('app');
-const app = captureApp === 'roles'
-  ? <RolesCaptureApp />
-  : captureApp === 'routing'
-    ? <RoutingCaptureApp />
-    : captureApp === 'skills'
-      ? <SkillsCaptureApp />
-      : <TeamsCaptureApp />;
+const app = captureApp === 'boards'
+  ? <BoardsCaptureApp />
+  : captureApp === 'roles'
+    ? <RolesCaptureApp />
+    : captureApp === 'routing'
+      ? <RoutingCaptureApp />
+      : captureApp === 'skills'
+        ? <SkillsCaptureApp />
+        : <TeamsCaptureApp />;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

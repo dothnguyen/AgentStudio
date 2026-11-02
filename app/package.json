@@ -13,6 +13,7 @@
     "start": "npm run build && electron .",
     "test": "vitest run",
     "live-check": "npm run build && node dist/live/liveCheck.js",
+    "capture:boards": "npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureBoards.js",
     "capture:teams": "npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureTeams.js",
     "capture:member": "npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureMember.js",
     "capture:roles": "npm run build && vite build --config vite.capture.config.ts && electron dist/live/captureRoles.js",

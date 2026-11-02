@@ -1,0 +1,35 @@
+{
+  "width": 1440,
+  "files": {
+    "board.png": {
+      "width": 1440,
+      "height": 1521,
+      "sha256": "28401b56a24bb0d3c08d98723eb6a3e6200029edf25530ea0ccc436c827fcdfe"
+    },
+    "board-all-columns.png": {
+      "width": 1440,
+      "height": 1521,
+      "sha256": "4cdeba9874f9422737402b1feac2e8b8583facceda4c4bf218450ebde7fde57c"
+    },
+    "ticket-working.png": {
+      "width": 1440,
+      "height": 1345,
+      "sha256": "f23ae3e118f2247483c6662b9db9576eea30ce8a6f6aaeb9889683b97c496ce8"
+    },
+    "ticket-waiting.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "4431d63499bcb8b6f06ca9ba6ac049ecf2b6c72a65a6c89d625dde13caf3c01a"
+    },
+    "ticket-blocked.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "071079edab3e9fadd3f388f6a101abc76589782dad420aca67fce91b53a8342c"
+    },
+    "ticket-done.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "027f4e1b15fd1cd2403dcf056a3ae33331c660244fe3b380577e3bb3473e1d19"
+    }
+  }
+}

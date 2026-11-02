@@ -9,7 +9,7 @@ import type {
 } from '../api';
 import { CONNECTED_TEXT, CONNECTING_TEXT, LOST_TITLE } from '../StartupScreen';
 import { ShellIcon } from '../shell/ShellIcon';
-import type { SectionId } from '../shell/navModel';
+import { boardTicketRoute } from '../shell/navModel';
 import { ActivityPanel } from './ActivityPanel';
 import { BoardPanel } from './BoardPanel';
 import { SummaryMetrics } from './SummaryMetrics';
@@ -20,7 +20,8 @@ interface DashboardHomeProps {
   workspace: Workspace;
   dashboard: DashboardApi;
   connection: ConnectionStatus;
-  onNavigate(sectionId: SectionId): void;
+  /** Opens a section or a `boards/ticket/<key>` route. */
+  onNavigate(sectionId: string): void;
 }
 
 const SECTION_NAMES = { teams: 'Team status', board: 'Board status', activity: 'Recent activity' } as const;
@@ -126,7 +127,11 @@ function DashboardOverview(props: DashboardHomeProps) {
       </header>
       <SummaryMetrics teams={teams} board={boardSection} />
       <div className="dashboard-grid">
-        <BoardPanel section={boardSection} onNavigate={(sectionId) => props.onNavigate(sectionId as SectionId)} />
+        <BoardPanel
+          section={boardSection}
+          onNavigate={(sectionId) => props.onNavigate(sectionId)}
+          onOpenTicket={(key) => props.onNavigate(boardTicketRoute(key))}
+        />
         <TeamsPanel section={teams} onNavigate={props.onNavigate} />
         <ActivityPanel section={activity} />
       </div>

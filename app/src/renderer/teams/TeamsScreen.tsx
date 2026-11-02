@@ -66,6 +66,8 @@ export interface TeamsScreenProps {
   onOpenRouting?(): void;
   /** Navigates to the Agents catalog from the Edit agent options dialog. */
   onOpenAgents?(): void;
+  /** Opens the read-only ticket page for a key shown on the team page. */
+  onOpenTicket?(key: string): void;
   /** One-shot request to open a member page, usually from a role's Used by list. */
   requestedMember?: { teamId: string; memberId: string } | null;
   onRequestedMemberConsumed?(): void;
@@ -796,6 +798,7 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
             roleCatalogMessage={roleCatalogMessage}
             onViewRole={props.onViewRole}
             onManageAgents={props.onOpenAgents}
+            onOpenTicket={props.onOpenTicket}
             writes={writes}
             connected={connected}
             actions={actions}
@@ -840,6 +843,7 @@ function TeamDetailPanel(props: {
   roleCatalogMessage: string | null;
   onViewRole?(roleId: string): void;
   onManageAgents?(): void;
+  onOpenTicket?(key: string): void;
   connected: boolean;
   actions: Record<string, MemberActionInFlight>;
   polling: Record<string, boolean>;
@@ -880,6 +884,7 @@ function TeamDetailPanel(props: {
           boardStatuses={props.board.section.data?.statuses ?? props.board.lastSettings?.statuses ?? null}
           memberActions={props.memberActions}
           copy={props.copy}
+          onOpenTicket={props.onOpenTicket}
           summary={<TeamOverviewPanel team={team} overview={overview} stale={props.readOnly} pending={pending} board={board} />} />
       </section>
       {props.onOpenRouting !== undefined && (

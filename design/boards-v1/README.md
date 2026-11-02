@@ -14,6 +14,42 @@ Design export for the Boards section. Phase A covers the sidebar group, the Curr
 | `ticket-done.html` / `.png` | Ticket page, a finished ticket (T-112) |
 | `boards-v1.dc.html` | Design canvas source. Props: `startView` (board or ticket), `startTicket`, `hideEmpty` (default true), `showFinished` (default false) |
 
+## Captures
+
+`npm --prefix app run capture:boards` builds the operator capture page, renders the real
+Current Phase screen and ticket page through `WorkspaceShell`, and writes these files:
+
+| Capture | What it shows |
+|---|---|
+| `captures/board.png` | Current Phase board with empty columns hidden and Finished collapsed |
+| `captures/board-all-columns.png` | The same board with empty columns shown and Finished expanded |
+| `captures/ticket-working.png` | Ticket page for a working ticket (T-114) |
+| `captures/ticket-waiting.png` | Ticket page for a ticket waiting on dependencies (T-118) |
+| `captures/ticket-blocked.png` | Ticket page with the blocked banner (T-136) |
+| `captures/ticket-done.png` | Ticket page for a finished ticket (T-112) |
+
+The capture page uses `app/capture/boardsV1Fixture.ts` for the same sample keys, titles,
+columns and ticket text as the design. The generated `manifest.json` records each image's
+size and SHA-256 so `boardsCapture.test.tsx` fails when a capture is stale.
+
+## Intended differences from the design PNGs
+
+- The captures show the app's own sidebar and real workspace values; the design canvas uses
+  the same illustrative `Agent Studio` workspace. The fixture has one team, so the sidebar
+  shows `1` beside Teams and a `New team` row where the design shows six members.
+- The capture fixture has 16 sample tickets like the design, but the real board hides empty columns
+  and collapses Finished by default, so `board.png` is narrower than
+  `board-all-columns.png` in the same way as the design.
+- The real board and ticket page use live component text and rules; illustrative counts in
+  the design that are not backed by the sample tickets are not invented. The ticket page
+  shows the full phase name (`Phase 06 - Roles, Routing and Skills redesign`) where the
+  design abbreviates it to `Phase 06`.
+- The real board is a scroll container, so the headless capture shows its horizontal
+  scrollbar; the design PNG omits it. Timeline labels for unknown event names use the
+  generic fallback instead of the design's hand-written labels.
+- Focus rings and native buttons appear where the design shows static controls; they are
+  intentionally visible for accessibility and keyboard use.
+
 ## Structure
 
 - Sidebar: Boards group (expandable) with children Current Phase (count badge), Backlog, Phases. Backlog and Phases are placeholders until Phase B.

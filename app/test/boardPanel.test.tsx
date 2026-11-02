@@ -200,6 +200,24 @@ describe('BoardPanel', () => {
     expect(within(result.getByRole('list', { name: 'High-priority tickets' })).getByText('waiting')).toBeTruthy();
   });
 
+  it('ticket_keys_open_the_ticket_page', () => {
+    const onOpenTicket = vi.fn();
+    const data: DashboardBoard = {
+      ...emptyBoard,
+      tickets: [{
+        key: 'T-009', title: 'First projection', status: 'busy', priority: 0, phase: 'phase-x',
+        activity: { state: 'blocked' },
+      }],
+    };
+    const result = render(<BoardPanel section={section({ state: 'ready', data })} onNavigate={vi.fn()} onOpenTicket={onOpenTicket} />);
+
+    const key = result.getByRole('button', { name: 'Open T-009' });
+    expect(key.textContent).toBe('T-009');
+    expect(key.classList.contains('ticket-key')).toBe(true);
+    fireEvent.click(key);
+    expect(onOpenTicket).toHaveBeenCalledWith('T-009');
+  });
+
   it('view_board_navigates_to_boards', () => {
     const onNavigate = vi.fn();
     const result = render(<BoardPanel section={section({ state: 'ready', data: emptyBoard })} onNavigate={onNavigate} />);

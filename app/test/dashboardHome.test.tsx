@@ -402,6 +402,23 @@ describe('DashboardHome', () => {
     expect(fake.board).toHaveBeenCalledTimes(2);
   });
 
+  it('board_ticket_keys_navigate_to_the_ticket_page_route', async () => {
+    const board: DashboardBoard = {
+      ...emptyBoard,
+      tickets: [{
+        key: 'T-142', title: 'Ticket page', status: 'review-ready', priority: 100, phase: 'default',
+        activity: { state: 'working', agent: 'dev', role: 'Developer' },
+      }],
+    };
+    const fake = fakeDashboard([{ ok: true, data: emptyTeams }], [{ ok: true, data: board }]);
+    const onNavigate = vi.fn();
+    const result = render(<DashboardHome workspace={workspace} dashboard={fake.api} connection={connected} onNavigate={onNavigate} />);
+    await act(async () => {});
+
+    fireEvent.click(within(result.getByRole('region', { name: 'Board status' })).getByRole('button', { name: 'Open T-142' }));
+    expect(onNavigate).toHaveBeenCalledWith('boards/ticket/T-142');
+  });
+
   it('view_board_selects_boards_in_the_workspace_shell', async () => {
     const fake = fakeDashboard();
     const onSwitchWorkspace = vi.fn();

@@ -7,6 +7,8 @@ import type { DashboardSectionController } from './useDashboardSection';
 export interface BoardPanelProps {
   section: DashboardSectionController<DashboardBoard>;
   onNavigate(sectionId: string): void;
+  /** Opens the read-only ticket page from a listed ticket key. */
+  onOpenTicket?(key: string): void;
 }
 
 export function BoardPanel(props: BoardPanelProps): JSX.Element {
@@ -29,7 +31,7 @@ export function BoardPanel(props: BoardPanelProps): JSX.Element {
         </div>
       )}
       {section.state === 'ready' && section.data !== null && (
-        <BoardReady data={section.data} onNavigate={props.onNavigate} />
+        <BoardReady data={section.data} onNavigate={props.onNavigate} onOpenTicket={props.onOpenTicket} />
       )}
     </section>
   );
@@ -57,7 +59,11 @@ export function boardProgress(columns: DashboardBoard['columns']): BoardProgress
   };
 }
 
-function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string): void }) {
+function BoardReady(props: {
+  data: DashboardBoard;
+  onNavigate(sectionId: string): void;
+  onOpenTicket?(key: string): void;
+}) {
   const { data } = props;
   const progress = boardProgress(data.columns);
 
@@ -117,7 +123,14 @@ function BoardReady(props: { data: DashboardBoard; onNavigate(sectionId: string)
           <ul className="board-ticket-list" aria-label="High-priority tickets">
             {data.tickets.map((ticket) => (
               <li key={ticket.key}>
-                <span className="ticket-key">{ticket.key}</span>
+                <button
+                  type="button"
+                  className="ticket-key board-ticket-key-link"
+                  aria-label={`Open ${ticket.key}`}
+                  onClick={() => props.onOpenTicket?.(ticket.key)}
+                >
+                  {ticket.key}
+                </button>
                 <span className="board-ticket-title">{ticket.title}</span>
                 <span className="status-badge">{ticket.status}</span>
                 <span>Priority {ticket.priority}</span>

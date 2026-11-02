@@ -13,6 +13,7 @@ export interface TeamsHarnessProps {
   onOpenBoard?(): void;
   onOpenRouting?(): void;
   onOpenAgents?(): void;
+  onOpenTicket?(key: string): void;
   onController?(controller: TeamsNavigationController): void;
   /** Render the real nested sidebar navigation next to the Teams screen. */
   sidebar?: boolean;
@@ -62,6 +63,7 @@ export function TeamsHarness(props: TeamsHarnessProps): JSX.Element {
         onOpenBoard={props.onOpenBoard}
         onOpenRouting={props.onOpenRouting}
         onOpenAgents={props.onOpenAgents}
+        onOpenTicket={props.onOpenTicket}
         createTeamRequested={requested}
         onCreateTeamRequestedChange={setRequested}
         onTeamsWritePendingChange={setWritePending}
