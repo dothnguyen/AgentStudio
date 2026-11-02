@@ -202,10 +202,10 @@ function Notice(): JSX.Element {
   );
 }
 
-function LoadingSkeleton(): JSX.Element {
+export function LoadingSkeleton({ label = "Loading the current phase…" }: { label?: string }): JSX.Element {
   return (
     <div className="boards-skeleton" role="status" aria-live="polite">
-      <span className="visually-hidden">Loading the current phase…</span>
+      <span className="visually-hidden">{label}</span>
       <div className="boards-skeleton-heading" aria-hidden="true">
         <span className="boards-skeleton-line boards-skeleton-title" />
         <span className="boards-skeleton-line boards-skeleton-description" />
@@ -216,6 +216,17 @@ function LoadingSkeleton(): JSX.Element {
         <span className="boards-skeleton-line boards-skeleton-panel-line" />
       </div>
     </div>
+  );
+}
+
+export function BoardErrorCard({ title, error, onRetry }: { title: string; error: ApiError | null; onRetry(): void }): JSX.Element {
+  return (
+    <section className="boards-state-card boards-state-error" role="alert">
+      <h2>{title}</h2>
+      {error !== null && <p><code className="entity-id">{error.code}</code>: {error.message}</p>}
+      <p>{error?.remediation ?? 'Retry; if it keeps failing, check the Agent Studio connection.'}</p>
+      <button type="button" onClick={onRetry}>Retry</button>
+    </section>
   );
 }
 
@@ -253,12 +264,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
       <div className="boards-current-screen" data-section="boards/current">
         <Breadcrumb />
         <h1 className="visually-hidden">Current Phase</h1>
-        <section className="boards-state-card boards-state-error" role="alert">
-          <h2>Could not load the current phase</h2>
-          {error !== null && <p><code className="entity-id">{error.code}</code>: {error.message}</p>}
-          <p>{error?.remediation ?? 'Retry; if it keeps failing, check the Agent Studio connection.'}</p>
-          <button type="button" onClick={() => { void board.reload(); }}>Retry</button>
-        </section>
+        <BoardErrorCard title="Could not load the current phase" error={error} onRetry={() => { void board.reload(); }} />
       </div>
     );
   }

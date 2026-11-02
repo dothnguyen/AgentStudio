@@ -2258,6 +2258,7 @@ ul[aria-label="Workspaces"] {
 .boards-phase-title h1 { margin: 0; color: var(--text); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .boards-phase-pill { display: inline-flex; align-items: center; flex: none; padding: 3px 9px; border-radius: var(--radius-pill); background: rgba(91, 156, 255, 0.14); color: #9ec3ff; font-size: 12px; font-weight: 500; }
 .boards-phase-description { margin: 0; color: var(--text-muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.boards-backlog-count { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .boards-phase-progress { display: flex; flex-direction: column; gap: 6px; flex: 0 1 320px; min-width: 240px; max-width: 360px; }
 .boards-phase-progress-text { display: flex; justify-content: space-between; gap: 12px; color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .boards-phase-progress-track { display: block; height: 8px; border-radius: var(--radius-pill); background: var(--chip-bg); overflow: hidden; }
