@@ -120,7 +120,7 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementRemoveMember, { teamDefId: 'core', memberId: 'm1' }, 'teamdef.member.remove', { teamDefId: 'core', memberId: 'm1' }],
   [C.managementUpdateBoardSettings, { changes: { baseBranch: 'main' }, expectedSha256: SHA }, 'board.settings.update', { changes: { baseBranch: 'main' }, expectedSha256: SHA }],
   [C.managementRoles, {}, 'role.list', {}],
-  [C.managementCreateRole, { input: { name: 'QA' }, expectedRolesSha256: null }, 'role.create', { name: 'QA', expectedSha256: null }],
+  [C.managementCreateRole, { input: { name: 'QA' }, expectedRolesSha256: null }, 'role.create', { role: { name: 'QA' }, expectedSha256: null }],
   [C.managementUpdateRole, { roleId: 'TeamLead', changes: { description: null }, expectedRolesSha256: SHA }, 'role.update', { role: 'TeamLead', description: null, expectedSha256: SHA }],
   [C.managementUpdateRoleInstructions, { roleId: 'TeamLead', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }, 'role.instructions.update', { role: 'TeamLead', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }],
   [C.managementDeleteRole, { roleId: 'TeamLead', confirmation: { expectedRolesSha256: SHA, expectedInstructionsSha256: null } }, 'role.delete', { role: 'TeamLead', expectedRolesSha256: SHA, expectedInstructionsSha256: null }],
@@ -275,12 +275,23 @@ describe('management IPC', () => {
     expect(calls).toEqual([['workspace.list', {}], ['role.list', { workspace: '/work/a' }]]);
   });
 
-  it('flattens create and update without forwarding renderer field names', async () => {
+  it('creates a role with the backend request contract', async () => {
+    const result = { roleId: 'market-researcher' };
+    const { call, calls } = setup({ replies: { 'role.create': ok(result) } });
+    const role = { id: 'market-researcher', name: 'Market Researcher', description: 'Research markets', skills: [] };
+    expect(await call(C.managementCreateRole, 'workspace-a', { input: role, expectedRolesSha256: SHA })).toEqual({ ok: true, data: result });
+    expect(calls).toEqual([
+      ['workspace.list', {}],
+      ['role.create', { workspace: '/work/a', role, expectedSha256: SHA }],
+    ]);
+  });
+
+  it('nests create fields and flattens update without forwarding renderer field names', async () => {
     const { call, calls } = setup();
     await call(C.managementCreateRole, 'workspace-a', { input: { id: 'qa', name: 'QA', description: '', skills: ['b', 'a'] }, expectedRolesSha256: null });
     await call(C.managementUpdateRole, 'workspace-a', { roleId: 'Legacy', changes: { name: 'L', description: null, skills: [] }, expectedRolesSha256: SHA });
     const targets = calls.filter(([c]) => c !== 'workspace.list');
-    expect(targets[0]).toEqual(['role.create', { workspace: '/work/a', id: 'qa', name: 'QA', description: '', skills: ['b', 'a'], expectedSha256: null }]);
+    expect(targets[0]).toEqual(['role.create', { workspace: '/work/a', role: { id: 'qa', name: 'QA', description: '', skills: ['b', 'a'] }, expectedSha256: null }]);
     expect(targets[1]).toEqual(['role.update', { workspace: '/work/a', role: 'Legacy', name: 'L', description: null, skills: [], expectedSha256: SHA }]);
     for (const [, args] of targets) for (const k of ['input', 'changes', 'roleId', 'expectedRolesSha256']) expect(k in (args as object)).toBe(false);
   });

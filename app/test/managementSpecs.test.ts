@@ -93,7 +93,7 @@ describe('managementSpecs', () => {
   it('maps every role method to one fixed backend command', () => {
     const rows: Array<[string, Record<string, unknown>, string, Record<string, unknown>]> = [
       ['roles', {}, 'role.list', {}],
-      ['createRole', { input: { name: 'N' }, expectedRolesSha256: null }, 'role.create', { name: 'N', expectedSha256: null }],
+      ['createRole', { input: { name: 'N' }, expectedRolesSha256: null }, 'role.create', { role: { name: 'N' }, expectedSha256: null }],
       ['updateRole', { roleId: 'R', changes: { name: 'N' }, expectedRolesSha256: SHA }, 'role.update', { role: 'R', name: 'N', expectedSha256: SHA }],
       ['updateRoleInstructions', { roleId: 'R', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }, 'role.instructions.update', { role: 'R', text: '', expectedRolesSha256: SHA, expectedInstructionsSha256: null }],
       ['deleteRole', { roleId: 'R', confirmation: { expectedRolesSha256: SHA, expectedInstructionsSha256: SHA2 } }, 'role.delete', { role: 'R', expectedRolesSha256: SHA, expectedInstructionsSha256: SHA2 }],
@@ -108,9 +108,9 @@ describe('managementSpecs', () => {
   it('accepts create fields and preserves ordered unique skills', () => {
     const skills = ['z-skill', 'a.b_c-1'];
     const out = parse('createRole', { input: { id: 'qa-lead', name: ' QA ', description: '', skills }, expectedRolesSha256: SHA }) as Record<string, unknown>;
-    expect(out).toEqual({ id: 'qa-lead', name: ' QA ', description: '', skills: ['z-skill', 'a.b_c-1'], expectedSha256: SHA });
-    expect(out.skills).not.toBe(skills);
-    expect((parse('createRole', { input: { name: 'N', skills: [] }, expectedRolesSha256: null }) as Record<string, unknown>).skills).toEqual([]);
+    expect(out).toEqual({ role: { id: 'qa-lead', name: ' QA ', description: '', skills: ['z-skill', 'a.b_c-1'] }, expectedSha256: SHA });
+    expect((out.role as Record<string, unknown>).skills).not.toBe(skills);
+    expect((parse('createRole', { input: { name: 'N', skills: [] }, expectedRolesSha256: null }) as { role: { skills: unknown } }).role.skills).toEqual([]);
   });
 
   it('requires a non-empty update change set', () => {
@@ -129,7 +129,7 @@ describe('managementSpecs', () => {
     expect(create({ name: 'N', id: 'Bad' })).toBe("management.createRole: input.id must be a slug (lowercase letters, digits, '-'; at most 64 characters).");
     expect(create({ name: '  ' })).toContain('input.name must be a non-empty string');
     expect(create({ name: 'n'.repeat(129) })).toContain('input.name');
-    expect(create({ name: 'n'.repeat(128) })).toEqual({ name: 'n'.repeat(128), expectedSha256: null });
+    expect(create({ name: 'n'.repeat(128) })).toEqual({ role: { name: 'n'.repeat(128) }, expectedSha256: null });
     expect(create({ name: 'N', description: 'd'.repeat(2001) })).toContain('input.description');
     expect(create({ name: 'N', description: 'd'.repeat(2000) })).not.toBeTypeOf('string');
     const upd = (roleId: unknown) => parse('updateRole', { roleId: roleId as never, changes: { name: 'N' }, expectedRolesSha256: SHA });

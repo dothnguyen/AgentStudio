@@ -373,8 +373,7 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
     },
     expectedRolesSha256: { kind: 'shaOrNull', required: true },
   }, {
-    flatten: 'input',
-    map: ({ expectedRolesSha256, ...rest }) => ({ ...rest, expectedSha256: expectedRolesSha256 }),
+    map: ({ input, expectedRolesSha256 }) => ({ role: input, expectedSha256: expectedRolesSha256 }),
   }),
   spec(C.managementUpdateRole, 'updateRole', 'role.update', {
     roleId: { kind: 'roleId', required: true },
