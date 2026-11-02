@@ -23,7 +23,7 @@ export function PhaseCard({ phase, statuses, onViewTickets, onOpenBoard }: {
   const label = [`${segments.done} of ${phase.ticketCount} done`, ...visible.filter(category => category.key !== 'done').map(category => `${segments[category.key]} ${category.accessible}`)].join(', ');
   return <section className="boards-milestone-card" aria-labelledby={headingId}>
     <div className="boards-milestone-heading">
-      <div className="boards-milestone-title"><h2 id={headingId}>{phase.name}</h2>
+      <div className="boards-milestone-title"><h2 id={headingId}><button type="button" className="boards-phase-name-link" onClick={() => onViewTickets(phase.slug)}>{phase.name}</button></h2>
         {state === 'current' && <span className="boards-phase-pill">Current</span>}
         {state === 'closed' && <span className="boards-phase-pill boards-backlog-closed">Closed</span>}
       </div>

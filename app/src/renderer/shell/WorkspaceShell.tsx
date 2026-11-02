@@ -8,6 +8,7 @@ import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { BacklogScreen } from '../boards/BacklogScreen';
+import { DEFAULT_BACKLOG_FILTERS, type BacklogFilters } from '../boards/backlogFilters';
 import { PhasesScreen } from '../boards/PhasesScreen';
 import { TicketScreen } from '../boards/TicketScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
@@ -59,6 +60,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const [teamsWritePending, setTeamsWritePending] = useState(false);
   const [pendingFocus, setPendingFocus] = useState<CreateFocusTarget | null>(null);
   const [currentPhaseTicketCount, setCurrentPhaseTicketCount] = useState<number | null>(null);
+  const [openPhaseCount, setOpenPhaseCount] = useState<number | null>(null);
+  const [backlogTicketCount, setBacklogTicketCount] = useState<number | null>(null);
+  const [backlogFilters, setBacklogFilters] = useState<BacklogFilters>(DEFAULT_BACKLOG_FILTERS);
+  const [ticketFrom, setTicketFrom] = useState<'current' | 'backlog' | 'phases'>('current');
   const connected = props.connection.state === 'connected';
   const boardsItem = items.find((item) => item.id === 'boards');
   const boardsEnabled = boardsItem !== undefined && boardsItem.disabled !== true;
@@ -73,6 +78,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     setCreateTeamRequested(false);
     setPendingFocus(null);
     setCurrentPhaseTicketCount(null);
+    setOpenPhaseCount(null);
+    setBacklogTicketCount(null);
+    setBacklogFilters(DEFAULT_BACKLOG_FILTERS);
+    setTicketFrom('current');
   }, [props.workspace.id]);
 
   // The Boards sidebar badge is a read of the current phase. Keep it truthful:
@@ -80,20 +89,25 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   useEffect(() => {
     if (!boardsEnabled || !connected) {
       setCurrentPhaseTicketCount(null);
+      setOpenPhaseCount(null);
+      setBacklogTicketCount(null);
       return;
     }
     let cancelled = false;
     setCurrentPhaseTicketCount(null);
+    setOpenPhaseCount(null);
     void props.management.boardPhases(props.workspace.id).then((result) => {
       if (cancelled) return;
       if (!result.ok) {
         setCurrentPhaseTicketCount(null);
+        setOpenPhaseCount(null);
         return;
       }
       const current = result.data.phases.find((phase) => phase.slug === result.data.currentPhase.slug);
       setCurrentPhaseTicketCount(current?.ticketCount ?? 0);
+      setOpenPhaseCount(result.data.phases.filter((phase) => phase.status === 'open').length);
     }).catch(() => {
-      if (!cancelled) setCurrentPhaseTicketCount(null);
+      if (!cancelled) { setCurrentPhaseTicketCount(null); setOpenPhaseCount(null); }
     });
     return () => { cancelled = true; };
   }, [boardsEnabled, connected, props.management, props.workspace.id]);
@@ -117,6 +131,9 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   }, [teamsNavigation.selectedKey]);
 
   function navigate(nextId: string, options?: {
+    phase?: string;
+    from?: 'current' | 'backlog' | 'phases';
+    preserveBacklog?: boolean;
     roleId?: string;
     skillId?: string;
     focusSkillList?: boolean;
@@ -129,6 +146,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     if (item === undefined ? !isBoardRoute(route) : item.disabled === true) return;
     const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
     const skillId = nextId === 'skills' && options?.skillId ? options.skillId : null;
+    if (route === 'boards/backlog' && !options?.preserveBacklog) {
+      setBacklogFilters(options?.phase ? { ...DEFAULT_BACKLOG_FILTERS, phases: [options.phase] } : DEFAULT_BACKLOG_FILTERS);
+    }
+    if (boardTicketKey(route) !== null) setTicketFrom(options?.from ?? 'current');
     setRequestedRoleId(roleId);
     setRequestedSkillId(skillId);
     setFocusSkillList(nextId === 'skills' && options?.focusSkillList === true);
@@ -212,17 +233,18 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onOpenTicket={(key) => navigate(boardTicketRoute(key))}
     />
   ) : sectionId === 'boards/backlog' ? (
-    <BacklogScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onOpenTicket={(key) => navigate(boardTicketRoute(key))} />
+    <BacklogScreen key={props.workspace.id} workspace={props.workspace} management={props.management} filters={backlogFilters} onFiltersChange={setBacklogFilters} onTicketCount={setBacklogTicketCount} onOpenPhases={() => navigate('boards/phases')} onOpenTicket={(key) => navigate(boardTicketRoute(key), { from: 'backlog' })} />
   ) : sectionId === 'boards/phases' ? (
-    <PhasesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
+    <PhasesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onViewTickets={(phase) => navigate('boards/backlog', { phase })} onOpenBoard={() => navigate(BOARDS_DEFAULT_ROUTE)} />
   ) : ticketKey !== null ? (
     <TicketScreen
       key={`${props.workspace.id}:${ticketKey}`}
       workspace={props.workspace}
       management={props.management}
       ticketKey={ticketKey}
-      onOpenBoard={() => navigate(BOARDS_DEFAULT_ROUTE)}
-      onOpenTicket={(key) => navigate(boardTicketRoute(key))}
+      boardLabel={ticketFrom === 'backlog' ? 'Backlog' : ticketFrom === 'phases' ? 'Phases' : 'Current Phase'}
+      onOpenBoard={() => navigate(`boards/${ticketFrom}`, { preserveBacklog: ticketFrom === 'backlog' })}
+      onOpenTicket={(key) => navigate(boardTicketRoute(key), { from: ticketFrom })}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />
@@ -313,7 +335,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
                     <ul className="boards-nav-list" aria-label="Boards">
                       {(item.children ?? BOARD_NAV_ITEMS).map((child) => {
                         const route = navItemRoute(child);
-                        const active = sectionId === route || (route === BOARDS_DEFAULT_ROUTE && ticketKey !== null);
+                        const active = sectionId === route || (route === `boards/${ticketFrom}` && ticketKey !== null);
+                        const count = route === BOARDS_DEFAULT_ROUTE ? currentPhaseTicketCount : route === 'boards/backlog' ? backlogTicketCount : route === 'boards/phases' ? openPhaseCount : null;
                         return (
                           <li key={child.id}>
                             <button
@@ -329,13 +352,13 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
                               }}
                             >
                               <span className="nav-label">{child.label}</span>
-                              {route === BOARDS_DEFAULT_ROUTE && currentPhaseTicketCount !== null && (
+                              {count !== null && (
                                 <span
                                   className="boards-nav-count"
                                   aria-hidden="true"
-                                  title={`${currentPhaseTicketCount} tickets in the current phase`}
+                                  title={route === 'boards/phases' ? `${count} open phases` : `${count} tickets${route === BOARDS_DEFAULT_ROUTE ? ' in the current phase' : ''}`}
                                 >
-                                  {currentPhaseTicketCount}
+                                  {count}
                                 </span>
                               )}
                             </button>

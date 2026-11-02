@@ -7,7 +7,7 @@ import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder'
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
 import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred, routingSettingsFixture } from './teamsFixtures';
-import { boardPhasesFixture, boardTicketDetailFixture } from './boardFixtures';
+import { boardPhasesFixture, boardTicketDetailFixture, boardTicketListFixture } from './boardFixtures';
 import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -665,6 +665,65 @@ describe('T-135 sidebar Boards group and routes', () => {
     await settle();
 
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe(phases.currentPhase.name);
+    expect(view.container.querySelector('[data-section="boards/current"]')).toBeTruthy();
+  });
+
+  it('shows no new badges before data loads and counts only open phases', async () => {
+    const pending = fakeManagement({ boardPhases: [new Promise<never>(() => {})] });
+    const view = render(shell(pending));
+    const nav = within(view.getByRole('navigation', { name: 'Workspace' }));
+    expect(nav.getByRole('button', { name: 'Phases' }).querySelector('.boards-nav-count')).toBeNull();
+    expect(nav.getByRole('button', { name: 'Backlog' }).querySelector('.boards-nav-count')).toBeNull();
+    view.unmount();
+    const closed = { ...phases, phases: phases.phases.map(phase => ({ ...phase, status: 'closed' as const })) };
+    const loaded = render(shell(fakeManagement({ boardPhases: [{ ok: true, data: closed }] })));
+    await settle();
+    expect(within(loaded.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Phases' }).querySelector('.boards-nav-count')?.textContent).toBe('0');
+  });
+
+  it('connects phases, filtered backlog, ticket dependencies and return without reapplying the preset', async () => {
+    const boardTicket = vi.fn(async (_id: string, input: { key: string }) => ({ ok: true as const, data: boardTicketDetailFixture(input.key) }));
+    const fake = fakeManagement({ boardPhases: [{ ok: true, data: phases }], calls: { boardTicket } });
+    const view = render(shell(fake));
+    await settle();
+    const nav = within(view.getByRole('navigation', { name: 'Workspace' }));
+    expect(nav.getByRole('button', { name: 'Phases' }).querySelector('.boards-nav-count')?.textContent).toBe('2');
+    expect(nav.getByRole('button', { name: 'Backlog' }).querySelector('.boards-nav-count')).toBeNull();
+    fireEvent.click(nav.getByRole('button', { name: 'Phases' }));
+    await settle();
+    fireEvent.click(within(view.getByRole('region', { name: 'Phase 05' })).getByRole('button', { name: 'View tickets' }));
+    await settle();
+    expect(view.getByRole('button', { name: 'Remove Phase: Phase 05' })).toBeTruthy();
+    expect(nav.getByRole('button', { name: 'Backlog' }).querySelector('.boards-nav-count')?.textContent).toBe(String(boardTicketListFixture().tickets.length));
+    fireEvent.change(view.getByLabelText('Priority'), { target: { value: 'urgent' } });
+    fireEvent.click(view.getByRole('button', { name: 'Open T-114: Roles v2: edit dialogs and the New role dialog' }));
+    await settle();
+    expect(within(view.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('button', { name: 'Backlog' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: /T-113.*Roles v2/ }));
+    await settle();
+    expect(within(view.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('button', { name: 'Backlog' })).toBeTruthy();
+    fireEvent.click(within(view.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('button', { name: 'Backlog' }));
+    await settle();
+    expect(view.getByRole('button', { name: 'Remove Phase: Phase 05' })).toBeTruthy();
+    expect((view.getByLabelText('Priority') as HTMLSelectElement).value).toBe('urgent');
+    fireEvent.click(view.getByRole('button', { name: 'Remove Phase: Phase 05' }));
+    expect(view.queryByRole('button', { name: 'Remove Phase: Phase 05' })).toBeNull();
+    fireEvent.click(view.getAllByRole('button', { name: 'Phase progress' })[0]!);
+    await settle();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Phases');
+    fireEvent.click(nav.getByRole('button', { name: 'Backlog' }));
+    await settle();
+    expect(view.queryByRole('button', { name: 'Remove Phase: Phase 05' })).toBeNull();
+    expect((view.getByLabelText('Priority') as HTMLSelectElement).value).toBe('any');
+    fireEvent.click(nav.getByRole('button', { name: 'Phases' }));
+    await settle();
+    fireEvent.click(within(view.getByRole('region', { name: 'Phase 06' })).getByRole('button', { name: 'Phase 06' }));
+    await settle();
+    expect(view.getByRole('button', { name: 'Remove Phase: Phase 06' })).toBeTruthy();
+    fireEvent.click(nav.getByRole('button', { name: 'Phases' }));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Open board' }));
+    await settle();
     expect(view.container.querySelector('[data-section="boards/current"]')).toBeTruthy();
   });
 

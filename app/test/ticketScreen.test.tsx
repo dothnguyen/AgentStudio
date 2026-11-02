@@ -101,6 +101,19 @@ describe('TicketScreen header', () => {
     expect(onOpenBoard).toHaveBeenCalledTimes(1);
   });
 
+  it('renders the Phases breadcrumb variant and returns through its first board crumb', async () => {
+    const onOpenBoard = vi.fn();
+    const { view } = setupTicket({ boardLabel: 'Phases', onOpenBoard });
+    await settle();
+
+    const breadcrumb = view.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(breadcrumb.textContent).toContain('Boards');
+    expect(breadcrumb.textContent).toContain('Phases');
+    expect(breadcrumb.querySelector('[aria-current="page"]')?.textContent).toBe('T-114');
+    fireEvent.click(within(breadcrumb).getByRole('button', { name: 'Phases' }));
+    expect(onOpenBoard).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a waiting ticket with its dependency and non-default priority', async () => {
     const { view } = setupTicket({ key: 'T-118' });
     await settle();

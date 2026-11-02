@@ -3,15 +3,18 @@ import type { JSX } from 'react';
 import type { ManagementApi, Workspace } from '../api';
 import { BoardErrorCard, LoadingSkeleton } from './CurrentPhaseScreen';
 import { BacklogToolbar } from './BacklogToolbar';
-import { activeFilterCount, DEFAULT_BACKLOG_FILTERS, filterBacklogTickets } from './backlogFilters';
+import { activeFilterCount, DEFAULT_BACKLOG_FILTERS, filterBacklogTickets, type BacklogFilters } from './backlogFilters';
 import { BacklogGroupCard } from './BacklogGroupCard';
 import { buildBacklogGroups } from './backlogModel';
 import { useBacklogData } from './useBacklogData';
 
-export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket }: { workspace: Workspace; management: ManagementApi; refreshMs?: number; onOpenTicket?: (key: string) => void }): JSX.Element {
+export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, onOpenPhases, filters: controlledFilters, onFiltersChange, onTicketCount }: { workspace: Workspace; management: ManagementApi; refreshMs?: number; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; filters?: BacklogFilters; onFiltersChange?: (filters: BacklogFilters) => void; onTicketCount?: (count: number) => void }): JSX.Element {
   const board = useBacklogData(management, workspace.id, refreshMs);
-  const [filters, setFilters] = useState(DEFAULT_BACKLOG_FILTERS);
-  const [query, setQuery] = useState('');
+  const [localFilters, setLocalFilters] = useState(DEFAULT_BACKLOG_FILTERS);
+  const filters = controlledFilters ?? localFilters;
+  const setFilters = onFiltersChange ?? setLocalFilters;
+  const [query, setQuery] = useState(filters.query);
+  useEffect(() => { if (board.data) onTicketCount?.(board.data.tickets.tickets.length); }, [board.data, onTicketCount]);
   useEffect(() => { const timer = window.setTimeout(() => setQuery(filters.query), 150); return () => window.clearTimeout(timer); }, [filters.query]);
   const active = activeFilterCount(filters) > 0;
   const data = board.data;
@@ -36,7 +39,7 @@ export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket }
             {data && <BacklogToolbar filters={filters} onChange={setFilters} settings={data.settings} phases={data.phases} tickets={data.tickets.tickets} resultCount={filtered.length} />}
             {active && filtered.length === 0 && <div className="boards-no-match"><p>No tickets match these filters</p><button type="button" onClick={() => setFilters({ ...DEFAULT_BACKLOG_FILTERS, sort: filters.sort })}>Clear filters</button></div>}
             {!active && board.data?.tickets.tickets.length === 0 && <section className="boards-state-card"><h2>No tickets yet</h2></section>}
-            <div className="boards-backlog-groups" data-testid="backlog-body">{data && groups.map((group) => <BacklogGroupCard key={group.slug ?? "no-phase"} group={group} total={active ? totals.get(group.slug) : undefined} settings={data.settings} onOpenTicket={onOpenTicket} />)}</div>
+            <div className="boards-backlog-groups" data-testid="backlog-body">{data && groups.map((group) => <BacklogGroupCard key={group.slug ?? "no-phase"} group={group} total={active ? totals.get(group.slug) : undefined} settings={data.settings} onOpenTicket={onOpenTicket} onOpenPhases={onOpenPhases} />)}</div>
           </>}
     </div>
   );

@@ -34,8 +34,10 @@ describe('PhasesScreen', () => {
     expect(closed.getByText('Closed')).toBeTruthy();
     expect(view.getAllByRole('button', { name: 'Open board' })).toHaveLength(1);
     fireEvent.click(open.getByRole('button', { name: 'View tickets' }));
+    fireEvent.click(closed.getByRole('button', { name: 'Closed early' }));
     fireEvent.click(current.getByRole('button', { name: 'Open board' }));
     expect(onViewTickets).toHaveBeenCalledWith('open-early');
+    expect(onViewTickets).toHaveBeenCalledWith('closed-early');
     expect(onOpenBoard).toHaveBeenCalledOnce();
   });
   it('shows counted segments, accessible progress and a legend without zero counts', async () => {
