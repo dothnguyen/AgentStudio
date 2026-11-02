@@ -5,6 +5,7 @@ import copy
 import hashlib
 import json
 import os
+from datetime import datetime, timezone
 
 from . import boardmodel, roles, workflowdef
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, CONFIG_CHANGED, ROLE_NOT_FOUND
@@ -225,3 +226,35 @@ def update_role(workspace, role_id, description, expected_sha256=None):
     result["role"] = {"id": result["role"]["id"], "description": result["role"]["description"]}
     result.pop("warnings")
     return result
+
+
+def upgrade_board(workspace, dry_run=False):
+    path = _path(workspace, "board.json")
+    data = _read_bytes(path)
+    if data is None:
+        boardmodel.load_config(workspace)
+    try:
+        raw = json.loads(data)
+    except (ValueError, UnicodeDecodeError) as e:
+        raise boardmodel._invalid([("root", f"cannot be read or is not valid JSON: {e}")])
+    boardmodel.parse_config(raw)
+    if raw["version"] == 3:
+        return {"upgraded": False}
+    upgraded, mapping = boardmodel.upgrade_config(raw)
+    upgraded["upgradedFrom"] = mapping
+    boardmodel.parse_config(upgraded)
+    if dry_run:
+        return {"upgraded": True, "idMap": mapping, "backup": None}
+    backup_dir = _path(workspace, "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    while True:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backup = os.path.join(backup_dir, f"board-{stamp}.json")
+        try:
+            with open(backup, "xb") as f:
+                f.write(data)
+            break
+        except FileExistsError:
+            continue
+    _write_json(path, upgraded)
+    return {"upgraded": True, "idMap": mapping, "backup": backup}

@@ -98,6 +98,7 @@ USAGE = """agent-studio <command>
   ticket unblock (--workspace PATH | cwd) KEY [--to STATUS]   return a blocked ticket to its recorded status
                                            (or to STATUS); starts a fresh round budget
   ticket retry (--workspace PATH | cwd) KEY   clear a stuck claim: release it and cancel its run
+  board upgrade [--dry-run] [--workspace PATH]   persist a v2 board upgrade and print the status ID map
   board show (--workspace PATH | cwd)      phases (current marked) with status columns and tickets (read-only)
   board rules check (--workspace PATH | cwd)   validate the rules: statuses, roles, workflows, path to done
   board phase add (--workspace PATH | cwd) --id ID --name N [--description D] [--before ID]

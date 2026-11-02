@@ -144,6 +144,14 @@ def _board_settings(args, req):
             conn.close()
 
 
+def _board_upgrade(args, req):
+    ws = _catalog_workspace(args, {"workspace", "dryRun"}, "board.upgrade")
+    dry_run = args.get("dryRun", False)
+    if not isinstance(dry_run, bool):
+        raise AsError(BAD_REQUEST, "dryRun must be a boolean.")
+    return boardsettings.upgrade_board(ws, dry_run)
+
+
 def _board_settings_update(args, req):
     ws = _catalog_workspace(args, {"workspace", "changes", "expectedSha256"}, "board.settings.update")
     if "changes" not in args:
@@ -1158,6 +1166,7 @@ COMMANDS = {
     "ticket.list": _ticket_list,
     "board.show": _board_show,
     "board.summary": _board_summary,
+    "board.upgrade": _board_upgrade,
     "board.settings": _board_settings,
     "board.settings.update": _board_settings_update,
     "role.create": _role_create,

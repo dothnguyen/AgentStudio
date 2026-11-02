@@ -39,7 +39,7 @@ WORKSPACE_MODES = ("main", "worktree", "none")
 BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
 _V2_TOP_KEYS = ("version", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
-_TOP_KEYS = _V2_TOP_KEYS + ("workflowStatuses", "todoEntry", "todoDefault")
+_TOP_KEYS = _V2_TOP_KEYS + ("workflowStatuses", "todoEntry", "todoDefault", "upgradedFrom")
 _STATUS_KEYS = ("id", "kind", "name")
 _FIELD_KEYS = ("id", "name", "type", "required")
 RULE_KEYS = ("when", "role", "workflow", "onPass", "onFail", "onBlocked", "maxRounds", "during", "cap",
@@ -373,6 +373,10 @@ def parse_config(raw) -> dict:
         todo_default = raw.get("todoDefault")
         if not (not agent_whens and not todo_entry and todo_default is None) and (not isinstance(todo_default, str) or todo_default not in todo_entry):
             problems.append(("todoDefault", "must be in todoEntry"))
+    if v3 and "upgradedFrom" in raw:
+        mapping = raw["upgradedFrom"]
+        if not isinstance(mapping, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in mapping.items()):
+            problems.append(("upgradedFrom", "must be an object mapping status IDs to status IDs"))
     if problems:
         raise _invalid(problems)
     by_id = {s["id"]: s for s in seen}
@@ -387,6 +391,8 @@ def parse_config(raw) -> dict:
                        "closedStatus": closed[0] if closed else None,
                        "duringToRule": {r["during"]: r for r in rules if "during" in r},
                        "columns": KANBAN_COLUMNS, "todoEntry": todo_entry, "todoDefault": todo_default})
+    if v3 and "upgradedFrom" in raw:
+        result["upgradedFrom"] = dict(raw["upgradedFrom"])
     return result
 
 

@@ -14,7 +14,7 @@ from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, envelope
 from .teamcli import _Fail, _call, _write_call
 
 TICKET_ACTIONS = ("add", "edit", "move", "show", "list", "depend", "phase", "apply", "unblock", "retry")
-BOARD_ACTIONS = ("show", "phase", "rules")
+BOARD_ACTIONS = ("show", "phase", "rules", "upgrade")
 PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
 RULES_ACTIONS = ("check",)
 
@@ -30,6 +30,8 @@ def _parser(action, group="ticket"):
     p.add_argument("--workspace")
     p.add_argument("--json", action="store_true")
     if group in ("board", "rules"):
+        if group == "board" and action == "upgrade":
+            p.add_argument("--dry-run", action="store_true")
         return p
     if group == "phase":
         if action == "add":
@@ -377,7 +379,16 @@ _PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, 
                    "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,
                    "set-current": _phase_set_current, "clear-current": _phase_clear_current}
 _RULES_HANDLERS = {"check": _rules_check}
-_BOARD_HANDLERS = {"show": _board_show}
+def _board_upgrade(ns):
+    data = _call("board.upgrade", {"workspace": _workspace(ns), "dryRun": ns.dry_run})
+    def render(result):
+        if not result["upgraded"]:
+            return "Board is already version 3."
+        return "\n".join(f"{old} -> {new}" for old, new in result["idMap"].items())
+    return data, render
+
+
+_BOARD_HANDLERS = {"show": _board_show, "upgrade": _board_upgrade}
 
 
 def run(argv, pretty) -> int:

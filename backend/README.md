@@ -387,8 +387,9 @@ the initial status becomes `none`, `done` becomes `merged`, and `close` becomes 
 have the corresponding terminal kinds. Rule references are updated, active statuses are added,
 and the parsed configuration exposes the old-to-new status mapping as `upgradedFrom`. The file is
 not changed. A compatible existing active status is reused; if its ID is already assigned to a
-rule or a status with a kind, a unique suffixed ID is generated. Version 3 files have no
-`upgradedFrom` field. If a required renamed ID is already in use, the existing status receives a
+rule or a status with a kind, a unique suffixed ID is generated. Run `agent-studio board upgrade [--dry-run] [--workspace PATH]` to persist the upgrade and print
+the mapping. The command backs up the original under `.agent-studio/backups/`; a dry run writes
+nothing. The persisted v3 `upgradedFrom` mapping remains available to later ticket migration. If a required renamed ID is already in use, the existing status receives a
 unique suffixed ID and references follow the mapping.
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
