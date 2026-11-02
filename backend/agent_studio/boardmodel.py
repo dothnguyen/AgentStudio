@@ -778,6 +778,27 @@ def ticket_phase(tx, workspace: str, args: dict) -> dict:
             "from": old, "moved": True}
 
 
+def ticket_workflow(tx, workspace: str, args: dict) -> dict:
+    config = load_config(workspace)
+    ticket = get_ticket(tx.conn, workspace, args["key"])
+    to = args["to"]
+    if ticket["assignee"] is not None:
+        raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; its workflow cannot change.",
+                      data={"key": ticket["key"], "assignee": ticket["assignee"]})
+    if to != BLOCKED_STATUS and to not in config["byId"]:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Status {to!r} is not on this board.",
+                      data={"key": ticket["key"], "status": to, "statuses": config_status_ids(config)})
+    if (ticket["status"] not in ("todo", "in-progress") or to == BLOCKED_STATUS
+            or config["byId"][to]["kind"] is not None or to in config.get("duringToRule", {})
+            or to == ticket["workflow_status"]):
+        raise AsError(TICKET_TRANSITION_INVALID, "Invalid workflow transition.",
+                      data={"key": ticket["key"], "from": ticket["workflow_status"], "to": to})
+    set_workflow(tx, ticket, to, "operator", args.get("reason"), config)
+    return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                            (ticket["id"],)).fetchone()),
+            "from": ticket["workflow_status"]}
+
+
 def ticket_move(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])

@@ -560,6 +560,15 @@ def _validate_ticket_move(args):
     return out
 
 
+def _validate_ticket_workflow(args):
+    out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
+           "to": req_text(args, "to", 64, allow_empty=False)}
+    reason = req_text(args, "reason", 500, required=False)
+    if reason is not None:
+        out["reason"] = reason
+    return out
+
+
 def _validate_ticket_depend(args):
     out = {"workspace": _workspace_arg(args), "key": _ticket_key(args.get("key")),
            "on": _ticket_keys(args, "on"), "remove": _ticket_keys(args, "remove")}
@@ -1139,6 +1148,7 @@ COMMANDS = {
     "ticket.update": _inbox("ticket.update", _validate_ticket_update),
     "ticket.edit": _inbox("ticket.edit", _validate_ticket_edit),
     "ticket.move": _inbox("ticket.move", _validate_ticket_move),
+    "ticket.workflow": _inbox("ticket.workflow", _validate_ticket_workflow),
     "ticket.depend": _inbox("ticket.depend", _validate_ticket_depend),
     "ticket.phase": _inbox("ticket.phase", _validate_ticket_phase),
     "ticket.apply": _inbox("ticket.apply", _validate_ticket_apply),

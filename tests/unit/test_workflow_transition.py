@@ -67,3 +67,73 @@ class WorkflowTransitionTests(BoardCase):
         self.assertEqual(caught.exception.data["key"], ticket["key"])
         self.assertEqual(boardmodel.get_ticket(self.conn, self.ws, ticket["key"]), ticket)
         self.assertEqual(len(self.events(ticket["key"])), 1)
+
+class OperatorWorkflowTests(BoardCase):
+    def setUp(self):
+        super().setUp()
+        self.ticket = self.add()
+        self.write_config(config())
+        self.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?",
+                          (self.ticket['id'],))
+
+    def change(self, to, **extra):
+        with self.store.transaction() as tx:
+            return boardmodel.ticket_workflow(tx, self.ws, dict(key=self.ticket['key'], to=to, **extra))
+
+    def test_allowed_changes_preserve_column_and_record_operator_event(self):
+        for column in ('todo', 'in-progress'):
+            with self.subTest(column=column):
+                self.conn.execute("UPDATE tickets SET status = ?, workflow_status = 'ready' WHERE id = ?",
+                                  (column, self.ticket['id']))
+                result = self.change('merge-ready', reason='review')
+                row = boardmodel.get_ticket(self.conn, self.ws, self.ticket['key'])
+                self.assertEqual((row['status'], row['workflow_status'], result['from']),
+                                 (column, 'merge-ready', 'ready'))
+                event = self.events(self.ticket['key'])[-1]
+                self.assertEqual((event['name'], event['actor'], event['from_status'], event['to_status']),
+                                 ('ticket.workflow_changed', 'operator', 'ready', 'merge-ready'))
+                self.assertEqual(json.loads(event['payload_json'])['reason'], 'review')
+
+    def test_invalid_transitions_leave_ticket_and_events_unchanged(self):
+        cases = [('todo', 'missing', 'BOARD_STATUS_UNKNOWN'),
+                 ('todo', 'blocked', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'backlog', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'done', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'closed', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'working', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'merging', 'TICKET_TRANSITION_INVALID'),
+                 ('todo', 'ready', 'TICKET_TRANSITION_INVALID'),
+                 ('backlog', 'merge-ready', 'TICKET_TRANSITION_INVALID'),
+                 ('done', 'merge-ready', 'TICKET_TRANSITION_INVALID'),
+                 ('closed', 'merge-ready', 'TICKET_TRANSITION_INVALID')]
+        for column, target, code in cases:
+            with self.subTest(column=column, target=target):
+                self.conn.execute('UPDATE tickets SET status = ? WHERE id = ?', (column, self.ticket['id']))
+                before = boardmodel.get_ticket(self.conn, self.ws, self.ticket['key'])
+                count = len(self.events(self.ticket['key']))
+                with self.assertRaises(AsError) as caught:
+                    self.change(target)
+                self.assertEqual(caught.exception.code, code)
+                self.assertEqual(boardmodel.get_ticket(self.conn, self.ws, self.ticket['key']), before)
+                self.assertEqual(len(self.events(self.ticket['key'])), count)
+
+    def test_claimed_ticket_is_busy(self):
+        self.conn.execute("UPDATE tickets SET assignee = 'agent' WHERE id = ?", (self.ticket['id'],))
+        with self.assertRaises(AsError) as caught:
+            self.change('merge-ready')
+        self.assertEqual(caught.exception.code, 'TICKET_BUSY')
+        self.assertEqual(len(self.events(self.ticket['key'])), 1)
+
+    def test_command_validation_and_registration(self):
+        from agent_studio import dispatch, coordinator
+        args = {'workspace': self.ws, 'key': self.ticket['key'], 'to': 'merge-ready', 'reason': 'review'}
+        self.assertEqual(dispatch._validate_ticket_workflow(args), args)
+        without_reason = {'workspace': self.ws, 'key': self.ticket['key'], 'to': 'merge-ready'}
+        self.assertEqual(dispatch._validate_ticket_workflow(without_reason), without_reason)
+        for change in ({'key': 'bad'}, {'key': None}, {'to': ''}, {'to': None},
+                       {'reason': 'x' * 501}, {'reason': 12}):
+            with self.subTest(change=change), self.assertRaises(AsError) as caught:
+                dispatch._validate_ticket_workflow(dict(args, **change))
+            self.assertEqual(caught.exception.code, 'BAD_REQUEST')
+        self.assertIn('ticket.workflow', dispatch.COMMANDS)
+        self.assertIn('ticket.workflow', coordinator.HANDLERS)

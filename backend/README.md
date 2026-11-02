@@ -386,6 +386,9 @@ execution has not yet been migrated to this schema. Version 2 remains supported 
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
 statuses use `in-progress`, and other working statuses retain `in-progress` or otherwise use `todo`.
+The mutating `ticket.workflow` command accepts `workspace`, `key`, `to`, and optional `reason`.
+It changes an unclaimed ticket in `todo` or `in-progress` to a different kindless workflow status,
+excluding `blocked` and rule `during` statuses, while preserving the column.
 
 ```bash
 agent-studio board rules check --workspace ~/work/project      # validate board.json against roles + workflows
