@@ -156,7 +156,12 @@ def _board_settings_update(args, req):
     ws = _catalog_workspace(args, {"workspace", "changes", "expectedSha256"}, "board.settings.update")
     if "changes" not in args:
         raise AsError(BAD_REQUEST, "Missing required argument 'changes'.")
-    return boardsettings.update_board(ws, args["changes"], _sha_arg(args))
+    conn = _reader() if isinstance(args["changes"], dict) and "workflowStatuses" in args["changes"] else None
+    try:
+        return boardsettings.update_board(ws, args["changes"], _sha_arg(args), conn)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _role_create(args, req):

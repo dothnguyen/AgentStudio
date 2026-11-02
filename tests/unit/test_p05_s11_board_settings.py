@@ -70,6 +70,26 @@ class BoardSettingsTests(unittest.TestCase):
         self.addCleanup(self.conn.close)
         self.store = Store(self.conn)
 
+    def test_workflow_status_removal_rejects_tickets_and_preserves_file(self):
+        board, _ = boardmodel.upgrade_config(copy.deepcopy(BOARD))
+        board["workflowStatuses"].append({"id": "unused"})
+        self.write("board.json", board)
+        changes = {"workflowStatuses": [s for s in board["workflowStatuses"] if s["id"] != "unused"]}
+        with patch("agent_studio.boardsettings.boardmodel.check_rules", return_value=[]):
+            class UsedConnection:
+                def execute(self, query, params):
+                    self.params = params
+                    return self
+                def fetchone(self):
+                    return (1,)
+            conn = UsedConnection()
+            before = self.read_bytes("board.json")
+            with self.assertRaises(AsError) as caught:
+                boardsettings.update_board(self.ws, changes, conn=conn)
+            self.assertEqual(conn.params, (self.ws, "unused"))
+            self.assertEqual(caught.exception.data["problems"][0]["path"], "workflowStatuses")
+            self.assertEqual(self.read_bytes("board.json"), before)
+
     def _restore(self):
         if self.old is None:
             os.environ.pop("XDG_STATE_HOME", None)

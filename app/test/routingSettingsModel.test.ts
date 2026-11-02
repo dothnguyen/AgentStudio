@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addRule, boardSettingsChanges, createRoutingDraft, errorProblems, isActionRule, isRuleFieldProblem, removeRule, removeRuleFailureLimit, ruleStatus, setRuleFailureLimit, setRuleSyncBase, unusedStatuses, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
+import { addWorkflowStatus, updateWorkflowStatus, removeWorkflowStatus, moveWorkflowStatus, addRule, boardSettingsChanges, createRoutingDraft, errorProblems, isActionRule, isRuleFieldProblem, removeRule, removeRuleFailureLimit, ruleStatus, setRuleFailureLimit, setRuleSyncBase, unusedStatuses, updateFailureLimit, updateRuleField, validateRoutingDraft } from '../src/renderer/teams/routingSettingsModel';
 import { escalationSettingsFixture, routingSettingsFixture } from './teamsFixtures';
 
 describe('routing settings model', () => {
@@ -373,5 +373,46 @@ describe('adding and removing rules', () => {
       expect(validateRoutingDraft(changed, s)).not.toContainEqual(expect.objectContaining({ path: 'rules[0].syncBase' }));
     }
     expect(updateRuleField(d, 0, 'workspace', 'worktree')).toEqual(d);
+  });
+});
+
+it('edits workflow statuses in order and emits the v3 settings payload', () => {
+  const s = routingSettingsFixture();
+  s.board.config = { ...s.board.config!, version: 3, workflowStatuses: [{ id: 'backlog', kind: 'initial' }, { id: 'done', kind: 'done' }] };
+  s.todoEntry = ['backlog']; s.todoDefault = 'backlog';
+  const original = createRoutingDraft(s)!;
+  let draft = addWorkflowStatus(original);
+  draft = updateWorkflowStatus(draft, 2, 'id', 'review');
+  draft = updateWorkflowStatus(draft, 2, 'name', 'Review');
+  draft = moveWorkflowStatus(draft, 2, -1);
+  expect(draft.workflowStatuses[1]).toEqual({ id: 'review', name: 'Review' });
+  expect(removeWorkflowStatus(draft, 1).workflowStatuses).toEqual(original.workflowStatuses);
+  draft = { ...draft, todoEntry: ['review'], todoDefault: 'review' };
+  expect(boardSettingsChanges(draft, s)).toEqual({ workflowStatuses: draft.workflowStatuses, todoEntry: ['review'], todoDefault: 'review' });
+  expect(original.workflowStatuses).toEqual(s.board.config!.workflowStatuses);
+});
+
+it('requires an unused in-progress status for agent rules and allows merge rules to omit it', () => {
+  const s = routingSettingsFixture();
+  const rules = structuredClone(s.board.config!.rules as Array<Record<string, unknown>>);
+  const workflowStatuses = s.statuses.map(({ id, kind }) => kind ? { id, kind } : { id });
+  rules.forEach((rule, i) => {
+    if (!('action' in rule)) {
+      const id = `active-${i}`;
+      workflowStatuses.push({ id });
+      rule.during = id;
+    }
+  });
+  s.board.config = { ...s.board.config!, version: 3, workflowStatuses, rules };
+  const draft = createRoutingDraft(s)!;
+  const firstAgent = draft.rules.findIndex(rule => !isActionRule(rule));
+  const missingDuring = updateRuleField(draft, firstAgent, 'during', '');
+  expect(validateRoutingDraft(missingDuring, s)).toContainEqual({
+    path: `rules[${firstAgent}].during`, message: 'Choose an unused status with no kind.',
+  });
+  const mergeIndex = draft.rules.findIndex(isActionRule);
+  expect(validateRoutingDraft(updateRuleField(draft, mergeIndex, 'during', ''), s)).toEqual([]);
+  expect(validateRoutingDraft(updateRuleField(draft, firstAgent, 'during', 'backlog'), s)).toContainEqual({
+    path: `rules[${firstAgent}].during`, message: 'Choose an unused status with no kind.',
   });
 });

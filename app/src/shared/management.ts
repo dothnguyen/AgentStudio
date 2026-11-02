@@ -342,6 +342,9 @@ export interface BoardSettings {
 }
 export type BoardSettingsKey =
   | 'statuses'
+  | 'workflowStatuses'
+  | 'todoEntry'
+  | 'todoDefault'
   | 'ticketFields'
   | 'rules'
   | 'leaseSeconds'

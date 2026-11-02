@@ -11,7 +11,7 @@ from . import boardmodel, roles, workflowdef
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, CONFIG_CHANGED, ROLE_NOT_FOUND
 
 PROTECTED_ROUTES = {"merge-conflict": "TeamLead", "plan-merge-conflict": "TeamLead"}
-EDITABLE_BOARD_KEYS = ("statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
+EDITABLE_BOARD_KEYS = ("workflowStatuses", "todoEntry", "todoDefault", "statuses", "ticketFields", "rules", "leaseSeconds", "baseBranch", "agentTicketStatus")
 
 
 def _path(workspace, name):
@@ -187,7 +187,7 @@ def settings(conn, workspace, coordinator_running, runtime_error):
             "runner": runner(conn, ws, coordinator_running, runtime_error)}
 
 
-def update_board(workspace, changes, expected_sha256=None):
+def update_board(workspace, changes, expected_sha256=None, conn=None):
     ws = workspace
     if not isinstance(changes, dict) or not changes:
         raise AsError(BAD_REQUEST, "changes must be a non-empty object.")
@@ -213,6 +213,16 @@ def update_board(workspace, changes, expected_sha256=None):
         else:
             candidate[key] = copy.deepcopy(value)
     cfg = boardmodel.parse_config(candidate)
+    if "workflowStatuses" in changes and current.get("version") == 3:
+        removed = {s["id"] for s in current.get("workflowStatuses", [])} - {s["id"] for s in candidate["workflowStatuses"]}
+        if removed:
+            if conn is None:
+                raise AsError(BOARD_CONFIG_INVALID, "Cannot verify whether removed statuses are in use.")
+            used = [status for status in removed if conn.execute(
+                "SELECT 1 FROM tickets WHERE workspace = ? AND workflow_status = ? LIMIT 1", (ws, status)).fetchone()]
+            if used:
+                raise AsError(BOARD_CONFIG_INVALID, "Cannot remove workflow statuses used by tickets.",
+                              data={"problems": [{"path": "workflowStatuses", "message": "Statuses used by tickets cannot be removed: " + ", ".join(sorted(used))}]})
     problems = boardmodel.check_rules(ws, cfg) + protected_problems(current, candidate)
     if problems:
         raise AsError(BOARD_CONFIG_INVALID, f"board.json is invalid: {len(problems)} problem(s); nothing was written",

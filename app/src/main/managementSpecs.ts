@@ -357,6 +357,9 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
       nonEmpty: true,
       object: {
         statuses: { kind: 'any' },
+        workflowStatuses: { kind: 'any' },
+        todoEntry: { kind: 'any' },
+        todoDefault: { kind: 'any' },
         ticketFields: { kind: 'any' },
         rules: { kind: 'any' },
         leaseSeconds: { kind: 'any' },

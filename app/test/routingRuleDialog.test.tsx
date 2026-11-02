@@ -389,3 +389,25 @@ it('accepts a role catalog label and keeps role ids in the payload', async () =>
   const rule = await openRule(panel, 0);
   expect(within(rule).getByRole('option', { name: 'Developer' })).toBeTruthy();
 });
+
+it('creates an in-progress status and includes it with the rule when saved', async () => {
+  const s = routingSettingsFixture();
+  s.board.config = { ...s.board.config!, version: 3, workflowStatuses: s.statuses.map(({ id, kind }) => kind ? { id, kind } : { id }) };
+  const rules = s.board.config.rules as Array<Record<string, unknown>>;
+  for (const [index, rule] of rules.entries()) {
+    if (!('action' in rule)) {
+      const id = `active-${index}`;
+      (s.board.config.workflowStatuses as Array<Record<string, unknown>>).push({ id });
+      rule.during = id;
+    }
+  }
+  s.workflowStatuses = s.board.config.workflowStatuses as typeof s.workflowStatuses;
+  s.todoEntry = ['backlog']; s.todoDefault = 'backlog';
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s, s]);
+  const view = await openRule(panel, 0);
+  fireEvent.click(within(view).getByRole('button', { name: 'Create backlog-ing' }));
+  expect((within(view).getByLabelText('In progress status') as HTMLSelectElement).value).toBe('backlog-ing');
+  await act(async () => { fireEvent.click(within(view).getByRole('button', { name: 'Save rule' })); });
+  expect(update).toHaveBeenCalledWith('ws-a', expect.objectContaining({ workflowStatuses: expect.arrayContaining([{ id: 'backlog-ing', name: 'backlog-ing' }]), rules: expect.arrayContaining([expect.objectContaining({ during: 'backlog-ing' })]) }), s.board.sha256);
+});

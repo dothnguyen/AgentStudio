@@ -226,3 +226,68 @@ it('shows no old disclosures or all-rules editor', async () => {
   expect(screen.queryByLabelText('Base branch')).toBeNull();
   expect(screen.queryByText(/Transitions/)).toBeNull();
 });
+
+it('shows a server rejection when removing a workflow status used by tickets', async () => {
+  const s = routingSettingsFixture();
+  const statuses = s.statuses.map(({ id, kind }) => kind ? { id, kind } : { id });
+  const rules = structuredClone(s.board.config!.rules as Array<Record<string, unknown>>);
+  rules.forEach((rule, i) => { if (!('action' in rule)) { const id = `active-${i}`; statuses.push({ id }); rule.during = id; } });
+  statuses.push({ id: 'unused' });
+  s.board.config = { ...s.board.config!, version: 3, workflowStatuses: statuses, rules };
+  s.workflowStatuses = statuses.map(status => ({ ...status, name: null, kind: status.kind ?? null }));
+  s.todoEntry = ['backlog']; s.todoDefault = 'backlog';
+  const update = vi.fn(async () => ({ ok: false as const, error: { code: 'BOARD_CONFIG_INVALID', message: 'in use', retryable: false, data: { problems: [{ path: 'workflowStatuses', message: 'Status unused is used by tickets' }] } } }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit workflow statuses and Todo entry' }));
+  const dialog = screen.getByRole('dialog');
+  const idFields = within(dialog).getAllByLabelText('ID') as HTMLInputElement[];
+  const row = idFields.find(input => input.value === 'unused')!.parentElement!.parentElement!;
+  fireEvent.click(within(row).getByRole('button', { name: 'Remove' }));
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save workflow settings' })); });
+  expect(within(dialog).getByText('workflowStatuses: Status unused is used by tickets')).toBeTruthy();
+  expect(update).toHaveBeenCalledOnce();
+});
+
+it('edits workflow statuses and Todo entry and submits all settings together', async () => {
+  const s = routingSettingsFixture();
+  const statuses = s.statuses.map(({ id, kind, name }) => ({ id, name, ...(kind ? { kind } : {}) }));
+  const rules = structuredClone(s.board.config!.rules as Array<Record<string, unknown>>);
+  rules.forEach((rule, i) => {
+    if (!('action' in rule)) {
+      const id = `active-${i}`;
+      statuses.push({ id, name: id });
+      rule.during = id;
+    }
+  });
+  const statusBeforeUnused = statuses.at(-1)!.id;
+  statuses.push({ id: 'unused', name: 'Unused' });
+  s.board.config = { ...s.board.config!, version: 3, workflowStatuses: statuses, rules };
+  s.workflowStatuses = statuses.map(status => ({ ...status, name: status.name ?? null, kind: status.kind ?? null }));
+  s.todoEntry = ['backlog']; s.todoDefault = 'backlog';
+  const update = vi.fn(async () => ({ ok: true as const, data: {} }));
+  const { panel } = await setup({ updateBoardSettings: update }, [s, s]);
+  fireEvent.click(panel.getByRole('button', { name: 'Edit workflow statuses and Todo entry' }));
+  const dialog = screen.getByRole('dialog');
+  const idFields = within(dialog).getAllByLabelText('ID') as HTMLInputElement[];
+  const unusedRow = idFields.find(input => input.value === 'unused')!.parentElement!.parentElement!;
+  fireEvent.change(within(unusedRow).getByLabelText('Name'), { target: { value: 'Review' } });
+  fireEvent.change(within(unusedRow).getByLabelText('ID'), { target: { value: 'review' } });
+  fireEvent.click(within(unusedRow).getByRole('button', { name: 'Move up' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Add status' }));
+  const newId = (within(dialog).getAllByLabelText('ID') as HTMLInputElement[]).at(-1)!;
+  const newRow = newId.parentElement!.parentElement!;
+  fireEvent.change(newId, { target: { value: 'qa' } });
+  fireEvent.change(within(newRow).getByLabelText('Name'), { target: { value: 'QA' } });
+  fireEvent.click(within(dialog).getByRole('checkbox', { name: 'merge-conflict' }));
+  fireEvent.change(within(dialog).getByLabelText('Default'), { target: { value: 'merge-conflict' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Save workflow settings' })); });
+  expect(update).toHaveBeenCalledOnce();
+  const payload = update.mock.calls[0]![1] as Record<string, unknown>;
+  expect(payload.workflowStatuses).toEqual(expect.arrayContaining([
+    { id: 'review', name: 'Review' }, { id: 'qa', name: 'QA' },
+  ]));
+  expect((payload.workflowStatuses as Array<{ id: string }>).findIndex(status => status.id === 'review'))
+    .toBeLessThan((payload.workflowStatuses as Array<{ id: string }>).findIndex(status => status.id === statusBeforeUnused));
+  expect(payload.todoEntry).toEqual(['backlog', 'merge-conflict']);
+  expect(payload.todoDefault).toBe('merge-conflict');
+});

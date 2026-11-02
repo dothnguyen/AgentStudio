@@ -180,6 +180,16 @@ export function RoutingRuleDialog(props: RoutingRuleDialogProps): JSX.Element {
       </> : <p className="routing-dialog-action-copy">Runs the built-in merge action. No role or workflow to choose.</p>}
     </RoutingDialogSection>
 
+    {settings.board.config?.version === 3 && <RoutingDialogSection title="In progress status">
+      <RoutingDialogSelect id={id('during')} label="In progress status" value={valueOf(rule?.during)}
+        options={[{ value: '', label: agent ? 'Choose a status' : 'None' }, ...draft.workflowStatuses.filter(candidate => candidate.kind == null && (candidate.id === rule?.during || (!draft.rules.some(other => ruleStatus(other) === candidate.id || other.during === candidate.id)))).map(candidate => ({ value: String(candidate.id), label: String(candidate.name || candidate.id) }))]}
+        disabled={disabled} problems={fieldProblems('during')} onChange={value => props.onDraftChange(updateRuleField(draft, index, 'during', value))} />
+      {status && !draft.workflowStatuses.some(candidate => candidate.id === `${status}-ing`) && <button type="button" disabled={disabled} onClick={() => {
+        const created = { ...draft, workflowStatuses: [...draft.workflowStatuses, { id: `${status}-ing`, name: `${status}-ing` }] };
+        props.onDraftChange(updateRuleField(created, index, 'during', `${status}-ing`));
+      }}>{`Create ${status}-ing`}</button>}
+    </RoutingDialogSection>}
+
     <RoutingDialogSection title="Next status">
       <div className="routing-dialog-grid">
         <RoutingDialogSelect id={id('on-pass')} label="If it passes" value={valueOf(rule?.onPass)} options={statusOptions(settings)} disabled={disabled} problems={fieldProblems('onPass')} onChange={value => props.onDraftChange(updateRuleField(draft, index, 'onPass', value))} />

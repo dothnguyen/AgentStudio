@@ -1,14 +1,14 @@
 import type { BoardSettings, BoardSettingsChanges, ManagementError, Problem } from '../../shared/management';
 
-export type EditableRuleField = 'status' | 'role' | 'workflow' | 'workspace' | 'onPass' | 'onFail' | 'onBlocked';
+export type EditableRuleField = 'status' | 'role' | 'workflow' | 'workspace' | 'onPass' | 'onFail' | 'onBlocked' | 'during';
 export type NewRuleKind = 'agent' | 'action';
-export interface RoutingDraft { baseBranch: string; rules: Array<Record<string, unknown>> }
+export interface RoutingDraft { baseBranch: string; rules: Array<Record<string, unknown>>; workflowStatuses: Array<Record<string, unknown>>; todoEntry: string[]; todoDefault: string | null }
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const clone = <T,>(value: T): T => structuredClone(value);
 export function createRoutingDraft(settings: BoardSettings): RoutingDraft | null {
   const config = settings.board.config;
   if (settings.board.state !== 'ok' || !object(config) || !Array.isArray(config.rules) || !config.rules.every(object)) return null;
-  return { baseBranch: settings.worktree.baseBranch ?? 'main', rules: clone(config.rules) };
+  return { baseBranch: settings.worktree.baseBranch ?? 'main', rules: clone(config.rules), workflowStatuses: clone(Array.isArray(config.workflowStatuses) ? config.workflowStatuses : settings.statuses), todoEntry: clone(settings.todoEntry ?? []), todoDefault: settings.todoDefault ?? null };
 }
 export function updateRuleField(draft: RoutingDraft, index: number, field: EditableRuleField, value: string): RoutingDraft {
   const rules = clone(draft.rules); const rule = rules[index];
@@ -20,7 +20,7 @@ export function updateRuleField(draft: RoutingDraft, index: number, field: Edita
     // out of a worktree drops the flag instead of leaving an invalid rule.
     if (value !== 'worktree') delete rule.syncBase;
   }
-  else if (field === 'onBlocked' && value === '') delete rule.onBlocked;
+  else if ((field === 'onBlocked' || field === 'during') && value === '') delete rule[field];
   else rule[field] = value;
   return { ...draft, rules };
 }
@@ -78,7 +78,7 @@ export function isRuleFieldProblem(path: string, index: number, agent: boolean, 
   if (!path.startsWith(prefix)) return false;
   const rest = path.slice(prefix.length);
   if (rest === 'when.status') return statusField;
-  if (rest === 'onPass' || rest === 'onFail') return true;
+  if (rest === 'during' || rest === 'onPass' || rest === 'onFail') return true;
   if (rest === 'role' || rest === 'workflow' || rest === 'workspace') return agent;
   return agent && (rest === 'onBlocked' || rest === 'onFailureLimit.count' || rest === 'onFailureLimit.status');
 }
@@ -102,7 +102,7 @@ export function removeRuleFailureLimit(draft: RoutingDraft, index: number): Rout
 export function validateRoutingDraft(draft: RoutingDraft, settings: BoardSettings): Problem[] {
   const problems: Problem[] = []; const add = (path: string, message: string) => problems.push({ path, message });
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(draft.baseBranch)) add('baseBranch', 'Use 1–64 lowercase letters, numbers, or hyphens, starting with a letter or number.');
-  const statuses = new Set(settings.statuses.map(s => s.id)); const seen = new Set<unknown>();
+  const statuses = new Set(draft.workflowStatuses.map(s => s.id)); const seen = new Set<unknown>();
   draft.rules.forEach((rule, i) => {
     const prefix = `rules[${i}]`; const status = object(rule.when) ? rule.when.status : undefined;
     for (const [path, value] of [['when.status', status], ['onPass', rule.onPass], ['onFail', rule.onFail], ...(rule.onBlocked ? [['onBlocked', rule.onBlocked]] : [])]) {
@@ -128,15 +128,41 @@ export function validateRoutingDraft(draft: RoutingDraft, settings: BoardSetting
       }
     }
   });
-  const initial = settings.statuses.find(s => s.kind === 'initial')?.id; const visited = new Set<string>(); const queue = initial ? [initial] : [];
+  const initial = draft.workflowStatuses.find(s => s.kind === 'initial')?.id as string | undefined; const visited = new Set<string>(); const queue = initial ? [initial] : [];
   while (queue.length) { const status = queue.shift()!; if (visited.has(status)) continue; visited.add(status); for (const rule of draft.rules) if (object(rule.when) && rule.when.status === status) for (const next of [rule.onPass, rule.onFail, rule.onBlocked, !isActionRule(rule) && object(rule.onFailureLimit) && typeof rule.onFailureLimit.status === 'string' && statuses.has(rule.onFailureLimit.status) ? rule.onFailureLimit.status : undefined]) if (typeof next === 'string' && next) queue.push(next); }
-  if (!settings.statuses.some(s => s.kind === 'done' && visited.has(s.id))) add('rules', 'No routing path reaches a done status.');
+  if (!draft.workflowStatuses.some(s => s.kind === 'done' && typeof s.id === 'string' && visited.has(s.id))) add('rules', 'No routing path reaches a done status.');
+  if (settings.board.config?.version === 3) {
+    const whens = new Set(draft.rules.map(ruleStatus));
+    draft.rules.forEach((rule, i) => {
+      if (!isActionRule(rule) || rule.during !== undefined) {
+        const status = draft.workflowStatuses.find(s => s.id === rule.during);
+        if (!status || status.kind != null || whens.has(rule.during as string) || draft.rules.some((other, j) => j !== i && other.during === rule.during)) add(`rules[${i}].during`, 'Choose an unused status with no kind.');
+      }
+    });
+  }
   return problems;
+}
+export function addWorkflowStatus(draft: RoutingDraft): RoutingDraft { return { ...draft, workflowStatuses: [...draft.workflowStatuses, { id: '', name: '' }] }; }
+export function updateWorkflowStatus(draft: RoutingDraft, index: number, field: 'id' | 'name' | 'kind', value: string): RoutingDraft {
+  const workflowStatuses = clone(draft.workflowStatuses); const status = workflowStatuses[index];
+  if (status) { if (field === 'kind' && !value) delete status.kind; else status[field] = value; }
+  return { ...draft, workflowStatuses };
+}
+export function removeWorkflowStatus(draft: RoutingDraft, index: number): RoutingDraft { return { ...draft, workflowStatuses: draft.workflowStatuses.filter((_, i) => i !== index) }; }
+export function moveWorkflowStatus(draft: RoutingDraft, index: number, direction: number): RoutingDraft {
+  const workflowStatuses = clone(draft.workflowStatuses); const target = index + direction;
+  if (index >= 0 && index < workflowStatuses.length && target >= 0 && target < workflowStatuses.length) [workflowStatuses[index], workflowStatuses[target]] = [workflowStatuses[target]!, workflowStatuses[index]!];
+  return { ...draft, workflowStatuses };
 }
 export function boardSettingsChanges(draft: RoutingDraft, settings: BoardSettings): BoardSettingsChanges | null {
   const changes: BoardSettingsChanges = {};
   if (draft.baseBranch !== (settings.worktree.baseBranch ?? 'main')) changes.baseBranch = draft.baseBranch;
   if (JSON.stringify(draft.rules) !== JSON.stringify(settings.board.config?.rules)) changes.rules = clone(draft.rules);
+  if (settings.board.config?.version === 3) {
+    if (JSON.stringify(draft.workflowStatuses) !== JSON.stringify(settings.board.config.workflowStatuses)) changes.workflowStatuses = clone(draft.workflowStatuses);
+    if (JSON.stringify(draft.todoEntry) !== JSON.stringify(settings.todoEntry)) changes.todoEntry = clone(draft.todoEntry);
+    if (draft.todoDefault !== settings.todoDefault) changes.todoDefault = draft.todoDefault;
+  }
   return Object.keys(changes).length ? changes : null;
 }
 export function errorProblems(error: ManagementError): Problem[] {

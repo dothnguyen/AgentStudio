@@ -4,6 +4,10 @@ import { RoutingReadView, type RoutingTeamsState } from './RoutingReadView';
 import type { DashboardSectionController } from '../dashboard/useDashboardSection';
 import {
   addRule,
+  addWorkflowStatus,
+  updateWorkflowStatus,
+  removeWorkflowStatus,
+  moveWorkflowStatus,
   boardSettingsChanges,
   createRoutingDraft,
   errorProblems,
@@ -18,6 +22,8 @@ import {
 import { statusName } from './routingViewModel';
 import { RoutingRuleDialog } from './RoutingRuleDialog';
 import { RoutingRemoveRuleDialog } from './RoutingRemoveRuleDialog';
+import { Dialog } from './Dialog';
+import { RoutingDialogFailure, RoutingDialogProblemText, RoutingDialogSummary, problemsAt } from './RoutingDialogParts';
 import { RoutingWorktreesDialog } from './RoutingWorktreesDialog';
 
 export interface RoutingSettingsPanelProps { workspaceId: string; management: ManagementApi; section: DashboardSectionController<BoardSettings>; connected: boolean; alert?: boolean; announce?: boolean; onLocalErrorChange?(active: boolean): void; roleItems?: RoleCatalogItem[] | null; onViewRole?(roleId: string): void; teams?: TeamOverview | null; teamsState?: RoutingTeamsState; onOpenTeam?(teamId: string | null): void; onOpenTeams?(): void }
@@ -25,6 +31,7 @@ export interface RoutingSettingsPanelProps { workspaceId: string; management: Ma
 type DialogState =
   | { kind: 'edit' | 'add'; settings: BoardSettings; index: number; draft: RoutingDraft }
   | { kind: 'remove'; settings: BoardSettings; index: number; draft: RoutingDraft; problems: Problem[] }
+  | { kind: 'statuses'; settings: BoardSettings; draft: RoutingDraft }
   | { kind: 'worktrees'; settings: BoardSettings; draft: RoutingDraft };
 
 type FocusTarget = { kind: 'rule'; index: number } | { kind: 'add' } | { kind: 'worktrees' };
@@ -70,6 +77,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
   const summaryProblems = ((): Problem[] => {
     if (dialog === null) return [];
     if (dialog.kind === 'remove') return dialogProblems;
+    if (dialog.kind === 'statuses') return dialogProblems.filter(problem => !/^(workflowStatuses|todoEntry|todoDefault)/.test(problem.path));
     if (dialog.kind === 'worktrees') return dialogProblems.filter(problem => problem.path !== 'baseBranch');
     const rule = dialog.draft.rules[dialog.index];
     const agent = !isActionRule(rule);
@@ -153,7 +161,7 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
     if (current.kind === 'edit') return `Saved rule ${current.index + 1}.`;
     if (current.kind === 'add') return `Added a rule for ${statusName(current.settings.statuses, ruleStatus(current.draft.rules[current.index]) ?? '')}.`;
     if (current.kind === 'remove') return `Removed the rule for ${statusName(current.settings.statuses, ruleStatus(current.draft.rules[current.index]) ?? '')}.`;
-    return 'Saved base branch.';
+    return current.kind === 'statuses' ? 'Saved workflow settings.' : 'Saved base branch.';
   }
 
   function successFocus(current: DialogState): FocusTarget {
@@ -235,6 +243,12 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
     {settings && <>
       {roleItems === null && <p className="panel-note">Role names are unavailable; rules show stable role ids.</p>}
       {notice && <p role={announce && !section.loading ? 'status' : undefined}>{notice}</p>}
+      {settings.board.config?.version === 3 && <section className="routing-dialog-section">
+        <h2>Workflow statuses</h2>
+        <ul>{settings.workflowStatuses.map(status => <li key={status.id}>{status.id} — {status.name || status.id} — {status.kind || 'No kind'}</li>)}</ul>
+        <p>Todo entry: {settings.todoEntry.join(', ') || 'None'}; default: {settings.todoDefault || 'None'}</p>
+        <button type="button" disabled={!canEdit} onClick={() => { if (baseDraft) openDialog({ kind: 'statuses', settings, draft: baseDraft }); }}>Edit workflow statuses and Todo entry</button>
+      </section>}
       <RoutingReadView
         settings={settings}
         roleItems={roleItems}
@@ -272,6 +286,22 @@ export function RoutingSettingsPanel({ workspaceId, management, section, connect
         onReloadLatest={() => void reloadDialog()}
         onRetryLatest={() => void reloadDialog()}
       />}
+      {dialog !== null && dialog.kind === 'statuses' && <Dialog title="Workflow statuses" onClose={closeDialog} busy={pending || saved} actions={[{ label: 'Cancel', onClick: closeDialog }, { label: 'Save workflow settings', variant: 'primary', disabled: !canEdit || pending || saved || error?.code === 'CONFIG_CHANGED' || dialogProblems.length > 0 || boardSettingsChanges(dialog.draft, dialog.settings) === null, onClick: () => void save() }]}>
+        <RoutingDialogFailure error={error} reloadError={reloadError} pending={pending} connected={connected} alert={alert} onReloadLatest={() => void reloadDialog()} onRetryLatest={() => void reloadDialog()} />
+        <RoutingDialogSummary problems={summaryProblems} />
+        <RoutingDialogProblemText problems={problemsAt(dialogProblems, 'workflowStatuses')} />
+        {dialog.draft.workflowStatuses.map((status, i) => <div key={i} className="routing-dialog-grid">
+          {(['id', 'name'] as const).map(field => <label key={field}>{field === 'id' ? 'ID' : 'Name'}<input value={typeof status[field] === 'string' ? status[field] as string : ''} disabled={!canEdit || pending || saved} onChange={event => changeDraft(updateWorkflowStatus(dialog.draft, i, field, event.target.value))} /><RoutingDialogProblemText problems={problemsAt(dialogProblems, `workflowStatuses[${i}].${field}`)} /></label>)}
+          <label>Kind<select value={typeof status.kind === 'string' ? status.kind : ''} disabled={!canEdit || pending || saved} onChange={event => changeDraft(updateWorkflowStatus(dialog.draft, i, 'kind', event.target.value))}><option value="">None</option><option value="initial">Initial</option><option value="done">Done</option><option value="closed">Closed</option></select><RoutingDialogProblemText problems={problemsAt(dialogProblems, `workflowStatuses[${i}].kind`)} /></label>
+          <RoutingDialogProblemText problems={problemsAt(dialogProblems, `workflowStatuses[${i}]`)} />
+          <button type="button" disabled={!canEdit || pending || saved || i === 0} onClick={() => changeDraft(moveWorkflowStatus(dialog.draft, i, -1))}>Move up</button><button type="button" disabled={!canEdit || pending || saved || i === dialog.draft.workflowStatuses.length - 1} onClick={() => changeDraft(moveWorkflowStatus(dialog.draft, i, 1))}>Move down</button><button type="button" disabled={!canEdit || pending || saved} onClick={() => changeDraft(removeWorkflowStatus(dialog.draft, i))}>Remove</button>
+        </div>)}
+        <button type="button" disabled={!canEdit || pending || saved} onClick={() => changeDraft(addWorkflowStatus(dialog.draft))}>Add status</button>
+        <h3>Todo entry</h3>
+        {dialog.draft.rules.filter(rule => !isActionRule(rule)).map(rule => ruleStatus(rule)).filter((status): status is string => status !== null).map(status => <label key={status}><input type="checkbox" checked={dialog.draft.todoEntry.includes(status)} disabled={!canEdit || pending || saved} onChange={event => { const todoEntry = event.target.checked ? [...dialog.draft.todoEntry, status] : dialog.draft.todoEntry.filter(value => value !== status); changeDraft({ ...dialog.draft, todoEntry, todoDefault: todoEntry.includes(dialog.draft.todoDefault ?? '') ? dialog.draft.todoDefault : todoEntry[0] ?? null }); }} />{statusName(dialog.settings.statuses, status)}</label>)}
+        <RoutingDialogProblemText problems={dialogProblems.filter(problem => /^todoEntry(?:\[|$)/.test(problem.path))} />
+        <label>Default<select value={dialog.draft.todoDefault ?? ''} disabled={!canEdit || pending || saved} onChange={event => changeDraft({ ...dialog.draft, todoDefault: event.target.value || null })}><option value="">Choose a default</option>{dialog.draft.todoEntry.map(status => <option key={status} value={status}>{statusName(dialog.settings.statuses, status)}</option>)}</select><RoutingDialogProblemText problems={problemsAt(dialogProblems, 'todoDefault')} /></label>
+      </Dialog>}
       {dialog !== null && dialog.kind === 'worktrees' && <RoutingWorktreesDialog
         settings={dialog.settings}
         draft={dialog.draft}
