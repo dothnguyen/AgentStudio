@@ -13,6 +13,16 @@ const list = (count: number) => boardTicketListFixture({ tickets: Array.from({ l
 const settle = () => act(async () => {});
 
 describe('BacklogScreen', () => {
+  it('limits initially rendered rows for a 300 ticket backlog and removes collapsed rows', async () => {
+    const tickets = Array.from({ length: 300 }, (_, i) => boardTicketSummary({ key: `T-${i}`, phase: 'phase-05' }));
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
+    await settle();
+    expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(50);
+    expect(view.getByRole('button', { name: 'Show 250 more' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: /Phase 05 Current 300 tickets/ }));
+    expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
+  });
+
   it('loads all tickets and renders the header and grouped body', async () => {
     const fake = fakeManagement({ boardTickets: [ok(list(2))] });
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} />);
@@ -46,6 +56,9 @@ describe('BacklogScreen', () => {
     headers[0]!.focus();
     await user.keyboard('{Enter}');
     expect(headers[0]?.getAttribute('aria-expanded')).toBe('false');
+    const body = view.container.querySelector(`[id="${headers[0]!.getAttribute('aria-controls')}"]`)!;
+    expect(body.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
+    expect(body.hasAttribute('hidden')).toBe(true);
     headers[1]!.focus();
     await user.keyboard(' ');
     expect(view.getByRole('button', { name: /Open T-3/ })).toBeTruthy();

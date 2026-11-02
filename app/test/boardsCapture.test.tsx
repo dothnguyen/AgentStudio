@@ -91,6 +91,7 @@ describe('boards v1 capture app', () => {
   it('parses each capture view and maps it to its ticket key', () => {
     expect(boardsCaptureMode('')).toBe('board');
     expect(boardsCaptureMode('?view=board-all')).toBe('board-all');
+    for (const mode of ['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases']) expect(boardsCaptureMode(`?view=${mode}`)).toBe(mode);
     expect(boardsCaptureMode('?view=ticket-working')).toBe('ticket-working');
     expect(boardsCaptureMode('?view=unknown')).toBe('board');
     expect(BOARDS_CAPTURE_TICKETS).toEqual({

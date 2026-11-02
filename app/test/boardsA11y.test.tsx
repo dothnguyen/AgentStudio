@@ -192,3 +192,9 @@ describe('Board cross-link styles', () => {
     expect(flat).toContain('.teams-member-work-ticket:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
   });
 });
+
+it('keeps Backlog columns responsive and Phases in one column', () => {
+  expect(flat).toContain('@media (max-width: 1100px) { .boards-backlog-toolbar-row { flex-wrap: wrap; }');
+  expect(flat).toContain('@media (max-width: 799px) { .boards-backlog-row .boards-ticket-owner, .boards-backlog-time { display: none; } }');
+  expect(flat).toContain('.boards-milestone-list { display: flex; flex-direction: column;');
+});

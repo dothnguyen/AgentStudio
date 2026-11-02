@@ -2496,3 +2496,6 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .boards-backlog-sort { margin-left: auto; }
 .boards-backlog-active { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .boards-backlog-active .boards-toolbar-count { margin-left: auto; }
+
+@media (max-width: 1100px) { .boards-backlog-toolbar-row { flex-wrap: wrap; } .boards-backlog-toolbar .boards-search { flex-basis: 100%; max-width: none; } }
+@media (max-width: 799px) { .boards-backlog-row .boards-ticket-owner, .boards-backlog-time { display: none; } }
