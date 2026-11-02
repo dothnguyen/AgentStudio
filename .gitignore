@@ -20,3 +20,4 @@ scripts/windows/live-gate-windows-evidence*.json
 # Agent Studio bridge (scripts/windows/as-bridge.ps1) and diagnose reports
 .agent-studio-bridge/
 diag-*.txt
+/.agent-studio/cache
