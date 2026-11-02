@@ -28,6 +28,7 @@ function headingLevels(root: ParentNode): number[] {
 
 function expectLogicalHeadings(root: ParentNode): void {
   const levels = headingLevels(root);
+  expect(levels.every((level) => level === 1 || level === 2)).toBe(true);
   levels.forEach((level, index) => {
     if (index > 0) expect(level).toBeLessThanOrEqual(levels[index - 1]! + 1);
   });
@@ -84,7 +85,7 @@ describe('Current Phase accessibility', () => {
       expect(view.getByRole('heading', { level: 2, name: new RegExp(`^${lane}`) })).toBeTruthy();
     }
     expect(view.getByRole('region', { name: 'Backlog column' })).toBeTruthy();
-    expect(view.getByRole('heading', { level: 3, name: 'Backlog' })).toBeTruthy();
+    expect(view.getByRole('heading', { level: 2, name: 'Backlog' })).toBeTruthy();
   });
 
   it('exposes every filter chip as a native aria-pressed toggle with text', async () => {
@@ -199,7 +200,7 @@ describe('Backlog and Phases accessibility', () => {
     expect(backlog.container.querySelectorAll('h3, h4, h5, h6')).toHaveLength(0);
     const groupButton = backlog.container.querySelector<HTMLButtonElement>('.boards-backlog-group-header')!;
     expect(groupButton.getAttribute('aria-expanded')).toBe('true');
-    const controlledPanel = backlog.container.querySelector(`#${groupButton.getAttribute('aria-controls')}`)!;
+    const controlledPanel = document.getElementById(groupButton.getAttribute('aria-controls')!)!;
     expect(controlledPanel.id).toBe(groupButton.getAttribute('aria-controls'));
     expect(controlledPanel.querySelector('.boards-backlog-row')).toBeTruthy();
     backlog.unmount();
