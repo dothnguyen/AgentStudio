@@ -20,7 +20,8 @@
         "claude-sonnet-5-5-medium",
         "codex-6-1-terra-medium",
         "agy-gemini-3-8-flash-medium",
-        "opencode-deepseek-flash"
+        "opencode-deepseek-flash",
+        "codex-gpt-luna-6-medium"
       ]
     },
     {
