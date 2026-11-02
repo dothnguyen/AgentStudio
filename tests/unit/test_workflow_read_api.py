@@ -34,6 +34,8 @@ class WorkflowReadTests(BoardCase):
             'backlog': 1, 'ready': 1, 'working': 0, 'merge-ready': 0,
             'merging': 0, 'done': 0, 'closed': 0,
         })
+        self.assertEqual(board['columnWorkflow']['todo'], {'ready': 1})
+        self.assertEqual(board['columnWorkflow']['backlog'], {'backlog': 1})
         self.assertNotIn('tickets', board)
 
     def test_settings_exposes_workflow_fields_and_during(self):

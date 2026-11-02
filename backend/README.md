@@ -402,8 +402,8 @@ configured outcome status. A blocked outcome without a target, or a round limit,
 The mutating `ticket.workflow` command accepts `workspace`, `key`, `to`, and optional `reason`.
 It changes an unclaimed ticket in `todo` or `in-progress` to a different kindless workflow status,
 excluding `blocked` and rule `during` statuses, while preserving the column.
-`ticket.move` takes a Kanban column as `to`, with optional `workflowStatus`, `reason`, and `force`
-(CLI: `--workflow-status`, `--reason`, `--force`). Moving to todo uses a configured todo entry,
+`ticket.move` takes a Kanban column as `to`, with optional `workflowStatus` (CLI `--workflow`), `reason`, and `force`
+(CLI also accepts `--workflow-status` as an alias). Moving to todo uses a configured todo entry,
 defaulting to `todoDefault`; in-progress requires a rule's waiting status. Backlog resets the
 workflow and round/blocking state. Done uses the first done status unless another is specified;
 closed uses the configured closed status. Leaving done or closed requires force and a target of
@@ -425,7 +425,7 @@ dependency keys) and `openDependsOn` (the dependency keys whose status is not a 
 output is unchanged. `status` filters by column; `workflowStatus` (CLI `--workflow-status`) filters by workflow status.
 Both filters combine with `phase` and `summary`. Tickets expose the column as `status` and the workflow state as
 `workflowStatus`. `phase.list` and `phase.show` count columns; `board.show` returns per-phase `columns` and
-`workflow` count maps without ticket lists. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
+`workflow` count maps and a `columnWorkflow` breakdown without ticket lists. `ticket workflow KEY ID [--reason TEXT]` changes the workflow status; operator MCP clients can use `ticket_workflow`. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
 and each rule’s `during` value.
 
 `ticket.show` still returns the ticket with `dependsOn` and `dependents` key lists, and adds `links`

@@ -88,8 +88,10 @@ USAGE = """agent-studio <command>
                                            add a ticket to a phase (the default phase) in the initial status
   ticket edit KEY (--body TEXT | --body-file PATH|-) [--mode replace|append] [--expected-body-sha256 SHA]
                                            update an unclaimed ticket body with an operator audit event
-  ticket move (--workspace PATH | cwd) KEY --to STATUS [--reason TEXT] [--force]
+  ticket move (--workspace PATH | cwd) KEY --to COLUMN [--workflow ID] [--reason TEXT] [--force]
                                            move a ticket; finished tickets need --force
+  ticket workflow (--workspace PATH | cwd) KEY ID [--reason TEXT]
+                                           change a ticket workflow status
   ticket show (--workspace PATH | cwd) KEY   one ticket with its dependencies and event history (read-only)
   ticket list [--status COLUMN] [--workflow-status STATUS] [--phase ID] [--summary] (--workspace PATH | cwd)   the workspace's tickets (read-only; --summary omits bodies and adds dependencies)
   ticket depend (--workspace PATH | cwd) KEY (--on KEY ... | --remove KEY ...)   manage dependencies

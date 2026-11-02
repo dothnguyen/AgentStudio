@@ -321,7 +321,7 @@ class CliTests(BoardCase):
                 "phases": [
                     {"slug": "default", "name": "Default", "description": None, "position": 0, "status": "open",
                      "current": True, "ticketCount": 1,
-                     "columns": {"todo": 1}, "workflow": {"ready": 1}},
+                     "columns": {"todo": 1}, "workflow": {"ready": 1}, "columnWorkflow": {"todo": {"ready": 1}}},
                     {"slug": "later", "name": "Later", "description": None, "position": 1, "status": "closed",
                      "current": False, "ticketCount": 0, "columns": {}, "workflow": {}}]}
         rc, out, err = self.run_cli(lambda req: {"ok": True, "data": data}, "board", "show",

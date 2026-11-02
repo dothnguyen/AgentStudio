@@ -46,7 +46,7 @@ TOOLS = [
          "mode": {"type": "string", "enum": ["replace", "append"], "description": "default replace"}},
          "required": ["key", "body"]}},
     {"name": "ticket_list",
-     "description": "List the workspace's tickets, optionally by status or phase. Summary omits bodies and adds "
+     "description": "List the workspace's tickets, optionally by column, workflow status or phase. Summary omits bodies and adds "
                     "dependency keys.",
      "inputSchema": {"type": "object", "properties": {
          "status": {"type": "string"}, "workflowStatus": {"type": "string"}, "phase": {"type": "string"},
@@ -149,7 +149,7 @@ def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: st
         data = _call("ticket.list", dict(args, workspace=workspace), write=False,
                      assignment=assignment, agent=agent)
         return {"content": [{"type": "text", "text": "\n".join(
-            f"{t['key']} [{t['status']}] {t['phase']}: {t['title']}" for t in data["tickets"])
+            f"{t['key']} [{t['status']}/{t.get('workflowStatus', t['status'])}] {t['phase']}: {t['title']}" for t in data["tickets"])
             or "(no tickets)"}], "tickets": data["tickets"]}
     if name == "ticket_show":
         if not isinstance(args.get("key"), str) or not args["key"].strip():
@@ -157,7 +157,7 @@ def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: st
         data = _call("ticket.show", dict(args, workspace=workspace), write=False,
                      assignment=assignment, agent=agent)
         t = data["ticket"]
-        return {"content": [{"type": "text", "text": f"{t['key']} [{t['status']}] phase {t['phase']}: "
+        return {"content": [{"type": "text", "text": f"{t['key']} [{t['status']}/{t.get('workflowStatus', t['status'])}] phase {t['phase']}: "
                                                      f"{t['title']}\n" + "\n".join(
             f"  {e['name']} -> {e.get('to')}" for e in data["events"])}], **data}
     if name == "phase_list":
@@ -217,11 +217,11 @@ _KEY = {"key": {"type": "string", "description": "ticket key, e.g. T-090"}}
 OPERATOR_READ_TOOLS = [
     {"name": "workspace_list", "description": "The Agent Studio workspaces registered on this computer.",
      "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "board_show", "description": "The board: phases with a count per status column.",
+    {"name": "board_show", "description": "The board: phases with column and workflow status counts.",
      "inputSchema": _op_schema()},
     {"name": "phase_list", "description": "The board's phases with the current one marked.",
      "inputSchema": _op_schema()},
-    {"name": "ticket_list", "description": "The workspace's tickets, optionally by status or phase; summary omits "
+    {"name": "ticket_list", "description": "The workspace's tickets, optionally by column, workflow status or phase; summary omits "
                                              "bodies and adds dependency keys.",
      "inputSchema": _op_schema({"status": {"type": "string"}, "workflowStatus": {"type": "string"}, "phase": {"type": "string"},
                                 "summary": {"type": "boolean", "description": "omit body and add "
@@ -251,6 +251,9 @@ OPERATOR_WRITE_TOOLS = [
     {"name": "ticket_move", "description": "Move a ticket to another Kanban column (finished tickets need force).",
      "inputSchema": _op_schema(dict(_KEY, to={"type": "string"}, reason={"type": "string", "maxLength": 500},
                                     workflowStatus={"type": "string"}, force={"type": "boolean"}), ["key", "to"])},
+    {"name": "ticket_workflow", "description": "Change a ticket's workflow status within the board.",
+     "inputSchema": _op_schema(dict(_KEY, to={"type": "string", "description": "workflow status id"},
+                                    reason={"type": "string", "maxLength": 500}), ["key", "to"])},
     {"name": "ticket_depend", "description": "Add (on) or remove (remove) ticket dependencies.",
      "inputSchema": _op_schema(dict(_KEY, on={"type": "array", "items": {"type": "string"}},
                                     remove={"type": "array", "items": {"type": "string"}}), ["key"])},
@@ -337,12 +340,12 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         if isinstance(args.get("summary"), bool):
             payload["summary"] = args["summary"]
         data = call("ticket.list", payload)
-        return text("\n".join(f"{t['key']} [{t['status']}] {t['phase']}: {t['title']}" for t in data["tickets"])
+        return text("\n".join(f"{t['key']} [{t['status']}/{t.get('workflowStatus', t['status'])}] {t['phase']}: {t['title']}" for t in data["tickets"])
                     or "(no tickets)", tickets=data["tickets"])
     if name == "ticket_show":
         data = call("ticket.show", {"key": _need(args, "key")})
         t = data["ticket"]
-        body = (f"{t['key']} [{t['status']}] phase {t['phase']}: {t['title']}\n{t.get('body') or ''}\nevents:\n"
+        body = (f"{t['key']} [{t['status']}/{t.get('workflowStatus', t['status'])}] phase {t['phase']}: {t['title']}\n{t.get('body') or ''}\nevents:\n"
                 + "\n".join(f"  {e['name']} -> {e.get('to')}" for e in data.get("events", [])))
         return text(body, **data)
     if name == "team_overview":
@@ -369,6 +372,10 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
                      force=args.get("force") is True)
         data = call("ticket.move", extra, True)
         return text(f"moved {data['ticket']['key']} to {data['ticket']['status']}", ticket=data["ticket"])
+    if name == "ticket_workflow":
+        extra = dict(_optional(args, "reason"), key=_need(args, "key"), to=_need(args, "to"))
+        data = call("ticket.workflow", extra, True)
+        return text(f"{data['ticket']['key']} workflow status: {data['ticket']['workflowStatus']}", ticket=data["ticket"])
     if name == "ticket_depend":
         extra = {"key": _need(args, "key"), "on": args.get("on") or [], "remove": args.get("remove") or []}
         data = call("ticket.depend", extra, True)

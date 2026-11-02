@@ -13,7 +13,7 @@ from . import boardmodel
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, envelope
 from .teamcli import _Fail, _call, _write_call
 
-TICKET_ACTIONS = ("add", "edit", "move", "show", "list", "depend", "phase", "apply", "unblock", "retry")
+TICKET_ACTIONS = ("add", "edit", "move", "workflow", "show", "list", "depend", "phase", "apply", "unblock", "retry")
 BOARD_ACTIONS = ("show", "phase", "rules", "upgrade")
 PHASE_ACTIONS = ("add", "list", "show", "edit", "close", "reopen", "remove", "set-current", "clear-current")
 RULES_ACTIONS = ("check",)
@@ -68,9 +68,13 @@ def _parser(action, group="ticket"):
     elif action == "move":
         p.add_argument("ticket_key")
         p.add_argument("--to", required=True)
-        p.add_argument("--workflow-status")
+        p.add_argument("--workflow", "--workflow-status", dest="workflow_status")
         p.add_argument("--reason")
         p.add_argument("--force", action="store_true")
+    elif action == "workflow":
+        p.add_argument("ticket_key")
+        p.add_argument("workflow_id")
+        p.add_argument("--reason")
     elif action == "phase":
         p.add_argument("ticket_key")
         p.add_argument("phase")
@@ -118,6 +122,14 @@ def _move(ns):
                                        **({"workflowStatus": ns.workflow_status} if ns.workflow_status else {})})
     t = data["ticket"]
     return data, lambda d: f"{t['key']}: {d.get('from') or '?'} -> {t['status']}" + ("  (forced)" if ns.force else "")
+
+
+def _workflow(ns):
+    args = {"workspace": _workspace(ns), "key": ns.ticket_key, "to": ns.workflow_id}
+    if ns.reason is not None:
+        args["reason"] = ns.reason
+    data = _write_call("ticket.workflow", args)
+    return data, lambda d: f"{d['ticket']['key']}: {d.get('from') or '?'} -> {d['ticket']['workflowStatus']}"
 
 
 def _edit(ns):
@@ -297,7 +309,7 @@ def activity_text(t) -> str:
 
 def _render_detail(d) -> str:
     t = d["ticket"]
-    lines = [f"{t['key']}  {t['status']}  priority {t['priority']}  phase {t['phase']} ({t.get('phaseName')})",
+    lines = [f"{t['key']}  [{t['status']}/{t.get('workflowStatus', t['status'])}]  priority {t['priority']}  phase {t['phase']} ({t.get('phaseName')})",
              f"title: {t['title']}"]
     a = t.get("activity") or {}
     lines.append("activity: " + activity_text(t)
@@ -329,7 +341,7 @@ def _render_list(d) -> str:
         scope = "".join(f" in {part} {value}" for part, value in (("status", d["status"]), ("phase", d["phase"]))
                         if value)
         return "no tickets" + scope
-    return "\n".join(f"{t['key']}  P{t['priority']:<4}  {t['status']:<10}  {t['phase']:<10}  "
+    return "\n".join(f"{t['key']}  P{t['priority']:<4}  [{t['status']}/{t.get('workflowStatus', t['status'])}]  {t['phase']:<10}  "
                      f"{activity_text(t):<22}  {t['title']}" for t in d["tickets"])
 
 
@@ -370,12 +382,13 @@ def _render_board(d) -> str:
             continue
         for column, count in phase["columns"].items():
             if count:
-                lines.append(f"  {column} ({count})")
-        lines.append("  workflow: " + ", ".join(f"{status} ({count})" for status, count in phase["workflow"].items() if count))
+                breakdown = phase.get("columnWorkflow", {}).get(column, {})
+                lines.append(f"  {column} ({count})" + (": " + ", ".join(
+                    f"{status} ({n})" for status, n in breakdown.items()) if breakdown else ""))
     return "\n".join(lines)
 
 
-_HANDLERS = {"add": _add, "edit": _edit, "move": _move, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
+_HANDLERS = {"add": _add, "edit": _edit, "move": _move, "workflow": _workflow, "show": _show, "list": _list, "depend": _depend, "phase": _ticket_phase,
              "apply": _ticket_apply, "unblock": _ticket_unblock, "retry": _ticket_retry}
 _PHASE_HANDLERS = {"add": _phase_add, "list": _phase_list, "show": _phase_show, "edit": _phase_edit,
                    "close": _phase_close, "reopen": _phase_reopen, "remove": _phase_remove,

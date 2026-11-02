@@ -1413,6 +1413,7 @@ def board_show(conn, workspace: str) -> dict:
     for row in rows:
         columns = {column: 0 for column in KANBAN_COLUMNS}
         workflow = {status: 0 for status in config_status_ids(config)}
+        column_workflow = {column: {} for column in KANBAN_COLUMNS}
         if row["id"]:
             for counts in conn.execute(
                 "SELECT status, COALESCE(workflow_status, status) AS workflow, COUNT(*) AS n "
@@ -1420,8 +1421,10 @@ def board_show(conn, workspace: str) -> dict:
                 (row["id"],)):
                 columns[counts["status"]] = columns.get(counts["status"], 0) + counts["n"]
                 workflow[counts["workflow"]] = workflow.get(counts["workflow"], 0) + counts["n"]
+                column_workflow.setdefault(counts["status"], {})[counts["workflow"]] = counts["n"]
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
-                           ticketCount=sum(columns.values()), columns=columns, workflow=workflow))
+                           ticketCount=sum(columns.values()), columns=columns, workflow=workflow,
+                           columnWorkflow=column_workflow))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}
 
 
