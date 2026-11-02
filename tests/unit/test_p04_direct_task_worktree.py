@@ -102,6 +102,10 @@ class DirectTaskWorktree(unittest.TestCase):
                          .fetchone()[0], "failed")
         ticket = dict(self.conn.execute("SELECT * FROM tickets").fetchone())
         self.assertEqual((ticket["workflow_status"], ticket["status"]), ("merge-conflict", "todo"))
+        event = self.conn.execute("SELECT from_status, to_status FROM ticket_events "
+                                  "WHERE ticket_id = ? AND name = 'ticket.direct_merge_conflict'",
+                                  (ticket["id"],)).fetchone()
+        self.assertEqual(tuple(event), ("merge-conflict", "merge-conflict"))
         self.assertEqual(ticket["worktree_path"], receipt["workspace"])
         self.assertTrue(os.path.isdir(receipt["workspace"]))
         with open(os.path.join(self.ws, "shared.txt")) as f:

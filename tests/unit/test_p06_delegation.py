@@ -80,6 +80,27 @@ class Config(unittest.TestCase):
         self.assertEqual(e.exception.code, delegation.DELEGATION_CONFIG_INVALID)
 
 
+class TicketNotes(unittest.TestCase):
+    def test_ticket_note_records_workflow_status_not_board_column(self):
+        row = {"id": "ticket-1", "status": "in-progress", "workflow_status": "dev-active"}
+        conn = mock.Mock()
+        conn.execute.return_value.fetchone.return_value = row
+        tx = mock.Mock(conn=conn)
+        with mock.patch("agent_studio.boardmodel._ticket_event") as event:
+            delegation.ticket_note(tx, "run-1", "delegation.started", {})
+        self.assertIn("workflow_status", conn.execute.call_args.args[0])
+        self.assertEqual(event.call_args.args[4:6], ("dev-active", "dev-active"))
+
+    def test_ticket_note_falls_back_to_legacy_status(self):
+        row = {"id": "ticket-1", "status": "in-progress", "workflow_status": None}
+        conn = mock.Mock()
+        conn.execute.return_value.fetchone.return_value = row
+        tx = mock.Mock(conn=conn)
+        with mock.patch("agent_studio.boardmodel._ticket_event") as event:
+            delegation.ticket_note(tx, "run-1", "delegation.started", {})
+        self.assertEqual(event.call_args.args[4:6], ("in-progress", "in-progress"))
+
+
 def stage(role="Developer", permission="workspace_write", delegates=None, type_="agent"):
     return workflowdef.Stage(id="s", type=type_, role=role, permission=permission, prompt="x", prompt_source="inline",
                              max_visits=1, pass_requires=(), next={"done": "$succeed"}, kind="work",

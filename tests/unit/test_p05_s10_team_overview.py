@@ -112,14 +112,25 @@ class TeamOverviewTests(unittest.TestCase):
         team, ids = self.seed_runtime("core", agents=(("dev", "busy"), ("rev", "idle")))
         _, run = self.seed_assignment(team, ids["dev"], "Build it")
         self.seed_ticket("T-001", "Title", ids["dev"], run)
+        self.conn.execute("UPDATE tickets SET status = ?, workflow_status = ? WHERE key = ?",
+                          ("in-progress", "dev-active", "T-001"))
         out = self.ov()
         dev, rev = self.member(out, "core", "dev"), self.member(out, "core", "rev")
         self.assertEqual((dev["presence"], dev["work"]["state"]), ("busy", "working"))
         self.assertEqual(dev["work"]["assignment"]["goal"], "Build it")
         self.assertEqual(dev["work"]["assignment"]["workflowRunId"], run)
         self.assertEqual(dev["work"]["ticket"]["key"], "T-001")
+        self.assertEqual((dev["work"]["ticket"]["status"], dev["work"]["ticket"]["workflowStatus"]),
+                         ("in-progress", "dev-active"))
         self.assertEqual(dev["work"]["ticket"]["workflowRunId"], run)
         self.assertEqual((rev["presence"], rev["work"]), ("idle", {"state": "none"}))
+
+    def test_legacy_working_ticket_reports_status_as_workflow_status(self):
+        self.core()
+        _, ids = self.seed_runtime("core")
+        self.seed_ticket("T-legacy", "Legacy", ids["dev"], None)
+        ticket = self.member(self.ov(), "core", "dev")["work"]["ticket"]
+        self.assertEqual((ticket["status"], ticket["workflowStatus"]), ("in_progress", "in_progress"))
 
     def test_role_and_provider_come_from_workspace_files(self):
         self.core()

@@ -454,9 +454,10 @@ def _public_result(res: Optional[dict]) -> Optional[dict]:
 def ticket_note(tx, wf_id: str, name: str, payload: dict) -> None:
     """Record a delegation step on the board ticket that holds this run, when there is one."""
     from . import boardmodel
-    row = tx.conn.execute("SELECT id, status FROM tickets WHERE active_run_id = ?", (wf_id,)).fetchone()
+    row = tx.conn.execute("SELECT id, status, workflow_status FROM tickets WHERE active_run_id = ?", (wf_id,)).fetchone()
     if row is not None:
-        boardmodel._ticket_event(tx.conn, row["id"], name, "coordinator", row["status"], row["status"], payload)
+        status = row["workflow_status"] or row["status"]
+        boardmodel._ticket_event(tx.conn, row["id"], name, "coordinator", status, status, payload)
 
 
 def _operator_request(tx, request_id: str) -> dict:

@@ -83,7 +83,7 @@ def _merge_direct_worktree(tx: Tx, asg: dict, task: dict, report_body: dict, ctx
             tx.conn.execute("UPDATE tickets SET branch = ?, worktree_path = ?, updated_at = ? WHERE id = ?",
                             (branch, path, utcnow(), added["id"]))
             boardmodel._ticket_event(tx.conn, added["id"], "ticket.direct_merge_conflict", "coordinator",
-                                     status, status,
+                                     added["workflowStatus"], added["workflowStatus"],
                                      {"ticketId": added["id"], "key": added["key"], "taskId": task["id"],
                                       "branch": branch, "path": path, "files": files})
             conflict["ticket"] = added["key"]

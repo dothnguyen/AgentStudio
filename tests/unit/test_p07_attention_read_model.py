@@ -118,6 +118,15 @@ class AttentionReadModelTests(unittest.TestCase):
         self.assertEqual(out["blockedTickets"][0]["memberId"], None)
         self.assertIsNone(out["blockedTickets"][0]["reason"])
 
+    def test_blocked_tickets_use_workflow_status_and_support_legacy_rows(self):
+        self.core()
+        self.seed_board_ticket("T-110", "Blocked stage", status="in-progress")
+        self.seed_board_ticket("T-111", "Legacy blocked", status="blocked")
+        self.seed_board_ticket("T-112", "No longer blocked", status="blocked")
+        self.conn.execute("UPDATE tickets SET workflow_status = 'blocked' WHERE key = 'T-110'")
+        self.conn.execute("UPDATE tickets SET workflow_status = 'dev-ready' WHERE key = 'T-112'")
+        self.assertEqual({t["key"] for t in self.ov()["blockedTickets"]}, {"T-110", "T-111"})
+
     def test_stopped_team_has_empty_attention(self):
         self.core()
         team, ids = self.seed_runtime("core", "stopped")

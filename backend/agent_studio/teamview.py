@@ -100,7 +100,7 @@ def _work(conn, workspace, agent_id):
                      f"WHERE a.agent_id = ? AND a.status IN ({marks}) ORDER BY a.created_at DESC, a.rowid DESC "
                      "LIMIT 1", (agent_id,) + ACTIVE).fetchone()
     run = conn.execute("SELECT id FROM workflow_runs WHERE task_id = ?", (a["task_id"],)).fetchone() if a else None
-    tk = conn.execute("SELECT key, title, status, active_run_id FROM tickets WHERE workspace = ? AND assignee = ? "
+    tk = conn.execute("SELECT key, title, status, workflow_status, active_run_id FROM tickets WHERE workspace = ? AND assignee = ? "
                       "ORDER BY updated_at DESC LIMIT 1", (workspace, agent_id)).fetchone()
     if a is None and tk is None:
         return {"state": "none"}
@@ -111,7 +111,8 @@ def _work(conn, workspace, agent_id):
                 "workflowRunId": run["id"] if run else None},
             "ticket": None if tk is None else {
                 "key": tk["key"], "title": textsafe.one_line(tk["title"] or "", MAX_TEXT),
-                "status": tk["status"], "workflowRunId": tk["active_run_id"]}}
+                "status": tk["status"], "workflowStatus": tk["workflow_status"] or tk["status"],
+                "workflowRunId": tk["active_run_id"]}}
     run_id = (tk["active_run_id"] if tk is not None else None) or (run["id"] if run else None)
     if run_id:   # P06: the member's run is parked while the coordinator runs delegated commands for it
         try:
@@ -168,7 +169,7 @@ LEFT JOIN workflow_runs w ON w.id = t.run_id
 LEFT JOIN stage_attempts sa ON sa.id = (
     SELECT id FROM stage_attempts WHERE workflow_run_id = w.id ORDER BY rowid DESC LIMIT 1)
 LEFT JOIN agents ag ON ag.id = sa.agent_id
-WHERE t.workspace = ? AND t.status = 'blocked'
+WHERE t.workspace = ? AND COALESCE(t.workflow_status, t.status) = 'blocked'
 ORDER BY t.updated_at DESC, t.rowid DESC
 LIMIT ?
 """

@@ -131,6 +131,8 @@ catalog: {state, message}, teams, truncated, partial}`. Each team has `id`, `nam
 (`ok|missing|unavailable`), the definition's `provider/model/reasoning`, the frozen `runtime` roster entry (or
 `null`), `presence` (an agent availability, or `not_in_runtime|not_started|stopped|error|disconnected|unavailable`)
 and `work`: `{state: "working", assignment, ticket}`, `{state: "none"}` or `{state: "unavailable", reason}`.
+The working ticket includes its board column as `status` and its workflow stage as `workflowStatus` (legacy
+tickets without a separate workflow stage report their status for both).
 Saved configuration also exposes `agentMode` (`ordered_catalog|single_catalog|inline`), `defaultAgent`,
 and ordered `agentOptions` with catalog details and an `ok|missing` state. Missing references remain in
 place. The nested runtime reports frozen `configuredAgents`, `activeAgent`, `quotaHolds`, `pendingAgent`,
