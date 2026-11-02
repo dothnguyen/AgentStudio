@@ -2,11 +2,13 @@ import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import type {
   ApiError,
   BoardRuleView,
+  BoardSettings,
   BoardTicketDetail,
   ManagementApi,
   Result,
   Workspace,
 } from '../api';
+import { MoveToTodoDialog } from './MoveToTodoDialog';
 import { SectionCard } from '../teams/SectionCard';
 import type { BoardStatusInfo } from './boardLaneModel';
 import {
@@ -45,6 +47,7 @@ interface TicketPageValue {
   statuses: BoardStatusInfo[];
   rules: BoardRuleView[];
   error: ApiError | null;
+  settings: BoardSettings | null;
 }
 
 export interface TicketPageController extends TicketPageValue {
@@ -68,7 +71,7 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
 }
 
 function emptyValue(state: TicketPageState, error: ApiError | null = null): TicketPageValue {
-  return { state, detail: null, statuses: [], rules: [], error };
+  return { state, detail: null, statuses: [], rules: [], error, settings: null };
 }
 
 /**
@@ -109,6 +112,7 @@ export function useBoardTicket(
       statuses: settings.ok ? settings.data.statuses : [],
       rules: settings.ok ? settings.data.rules : [],
       error: null,
+      settings: settings.ok ? settings.data : null,
     });
   }, [management, ticketKey, workspaceId]);
 
@@ -176,16 +180,19 @@ function TicketHeader(props: {
 }): JSX.Element {
   const ticket = props.detail.ticket;
   const status = ticketStatusChip(ticket, props.statuses);
+  const workflowStatus = ticketStatusChip({ workflowStatus: ticket.workflowStatus, returnStatus: null }, props.statuses);
   const activity = ticketActivityChip(ticketActivitySummary(props.detail), props.rules);
   return (
     <header className="boards-ticket-header">
       <div className="boards-ticket-heading">
         <div className="boards-ticket-chips">
           <span className="boards-ticket-key-chip">{ticket.key}</span>
+          <span className="boards-ticket-chip boards-ticket-column-chip">{ticket.status}</span>
           <span className="boards-ticket-status-chip" data-status={status.id}>
             <span className={`boards-status-dot boards-status-dot-${status.tone}`} aria-hidden="true" />
             {status.label}
           </span>
+          {workflowStatus.id !== status.id && <span className="boards-ticket-chip">{workflowStatus.label}</span>}
           <span
             className={`boards-ticket-chip boards-ticket-activity-chip ${TICKET_CHIP_TONE_CLASS[activity.tone]}`}
             data-chip={activity.tone}
@@ -202,6 +209,45 @@ function TicketHeader(props: {
       {ticket.workflowStatus === 'blocked' && <BlockedBanner detail={props.detail} statuses={props.statuses} />}
     </header>
   );
+}
+
+export function ticketActions(ticket: Pick<BoardTicketDetail['ticket'], 'status' | 'assignee'>): string[] {
+  if (ticket.status === 'backlog') return ['Move to Todo'];
+  if (ticket.status === 'done' || ticket.status === 'closed') return ['Reopen'];
+  if (ticket.assignee === null && (ticket.status === 'todo' || ticket.status === 'in-progress')) return ['Change workflow status', 'Back to Backlog', 'Close'];
+  return [];
+}
+
+function TicketActions(props: { detail: BoardTicketDetail; settings: BoardSettings | null; management: ManagementApi; workspaceId: string; reload(): Promise<void> }): JSX.Element {
+  const [dialog, setDialog] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [selected, setSelected] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ticket = props.detail.ticket;
+  const actions = ticketActions(ticket);
+  const options = (props.settings?.workflowStatuses ?? []).filter(status => status.kind === null && status.id !== 'blocked' && status.id !== ticket.workflowStatus && !props.settings?.rules.some(rule => rule.during === status.id));
+  async function act(action: string): Promise<void> {
+    setBusy(true); setError(null);
+    try {
+      const result = action === 'workflow'
+        ? await props.management.ticketWorkflow(props.workspaceId, { key: ticket.key, to: selected })
+        : await props.management.ticketMove(props.workspaceId, { key: ticket.key, to: action === 'backlog' ? 'backlog' : 'closed' });
+      if (result.ok) await props.reload(); else setError(result.error.message);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  }
+  return <div className="boards-ticket-actions">
+    {actions.map(action => <button type="button" key={action} disabled={busy || ((action === 'Move to Todo' || action === 'Reopen') && !props.settings)} onClick={() => {
+      setError(null);
+      if (action === 'Move to Todo' || action === 'Reopen') setDialog(true);
+      else if (action === 'Change workflow status') { setSelected(options[0]?.id ?? ''); setChanging(true); }
+      else void act(action === 'Back to Backlog' ? 'backlog' : 'closed');
+    }}>{action}</button>)}
+    {changing && <span><label>Workflow status <select value={selected} onChange={event => setSelected(event.target.value)}>{options.map(option => <option key={option.id} value={option.id}>{option.name || option.id}</option>)}</select></label> <button type="button" disabled={busy || !selected} onClick={() => { void act('workflow'); }}>Apply</button> <button type="button" disabled={busy} onClick={() => setChanging(false)}>Cancel</button></span>}
+    {error && <p role="alert">{error}</p>}
+    {dialog && props.settings && <MoveToTodoDialog ticketKey={ticket.key} settings={props.settings} management={props.management} workspaceId={props.workspaceId} force={ticket.status === 'done' || ticket.status === 'closed'} onClose={() => setDialog(false)} onSuccess={() => { setDialog(false); void props.reload(); }} />}
+  </div>;
 }
 
 function DescriptionCard(props: { body: string | null }): JSX.Element {
@@ -431,7 +477,8 @@ export function TicketScreen(props: TicketScreenProps): JSX.Element {
   return (
     <div className="boards-ticket-screen" data-section="boards/ticket">
       {breadcrumb}
-      <TicketHeader detail={ticket.detail} statuses={ticket.statuses} rules={ticket.rules} />
+      <TicketHeader detail={ticket.detail} statuses={ticket.settings?.workflowStatuses.length ? ticket.settings.workflowStatuses : ticket.statuses} rules={ticket.rules} />
+      <TicketActions key={ticket.detail.ticket.key} detail={ticket.detail} settings={ticket.settings} management={props.management} workspaceId={props.workspace.id} reload={ticket.reload} />
       <div className="boards-ticket-layout">
         <div className="boards-ticket-main">
           <DescriptionCard body={ticket.detail.ticket.body} />

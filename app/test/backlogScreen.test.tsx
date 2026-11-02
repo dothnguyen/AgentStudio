@@ -127,6 +127,18 @@ describe('BacklogScreen', () => {
     await user.click(row);
     expect(open.mock.calls).toEqual([['T-1'], ['T-1']]);
   });
+  it.each([null, 'agent'])('opens the Move to Todo picker from a backlog row with assignee %s', async (assignee) => {
+    const settings = boardSettingsFixture();
+    settings.todoEntry = ['dev-ready'];
+    settings.todoDefault = 'dev-ready';
+    settings.workflowStatuses = [{ id: 'dev-ready', name: 'Ready for dev', kind: null }];
+    const tickets = [boardTicketSummary({ key: 'T-7', status: 'backlog', assignee })];
+    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Move to Todo' }));
+    expect(view.getByRole('dialog', { name: 'Move to Todo' })).toBeTruthy();
+    expect((view.getByLabelText('Workflow status') as HTMLSelectElement).value).toBe('dev-ready');
+  });
   it('reveals remaining tickets after the first 50', async () => {
     const tickets = Array.from({ length: 51 }, (_, i) => boardTicketSummary({ key: `T-${i + 1}` }));
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);

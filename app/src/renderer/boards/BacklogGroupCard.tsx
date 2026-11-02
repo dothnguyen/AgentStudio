@@ -4,7 +4,7 @@ import type { BoardSettings } from '../api';
 import type { BacklogGroup } from './backlogModel';
 import { BacklogRow } from './BacklogRow';
 
-export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases }: { group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void }): JSX.Element {
+export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo }: { group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
   const bodyId = useId();
   const [expanded, setExpanded] = useState(group.current || !group.closed);
   const [showAll, setShowAll] = useState(false);
@@ -18,7 +18,7 @@ export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenP
     </button>{onOpenPhases && <button type="button" className="boards-backlog-progress-link" onClick={onOpenPhases}>Phase progress</button>}</div>
     <div id={bodyId} className="boards-backlog-group-body" hidden={!expanded}>
       {expanded && <>
-      {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} rules={settings.rules} onOpenTicket={onOpenTicket} />)}
+      {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
       {!showAll && group.tickets.length > 50 && <button type="button" className="boards-backlog-more" onClick={() => setShowAll(true)}>Show {group.tickets.length - 50} more</button>}
       </>}
     </div>

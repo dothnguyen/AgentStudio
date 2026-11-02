@@ -2499,3 +2499,5 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 
 @media (max-width: 1100px) { .boards-backlog-toolbar-row { flex-wrap: wrap; } .boards-backlog-toolbar .boards-search { flex-basis: 100%; max-width: none; } }
 @media (max-width: 799px) { .boards-backlog-row .boards-ticket-owner, .boards-backlog-time { display: none; } }
+.boards-backlog-row-wrap { display: flex; align-items: center; }
+.boards-backlog-row-wrap .boards-backlog-row { flex: 1; }

@@ -165,6 +165,12 @@ export function ticketEventRows(events: readonly BoardTicketEvent[]): TicketEven
           tone: 'grey',
         };
       }
+      case 'workflow_changed':
+      case 'migrated': {
+        const from = text(event.from) ?? text(payload.from);
+        const to = text(event.to) ?? text(payload.to);
+        return { ...base, title: name === 'migrated' ? 'Workflow status migrated' : 'Workflow status changed', detail: from && to ? `${from} → ${to}` : to, tone: 'blue' };
+      }
       case 'moved': {
         const to = text(event.to) ?? text(payload.to);
         const actor = text(event.actor);

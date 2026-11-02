@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardSettings, BoardTicketDetail, Result } from '../src/renderer/api';
 import { TicketScreen } from '../src/renderer/boards/TicketScreen';
@@ -19,6 +19,12 @@ function ticketSettings(overrides: Partial<BoardSettings> = {}): BoardSettings {
   return {
     ...base,
     statuses: [
+      { id: 'dev-ready', name: 'Dev ready', kind: null },
+      { id: 'qa-ready', name: 'QA ready', kind: null },
+      { id: 'done', name: 'Done', kind: 'done' },
+      { id: 'blocked', name: null, kind: null },
+    ],
+    workflowStatuses: [
       { id: 'dev-ready', name: 'Dev ready', kind: null },
       { id: 'qa-ready', name: 'QA ready', kind: null },
       { id: 'done', name: 'Done', kind: 'done' },
@@ -71,7 +77,7 @@ async function settle(): Promise<void> {
 describe('TicketScreen header', () => {
   it('renders the breadcrumb, key, status, working chip and title from fake data', async () => {
     const onOpenBoard = vi.fn();
-    const { view, boardTicket } = setupTicket({ onOpenBoard });
+    const { view, boardTicket, detail } = setupTicket({ onOpenBoard });
     await settle();
 
     const breadcrumb = view.getByRole('navigation', { name: 'Breadcrumb' });
@@ -80,6 +86,7 @@ describe('TicketScreen header', () => {
     expect(breadcrumb.querySelector('[aria-current="page"]')?.textContent).toBe('T-114');
 
     expect(view.container.querySelector('.boards-ticket-key-chip')?.textContent).toBe('T-114');
+    expect(view.container.querySelector('.boards-ticket-column-chip')?.textContent).toBe(detail.ticket.status);
     const status = view.container.querySelector('.boards-ticket-status-chip')!;
     expect(status.textContent).toBe('Dev ready');
     expect(status.querySelector('.boards-status-dot-blue')).toBeTruthy();
@@ -149,10 +156,67 @@ describe('TicketScreen blocked banner', () => {
     expect(banner.textContent).toContain('It returns to QA ready when it is unblocked.');
 
     expect(view.container.querySelector('.boards-ticket-status-chip')?.textContent).toBe('QA ready');
+    expect(view.container.querySelector('.boards-ticket-chips')?.textContent).toContain('Blocked');
     expect(view.container.querySelector('.boards-ticket-activity-chip')?.textContent).toBe('Blocked');
     expect(view.container.querySelector('.boards-ticket-activity-chip')?.getAttribute('data-chip')).toBe('blocked');
     expect(view.getByRole('button', { name: 'Current Phase' })).toBeTruthy();
     expect(view.container.querySelector('.boards-blocked-banner button')).toBeNull();
+  });
+});
+
+describe('TicketScreen workflow actions', () => {
+  it('reopens a closed claimed ticket through the Todo status picker and reloads it', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.status = 'closed';
+    detail.ticket.assignee = 'agent';
+    const boardTicket = vi.fn(async () => okR(detail));
+    const ticketMove = vi.fn(async () => ({ ok: true as const, data: {} }));
+    const settings = ticketSettings({ todoEntry: ['qa-ready'], todoDefault: 'qa-ready' });
+    const fake = fakeManagement({ boardSettings: [okR(settings)], calls: { boardTicket, ticketMove } });
+    const view = render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+
+    fireEvent.click(view.getByRole('button', { name: 'Reopen' }));
+    expect(view.getByRole('dialog', { name: 'Reopen ticket' })).toBeTruthy();
+    expect((view.getByLabelText('Workflow status') as HTMLSelectElement).value).toBe('qa-ready');
+    fireEvent.click(view.getByRole('dialog', { name: 'Reopen ticket' }).querySelector('button.dialog-action-primary')!);
+
+    await waitFor(() => expect(boardTicket).toHaveBeenCalledTimes(2));
+    expect(ticketMove).toHaveBeenCalledWith(workspaceA.id, { key: 'T-114', to: 'todo', workflowStatus: 'qa-ready', force: true });
+  });
+
+  it('applies an allowed workflow status and reloads the ticket after success', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.status = 'todo';
+    detail.ticket.assignee = null;
+    const boardTicket = vi.fn(async () => okR(detail));
+    const ticketWorkflow = vi.fn(async () => ({ ok: true as const, data: {} }));
+    const fake = fakeManagement({
+      boardSettings: [okR(ticketSettings())],
+      calls: { boardTicket, ticketWorkflow },
+    });
+    const view = render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Change workflow status' }));
+    const select = view.getByLabelText('Workflow status') as HTMLSelectElement;
+    expect(Array.from(select.options).map(option => option.value)).toEqual(['qa-ready']);
+    fireEvent.click(view.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(boardTicket).toHaveBeenCalledTimes(2));
+    expect(ticketWorkflow).toHaveBeenCalledWith(workspaceA.id, { key: 'T-114', to: 'qa-ready' });
+  });
+
+  it('shows workflow action errors inline', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.status = 'todo';
+    detail.ticket.assignee = null;
+    const ticketWorkflow = vi.fn(async () => ({ ok: false as const, error: { code: 'INVALID', message: 'Status is unavailable', retryable: false } }));
+    const boardTicket = vi.fn(async () => okR(detail));
+    const fake = fakeManagement({ boardSettings: [okR(ticketSettings())], calls: { boardTicket, ticketWorkflow } });
+    const view = render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Change workflow status' }));
+    fireEvent.click(view.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(view.getByRole('alert').textContent).toBe('Status is unavailable'));
   });
 });
 
@@ -189,7 +253,9 @@ describe('TicketScreen timeline', () => {
     detail.events = [
       { id: 1, at, actor: 'operator', name: 'ticket.created', from: null, to: 'dev-ready', payload: { key: 'T-114' } },
       { id: 2, at, actor: 'operator', name: 'ticket.moved', from: 'dev-ready', to: 'qa-ready', payload: {} },
-      { id: 3, at, actor: 'coordinator', name: 'ticket.some_new_event', from: null, to: null, payload: {} },
+      { id: 3, at, actor: 'operator', name: 'ticket.workflow_changed', from: 'dev-ready', to: 'qa-ready', payload: {} },
+      { id: 4, at, actor: 'operator', name: 'ticket.migrated', from: 'qa-ready', to: 'dev-ready', payload: {} },
+      { id: 5, at, actor: 'coordinator', name: 'ticket.some_new_event', from: null, to: null, payload: {} },
     ];
     detail.eventsTruncated = true;
     return detail;
@@ -201,11 +267,11 @@ describe('TicketScreen timeline', () => {
 
     const card = view.getByRole('region', { name: 'Timeline' });
     expect(card.textContent).toContain('What happened to this ticket, oldest first.');
-    expect(card.textContent).toContain('Showing the latest 3 events');
+    expect(card.textContent).toContain('Showing the latest 5 events');
     const rows = Array.from(card.querySelectorAll('.boards-event-row'));
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(5);
     expect(rows.map((row) => row.querySelector('.boards-event-title')?.textContent)).toEqual([
-      'Created', 'Moved to qa-ready', 'ticket some new event',
+      'Created', 'Moved to qa-ready', 'Workflow status changed', 'Workflow status migrated', 'ticket some new event',
     ]);
     expect(rows[1]!.querySelector('.boards-event-detail')?.textContent).toBe('Moved by operator');
     expect(rows[0]!.querySelector('.boards-event-dot-grey')).toBeTruthy();
