@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CurrentPhaseScreen } from '../src/renderer/boards/CurrentPhaseScreen';
@@ -197,12 +197,14 @@ describe('Backlog and Phases accessibility', () => {
     );
     await settle();
     expect(backlog.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expectLogicalHeadings(backlog.container);
     expect(backlog.container.querySelectorAll('h3, h4, h5, h6')).toHaveLength(0);
     const groupButton = backlog.container.querySelector<HTMLButtonElement>('.boards-backlog-group-header')!;
     expect(groupButton.getAttribute('aria-expanded')).toBe('true');
     const controlledPanel = document.getElementById(groupButton.getAttribute('aria-controls')!)!;
     expect(controlledPanel.id).toBe(groupButton.getAttribute('aria-controls'));
     expect(controlledPanel.querySelector('.boards-backlog-row')).toBeTruthy();
+    expect(controlledPanel.querySelectorAll('button, a, input, select, [tabindex]')).toHaveLength(1);
     backlog.unmount();
 
     const phases = render(
@@ -210,10 +212,44 @@ describe('Backlog and Phases accessibility', () => {
     );
     await settle();
     expect(phases.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expectLogicalHeadings(phases.container);
     expect(phases.container.querySelectorAll('h3, h4, h5, h6')).toHaveLength(0);
     for (const track of phases.container.querySelectorAll('[role="img"]')) {
       expect(track.getAttribute('aria-label')?.trim().length).toBeGreaterThan(0);
     }
+  });
+
+  it('uses an accessible dialog and keyboard behavior for backlog filter popovers', async () => {
+    const view = render(
+      <BacklogScreen
+        workspace={workspaceA}
+        management={fakeManagement({ boardTickets: [{ ok: true, data: boardTicketListFixture({ tickets: [boardTicketSummary()] }) }] }).api}
+      />,
+    );
+    await settle();
+
+    const trigger = view.getByRole('button', { name: 'Activity' });
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    fireEvent.click(trigger);
+    const dialog = view.getByRole('dialog', { name: 'Activity options' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(trigger.getAttribute('aria-controls')).toBe(dialog.id);
+    const firstOption = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await waitFor(() => expect(document.activeElement).toBe(firstOption));
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(view.queryByRole('dialog', { name: 'Activity options' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('labels the Current Phase progress graphic and keeps all phase cards in one column', async () => {
+    const current = await renderBoard();
+    const progress = current.container.querySelector('[role="progressbar"]');
+    expect(progress?.getAttribute('aria-label')?.trim()).toBeTruthy();
+    current.unmount();
+
+    expect(flat).toContain('.boards-milestone-list { display: flex; flex-direction: column;');
   });
 });
 
@@ -224,6 +260,13 @@ describe('Board cross-link styles', () => {
     expect(flat).toContain('.teams-member-work-ticket { all: unset; cursor: pointer; border-radius: 3px; color: #7fb2ff;');
     expect(flat).toContain('.teams-member-work-ticket:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
   });
+});
+
+it('documents all Boards destinations and leaves no Boards placeholder copy', () => {
+  const appReadme = readFileSync(resolve(__dirname, '../README.md'), 'utf8');
+  const placeholder = readFileSync(resolve(__dirname, '../src/renderer/sections/SectionPlaceholder.tsx'), 'utf8');
+  for (const section of ['Current Phase', 'Backlog', 'Phases']) expect(appReadme).toContain(section);
+  expect(placeholder).not.toMatch(/Boards|Backlog|Phases/);
 });
 
 it('keeps Backlog columns responsive and Phases in one column', () => {
