@@ -69,15 +69,16 @@ class Applier(unittest.TestCase):
         self.assertEqual(ticket["ticket"]["status"], "none")
         applied = self.cli("ticket", "apply", "--workspace", self.ws, ticket["ticket"]["key"], run,
                            "--json")["data"]
-        self.assertEqual((applied["applied"], applied["outcome"], applied["ticket"]["status"]),
-                         (True, "pass", "verify"))
+        self.assertEqual((applied["applied"], applied["outcome"], applied["ticket"]["workflowStatus"],
+                          applied["ticket"]["status"]), (True, "pass", "verify", "todo"))
         again = self.cli("ticket", "apply", "--workspace", self.ws, ticket["ticket"]["key"], run,
                          "--json")["data"]
         self.assertFalse(again["applied"])  # the same run never applies twice
 
         detail = self.cli("ticket", "show", "--workspace", self.ws, ticket["ticket"]["key"], "--json")["data"]
         self.assertEqual(detail["ticket"]["runId"], run)
-        self.assertEqual([e["name"] for e in detail["events"]], ["ticket.created", "ticket.outcome_applied"])
+        self.assertEqual([e["name"] for e in detail["events"]],
+                         ["ticket.created", "ticket.migrated", "ticket.outcome_applied"])
 
     def test_failing_runs_count_rounds_and_block(self):
         rc, started, p = self.sb.run("team", "start", "--workspace", self.ws, "--team", "alpha")
@@ -97,7 +98,8 @@ class Applier(unittest.TestCase):
         blocked = self.cli("ticket", "list", "--workspace", self.ws, "--status", "blocked", "--json")["data"]
         self.assertEqual([t["key"] for t in blocked["tickets"]], [ticket["key"]])
         unblocked = self.cli("ticket", "unblock", "--workspace", self.ws, ticket["key"], "--json")["data"]
-        self.assertEqual(unblocked["ticket"]["status"], "none")
+        self.assertEqual((unblocked["ticket"]["workflowStatus"], unblocked["ticket"]["status"]),
+                         ("none", "backlog"))
 
 
 if __name__ == "__main__":

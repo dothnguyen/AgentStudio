@@ -78,6 +78,7 @@ def tick(store, ctx: dict) -> dict:
         workspace = row["workspace"]
         try:
             with store.transaction(actor="coordinator") as tx:  # running work always finishes
+                boardmodel.backfill_workflow(tx, workspace)
                 _recover(tx, workspace, ctx)
                 out["applied"] += _apply_finished(tx, workspace)
                 out["merged"] += _run_merge_actions(tx, workspace, ctx)
@@ -291,9 +292,9 @@ def _claiming_rule(tx, workspace: str, ticket: dict) -> dict:
     status (a ticket worked without a `during` status stays in the rule's `when` status)."""
     config = boardmodel.load_config(workspace)
     for rule in config["rules"]:
-        if rule.get("during") == ticket["status"]:
+        if rule.get("during") == (ticket.get("workflow_status") or ticket["status"]):
             return rule
-    return config["rulesByStatus"].get(ticket["status"])
+    return config["rulesByStatus"].get(ticket.get("workflow_status") or ticket["status"])
 
 
 def _rule_order(config):
@@ -306,7 +307,7 @@ def _deps_open(tx, ticket_id: str, config) -> int:
     marks = ",".join("?" * len(finished)) or "NULL"
     return tx.conn.execute(
         f"SELECT COUNT(*) FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
-        f"WHERE d.ticket_id = ? AND t.status NOT IN ({marks})",
+        f"WHERE d.ticket_id = ? AND COALESCE(t.workflow_status, t.status) NOT IN ({marks})",
         (ticket_id,) + tuple(finished)).fetchone()[0]
 
 
@@ -324,7 +325,7 @@ def _active_under_rule(tx, workspace: str, rule: dict) -> int:
     statuses = [rule["during"]] if rule.get("during") else [rule["when"]["status"]]
     marks = ",".join("?" * len(statuses))
     return tx.conn.execute(
-        f"SELECT COUNT(*) FROM tickets WHERE workspace = ? AND status IN ({marks}) AND assignee IS NOT NULL",
+        f"SELECT COUNT(*) FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) IN ({marks}) AND assignee IS NOT NULL",
         (workspace,) + tuple(statuses)).fetchone()[0]
 
 
@@ -357,7 +358,7 @@ def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
 
 def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, members=None):
     rows = tx.conn.execute(
-        "SELECT * FROM tickets WHERE workspace = ? AND status = ? AND assignee IS NULL "
+        "SELECT * FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) = ? AND assignee IS NULL "
         "ORDER BY priority, created_at, key", (workspace, rule["when"]["status"])).fetchall()
     for row in rows:
         ticket = dict(row)
@@ -383,8 +384,9 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
     lease = lease_time(config)
     status = rule.get("during") or rule["when"]["status"]
     # claim first: the engine's run-workspace check accepts a ticket worktree only while it is claimed
-    tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, status = ?, updated_at = ? "
-                    "WHERE id = ?", (member["id"], lease, status, utcnow(), ticket["id"]))
+    column = boardmodel.column_for(config, ticket["status"], status, True) if ticket.get("workflow_status") is not None else status
+    tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, status = ?, workflow_status = ?, updated_at = ? "
+                    "WHERE id = ?", (member["id"], lease, column, status if ticket.get("workflow_status") is not None else None, utcnow(), ticket["id"]))
     ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
     try:
         run_workspace = workspace
@@ -469,7 +471,7 @@ def _run_merge_actions(tx, workspace: str, ctx: dict) -> int:
         if rule.get("action") != "merge":
             continue
         rows = tx.conn.execute(
-            "SELECT * FROM tickets WHERE workspace = ? AND status = ? AND branch IS NOT NULL "
+            "SELECT * FROM tickets WHERE workspace = ? AND COALESCE(workflow_status, status) = ? AND branch IS NOT NULL "
             "AND assignee IS NULL ORDER BY priority, created_at, key",
             (workspace, rule["when"]["status"])).fetchall()
         for row in rows:
@@ -539,7 +541,7 @@ def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:
     rows = tx.conn.execute(
         "SELECT * FROM tickets WHERE created_by_assignment IN "
         "(SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id IS NOT NULL) "
-        "AND status = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
+        "AND COALESCE(workflow_status, status) = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
     keys = []
     for row in rows:
         child = dict(row)
@@ -568,8 +570,14 @@ def _move_by_rule(tx, workspace: str, ticket: dict, rule: dict, target_key: str,
 
 
 def _set_status(tx, ticket: dict, status: str) -> None:
-    tx.conn.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
-                    (status, utcnow(), ticket["id"]))
+    if ticket.get("workflow_status") is not None:
+        config = boardmodel.load_config(ticket["workspace"])
+        column = boardmodel.column_for(config, ticket["status"], status, False)
+        tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ?, updated_at = ? WHERE id = ?",
+                        (column, status, utcnow(), ticket["id"]))
+    else:
+        tx.conn.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?",
+                        (status, utcnow(), ticket["id"]))
 
 
 # ---- lease helper ------------------------------------------------------------------------------------------

@@ -231,7 +231,10 @@ def process_pending(store: Store, ctx: dict) -> int:
             with store.transaction(actor="operator", command_seq=row["seq"]) as tx:
                 if handler is None:
                     raise AsError(UNKNOWN_COMMAND, f"The coordinator does not handle {row['command']!r}.")
-                data = handler(json.loads(row["args_json"]), tx, ctx)
+                args = json.loads(row["args_json"])
+                if row["command"].startswith(("ticket.", "phase.", "board.")) and args.get("workspace"):
+                    boardmodel.backfill_workflow(tx, args["workspace"])
+                data = handler(args, tx, ctx)
                 crashpoints.hit("before_command_commit")
                 if isinstance(data, teams.Failure):  # keep the recorded state change, answer with the error
                     resp = {"ok": False, "error": data.error.to_error()}

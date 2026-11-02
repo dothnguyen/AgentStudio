@@ -91,6 +91,8 @@ class RecoveryCase(unittest.TestCase):
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, active_run_id = ?, "
                             "status = 'in-progress' WHERE key = 'T-001'", (self.worker, lease, run))
+            ticket = boardmodel.get_ticket(tx.conn, self.ws, 'T-001')
+            boardmodel._ticket_event(tx.conn, ticket['id'], 'ticket.claimed', 'coordinator', None, None, {})
 
     def test_pending_claim_lease_expiry_releases_once_and_returns_the_ticket(self):
         self.claim()
@@ -98,11 +100,11 @@ class RecoveryCase(unittest.TestCase):
         out = self.tick()
         self.assertEqual(out["errors"], [])
         ticket = self.ticket()
-        self.assertEqual((ticket["status"], ticket["assignee"], ticket["active_run_id"]),
-                         ("none", None, None))
+        self.assertEqual((ticket["workflow_status"], ticket["status"], ticket["assignee"], ticket["active_run_id"]),
+                         ("none", "backlog", None, None))
         self.assertIsNone(ticket["run_id"])
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
-        self.assertEqual(names, ["ticket.created", "ticket.claim_released", "ticket.lease_expired"])
+        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.migrated", "ticket.claim_released", "ticket.lease_expired"])
         again = self.tick()  # exactly once: nothing more to release
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
                          names)
@@ -113,12 +115,12 @@ class RecoveryCase(unittest.TestCase):
         self.make_unavailable()
         self.tick()
         ticket = self.ticket()
-        self.assertEqual((ticket["status"], ticket["assignee"], ticket["active_run_id"]),
-                         ("in-progress", self.worker, run))
+        self.assertEqual((ticket["workflow_status"], ticket["status"], ticket["assignee"], ticket["active_run_id"]),
+                         ("in-progress", "in-progress", self.worker, run))
         self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
                                            (run,)).fetchone()[0], "paused")
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
-                         ["ticket.created"])
+                         ["ticket.created", "ticket.claimed", "ticket.migrated"])
 
     def test_usage_limit_releases_without_a_round(self):
         run = self.make_run("failed")
@@ -132,7 +134,8 @@ class RecoveryCase(unittest.TestCase):
         self.make_unavailable(limit=True)  # report_rules marks the member limit_reached in reality
         self.tick()
         ticket = self.ticket()
-        self.assertEqual((ticket["status"], ticket["assignee"]), ("none", None))
+        self.assertEqual((ticket["workflow_status"], ticket["status"], ticket["assignee"]),
+                         ("none", "backlog", None))
         self.assertIsNone(ticket["rounds_json"])  # no round counted
         self.assertEqual(ticket["run_id"], run)
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]

@@ -45,21 +45,22 @@ class BoardCommands(unittest.TestCase):
         self.assertEqual(second["ticket"]["key"], "T-002")
 
         moved = self.ok("ticket", "move", "--workspace", self.ws, "T-002", "--to", "doing")
-        self.assertEqual((moved["from"], moved["ticket"]["status"]), ("none", "doing"))
+        self.assertEqual((moved["from"], moved["ticket"]["workflowStatus"], moved["ticket"]["status"]),
+                         ("none", "doing", "todo"))
         blocked = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "merged")
-        self.assertEqual(blocked["ticket"]["status"], "merged")
+        self.assertEqual((blocked["ticket"]["workflowStatus"], blocked["ticket"]["status"]), ("merged", "done"))
         rc, out, err = self.cli("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none")
         self.assertEqual(rc, 1)
         self.assertTrue(err.startswith("TICKET_TRANSITION_INVALID:"), err)
         self.assertIn("--force", err)
         forced = self.ok("ticket", "move", "--workspace", self.ws, "T-001", "--to", "none", "--force")
-        self.assertEqual(forced["ticket"]["status"], "none")
+        self.assertEqual((forced["ticket"]["workflowStatus"], forced["ticket"]["status"]), ("none", "backlog"))
 
         self.ok("ticket", "depend", "--workspace", self.ws, "T-001", "--on", "T-002")
         detail = self.ok("ticket", "show", "--workspace", self.ws, "T-001")
         self.assertEqual(detail["dependsOn"], ["T-002"])
         self.assertEqual([e["name"] for e in detail["events"]],
-                         ["ticket.created", "ticket.moved", "ticket.moved", "ticket.depends"])
+                         ["ticket.created", "ticket.migrated", "ticket.moved", "ticket.moved", "ticket.depends"])
 
         listed = self.ok("ticket", "list", "--workspace", self.ws, "--status", "none")
         self.assertEqual([t["key"] for t in listed["tickets"]], ["T-001"])  # T-002 is in doing
@@ -89,7 +90,8 @@ class BoardCommands(unittest.TestCase):
         original_hash = hashlib.sha256(b"Original").hexdigest()
         updated = self.ok("ticket", "edit", "--workspace", self.ws, ticket["ticket"]["key"],
                           "--body", "Updated\nRequirements", "--expected-body-sha256", original_hash)
-        self.assertEqual((updated["ticket"]["status"], updated["ticket"]["body"]), ("none", "Updated\nRequirements"))
+        self.assertEqual((updated["ticket"]["workflowStatus"], updated["ticket"]["status"], updated["ticket"]["body"]),
+                         ("none", "backlog", "Updated\nRequirements"))
         rc, _, err = self.cli("ticket", "edit", "--workspace", self.ws, "T-001", "--body", "Lost update",
                               "--expected-body-sha256", original_hash)
         self.assertEqual(rc, 1)

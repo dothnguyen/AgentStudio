@@ -137,7 +137,7 @@ class Binding(SchedCase):
         self.assertIsNone(self.ticket("T-002")["active_run_id"])
         self.finish(run)
         self.tick()  # ... but the finished run is still applied
-        self.assertEqual(self.ticket("T-001")["status"], "merged")
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
         self.assertIsNone(self.ticket("T-001")["assignee"])
 
 
@@ -198,7 +198,7 @@ class TickRules(SchedCase):
                          "failed")
         self.assertIsNone(self.ticket("T-001")["rounds_json"])
         names = [r[0] for r in self.conn.execute("SELECT name FROM ticket_events ORDER BY id").fetchall()]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.claim_released", "ticket.claimed"])
+        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed", "ticket.claim_released", "ticket.claimed"])
 
     def test_other_paused_failure_keeps_its_claim(self):
         self.add_ticket()
@@ -235,6 +235,20 @@ class TickRules(SchedCase):
         self.assertEqual(self.conn.execute("SELECT status FROM tasks WHERE id = ?", (wf["task_id"],)).fetchone()[0],
                          "cancelled")
 
+    def test_backfilled_ticket_is_claimed_and_outcome_updates_workflow(self):
+        self.add_ticket()
+        result = self.tick()
+        self.assertEqual((result["claimed"], result["errors"]), (1, []))
+        row = self.ticket("T-001")
+        config = boardmodel.load_config(self.ws)
+        self.assertEqual(row["workflow_status"], config["rules"][0]["during"])
+        self.assertEqual(row["status"], "in-progress")
+        self.finish(row["active_run_id"])
+        self.tick()
+        row = self.ticket("T-001")
+        self.assertEqual((row["workflow_status"], row["status"]),
+                         (config["rules"][0]["onPass"], "done"))
+
     def test_claims_by_rule_with_lease_during_status_and_event(self):
         self.add_ticket()
         out = self.tick()
@@ -248,7 +262,7 @@ class TickRules(SchedCase):
         self.assertEqual(run["status"], "running")
         names = [e["name"] for e in self.conn.execute(
             "SELECT name FROM ticket_events ORDER BY id").fetchall()]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed"])
+        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed"])
         assignment = self.conn.execute("SELECT agent_id FROM assignments ORDER BY created_at DESC").fetchone()
         self.assertEqual(assignment["agent_id"], self.worker)
 
@@ -305,12 +319,12 @@ class TickRules(SchedCase):
         self.finish(parent["active_run_id"])
         self.free_member()
         self.tick()  # apply the run, merge its branch, then promote only tickets created by that run
-        self.assertEqual(self.ticket("T-001")["status"], "merged")
-        self.assertEqual(self.ticket("T-002")["status"], "refine-ready")
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
+        self.assertEqual(self.ticket("T-002")["workflow_status"], "refine-ready")
         self.assertTrue(os.path.exists(os.path.join(self.ws, "plan.md")))
         child_events = [r[0] for r in self.conn.execute(
             "SELECT name FROM ticket_events WHERE ticket_id = ? ORDER BY id", (child["id"],)).fetchall()]
-        self.assertEqual(child_events, ["ticket.created", "ticket.created_status_promoted"])
+        self.assertEqual(child_events, ["ticket.created", "ticket.migrated", "ticket.created_status_promoted"])
 
     def test_only_the_effective_current_phase_is_claimed(self):
         with self.store.transaction() as tx:
@@ -325,7 +339,7 @@ class TickRules(SchedCase):
         with self.store.transaction() as tx:
             boardmodel.phase_set_current(tx, self.ws, {"phase": "later"})
         self.tick()  # first ticket finishes; new claims use the new current phase
-        self.assertEqual(self.ticket("T-001")["status"], "merged")
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
         self.assertIsNotNone(self.ticket("T-002")["active_run_id"])
 
     def test_current_phase_change_leaves_the_running_ticket_alone(self):
@@ -341,7 +355,7 @@ class TickRules(SchedCase):
                          (after["status"], after["active_run_id"], after["assignee"]))
         self.finish(before["active_run_id"])
         self.tick()  # the outcome still applies by the claiming rule (the during status)
-        self.assertEqual(self.ticket("T-001")["status"], "merged")
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
 
     def test_requires_deps(self):
         self.write_board(rules_board_json(requiresDeps=True))
@@ -354,7 +368,7 @@ class TickRules(SchedCase):
         self.finish(self.ticket("T-001")["active_run_id"])
         self.free_member()
         self.tick()  # the dependency reaches done and releases its claim; the dependent is claimed
-        self.assertEqual(self.ticket("T-001")["status"], "merged")
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
         self.assertIsNotNone(self.ticket("T-002")["active_run_id"])
 
     def test_cap(self):

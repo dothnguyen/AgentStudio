@@ -671,6 +671,34 @@ def column_for(config: dict, current_column: str, target: str, claimed: bool) ->
     return "in-progress" if current_column == "in-progress" else "todo"
 
 
+def backfill_workflow(tx, workspace: str) -> None:
+    """Convert legacy ticket statuses atomically with the board write or scheduler tick."""
+    if not tx.conn.execute("SELECT EXISTS(SELECT 1 FROM tickets WHERE workspace = ? AND workflow_status IS NULL)",
+                           (workspace,)).fetchone()[0]:
+        return
+    config = load_config(workspace)
+    mapping = config.get("upgradedFrom", {})
+    rows = tx.conn.execute(
+        "SELECT t.*, EXISTS(SELECT 1 FROM ticket_events e WHERE e.ticket_id = t.id "
+        "AND e.name = 'ticket.claimed') AS ever_claimed FROM tickets t "
+        "WHERE t.workspace = ? AND t.workflow_status IS NULL", (workspace,)).fetchall()
+    for row in rows:
+        old = row["status"]
+        workflow = mapping.get(old, old)
+        return_status = row["return_status"]
+        if workflow == BLOCKED_STATUS:
+            column = "in-progress"
+            return_status = mapping.get(return_status, return_status)
+        else:
+            column = column_for(config, "todo", workflow, False)
+            if row["ever_claimed"] and column == "todo":
+                column = "in-progress"
+        tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ?, return_status = ? WHERE id = ?",
+                        (workflow, column, return_status, row["id"]))
+        _ticket_event(tx.conn, row["id"], "ticket.migrated", "coordinator", old, workflow,
+                      {"fromStatus": old, "workflowStatus": workflow, "column": column})
+
+
 def set_workflow(tx, ticket: dict, to: str, actor: str, reason, config: dict, claimed: bool = False) -> None:
     try:
         column = column_for(config, ticket["status"], to, claimed)
@@ -710,7 +738,7 @@ def ticket_activity(conn, row, config=None) -> dict:
             config = load_config(row["workspace"])
         except AsError:
             config = None
-    status = row["status"]
+    status = row["workflow_status"] or row["status"]
     if status == BLOCKED_STATUS:
         return {"state": "blocked", "note": row["blocked_reason"]}
     if row["assignee"] is not None:
@@ -790,7 +818,7 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
         else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     created_status = config["agentStatus"]
     parent = tx.conn.execute(
-        "SELECT t.status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
+        "SELECT COALESCE(t.workflow_status, t.status) AS status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
         "JOIN tickets t ON t.active_run_id = wr.id "
         "WHERE sa.assignment_id = ? AND t.workspace = ? LIMIT 1", (assignment_id, workspace)).fetchone()
     if parent is not None:
@@ -883,31 +911,34 @@ def ticket_move(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])
     to = args["to"]
+    old = ticket.get("workflow_status") or ticket["status"]
     if to not in config["byId"]:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {to!r} is not on this board.",
                       data={"key": ticket["key"], "status": to, "statuses": config_status_ids(config)})
-    if to == ticket["status"]:
+    if to == old:
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is already in status {to!r}.",
-                      data={"key": ticket["key"], "from": ticket["status"], "to": to})
+                      data={"key": ticket["key"], "from": old, "to": to})
     if ticket["assignee"] is not None:
         raise AsError(TICKET_BUSY, f"Ticket {ticket['key']} is claimed by an agent; its status cannot change.",
                       data={"key": ticket["key"], "assignee": ticket["assignee"]},
                       remediation="wait for the current run to finish, or use ticket retry to release a stuck claim")
-    if ticket["status"] in config["terminal"] and not args.get("force"):
+    if old in config["terminal"] and not args.get("force"):
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is in the terminal status "
                                                  f"{ticket['status']!r}; moving it needs --force.",
-                      data={"key": ticket["key"], "from": ticket["status"], "to": to},
+                      data={"key": ticket["key"], "from": old, "to": to},
                       remediation="pass --force to move a finished ticket explicitly")
-    if ticket["status"] == BLOCKED_STATUS:  # an operator's move out of blocked also starts a fresh round budget
+    if old == BLOCKED_STATUS:  # an operator's move out of blocked also starts a fresh round budget
         tx.conn.execute("UPDATE tickets SET return_status = NULL, blocked_reason = NULL, rounds_json = NULL "
                         "WHERE id = ?", (ticket["id"],))
-    tx.conn.execute("UPDATE tickets SET status = ?, updated_at = ? WHERE id = ?", (to, utcnow(), ticket["id"]))
-    _ticket_event(tx.conn, ticket["id"], "ticket.moved", "operator", ticket["status"], to,
-                  {"ticketId": ticket["id"], "key": ticket["key"], "from": ticket["status"], "to": to,
-                   "reason": args.get("reason"), "force": bool(args.get("force")) and ticket["status"] in config["terminal"]})
+    column = column_for(config, ticket["status"], to, False) if ticket.get("workflow_status") is not None else to
+    tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ?, updated_at = ? WHERE id = ?",
+                    (column, to if ticket.get("workflow_status") is not None else None, utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.moved", "operator", old, to,
+                  {"ticketId": ticket["id"], "key": ticket["key"], "from": old, "to": to,
+                   "reason": args.get("reason"), "force": bool(args.get("force")) and old in config["terminal"]})
     return {"ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
                                                             (ticket["id"],)).fetchone()),
-            "from": ticket["status"]}
+            "from": old}
 
 
 # ---- dependencies -----------------------------------------------------------------------------------------
@@ -1046,7 +1077,7 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
     if ticket["run_id"] == run["id"]:
         return {"applied": False, "ticket": _ticket_json(tx.conn, tx.conn.execute(
             "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
-    rule = rule or config["rulesByStatus"].get(ticket["status"])
+    rule = rule or config["rulesByStatus"].get(ticket.get("workflow_status") or ticket["status"])
     if rule is None:
         raise AsError(BOARD_RULE_MISSING, f"Status {ticket['status']!r} has no rule, so the run outcome "
                                           f"cannot be applied.", data={"key": ticket["key"],
@@ -1087,6 +1118,10 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
                   reason, now)
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
+    if ticket.get("workflow_status") is not None:
+        column = column_for(config, ticket["status"], target, False)
+        tx.conn.execute("UPDATE tickets SET workflow_status = ? WHERE id = ?", (target, ticket["id"]))
+        values = (column,) + values[1:]
     tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
                     "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
                     "lease_until = NULL WHERE id = ?",
@@ -1191,7 +1226,7 @@ def operator_ticket_edit(tx, workspace: str, args: dict) -> dict:
 def ticket_unblock(tx, workspace: str, args: dict) -> dict:
     config = load_config(workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])
-    if ticket["status"] != BLOCKED_STATUS:
+    if (ticket.get("workflow_status") or ticket["status"]) != BLOCKED_STATUS:
         raise AsError(TICKET_TRANSITION_INVALID, f"Ticket {ticket['key']} is not blocked.",
                       data={"key": ticket["key"], "status": ticket["status"]})
     target = args.get("to") or ticket["return_status"] or config["initial"]
@@ -1199,8 +1234,14 @@ def ticket_unblock(tx, workspace: str, args: dict) -> dict:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {target!r} is not a working status on this board.",
                       data={"key": ticket["key"], "status": target, "statuses": config_status_ids(config)})
     # an operator's decision starts a fresh round budget (the limit that blocked the ticket is not carried over)
-    tx.conn.execute("UPDATE tickets SET status = ?, return_status = NULL, blocked_reason = NULL, "
-                    "rounds_json = NULL, updated_at = ? WHERE id = ?", (target, utcnow(), ticket["id"]))
+    if ticket.get("workflow_status") is not None:
+        column = column_for(config, ticket["status"], target, False)
+        tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ? WHERE id = ?",
+                        (target, column, ticket["id"]))
+    else:
+        tx.conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (target, ticket["id"]))
+    tx.conn.execute("UPDATE tickets SET return_status = NULL, blocked_reason = NULL, "
+                    "rounds_json = NULL, updated_at = ? WHERE id = ?", (utcnow(), ticket["id"]))
     _ticket_event(tx.conn, ticket["id"], "ticket.unblocked", "operator", BLOCKED_STATUS, target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "to": target,
                    "reason": ticket["blocked_reason"], "roundsReset": True})
@@ -1230,7 +1271,12 @@ def release_claim(tx, ticket: dict, reason: str, to_status=None, detail=None) ->
     """Give a claim back without applying anything (a start failure, or lease recovery in S11)."""
     values = [utcnow(), ticket["id"]]
     sets = "assignee = NULL, lease_until = NULL, active_run_id = NULL, updated_at = ?"
-    if to_status is not None and to_status != ticket["status"]:
+    if to_status is not None and ticket.get("workflow_status") is not None:
+        config = load_config(ticket["workspace"])
+        column = column_for(config, ticket["status"], to_status, False)
+        sets += ", status = ?, workflow_status = ?"
+        values[1:1] = [column, to_status]
+    elif to_status is not None and to_status != ticket["status"]:
         sets += ", status = ?"
         values.insert(1, to_status)
     tx.conn.execute(f"UPDATE tickets SET {sets} WHERE id = ?", values)
@@ -1293,7 +1339,7 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
 
 def _dependency_keys(conn, ticket_id: str, terminal) -> tuple:
     """The ticket's dependency keys, plus those whose status is not done/closed (in key order)."""
-    rows = conn.execute("SELECT t.key, t.status FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
+    rows = conn.execute("SELECT t.key, COALESCE(t.workflow_status, t.status) AS status FROM ticket_deps d JOIN tickets t ON t.id = d.blocked_by_ticket_id "
                         "WHERE d.ticket_id = ? ORDER BY t.key", (ticket_id,)).fetchall()
     keys = [r["key"] for r in rows]
     return keys, [r["key"] for r in rows if r["status"] not in terminal]
@@ -1306,7 +1352,7 @@ def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = F
                       data={"status": status, "statuses": config_status_ids(config)})
     clauses, params = ["workspace = ?"], [workspace]
     if status is not None:
-        clauses.append("status = ?")
+        clauses.append("COALESCE(workflow_status, status) = ?")
         params.append(status)
     if phase is not None:
         clauses.append("phase_id = ?")
@@ -1339,7 +1385,7 @@ def board_show(conn, workspace: str) -> dict:
                                "ORDER BY priority, created_at, key", (row["id"],)).fetchall() if row["id"] else []
         by_status = {}
         for ticket in tickets:
-            by_status.setdefault(ticket["status"], []).append(_ticket_json(conn, ticket, config))
+            by_status.setdefault(ticket["workflow_status"] or ticket["status"], []).append(_ticket_json(conn, ticket, config))
         columns = [{"status": s["id"], "kind": s["kind"], "title": s["name"], "count": len(by_status.get(s["id"], [])),
                     "tickets": by_status.get(s["id"], [])} for s in config["statuses"]]
         if BLOCKED_STATUS in by_status:  # the reserved blocked column appears only when tickets are blocked

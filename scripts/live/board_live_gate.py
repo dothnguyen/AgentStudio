@@ -141,7 +141,7 @@ class Gate:
         last = None
         while time.monotonic() < deadline:
             last = self.ticket(ws, key)
-            if last["ticket"]["status"] in statuses:
+            if last["ticket"]["workflowStatus"] in statuses:
                 return last
             time.sleep(0.5 if self.dry else 10)
         raise Fail(f"{key} never reached {statuses}; last={json.dumps(last)[:1500]}")
@@ -208,7 +208,7 @@ class Gate:
 
         untouched = self.ticket(ws, out_of_phase["key"])
         cli("team", "stop-board", "--workspace", ws, "--team", "main", "--json")
-        if untouched["ticket"]["status"] != "none" or untouched["ticket"]["assignee"] is not None \
+        if untouched["ticket"]["workflowStatus"] != "none" or untouched["ticket"]["assignee"] is not None \
                 or any(e["name"] == "ticket.claimed" for e in untouched["events"]):
             raise Fail(f"the other-phase ticket was not left alone: "
                        f"{json.dumps(untouched['ticket'])[:500]}")

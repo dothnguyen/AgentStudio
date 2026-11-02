@@ -20,7 +20,7 @@ and P00-S07 (restart reconciliation, `assignment resolve`, bounded stop). Recove
 | `agent_studio/ops.py` | `health`, `preflight`. |
 | `agent_studio/schema.py` | Entities, enums, allowed transitions, DDL (single source for SQL CHECKs and Python checks). |
 | `agent_studio/state.py` | Connections by role (`coordinator`/`client`/`runner`/`reader`) with an SQLite authorizer; migrations. |
-| | Schema v19 adds nullable `tickets.workflow_status` and an index on `(workspace, workflow_status)`; application behavior does not use the column yet. |
+| | Schema v19 adds nullable `tickets.workflow_status` and an index on `(workspace, workflow_status)`. Board writes and scheduler ticks backfill legacy tickets transactionally, recording a `ticket.migrated` event for each converted ticket. |
 | `agent_studio/store.py` | Coordinator-only `Store`/`Tx`: every row change writes exactly one event in the same transaction. |
 | `agent_studio/reports.py` | Immutable worker-report inbox and exactly-once application. |
 | `agent_studio/queries.py` | `snapshot` and `events.after` (read-only, one consistent read transaction each). |

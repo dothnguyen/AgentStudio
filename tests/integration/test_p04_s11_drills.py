@@ -106,7 +106,7 @@ class DrillCase(unittest.TestCase):
         raise AssertionError(f"timed out waiting for {message}; last={last!r}")
 
     def wait_status(self, key, statuses, timeout=120):
-        return self.wait_for(lambda: self.ticket(key) if self.ticket(key)["status"] in statuses else None,
+        return self.wait_for(lambda: self.ticket(key) if self.ticket(key)["workflowStatus"] in statuses else None,
                              timeout, f"{key} in {statuses}")
 
     def wait_claimed(self, key, timeout=120):
@@ -205,7 +205,7 @@ class MergeConflict(DrillCase):
             lambda: next((e for e in self.events("T-002") if e["name"] == "ticket.merge_conflict"), None),
             120, "merge conflict")
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket("T-002")["status"], "none")
+        self.assertEqual(self.ticket("T-002")["workflowStatus"], "none")
         with open(os.path.join(self.ws, "shared.txt")) as f:
             self.assertEqual(f.read(), "from first\n")
 
@@ -219,17 +219,17 @@ class RoundLimit(DrillCase):
         self.start_and_run()
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:
-            if self.ticket("T-001")["status"] == "blocked":
+            if self.ticket("T-001")["workflowStatus"] == "blocked":
                 break
             time.sleep(0.5)
         ticket = self.ticket("T-001")
-        self.assertEqual(ticket["status"], "blocked")
+        self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("blocked", "in-progress"))
         self.assertEqual(ticket["blockedReason"], "ROUND_LIMIT:none")
         self.assertEqual(ticket["rounds"], {"none": 2})
         rc, r, p = self.sb.run("team", "stop-board", "--workspace", self.ws, "--json")
         self.assertTrue(r["ok"], r)
         unblocked = self.json_cmd("ticket", "unblock", "T-001")
-        self.assertEqual(unblocked["ticket"]["status"], "none")
+        self.assertEqual((unblocked["ticket"]["workflowStatus"], unblocked["ticket"]["status"]), ("none", "backlog"))
 
 
 class UsageLimit(DrillCase):
@@ -252,7 +252,7 @@ class UsageLimit(DrillCase):
         conn.commit()
 
         released = self.wait_for(lambda: self.ticket("T-001") if self.ticket("T-001")["assignee"] is None
-                                 and self.ticket("T-001")["status"] == "none" else None, 60, "release")
+                                 and self.ticket("T-001")["workflowStatus"] == "none" else None, 60, "release")
         self.assertIsNone(released["rounds"])  # the round was not counted
         self.assertEqual(released["runId"], run)
 
@@ -269,7 +269,7 @@ class StuckClaim(DrillCase):
         claimed = self.wait_claimed("T-001")
         run = claimed["activeRunId"]
         released = self.json_cmd("ticket", "retry", "T-001")
-        self.assertEqual(released["ticket"]["status"], "none")
+        self.assertEqual((released["ticket"]["workflowStatus"], released["ticket"]["status"]), ("none", "backlog"))
         self.assertIsNone(released["ticket"]["assignee"])
         self.wait_for(lambda: self.db().execute(
             "SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0] in ("cancelled", "failed"),

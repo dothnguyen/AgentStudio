@@ -111,7 +111,7 @@ class RunBoardCase(unittest.TestCase):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             ticket = self.ticket_json(key)
-            if ticket["status"] in statuses:
+            if ticket["workflowStatus"] in statuses:
                 return ticket
             time.sleep(0.3)
         raise AssertionError(f"{key} never reached {statuses}; last={ticket}")
@@ -143,13 +143,13 @@ class ThreeRules(RunBoardCase):
         out = self.run_board()
         self.assertIn("board", out)
         ticket = self.wait_status("T-001", ("merged",), timeout=120)
-        self.assertEqual(ticket["status"], "merged")
+        self.assertEqual((ticket["workflowStatus"], ticket["status"]), ("merged", "done"))
         detail = self.board_json("ticket", "show", "T-001")
         names = [e["name"] for e in detail["events"]]
-        self.assertEqual(names, ["ticket.created", "ticket.claimed", "ticket.outcome_applied",
+        self.assertEqual(names, ["ticket.created", "ticket.migrated", "ticket.claimed", "ticket.outcome_applied",
                                  "ticket.claimed", "ticket.outcome_applied"])
         self.assertEqual([e["to"] for e in detail["events"]],
-                         ["none", "build-active", "verify", "verify-active", "merged"])
+                         ["none", "none", "build-active", "verify", "verify-active", "merged"])
 
 
 class BusyAndStop(RunBoardCase):
@@ -165,7 +165,7 @@ class BusyAndStop(RunBoardCase):
         self.run_board()
         time.sleep(4)  # the board is running, but Ryan is busy with an operator task
         ticket = self.ticket_json("T-001")
-        self.assertEqual((ticket["status"], ticket["assignee"]), ("none", None))
+        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("none", None))
 
         rc, out, err = self.human("stop-board", "--team", "alpha")
         self.assertEqual(rc, 0, err)
@@ -177,7 +177,7 @@ class BusyAndStop(RunBoardCase):
             time.sleep(0.5)
         time.sleep(3)  # ...but the stopped board claims nothing
         ticket = self.ticket_json("T-001")
-        self.assertEqual((ticket["status"], ticket["assignee"]), ("none", None))
+        self.assertEqual((ticket["workflowStatus"], ticket["assignee"]), ("none", None))
 
 
 class WorktreesAndMerge(RunBoardCase):
@@ -217,7 +217,7 @@ class WorktreesAndMerge(RunBoardCase):
 
         conflict = self.wait_event("T-002", "ticket.merge_conflict", timeout=90)  # the second conflicts
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket_json("T-002")["status"], "none")  # onFail returned it to the queue
+        self.assertEqual(self.ticket_json("T-002")["workflowStatus"], "none")  # onFail returned it to the queue
         with open(os.path.join(self.ws, "shared.txt")) as f:
             self.assertEqual(f.read(), "from first\n")  # the base branch is untouched by the conflict
         self.assertTrue(os.path.isdir(second["worktreePath"]))  # kept for the fixing round
