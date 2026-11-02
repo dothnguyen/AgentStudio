@@ -1,35 +1,55 @@
 {
   "width": 1440,
   "files": {
+    "backlog.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "5f12813b5daff1922750b4c66043916d47be5f1cc2357459eb97997d2d016db3"
+    },
+    "backlog-filtered.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "e25a425eac4c199110fb7d7f24d176f035561da0fbdd5d2bc7c4acdfb635a6be"
+    },
+    "backlog-collapsed.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "2236fde4868cd633648e66bbfec6598e437730ac38d43e6e242f6fd1c5e941fe"
+    },
+    "phases.png": {
+      "width": 1440,
+      "height": 1300,
+      "sha256": "7d90a92b3bd09f317177acd87dc33a78f0231f603ae7286d95285d2db0fde71b"
+    },
     "board.png": {
       "width": 1440,
       "height": 1521,
-      "sha256": "28401b56a24bb0d3c08d98723eb6a3e6200029edf25530ea0ccc436c827fcdfe"
+      "sha256": "61f6d37f019e8daa0339afc18ca9e7dc5de3afec7f76e89179473a0db98736ad"
     },
     "board-all-columns.png": {
       "width": 1440,
       "height": 1521,
-      "sha256": "4cdeba9874f9422737402b1feac2e8b8583facceda4c4bf218450ebde7fde57c"
+      "sha256": "f5d304c7e15c87e73857cbd0e676864bff9b3d777f175d00b5e3a158385f0fe7"
     },
     "ticket-working.png": {
       "width": 1440,
       "height": 1345,
-      "sha256": "f23ae3e118f2247483c6662b9db9576eea30ce8a6f6aaeb9889683b97c496ce8"
+      "sha256": "657cc2adeb392c02f1ac43530e848c2e39e0e8b3161d37cddf91627be109bb4c"
     },
     "ticket-waiting.png": {
       "width": 1440,
       "height": 1300,
-      "sha256": "4431d63499bcb8b6f06ca9ba6ac049ecf2b6c72a65a6c89d625dde13caf3c01a"
+      "sha256": "9a3fcb6eb4241c4ce998055e90e2a6c99c8059ca8fc7af53e4803aed9da50697"
     },
     "ticket-blocked.png": {
       "width": 1440,
       "height": 1300,
-      "sha256": "071079edab3e9fadd3f388f6a101abc76589782dad420aca67fce91b53a8342c"
+      "sha256": "7d46283ca2d2ec711ea7934a231606a4b87a872099268cab21462f69757374d3"
     },
     "ticket-done.png": {
       "width": 1440,
       "height": 1300,
-      "sha256": "027f4e1b15fd1cd2403dcf056a3ae33331c660244fe3b380577e3bb3473e1d19"
+      "sha256": "997b7a477dfc167b93edd85e4cf1fd9b50bba6105478f0f29f147b3474410d2a"
     }
   }
 }

@@ -187,6 +187,13 @@ describe('boards v1 capture evidence', () => {
     expect(sha256(file)).toBe(manifest.files[`${name}.png`]!.sha256);
   });
 
+  it.each(['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases'])('captures/%s.png is a real implementation screenshot matching its checksum', (name) => {
+    const file = path.join(captureDir, `${name}.png`);
+    expect(fs.existsSync(file), `${file} is missing`).toBe(true);
+    expect(fs.statSync(file).size).toBeGreaterThan(10_000);
+    expect(pngSize(file)).toEqual({ width: 1440, height: 1300 });
+    expect(sha256(file)).toBe(manifest.files[`${name}.png`]!.sha256);
+  });
   it('wires the capture command and documents the generated files', () => {
     const pkg = JSON.parse(read(path.join(appDir, 'package.json'))) as { scripts: Record<string, string> };
     expect(pkg.scripts['capture:boards']).toContain('electron dist/live/captureBoards.js');

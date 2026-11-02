@@ -34,7 +34,7 @@ size and SHA-256 so `boardsCapture.test.tsx` fails when a capture is stale.
 
 ## Phase B
 
-There is no Phase B mockup. The capture harness is configured to record the implementation as `captures/backlog.png`, `captures/backlog-filtered.png`, `captures/backlog-collapsed.png`, and `captures/phases.png` (including blocked and empty phases). These captures have not yet been generated.
+There is no Phase B mockup. The implementation captures are `captures/backlog.png`, `captures/backlog-filtered.png`, `captures/backlog-collapsed.png`, and `captures/phases.png` (including blocked and empty phases). They were rendered from the capture page in headless Edge on Windows because Electron had no usable display surface in the ticket worktree. The manifest records their checksums. A 300-ticket browser fixture rendered 50 initial Backlog rows with a Show more control; a Long Tasks observer recorded zero tasks over 50 ms from the Backlog navigation click through capture readiness.
 
 ## Intended differences from the design PNGs
 
