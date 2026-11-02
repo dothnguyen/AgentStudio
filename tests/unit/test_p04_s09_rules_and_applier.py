@@ -8,6 +8,7 @@ from tests.helpers import fresh
 from agent_studio import boardmodel
 from agent_studio.protocol import AsError
 from tests.unit.test_p04_s07_board_model import BoardCase
+from tests.unit.test_board_config_v3 import config as workflow_config
 
 ROLES = {"version": 1, "roles": {"worker": {}, "checker": {}}}
 SOLO = {"version": 1, "description": "solo", "stages": [
@@ -300,6 +301,95 @@ class OutcomeApplier(ApplierCase):
                          [("ticket.created", None, "none", "operator"),
                           ("ticket.outcome_applied", "none", "none", "coordinator")])
         self.assertEqual(json.loads(events[-1]["payload_json"])["rounds"], 1)
+
+
+class WorkflowOutcomeApplier(ApplierCase):
+    def setUp(self):
+        super().setUp()
+        self.config = workflow_config()
+        self.config["rules"][0].update(maxRounds=2, onFailureLimit={"count": 2, "status": "merge-ready"})
+        self.write_config(self.config)
+        self.ticket = self.add("workflow outcome")
+        self.claim("working")
+
+    def claim(self, status):
+        self.conn.execute("UPDATE tickets SET status = 'in-progress', workflow_status = ?, "
+                          "assignee = 'worker', active_run_id = NULL, lease_until = 'later' WHERE id = ?",
+                          (status, self.ticket["id"]))
+
+    def test_pass_moves_to_ready_and_replay_writes_nothing(self):
+        run = self.make_run("succeeded")
+        result = self.apply(self.ticket["key"], run)
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertEqual((row["workflow_status"], row["status"], row["assignee"], row["lease_until"]),
+                         ("merge-ready", "in-progress", None, None))
+        self.assertEqual(result["rule"], "ready")
+        events = self.events(self.ticket["key"])
+        self.assertEqual([(e["name"], e["from_status"], e["to_status"]) for e in events[-2:]],
+                         [("ticket.workflow_changed", "working", "merge-ready"),
+                          ("ticket.outcome_applied", "working", "merge-ready")])
+        self.assertFalse(self.apply(self.ticket["key"], run)["applied"])
+        self.assertEqual(len(self.events(self.ticket["key"])), len(events))
+
+    def test_pass_to_done_and_when_rule_lookup(self):
+        self.claim("merge-ready")
+        self.apply(self.ticket["key"], self.make_run("succeeded"))
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertEqual((row["workflow_status"], row["status"]), ("done", "done"))
+
+    def test_failure_and_failure_limit(self):
+        self.apply(self.ticket["key"], self.make_run("failed"))
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertEqual((row["workflow_status"], row["status"]), ("ready", "in-progress"))
+        self.claim("working")
+        result = self.apply(self.ticket["key"], self.make_run("failed"))
+        self.assertEqual((result["ticket"]["workflowStatus"], result["ticket"]["status"], result["reason"]),
+                         ("merge-ready", "in-progress", "FAILURE_LIMIT:ready"))
+
+    def test_failed_run_findings_are_appended_and_event_keeps_workflow_statuses(self):
+        self.conn.execute("UPDATE tickets SET body = ? WHERE id = ?", ("original brief", self.ticket["id"]))
+        run = self.make_run("failed")
+        with self.store.transaction() as tx:
+            tx.create("stage_attempt", {"team_id": self.team, "workflow_run_id": run, "stage": "work",
+                                         "attempt": 1, "verdict_json": {"verdict": "fail",
+                                                                        "findings": ["missing validation"]}})
+
+        self.apply(self.ticket["key"], run)
+
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertIn("original brief", row["body"])
+        self.assertIn("Findings from ready, round 1", row["body"])
+        self.assertIn("- missing validation", row["body"])
+        event = [e for e in self.events(self.ticket["key"]) if e["name"] == "ticket.outcome_applied"][-1]
+        self.assertEqual((event["from_status"], event["to_status"]), ("working", "ready"))
+        self.assertEqual(json.loads(event["payload_json"]), {
+            "ticketId": self.ticket["id"], "key": self.ticket["key"], "run": run,
+            "outcome": "fail", "rule": "ready", "rounds": 1, "to": "ready", "reason": None,
+        })
+
+    def test_round_limit_and_blocked_outcome_preserve_column_and_return_status(self):
+        del self.config["rules"][0]["onFailureLimit"]
+        self.write_config(self.config)
+        self.apply(self.ticket["key"], self.make_run("failed"))
+        self.claim("working")
+        result = self.apply(self.ticket["key"], self.make_run("failed"))
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertEqual((row["workflow_status"], row["status"], row["return_status"], row["blocked_reason"]),
+                         ("blocked", "in-progress", "ready", "ROUND_LIMIT:ready"))
+        self.assertEqual(result["reason"], "ROUND_LIMIT:ready")
+        self.claim("working")
+        run = self.make_run("paused")
+        self.apply(self.ticket["key"], run)
+        row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
+        self.assertEqual((row["workflow_status"], row["status"], row["return_status"], row["blocked_reason"]),
+                         ("blocked", "in-progress", "ready", f"RUN_BLOCKED:{run}"))
+
+    def test_on_blocked_target_is_a_workflow_status(self):
+        self.config["rules"][0]["onBlocked"] = "merge-ready"
+        self.write_config(self.config)
+        result = self.apply(self.ticket["key"], self.make_run("paused"))
+        self.assertEqual((result["ticket"]["workflowStatus"], result["ticket"]["status"]),
+                         ("merge-ready", "in-progress"))
 
 
 class Unblock(ApplierCase):

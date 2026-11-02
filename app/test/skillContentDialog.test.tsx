@@ -337,7 +337,7 @@ describe('Skill content dialog', () => {
     expect((within(dialog).getByLabelText('Your changes') as HTMLTextAreaElement).value).toBe(draft);
     expect(within(dialog).getByText('Copy anything you still need into the current file before saving again.')).toBeTruthy();
     expect(saveButton(dialog).disabled).toBe(true);
-    expect(document.activeElement).toBe(textarea(dialog));
+    await waitFor(() => expect(document.activeElement).toBe(textarea(dialog)));
   });
 
   it('saves with the reloaded sha after a conflict is resolved', async () => {

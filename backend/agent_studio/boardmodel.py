@@ -705,15 +705,22 @@ def backfill_workflow(tx, workspace: str) -> None:
                       {"fromStatus": old, "workflowStatus": workflow, "column": column})
 
 
-def set_workflow(tx, ticket: dict, to: str, actor: str, reason, config: dict, claimed: bool = False) -> None:
+def set_workflow(tx, ticket: dict, to: str, actor: str, reason, config: dict, claimed: bool = False,
+                 outcome_values: tuple = None) -> None:
     try:
         column = column_for(config, ticket["status"], to, claimed)
     except AsError as exc:
         if exc.code == BOARD_STATUS_UNKNOWN:
             exc.data["key"] = ticket["key"]
         raise
-    tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ?, updated_at = ? WHERE id = ?",
-                    (to, column, utcnow(), ticket["id"]))
+    if outcome_values is None:
+        tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ?, updated_at = ? WHERE id = ?",
+                        (to, column, utcnow(), ticket["id"]))
+    else:
+        tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ?, updated_at = ?, run_id = ?, "
+                        "rounds_json = ?, return_status = ?, blocked_reason = ?, active_run_id = NULL, "
+                        "assignee = NULL, lease_until = NULL WHERE id = ?",
+                        (to, column, utcnow()) + outcome_values + (ticket["id"],))
     _ticket_event(tx.conn, ticket["id"], "ticket.workflow_changed", actor, ticket["workflow_status"], to,
                   {"ticketId": ticket["id"], "key": ticket["key"], "from": ticket["workflow_status"],
                    "to": to, "fromColumn": ticket["status"], "toColumn": column, "reason": reason})
@@ -1083,11 +1090,13 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
     if ticket["run_id"] == run["id"]:
         return {"applied": False, "ticket": _ticket_json(tx.conn, tx.conn.execute(
             "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
-    rule = rule or config["rulesByStatus"].get(ticket.get("workflow_status") or ticket["status"])
+    workflow_status = ticket.get("workflow_status") or ticket["status"]
+    rule = (config["duringToRule"].get(workflow_status) or config["rulesByStatus"].get(workflow_status)
+            or (rule if ticket.get("workflow_status") is None else None))
     if rule is None:
-        raise AsError(BOARD_RULE_MISSING, f"Status {ticket['status']!r} has no rule, so the run outcome "
+        raise AsError(BOARD_RULE_MISSING, f"Status {workflow_status!r} has no rule, so the run outcome "
                                           f"cannot be applied.", data={"key": ticket["key"],
-                                                                       "status": ticket["status"]})
+                                                                       "status": workflow_status})
     outcome = RUN_OUTCOMES[run["status"]]
     rounds = json.loads(ticket["rounds_json"] or "{}")
     rule_status_id = rule["when"]["status"]
@@ -1125,13 +1134,11 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
     if ticket.get("workflow_status") is not None:
-        column = column_for(config, ticket["status"], target, False)
-        tx.conn.execute("UPDATE tickets SET workflow_status = ? WHERE id = ?", (target, ticket["id"]))
-        values = (column,) + values[1:]
-    tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
-                    "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
-                    "lease_until = NULL WHERE id = ?",
-                    values + (ticket["id"],))
+        set_workflow(tx, ticket, target, "coordinator", reason, config, outcome_values=values[1:5])
+    else:
+        tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
+                        "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
+                        "lease_until = NULL WHERE id = ?", values + (ticket["id"],))
     if outcome != "pass":
         findings = _run_findings(tx.conn, run["id"])
         if findings:  # the next agent only sees the ticket, so a failed run's findings travel in its body
@@ -1139,7 +1146,7 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
                         + "\n".join(f"- {f}" for f in findings))
         if "onFailPriority" in rule and target != BLOCKED_STATUS:
             bump_priority(tx, ticket["id"], rule["onFailPriority"])
-    _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", ticket["status"], target,
+    _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", workflow_status, target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "outcome": outcome,
                    "rule": rule_status_id, "rounds": rounds[rule_status_id], "to": target,
                    "reason": reason})

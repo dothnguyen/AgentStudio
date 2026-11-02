@@ -78,7 +78,7 @@ class Applier(unittest.TestCase):
         detail = self.cli("ticket", "show", "--workspace", self.ws, ticket["ticket"]["key"], "--json")["data"]
         self.assertEqual(detail["ticket"]["runId"], run)
         self.assertEqual([e["name"] for e in detail["events"]],
-                         ["ticket.created", "ticket.migrated", "ticket.outcome_applied"])
+                         ["ticket.created", "ticket.migrated", "ticket.workflow_changed", "ticket.outcome_applied"])
 
     def test_failing_runs_count_rounds_and_block(self):
         rc, started, p = self.sb.run("team", "start", "--workspace", self.ws, "--team", "alpha")

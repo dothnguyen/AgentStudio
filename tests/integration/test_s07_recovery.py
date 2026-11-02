@@ -137,7 +137,13 @@ class CoordinatorCrashes(Drill):
         self.wait_asg(aid, "running")
         os.kill(self.coordinator_pid(), signal.SIGKILL)
         time.sleep(1)
-        self.start_coordinator("before_report_apply_commit")  # dies while applying the next report
+        self.sb.env["AGENT_STUDIO_TEST_CRASH_AT"] = "before_report_apply_commit"
+        _, started, _ = self.sb.run("coordinator", "start", "--enable-debug")
+        if not started["ok"]:
+            # A pending report can trigger the intended crash before startup returns.
+            self.assertEqual(started["error"]["code"], "BACKEND_UNAVAILABLE")
+            self.assertTrue(os.path.exists(os.path.join(self.sb.state_dir,
+                                                       "crashed-at-before_report_apply_commit")))
         self.restart_after_crash()
         self.wait_asg(aid, "succeeded")
         self.assert_ran_once(r["data"]["taskId"])
