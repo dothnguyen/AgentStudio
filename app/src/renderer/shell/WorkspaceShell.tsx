@@ -7,6 +7,7 @@ import { RolesScreen } from '../roles/RolesScreen';
 import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
+import { TicketScreen } from '../boards/TicketScreen';
 import { TeamsScreen, type CreateFocusTarget } from '../teams/TeamsScreen';
 import { WorkspaceTeamNavigation } from '../teams/WorkspaceTeamNavigation';
 import { useTeamsNavigationController } from '../teams/useTeamsNavigationController';
@@ -208,10 +209,12 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       onOpenTicket={(key) => navigate(boardTicketRoute(key))}
     />
   ) : ticketKey !== null ? (
-    <SectionPlaceholder
-      sectionId={sectionId}
-      title={ticketKey}
-      description="Not available yet. The ticket details will appear here."
+    <TicketScreen
+      key={`${props.workspace.id}:${ticketKey}`}
+      workspace={props.workspace}
+      management={props.management}
+      ticketKey={ticketKey}
+      onOpenBoard={() => navigate(BOARDS_DEFAULT_ROUTE)}
     />
   ) : (
     <SectionPlaceholder sectionId={sectionId} title={content.title} description={content.description} />

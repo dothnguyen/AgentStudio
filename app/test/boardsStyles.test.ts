@@ -63,6 +63,30 @@ describe('Board toolbar styles', () => {
   });
 });
 
+describe('Ticket page styles', () => {
+  it('uses the two-column layout with the dark monospace description box', () => {
+    expect(flat).toContain('.boards-ticket-screen { display: flex; flex-direction: column; gap: 20px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-x: clip; overflow-wrap: anywhere; }');
+    expect(flat).toContain('.boards-ticket-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; min-width: 0; }');
+    expect(flat).toContain('.boards-ticket-main { display: flex; flex-direction: column; gap: 22px; flex: 999 1 560px; min-width: 0; }');
+    expect(flat).toContain('.boards-ticket-aside { display: flex; flex-direction: column; gap: 22px; flex: 1 1 320px; min-width: 0; max-width: 400px; }');
+    expect(flat).toContain('.boards-ticket-body { max-height: 420px; margin: 0; overflow: auto; padding: 14px 16px; border: 1px solid #23262c; border-radius: 8px; background: #121418;');
+    expect(flat).toContain('white-space: pre-wrap; overflow-wrap: anywhere; }');
+  });
+
+  it('uses the design key, status and activity chips and the amber blocked banner', () => {
+    expect(flat).toContain('.boards-ticket-key-chip { padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-chip); background: var(--chip-bg); color: var(--text-secondary); font-family: var(--font-mono); font-size: 13px; }');
+    expect(flat).toContain('.boards-ticket-status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--chip-bg); font-size: 12px; font-weight: 500; }');
+    expect(flat).toContain('.boards-ticket-activity-chip { padding: 3px 10px; font-size: 12px; }');
+    expect(flat).toContain('.boards-ticket-priority-chip { padding: 3px 10px; border-radius: var(--radius-pill); background: rgba(91, 156, 255, 0.12); color: #9ec3ff; font-size: 12px; }');
+    expect(flat).toContain('.boards-blocked-banner { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; border: 1px solid #4a3d1e; border-radius: var(--radius-banner); background: rgba(240, 180, 83, 0.07); color: #f0b453; font-size: 12.5px; }');
+  });
+
+  it('makes the breadcrumb board name a link and the key monospace', () => {
+    expect(flat).toContain('.boards-breadcrumb .boards-crumb { all: unset; cursor: pointer; color: #a3a9b2; border-radius: 3px; }');
+    expect(flat).toContain('.boards-breadcrumb-key { color: #e7e9ec; font-family: var(--font-mono); }');
+  });
+});
+
 describe('Ticket card styles', () => {
   it('colours the working and blocked left edges and shows a focus ring', () => {
     expect(flat).toContain('.boards-ticket-card[data-activity="working"] { border-left-color: #4ac26b; }');

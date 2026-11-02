@@ -3,8 +3,8 @@ import type { BoardRuleView, BoardTicketSummary } from '../api';
 import {
   agentInitials,
   blockedReasonLine,
+  TICKET_CHIP_TONE_CLASS,
   ticketActivityChip,
-  type TicketActivityTone,
 } from './ticketCardModel';
 
 export interface TicketCardProps {
@@ -14,15 +14,6 @@ export interface TicketCardProps {
   /** Opens the ticket page at boards/ticket/:key. */
   onOpenTicket?(key: string): void;
 }
-
-const CHIP_TONE_CLASS: Record<TicketActivityTone, string> = {
-  working: 'boards-ticket-chip-working',
-  blocked: 'boards-ticket-chip-blocked',
-  waiting: 'boards-ticket-chip-waiting',
-  queued: 'boards-ticket-chip-queued',
-  idle: 'boards-ticket-chip-idle',
-  done: 'boards-ticket-chip-done',
-};
 
 /** One kanban card: key, title, optional priority and blocked reason, activity and owner. */
 export function TicketCard(props: TicketCardProps): JSX.Element {
@@ -57,7 +48,7 @@ export function TicketCard(props: TicketCardProps): JSX.Element {
       <span className="boards-ticket-title">{ticket.title}</span>
       {reason !== null && <span className="boards-ticket-reason">{reason}</span>}
       <span className="boards-ticket-footer">
-        <span className={`boards-ticket-chip ${CHIP_TONE_CLASS[chip.tone]}`} data-chip={chip.tone}>
+        <span className={`boards-ticket-chip ${TICKET_CHIP_TONE_CLASS[chip.tone]}`} data-chip={chip.tone}>
           <span className="boards-ticket-chip-dot" aria-hidden="true" />
           {chip.label}
         </span>

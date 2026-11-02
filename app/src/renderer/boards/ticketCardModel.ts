@@ -8,6 +8,16 @@ export interface TicketActivityChip {
   label: string;
 }
 
+/** The CSS chip class for each activity tone; shared by board cards and the ticket page. */
+export const TICKET_CHIP_TONE_CLASS: Record<TicketActivityTone, string> = {
+  working: 'boards-ticket-chip-working',
+  blocked: 'boards-ticket-chip-blocked',
+  waiting: 'boards-ticket-chip-waiting',
+  queued: 'boards-ticket-chip-queued',
+  idle: 'boards-ticket-chip-idle',
+  done: 'boards-ticket-chip-done',
+};
+
 /** The ticket statuses that mean the ticket is finished on the board. */
 const FINISHED_STATUSES: readonly string[] = ['done', 'close'];
 

@@ -2339,6 +2339,30 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .boards-column-more { width: 100%; min-height: 0; padding: 7px 10px; border: 1px dashed #343a43; border-radius: 8px; background: transparent; color: #c4cad2; font-size: 12.5px; text-align: center; }
 .boards-column-more:hover:not(:disabled) { background: #1b1f24; }
 .boards-column-empty { padding: 14px 8px; border: 1px dashed #262a30; border-radius: 8px; color: #8d949e; font-size: 12px; text-align: center; }
+.boards-ticket-screen { display: flex; flex-direction: column; gap: 20px; max-width: 1240px; margin: 0 auto; min-width: 0; overflow-x: clip; overflow-wrap: anywhere; }
+.boards-breadcrumb .boards-crumb { all: unset; cursor: pointer; color: #a3a9b2; border-radius: 3px; }
+.boards-breadcrumb .boards-crumb:hover { color: #e7e9ec; text-decoration: underline; }
+.boards-breadcrumb .boards-crumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.boards-breadcrumb-key { color: #e7e9ec; font-family: var(--font-mono); }
+.boards-ticket-header { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.boards-ticket-heading { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.boards-ticket-chips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.boards-ticket-key-chip { padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-chip); background: var(--chip-bg); color: var(--text-secondary); font-family: var(--font-mono); font-size: 13px; }
+.boards-ticket-status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--chip-bg); font-size: 12px; font-weight: 500; }
+.boards-ticket-status-chip .boards-status-dot { width: 7px; height: 7px; }
+.boards-ticket-activity-chip { padding: 3px 10px; font-size: 12px; }
+.boards-ticket-priority-chip { padding: 3px 10px; border-radius: var(--radius-pill); background: rgba(91, 156, 255, 0.12); color: #9ec3ff; font-size: 12px; }
+.boards-ticket-heading h1 { max-width: 980px; margin: 0; color: var(--text); font-size: 22px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.boards-blocked-banner { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; border: 1px solid #4a3d1e; border-radius: var(--radius-banner); background: rgba(240, 180, 83, 0.07); color: #f0b453; font-size: 12.5px; }
+.boards-blocked-banner svg { flex: none; margin-top: 1px; }
+.boards-blocked-banner span { min-width: 0; overflow-wrap: anywhere; }
+.boards-blocked-banner strong { font-weight: 600; }
+.boards-ticket-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 22px; min-width: 0; }
+.boards-ticket-main { display: flex; flex-direction: column; gap: 22px; flex: 999 1 560px; min-width: 0; }
+.boards-ticket-aside { display: flex; flex-direction: column; gap: 22px; flex: 1 1 320px; min-width: 0; max-width: 400px; }
+.boards-ticket-body { max-height: 420px; margin: 0; overflow: auto; padding: 14px 16px; border: 1px solid #23262c; border-radius: 8px; background: #121418; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.boards-ticket-body-empty { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+.boards-ticket-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .boards-skeleton { display: flex; flex-direction: column; gap: 20px; }
 .boards-skeleton-heading { display: flex; flex-direction: column; gap: 10px; }
 .boards-skeleton-line { display: block; border-radius: 6px; background: #1b1f24; animation: boards-skeleton-pulse 1.4s ease-in-out infinite; }

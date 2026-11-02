@@ -7,7 +7,7 @@ import { SectionPlaceholder } from '../src/renderer/sections/SectionPlaceholder'
 import { WorkspaceShell as WorkspaceShellComponent, type WorkspaceShellProps } from '../src/renderer/shell/WorkspaceShell';
 import { NAV_ITEMS, type NavItem } from '../src/renderer/shell/navModel';
 import { fakeManagement, member, overviewFixture, team, teamDefinition, twoTeams, connectionFixture, deferred, routingSettingsFixture } from './teamsFixtures';
-import { boardPhasesFixture } from './boardFixtures';
+import { boardPhasesFixture, boardTicketDetailFixture } from './boardFixtures';
 import { roleItem, rolesFixture, usageOf } from './rolesFixtures';
 
 afterEach(cleanup);
@@ -640,6 +640,31 @@ describe('T-135 sidebar Boards group and routes', () => {
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Ticket T-134');
     expect(view.getByRole('button', { name: 'Current Phase' }).getAttribute('aria-current')).toBe('page');
     expect(view.getByRole('button', { name: 'Boards' }).classList.contains('nav-item-open')).toBe(true);
+  });
+
+  it('opens_the_real_ticket_page_from_a_board_card_and_links_back_to_current_phase', async () => {
+    const boardTicket = vi.fn(async (_id: string, input: { key: string }) => ({
+      ok: true as const,
+      data: boardTicketDetailFixture(input.key),
+    }));
+    const fake = fakeManagement({ boardPhases: [{ ok: true, data: phases }], calls: { boardTicket } });
+    const view = render(shell(fake));
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Boards' }));
+    await settle();
+
+    fireEvent.click(view.getByRole('button', { name: 'Open T-114: Roles v2: edit dialogs and the New role dialog' }));
+    await settle();
+
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Roles v2: edit dialogs and the New role dialog');
+    expect(view.container.querySelector('[data-section="boards/ticket"]')).toBeTruthy();
+    expect(boardTicket).toHaveBeenCalledWith('a', { key: 'T-114' });
+    const breadcrumb = view.getByRole('navigation', { name: 'Breadcrumb' });
+    fireEvent.click(within(breadcrumb).getByRole('button', { name: 'Current Phase' }));
+    await settle();
+
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe(phases.currentPhase.name);
+    expect(view.container.querySelector('[data-section="boards/current"]')).toBeTruthy();
   });
 
   it('never_renders_or_opens_the_group_when_boards_is_disabled_or_absent', async () => {
