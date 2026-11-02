@@ -9,6 +9,7 @@ import {
   type BoardLane,
   type BoardStatusInfo,
 } from './boardLanes';
+import { TicketCard } from './TicketCard';
 
 export interface BoardLanesProps {
   statuses: readonly BoardStatusInfo[];
@@ -37,35 +38,9 @@ function WorkerIcon(): JSX.Element {
   );
 }
 
-function TicketCard({ ticket, onOpenTicket }: { ticket: BoardTicketSummary; onOpenTicket?: (key: string) => void }): JSX.Element {
-  const content = (
-    <>
-      <span className="boards-ticket-key">{ticket.key}</span>
-      <span className="boards-ticket-title">{ticket.title}</span>
-    </>
-  );
-  if (onOpenTicket === undefined) {
-    return (
-      <article className="boards-ticket-card" data-ticket-key={ticket.key} aria-label={`${ticket.key}: ${ticket.title}`}>
-        {content}
-      </article>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="boards-ticket-card"
-      data-ticket-key={ticket.key}
-      aria-label={`Open ${ticket.key}: ${ticket.title}`}
-      onClick={() => { onOpenTicket(ticket.key); }}
-    >
-      {content}
-    </button>
-  );
-}
-
 function BoardColumnView(props: {
   column: BoardColumn;
+  rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
@@ -88,7 +63,7 @@ function BoardColumnView(props: {
       <ul className="boards-column-cards">
         {shown.map((ticket) => (
           <li key={ticket.id}>
-            <TicketCard ticket={ticket} onOpenTicket={props.onOpenTicket} />
+            <TicketCard ticket={ticket} rules={props.rules} onOpenTicket={props.onOpenTicket} />
           </li>
         ))}
       </ul>
@@ -109,6 +84,7 @@ function BoardColumnView(props: {
 
 function BoardLaneView(props: {
   lane: BoardLane;
+  rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
 }): JSX.Element {
   const { lane } = props;
@@ -134,7 +110,7 @@ function BoardLaneView(props: {
       {!collapsed && (
         <div className="boards-lane-columns">
           {lane.columns.map((column) => (
-            <BoardColumnView key={column.id} column={column} onOpenTicket={props.onOpenTicket} />
+            <BoardColumnView key={column.id} column={column} rules={props.rules} onOpenTicket={props.onOpenTicket} />
           ))}
           {hiddenText !== null && <span className="boards-lane-hidden">{hiddenText}</span>}
         </div>
@@ -150,7 +126,7 @@ export function BoardLanes(props: BoardLanesProps): JSX.Element {
     <div className="boards-board" role="region" aria-label="Board columns (scrollable)" tabIndex={0}>
       <div className="boards-board-lanes">
         {lanes.map((lane) => (
-          <BoardLaneView key={lane.id} lane={lane} onOpenTicket={props.onOpenTicket} />
+          <BoardLaneView key={lane.id} lane={lane} rules={props.rules} onOpenTicket={props.onOpenTicket} />
         ))}
       </div>
     </div>

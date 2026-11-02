@@ -43,3 +43,19 @@ describe('Current Phase lane styles', () => {
     expect(flat).toContain('.boards-ticket-title { display: -webkit-box; overflow: hidden; font-weight: 500; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }');
   });
 });
+
+describe('Ticket card styles', () => {
+  it('colours the working and blocked left edges and shows a focus ring', () => {
+    expect(flat).toContain('.boards-ticket-card[data-activity="working"] { border-left-color: #4ac26b; }');
+    expect(flat).toContain('.boards-ticket-card[data-activity="blocked"] { border-left-color: #f0b453; }');
+    expect(flat).toContain('button.boards-ticket-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }');
+  });
+
+  it('uses the design priority tag, two-line blocked reason and activity chips', () => {
+    expect(flat).toContain('.boards-ticket-priority { flex: none; padding: 1px 7px; border-radius: 4px; background: rgba(91, 156, 255, 0.12); color: #9ec3ff; font-size: 11px; }');
+    expect(flat).toContain('.boards-ticket-reason { display: -webkit-box; overflow: hidden; color: #f0b453; font-size: 12px; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }');
+    expect(flat).toContain('.boards-ticket-chip-working { color: #6fd38b; background: rgba(74, 194, 107, 0.12); }');
+    expect(flat).toContain('.boards-ticket-chip-blocked { color: #f0b453; background: rgba(240, 180, 83, 0.12); }');
+    expect(flat).toContain('.boards-ticket-chip-queued { color: #9ec3ff; background: rgba(91, 156, 255, 0.12); }');
+  });
+});

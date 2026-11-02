@@ -17,6 +17,7 @@ import {
   DEFAULT_SECTION,
   NAV_ITEMS,
   boardTicketKey,
+  boardTicketRoute,
   findNavItem,
   findNavItemById,
   isBoardRoute,
@@ -204,6 +205,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       workspace={props.workspace}
       management={props.management}
       onOpenPhases={() => navigate('boards/phases')}
+      onOpenTicket={(key) => navigate(boardTicketRoute(key))}
     />
   ) : ticketKey !== null ? (
     <SectionPlaceholder
