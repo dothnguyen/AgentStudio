@@ -24,7 +24,7 @@ function MultiSelect({ label, options, selected, onChange }: { label: string; op
     }
   };
   return <div className="boards-backlog-multi" onKeyDown={keyDown} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
-    <button ref={button} type="button" className="boards-filter-chip" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>{label}{selected.length > 0 && ` · ${selected.length}`}</button>
+    <button ref={button} type="button" className="boards-filter-chip" aria-haspopup="dialog" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>{label}{selected.length > 0 && ` · ${selected.length}`}</button>
     {open && <div ref={panel} id={id} className="boards-backlog-popover" role="dialog" aria-label={`${label} options`} tabIndex={-1}>
       {options.map(option => <label key={option.value}><input type="checkbox" checked={selected.includes(option.value)} onChange={() => onChange(selected.includes(option.value) ? selected.filter(value => value !== option.value) : [...selected, option.value])} />{option.label}</label>)}
     </div>}

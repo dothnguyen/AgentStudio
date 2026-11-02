@@ -230,10 +230,13 @@ describe('Backlog and Phases accessibility', () => {
 
     const trigger = view.getByRole('button', { name: 'Activity' });
     expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    const controlledId = trigger.getAttribute('aria-controls');
+    expect(controlledId).toBeTruthy();
     fireEvent.click(trigger);
     const dialog = view.getByRole('dialog', { name: 'Activity options' });
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    expect(trigger.getAttribute('aria-controls')).toBe(dialog.id);
+    expect(dialog.id).toBe(controlledId);
     const firstOption = dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
     await waitFor(() => expect(document.activeElement).toBe(firstOption));
 
@@ -241,6 +244,7 @@ describe('Backlog and Phases accessibility', () => {
     expect(view.queryByRole('dialog', { name: 'Activity options' })).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute('aria-controls')).toBe(controlledId);
   });
 
   it('labels the Current Phase progress graphic and keeps all phase cards in one column', async () => {
