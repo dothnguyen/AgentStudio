@@ -8,7 +8,7 @@ import type {
   Workspace,
 } from '../api';
 import { SectionCard } from '../teams/SectionCard';
-import type { BoardStatusInfo } from './boardLanes';
+import type { BoardStatusInfo } from './boardLaneModel';
 import {
   TICKET_CHIP_TONE_CLASS,
   ticketActivityChip,

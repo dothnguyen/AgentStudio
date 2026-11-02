@@ -11,7 +11,7 @@ import {
   statusTone,
   type BoardStatusInfo,
   type BoardStatusTone,
-} from './boardLanes';
+} from './boardLaneModel';
 
 export interface TicketStatusChip {
   /** The status shown on the page; a blocked ticket shows the status it returns to. */
