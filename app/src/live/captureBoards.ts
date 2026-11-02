@@ -20,6 +20,10 @@ interface Mode {
 }
 
 const MODES: Mode[] = [
+  { file: 'backlog.png', view: 'backlog', height: 1300 },
+  { file: 'backlog-filtered.png', view: 'backlog-filtered', height: 1300 },
+  { file: 'backlog-collapsed.png', view: 'backlog-collapsed', height: 1300 },
+  { file: 'phases.png', view: 'phases', height: 1300 },
   { file: 'board.png', view: 'board', height: 1521 },
   { file: 'board-all-columns.png', view: 'board-all', height: 1521 },
   { file: 'ticket-working.png', view: 'ticket-working', height: 1345 },

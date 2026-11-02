@@ -305,7 +305,7 @@ describe('TicketScreen details and column order', () => {
     await settle();
 
     const aside = view.getByRole('complementary', { name: 'Ticket details' });
-    const headings = Array.from(aside.querySelectorAll('h2')).map((heading) => heading.textContent);
+    const headings = Array.from(aside.querySelectorAll(':scope > section')).map((section) => section.querySelector('h2')?.textContent);
     expect(headings).toEqual(['Work', 'Dependencies', 'Details']);
   });
 });

@@ -29,6 +29,7 @@ const read = (absolutePath: string) => fs.readFileSync(absolutePath, 'utf8');
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState({}, '', '/');
   delete document.documentElement.dataset.captureReady;
   delete document.documentElement.dataset.captureError;
 });
@@ -78,6 +79,24 @@ describe('boards v1 capture fixture', () => {
 });
 
 describe('boards v1 capture app', () => {
+  it.each(['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases'])('prepares the %s implementation capture', async (mode) => {
+    window.history.replaceState({}, '', `/?view=${mode}`);
+    const view = render(<BoardsCaptureApp />);
+    await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 5000 });
+    if (mode === 'phases') {
+      expect(view.getByText('Phase 07 - Upcoming')).toBeTruthy();
+      expect(view.getByText('No tickets yet')).toBeTruthy();
+      expect(view.getByRole('img', { name: /1 blocked/ })).toBeTruthy();
+    } else if (mode === 'backlog-collapsed') {
+      expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
+    } else if (mode === 'backlog-filtered') {
+      expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(1);
+      expect(view.container.querySelector('.boards-backlog-row')?.textContent).toContain('T-136');
+    } else {
+      expect(view.container.querySelectorAll('.boards-backlog-row').length).toBeGreaterThan(1);
+    }
+  });
+
   it('opens Current Phase in the real shell and marks the board ready', async () => {
     render(<BoardsCaptureApp />);
     await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 5000 });
@@ -91,6 +110,7 @@ describe('boards v1 capture app', () => {
   it('parses each capture view and maps it to its ticket key', () => {
     expect(boardsCaptureMode('')).toBe('board');
     expect(boardsCaptureMode('?view=board-all')).toBe('board-all');
+    for (const mode of ['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases']) expect(boardsCaptureMode(`?view=${mode}`)).toBe(mode);
     expect(boardsCaptureMode('?view=ticket-working')).toBe('ticket-working');
     expect(boardsCaptureMode('?view=unknown')).toBe('board');
     expect(BOARDS_CAPTURE_TICKETS).toEqual({
@@ -167,6 +187,13 @@ describe('boards v1 capture evidence', () => {
     expect(sha256(file)).toBe(manifest.files[`${name}.png`]!.sha256);
   });
 
+  it.each(['backlog', 'backlog-filtered', 'backlog-collapsed', 'phases'])('captures/%s.png is a real implementation screenshot matching its checksum', (name) => {
+    const file = path.join(captureDir, `${name}.png`);
+    expect(fs.existsSync(file), `${file} is missing`).toBe(true);
+    expect(fs.statSync(file).size).toBeGreaterThan(10_000);
+    expect(pngSize(file)).toEqual({ width: 1440, height: 1300 });
+    expect(sha256(file)).toBe(manifest.files[`${name}.png`]!.sha256);
+  });
   it('wires the capture command and documents the generated files', () => {
     const pkg = JSON.parse(read(path.join(appDir, 'package.json'))) as { scripts: Record<string, string> };
     expect(pkg.scripts['capture:boards']).toContain('electron dist/live/captureBoards.js');

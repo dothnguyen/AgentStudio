@@ -53,7 +53,7 @@ function BoardColumnView(props: {
     <section className="boards-column" aria-label={`${column.label} column`} data-status={column.id}>
       <div className="boards-column-header">
         <span className={`boards-status-dot boards-status-dot-${column.tone}`} aria-hidden="true" />
-        <h3 className="boards-column-name" title={column.label}>{column.label}</h3>
+        <h2 className="boards-column-name" title={column.label}>{column.label}</h2>
         <span className="boards-column-count">{column.tickets.length}</span>
       </div>
       {column.worker !== null && (

@@ -320,7 +320,7 @@ function DependenciesCard(props: {
       className="boards-dependencies-card"
     >
       <div className="boards-dependency-group">
-        <h3 className="boards-dependency-heading">Waits for</h3>
+        <h2 className="boards-dependency-heading">Waits for</h2>
         {waitsFor.length === 0
           ? <p className="boards-dependency-empty">None</p>
           : (
@@ -332,7 +332,7 @@ function DependenciesCard(props: {
           )}
       </div>
       <div className="boards-dependency-group">
-        <h3 className="boards-dependency-heading">Blocks</h3>
+        <h2 className="boards-dependency-heading">Blocks</h2>
         {blocks.length === 0
           ? <p className="boards-dependency-empty">None</p>
           : (

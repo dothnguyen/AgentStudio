@@ -6,9 +6,9 @@ import { WorkspaceShell } from '../src/renderer/shell/WorkspaceShell';
 import { TEAMS_V4_CONNECTION } from './teamsOverviewV4Fixture';
 import { BOARDS_V1_WORKSPACE, createBoardsV1Apis } from './boardsV1Fixture';
 
-export type BoardsCaptureMode = 'board' | 'board-all' | 'ticket-working' | 'ticket-waiting' | 'ticket-blocked' | 'ticket-done';
+export type BoardsCaptureMode = 'board' | 'board-all' | 'ticket-working' | 'ticket-waiting' | 'ticket-blocked' | 'ticket-done' | 'backlog' | 'backlog-filtered' | 'backlog-collapsed' | 'phases';
 
-export const BOARDS_CAPTURE_TICKETS: Record<Exclude<BoardsCaptureMode, 'board' | 'board-all'>, string> = {
+export const BOARDS_CAPTURE_TICKETS: Record<'ticket-working' | 'ticket-waiting' | 'ticket-blocked' | 'ticket-done', string> = {
   'ticket-working': 'T-114',
   'ticket-waiting': 'T-118',
   'ticket-blocked': 'T-136',
@@ -19,6 +19,10 @@ export const BOARDS_CAPTURE_TICKETS: Record<Exclude<BoardsCaptureMode, 'board' |
 export function boardsCaptureMode(search: string): BoardsCaptureMode {
   const value = new URLSearchParams(search).get('view');
   switch (value) {
+    case 'backlog':
+    case 'backlog-filtered':
+    case 'backlog-collapsed':
+    case 'phases':
     case 'board-all':
     case 'ticket-working':
     case 'ticket-waiting':
@@ -50,7 +54,7 @@ export function isTicketReady(root: ParentNode): boolean {
 }
 
 export function BoardsCaptureApp(): JSX.Element {
-  const apis = useMemo(() => createBoardsV1Apis(), []);
+  const apis = useMemo(() => createBoardsV1Apis(boardsCaptureMode(window.location.search) === 'phases'), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,13 +81,32 @@ export function BoardsCaptureApp(): JSX.Element {
       await waitFor(() => openBoardsSection(document), 'the Boards navigation item');
       await waitFor(() => isBoardReady(document), 'the Current Phase board');
 
-      if (mode === 'board-all') {
+      if (mode.startsWith('backlog') || mode === 'phases') {
+        const target = mode === 'phases' ? 'Phases' : 'Backlog';
+        await waitFor(() => {
+          const nav = Array.from(document.querySelectorAll<HTMLButtonElement>('.boards-nav-item')).find(button => button.textContent?.trim().startsWith(target));
+          if (!nav) return false;
+          nav.click();
+          return true;
+        }, `${target} navigation`);
+        await waitFor(() => document.querySelector(`[data-section="boards/${target.toLowerCase()}"] ${mode === 'phases' ? '.boards-milestone-card' : '.boards-backlog-group'}`) !== null, target);
+        if (mode === 'backlog-filtered') {
+          const input = document.querySelector<HTMLInputElement>('[data-section="boards/backlog"] input[placeholder="Search tickets"]')!;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'T-136');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          await waitFor(() => document.querySelector('.boards-backlog-active') !== null, 'filtered backlog');
+        } else if (mode === 'backlog-collapsed') {
+          document.querySelectorAll<HTMLButtonElement>('.boards-backlog-group-header[aria-expanded="true"]').forEach(button => button.click());
+          await waitFor(() => document.querySelector('.boards-backlog-row') === null, 'collapsed backlog');
+        }
+      } else if (mode === 'board-all') {
         const chip = document.querySelector<HTMLButtonElement>('.boards-filter-chip[aria-pressed="true"]');
         if (chip !== null && (chip.textContent ?? '').trim() === 'Hide empty columns') chip.click();
         await waitFor(() => document.querySelector<HTMLButtonElement>('.boards-lane-toggle[aria-label="Expand Finished lane"]') !== null, 'the Finished lane toggle');
         clickButton('Expand Finished lane');
-      } else if (mode !== 'board') {
-        const key = BOARDS_CAPTURE_TICKETS[mode];
+      } else if (mode.startsWith('ticket-')) {
+        const ticketMode = mode as keyof typeof BOARDS_CAPTURE_TICKETS;
+        const key = BOARDS_CAPTURE_TICKETS[ticketMode];
         if (document.querySelector(`[data-ticket-key="${key}"]`) === null) {
           clickButton('Expand Finished lane');
           await new Promise<void>((resolve) => { window.setTimeout(() => resolve(), 50); });

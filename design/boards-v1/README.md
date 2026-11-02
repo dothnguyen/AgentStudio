@@ -1,6 +1,6 @@
 # Boards v1 (Phase A): Current Phase board and read-only ticket page
 
-Design export for the Boards section. Phase A covers the sidebar group, the Current Phase kanban and a read-only ticket page. Backlog and Phases come in Phase B, actions (move, unblock, retry) in Phase C.
+Design export for the Boards section. Phase A covers the sidebar group, the Current Phase kanban and a read-only ticket page. Phase B adds Backlog and Phases; actions (move, unblock, retry) are planned for Phase C.
 
 ## Files
 
@@ -32,6 +32,10 @@ The capture page uses `app/capture/boardsV1Fixture.ts` for the same sample keys,
 columns and ticket text as the design. The generated `manifest.json` records each image's
 size and SHA-256 so `boardsCapture.test.tsx` fails when a capture is stale.
 
+## Phase B
+
+There is no Phase B mockup. The implementation captures are `captures/backlog.png`, `captures/backlog-filtered.png`, `captures/backlog-collapsed.png`, and `captures/phases.png` (including blocked and empty phases). They were rendered from the capture page in headless Edge on Windows because Electron had no usable display surface in the ticket worktree. The manifest records their checksums. A 300-ticket browser fixture rendered 50 initial Backlog rows with a Show more control; a Long Tasks observer recorded zero tasks over 50 ms from the Backlog navigation click through capture readiness.
+
 ## Intended differences from the design PNGs
 
 - The captures show the app's own sidebar and real workspace values; the design canvas uses
@@ -52,7 +56,7 @@ size and SHA-256 so `boardsCapture.test.tsx` fails when a capture is stale.
 
 ## Structure
 
-- Sidebar: Boards group (expandable) with children Current Phase (count badge), Backlog, Phases. Backlog and Phases are placeholders until Phase B.
+- Sidebar: Boards group (expandable) with children Current Phase (count badge), Backlog, Phases. Backlog and Phases open their respective screens.
 - Current Phase header: phase name, "Current" pill, description, progress from done/total counts, one-line notice about automatic work.
 - "Needs attention" card: blocked tickets, command requests awaiting approval, paused runs.
 - Toolbar: search, Blocked only, Working now, Hide empty columns, ticket count.

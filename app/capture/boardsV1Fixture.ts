@@ -341,7 +341,7 @@ export function boardsV1Overview(): TeamOverview {
   };
 }
 
-export function createBoardsV1Apis(): { dashboard: ReturnType<typeof createTeamsOverviewV4Apis>['dashboard']; management: ManagementApi } {
+export function createBoardsV1Apis(includeEmptyPhase = false): { dashboard: ReturnType<typeof createTeamsOverviewV4Apis>['dashboard']; management: ManagementApi } {
   const writeNames = [
     'createAgent', 'updateAgent', 'deleteAgent', 'createTeam', 'renameTeam', 'deleteTeam',
     'addMember', 'updateMember', 'removeMember', 'updateBoardSettings', 'createRole', 'updateRole',
@@ -352,7 +352,7 @@ export function createBoardsV1Apis(): { dashboard: ReturnType<typeof createTeams
   const writes = Object.fromEntries(writeNames.map((name) => [name, async () => READ_ONLY]));
   const management = {
     ...writes,
-    boardPhases: async (): Promise<ManagementResult<BoardPhases>> => ({ ok: true, data: boardsV1Phases() }),
+    boardPhases: async (): Promise<ManagementResult<BoardPhases>> => ({ ok: true, data: includeEmptyPhase ? { ...boardsV1Phases(), phases: [...boardsV1Phases().phases, { ...boardsV1Phases().phases[0]!, id: 'phase-07-id', slug: 'phase-07', name: 'Phase 07 - Upcoming', current: false, ticketCount: 0, counts: {} }] } : boardsV1Phases() }),
     boardSettings: async (): Promise<ManagementResult<BoardSettings>> => ({ ok: true, data: boardsV1Settings() }),
     boardTickets: async (): Promise<ManagementResult<BoardTicketList>> => ({ ok: true, data: boardsV1TicketList() }),
     boardTicket: async (_id: string, input: { key: string }): Promise<ManagementResult<BoardTicketDetail>> => ({ ok: true, data: boardsV1TicketDetail(input.key) }),
