@@ -263,7 +263,11 @@ agent-studio provider verify --provider codex --model gpt-5.1-codex --reasoning 
 agent-studio preflight --workspace ~/work/project --provider codex --role Developer --deep
 ```
 
-Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Reviewer,model=sonnet,reasoning=high`): `--effort` levels `low medium high xhigh max`; Claude agents can read and edit files but never run commands (see `providers/claude/CONTRACT.md`). Without `--agent`, the roster comes from a saved team definition in `.agent-studio/teams/` (`agent-studio team start --team ID`). The rest of the workspace configuration:
+Codex reasoning levels: `minimal low medium high xhigh`. Claude Code (`claude:Reviewer,model=sonnet,reasoning=high`): `--effort` levels `low medium high xhigh max`; Claude agents can read and edit files but never run commands (see `providers/claude/CONTRACT.md`). Without `--agent`, the roster comes from a saved team definition in `.agent-studio/teams/` (`agent-studio team start --team ID`).
+
+For machine callers, `team.start` with `workspace` and `teamDefId` builds the roster from the saved team and uses its name by default. A non-empty explicit roster takes precedence; an invalid saved team returns its validation problems.
+
+The rest of the workspace configuration:
 
 ```
 .agent-studio/roles.json         {"version": 1, "roles": {"Developer": {"description": "Implements features",

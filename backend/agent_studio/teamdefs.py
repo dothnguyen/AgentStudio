@@ -412,6 +412,24 @@ def check_team(workspace: str, team_id) -> dict:
             "roster": _roster(workspace, team) if ready else []}
 
 
+def start_roster(workspace: str, team_id) -> tuple:
+    result = check_team(workspace, team_id)
+    if not result["ready"]:
+        raise _invalid(team_id, result["problems"])
+    team = load(workspace, team_id)
+    roster = []
+    for member in result["roster"]:
+        item = {"memberId": member["id"], "displayName": member["name"],
+                "providerId": member["provider"], "role": member["role"]}
+        for key in ("model", "reasoning"):
+            if member.get(key):
+                item[key] = member[key]
+        if member.get("canAddTickets") is not None:
+            item["canAddTickets"] = bool(member["canAddTickets"])
+        roster.append(item)
+    return team["name"], roster
+
+
 def create_team(workspace: str, name, team_id=None) -> dict:
     return {"team": add_team(workspace, name, team_id)["team"], "problems": []}
 

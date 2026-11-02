@@ -286,20 +286,8 @@ def _pick_def(ws, ref, verb) -> str:
 
 def _definition_start_args(ws, ns) -> dict:
     fid = _pick_def(ws, ns.team, "start")
-    res = teamdefs.check_team(ws, fid)
-    if not res["ready"]:
-        raise teamdefs._invalid(fid, res["problems"])
-    team = teamdefs.load(ws, fid)
-    roster = []
-    for m in res["roster"]:
-        item = {"memberId": m["id"], "displayName": m["name"], "providerId": m["provider"], "role": m["role"]}
-        for k in ("model", "reasoning"):
-            if m.get(k):
-                item[k] = m[k]
-        if m.get("canAddTickets") is not None:
-            item["canAddTickets"] = bool(m["canAddTickets"])
-        roster.append(item)
-    return {"workspace": ws, "name": ns.name or team["name"], "teamDefId": fid, "roster": roster}
+    name, roster = teamdefs.start_roster(ws, fid)
+    return {"workspace": ws, "name": ns.name or name, "teamDefId": fid, "roster": roster}
 
 
 def _render_team_status(d: dict) -> str:

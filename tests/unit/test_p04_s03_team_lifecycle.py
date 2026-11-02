@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 from tests import helpers  # noqa: F401  (puts backend on sys.path)
-from agent_studio import cli, dispatch, state, teamdefs, teams, teamstatus, workspace
+from agent_studio import PROTOCOL, cli, dispatch, state, teamdefs, teams, teamstatus, workspace
 from agent_studio.protocol import AsError
 from agent_studio.store import Store
 
@@ -195,6 +195,73 @@ class DispatchValidation(unittest.TestCase):
         with self.assertRaises(AsError):
             dispatch._validate_team_stop({"teamId": "x"})
         self.assertEqual(dispatch._validate_team_stop({"workspace": ws, "teamDefId": "alpha"})["teamDefId"], "alpha")
+
+
+class DispatchTeamStart(Base):
+    def setUp(self):
+        super().setUp()
+        self.conn, self.store = seeded()
+        self.addCleanup(self.conn.close)
+        self.tmux = mock.Mock(socket="test")
+        self.tmux.create_team_session.side_effect = lambda _name, _ws, commands, _labels, _id, _marker: {
+            "session_id": "$1", "window_id": "@1", "session_name": "test",
+            "panes": [{"pane_id": f"%{i}", "pane_pid": 123} for i in range(len(commands))]}
+
+    def start(self, **args):
+        def submit(_command, clean, _key, _timeout):
+            try:
+                with self.store.transaction() as tx:
+                    data = teams.team_start(tx, clean, {"debug": True, "stateDir": self.root, "tmux": self.tmux})
+                return {"ok": True, "data": data}
+            except AsError as exc:
+                return {"ok": False, "error": exc.to_error(), "data": exc.data}
+        with mock.patch.object(dispatch.client, "submit", side_effect=submit), \
+             mock.patch.object(teams, "worker_path", return_value="/bin/true"), \
+             mock.patch.object(teams.procid, "identity", return_value={"pid": 123, "startTime": 1, "bootId": "boot"}), \
+             mock.patch.object(teams, "attach_info", return_value={}):
+            return dispatch.handle_request({"protocol": PROTOCOL, "id": "start", "idempotencyKey": "start-key", "command": "team.start",
+                                            "args": {"workspace": self.ws, **args}}, require_id=True)
+
+    def test_saved_team_starts_with_omitted_or_empty_roster(self):
+        self.put_team("alpha", [member("ryan", "Ryan", canAddTickets=True), member("sam", "Sam", "reviewer")])
+        self.assertFalse(os.path.exists(os.path.join(self.cfg, "team.json")))
+        for roster in (None, []):
+            with self.subTest(roster=roster):
+                args = {"teamDefId": "alpha"}
+                if roster is not None:
+                    args["roster"] = roster
+                result = self.start(**args)
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(result["data"]["name"], "Alpha")
+                agents = result["data"]["agents"]
+                self.assertEqual([(a["memberId"], a["role"], a["providerId"]) for a in agents],
+                                 [("ryan", "developer", "fake"), ("sam", "reviewer", "fake")])
+                self.assertTrue(agents[0]["canAddTickets"])
+                with self.store.transaction() as tx:
+                    tx.transition("team", result["data"]["teamId"], "stopping")
+                    tx.transition("team", result["data"]["teamId"], "stopped")
+
+    def test_invalid_saved_team_returns_problems_without_creating_team(self):
+        self.put_team("alpha", [{"id": "a", "name": "A", "role": "developer", "agent": "ghost"}])
+        result = self.start(teamDefId="alpha")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"]["code"], "TEAM_CONFIG_INVALID")
+        self.assertEqual(result["data"]["problems"][0]["path"], "members[0].agent")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM teams").fetchone()[0], 0)
+
+    def test_explicit_roster_and_name_win(self):
+        self.put_team("alpha", [member("a", "Saved")])
+        result = self.start(teamDefId="alpha", name="Custom", roster=[
+            {"providerId": "fake", "role": "reviewer", "displayName": "Explicit"}])
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["data"]["name"], "Custom")
+        self.assertEqual([(a["displayName"], a["role"]) for a in result["data"]["agents"]],
+                         [("Explicit", "reviewer")])
+
+    def test_missing_definition_and_roster_is_bad_request(self):
+        result = self.start()
+        self.assertEqual(result["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM teams").fetchone()[0], 0)
 
 
 def seeded():

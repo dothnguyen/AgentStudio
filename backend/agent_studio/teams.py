@@ -402,6 +402,9 @@ def team_start(tx: Tx, args: dict, ctx: dict) -> dict:
     frozen_options = {}
     if args.get("teamDefId"):
         from . import teamdefs
+        if not args.get("roster"):
+            name, roster = teamdefs.start_roster(workspace, args["teamDefId"])
+            args = dict(args, roster=roster, name=args.get("name") or name)
         definition = teamdefs.load(workspace, args["teamDefId"])
         catalog = teamdefs._members_catalog(workspace, definition)
         args = dict(args, roster=[dict(m) for m in args.get("roster") or []])
