@@ -41,16 +41,16 @@ describe('PhasesScreen', () => {
     expect(onOpenBoard).toHaveBeenCalledOnce();
   });
   it('shows counted segments, accessible progress and a legend without zero counts', async () => {
-    const phase = boardPhase({ name: 'Milestone', ticketCount: 20, counts: { done: 12, 'review-ready': 2, 'dev-ready': 3, backlog: 1, blocked: 1, custom: 1 } });
+    const phase = boardPhase({ name: 'Milestone', ticketCount: 20, counts: { done: 10, closed: 2, 'in-progress': 3, todo: 1, backlog: 3, custom: 1 } });
     const fake = fakeManagement({ boardPhases: [ok(boardPhasesFixture({ phases: [phase] }))] });
     const view = render(<PhasesScreen workspace={workspaceA} management={fake.api} />);
     await settle();
     expect(view.getByText('12 of 20 done · 60%')).toBeTruthy();
-    const bar = view.getByRole('img', { name: '12 of 20 done, 2 in review, 3 in progress, 1 intake, 1 blocked, 1 other' });
+    const bar = view.getByRole('img', { name: '12 of 20 done, 2 closed, 3 in progress, 1 to do, 3 backlog, 1 other' });
     const segments = Array.from(bar.children) as HTMLElement[];
-    expect(segments.map(segment => segment.title)).toEqual(['Done: 12', 'Review: 2', 'In progress: 3', 'Intake: 1', 'Blocked: 1', 'Other: 1']);
+    expect(segments.map(segment => segment.title)).toEqual(['Done: 10', 'Closed: 2', 'In progress: 3', 'To do: 1', 'Backlog: 3', 'Other: 1']);
     expect(segments.reduce((sum, segment) => sum + parseFloat(segment.style.width), 0)).toBe(100);
-    for (const label of ['Done 12', 'Review 2', 'In progress 3', 'Intake 1', 'Blocked 1', 'Other 1']) expect(view.getByText(label)).toBeTruthy();
+    for (const label of ['Done 10', 'Closed 2', 'In progress 3', 'To do 1', 'Backlog 3', 'Other 1']) expect(view.getByText(label)).toBeTruthy();
   });
   it('shows an empty track and no zero-count legend entries', async () => {
     const phase = boardPhase({ name: 'Empty', description: '  ', counts: {}, ticketCount: 0 });

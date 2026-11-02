@@ -5,10 +5,10 @@ import { percentDone, phaseSegments, phaseState, type PhaseSegments } from './ph
 
 const CATEGORIES: { key: keyof PhaseSegments; label: string; accessible: string }[] = [
   { key: 'done', label: 'Done', accessible: 'done' },
-  { key: 'inReview', label: 'Review', accessible: 'in review' },
+  { key: 'closed', label: 'Closed', accessible: 'closed' },
   { key: 'inProgress', label: 'In progress', accessible: 'in progress' },
-  { key: 'intake', label: 'Intake', accessible: 'intake' },
-  { key: 'blocked', label: 'Blocked', accessible: 'blocked' },
+  { key: 'todo', label: 'To do', accessible: 'to do' },
+  { key: 'backlog', label: 'Backlog', accessible: 'backlog' },
   { key: 'other', label: 'Other', accessible: 'other' },
 ];
 
@@ -20,14 +20,14 @@ export function PhaseCard({ phase, statuses, onViewTickets, onOpenBoard }: {
   const segments = phaseSegments(phase, statuses);
   const state = phaseState(phase);
   const visible = CATEGORIES.filter(category => segments[category.key] > 0);
-  const label = [`${segments.done} of ${phase.ticketCount} done`, ...visible.filter(category => category.key !== 'done').map(category => `${segments[category.key]} ${category.accessible}`)].join(', ');
+  const label = [`${segments.done + segments.closed} of ${phase.ticketCount} done`, ...visible.filter(category => category.key !== 'done').map(category => `${segments[category.key]} ${category.accessible}`)].join(', ');
   return <section className="boards-milestone-card" aria-labelledby={headingId}>
     <div className="boards-milestone-heading">
       <div className="boards-milestone-title"><h2 id={headingId}><button type="button" className="boards-phase-name-link" onClick={() => onViewTickets(phase.slug)}>{phase.name}</button></h2>
         {state === 'current' && <span className="boards-phase-pill">Current</span>}
         {state === 'closed' && <span className="boards-phase-pill boards-backlog-closed">Closed</span>}
       </div>
-      <span className="boards-milestone-count">{segments.done} of {phase.ticketCount} done · {percentDone(phase)}%</span>
+      <span className="boards-milestone-count">{segments.done + segments.closed} of {phase.ticketCount} done · {percentDone(phase)}%</span>
     </div>
     <p className="boards-milestone-description">{phase.description?.trim() || 'No description'}</p>
     <div className="boards-milestone-track" role="img" aria-label={label}>

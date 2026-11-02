@@ -43,7 +43,7 @@ describe('buildBacklogGroups', () => {
   it('counts terminal statuses first and classifies all open activities', () => {
     const entries = [
       ticket({ status: 'done', activity: { state: 'working' } }),
-      ticket({ status: 'close' }),
+      ticket({ status: 'closed' }),
       ticket({ activity: { state: 'working' } }),
       ticket({ activity: { state: 'blocked' } }),
       ticket({ activity: { state: 'not started', waitingFor: 'Developer' } }),

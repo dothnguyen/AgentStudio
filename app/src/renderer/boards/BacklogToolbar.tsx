@@ -37,12 +37,13 @@ const activityOptions: Option[] = [
 ];
 
 export function BacklogToolbar({ filters, onChange, settings, phases, tickets, resultCount }: { filters: BacklogFilters; onChange: (filters: BacklogFilters) => void; settings: BoardSettings; phases: BoardPhases; tickets: BoardTicketSummary[]; resultCount: number }): JSX.Element {
-  const statuses = settings.statuses.map(status => ({ value: status.id, label: status.name || status.id }));
+  const columns = ([['backlog', 'Backlog'], ['todo', 'To do'], ['in-progress', 'In progress'], ['done', 'Done'], ['closed', 'Closed']] as const).map(([id, label]) => ({ value: id, label: settings.statuses.find(status => status.id === id)?.name || label }));
+  const workflowStatuses = settings.workflowStatuses.map(status => ({ value: status.id, label: status.name || status.id }));
   const phaseOptions = phases.phases.map(phase => ({ value: phase.slug, label: phase.name }));
   const update = (patch: Partial<BacklogFilters>) => onChange({ ...filters, ...patch });
   const chips: Array<{ key: string; label: string; remove: () => void }> = [];
   if (filters.query) chips.push({ key: 'query', label: `Search: ${filters.query}`, remove: () => update({ query: '' }) });
-  for (const [field, title, options] of [['statuses', 'Status', statuses], ['phases', 'Phase', phaseOptions], ['activity', 'Activity', activityOptions]] as const) {
+  for (const [field, title, options] of [['columns', 'Column', columns], ['workflowStatuses', 'Workflow status', workflowStatuses], ['phases', 'Phase', phaseOptions], ['activity', 'Activity', activityOptions]] as const) {
     for (const value of filters[field]) chips.push({ key: `${field}-${value}`, label: `${title}: ${options.find(option => option.value === value)?.label ?? value}`, remove: () => update({ [field]: filters[field].filter(item => item !== value) }) });
   }
   if (filters.owner !== null) chips.push({ key: 'owner', label: `Owner: ${filters.owner}`, remove: () => update({ owner: null }) });
@@ -51,13 +52,14 @@ export function BacklogToolbar({ filters, onChange, settings, phases, tickets, r
   return <section className="boards-backlog-toolbar" aria-label="Backlog filters">
     <div className="boards-toolbar boards-backlog-toolbar-row">
       <label className="boards-search"><span className="visually-hidden">Search tickets</span><input placeholder="Search tickets" value={filters.query} onChange={event => update({ query: event.target.value })} /></label>
-      <MultiSelect label="Status" options={statuses} selected={filters.statuses} onChange={statuses => update({ statuses })} />
+      <MultiSelect label="Column" options={columns} selected={filters.columns} onChange={columns => update({ columns })} />
+      <MultiSelect label="Workflow status" options={workflowStatuses} selected={filters.workflowStatuses} onChange={workflowStatuses => update({ workflowStatuses })} />
       <MultiSelect label="Phase" options={phaseOptions} selected={filters.phases} onChange={phases => update({ phases })} />
       <MultiSelect label="Activity" options={activityOptions} selected={filters.activity} onChange={activity => update({ activity: activity as BacklogFilters['activity'] })} />
       <label className="boards-backlog-select">Owner <select value={filters.owner ?? ''} onChange={event => update({ owner: event.target.value || null })}><option value="">Anyone</option>{ownersOf(tickets).map(owner => <option key={owner} value={owner}>{owner}</option>)}</select></label>
       <label className="boards-backlog-select">Priority <select value={filters.priority} onChange={event => update({ priority: event.target.value as BacklogFilters['priority'] })}><option value="any">Any</option><option value="urgent">Urgent</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
       <label className="boards-backlog-select">Dependencies <select value={filters.hasOpenDeps} onChange={event => update({ hasOpenDeps: event.target.value as BacklogFilters['hasOpenDeps'] })}><option value="any">Any</option><option value="yes">Has open dependencies</option><option value="no">No open dependencies</option></select></label>
-      <label className="boards-backlog-select boards-backlog-sort">Sort <select value={filters.sort} onChange={event => update({ sort: event.target.value as BacklogFilters['sort'] })}><option value="priority">Priority</option><option value="key">Newest</option><option value="updated">Recently updated</option><option value="status">Status</option></select></label>
+      <label className="boards-backlog-select boards-backlog-sort">Sort <select value={filters.sort} onChange={event => update({ sort: event.target.value as BacklogFilters['sort'] })}><option value="priority">Priority</option><option value="key">Newest</option><option value="updated">Recently updated</option><option value="status">Column</option></select></label>
     </div>
     {activeFilterCount(filters) > 0 && <div className="boards-backlog-active">{chips.map(chip => <button key={chip.key} type="button" className="boards-filter-chip" aria-label={`Remove ${chip.label}`} onClick={chip.remove}>{chip.label} <span aria-hidden="true">×</span></button>)}<button type="button" onClick={() => onChange({ ...DEFAULT_BACKLOG_FILTERS, sort: filters.sort })}>Clear all</button><span className="boards-toolbar-count">{resultCount} of {tickets.length} tickets</span></div>}
   </section>;

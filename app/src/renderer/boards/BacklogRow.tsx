@@ -7,6 +7,7 @@ import { agentInitials, ticketActivityChip, TICKET_CHIP_TONE_CLASS } from './tic
 interface Props {
   ticket: BoardTicketSummary;
   status: BoardStatusInfo;
+  workflowStatus: BoardStatusInfo;
   rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
   onMoveToTodo?: (key: string) => void;
@@ -22,7 +23,7 @@ function relativeTime(value: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-function Row({ ticket, status, rules, onOpenTicket, onMoveToTodo }: Props): JSX.Element {
+function Row({ ticket, status, workflowStatus, rules, onOpenTicket, onMoveToTodo }: Props): JSX.Element {
   const chip = ticketActivityChip(ticket, rules);
   const agent = ticket.activity.agent?.trim() ?? '';
   const date = new Date(ticket.updatedAt);
@@ -30,7 +31,7 @@ function Row({ ticket, status, rules, onOpenTicket, onMoveToTodo }: Props): JSX.
   return <div className="boards-backlog-row-wrap"><button type="button" className="boards-backlog-row" aria-label={`Open ${ticket.key}: ${ticket.title}`} onClick={open}>
     <span className="boards-ticket-key boards-backlog-key">{ticket.key}</span>
     <span className="boards-backlog-title" title={ticket.title}>{ticket.title}</span>
-    <span className="boards-backlog-status"><span className={`boards-status-dot boards-status-dot-${statusTone(status)}`} aria-hidden="true" />{statusLabel(status)}</span>
+    <span className="boards-backlog-status"><span className={`boards-status-dot boards-status-dot-${statusTone(status)}`} aria-hidden="true" />{statusLabel(status)} · {statusLabel(workflowStatus)}</span>
     <span className={`boards-ticket-chip ${TICKET_CHIP_TONE_CLASS[chip.tone]}`}><span className="boards-ticket-chip-dot" aria-hidden="true" />{chip.label}</span>
     {ticket.priority !== 100 && <span className="boards-ticket-priority">Priority {ticket.priority}</span>}
     {agent && <span className="boards-ticket-owner"><span className="boards-ticket-avatar" aria-hidden="true">{agentInitials(agent)}</span><span className="boards-ticket-owner-name">{agent}</span></span>}
@@ -41,4 +42,4 @@ function Row({ ticket, status, rules, onOpenTicket, onMoveToTodo }: Props): JSX.
 // Polling creates new objects; compare their contents so unchanged rows can be reused.
 export const BacklogRow = memo(Row, (a, b) => a.onOpenTicket === b.onOpenTicket && a.onMoveToTodo === b.onMoveToTodo
   && a.ticket.key === b.ticket.key && a.ticket.updatedAt === b.ticket.updatedAt
-  && JSON.stringify([a.ticket, a.status, a.rules]) === JSON.stringify([b.ticket, b.status, b.rules]));
+  && JSON.stringify([a.ticket, a.status, a.workflowStatus, a.rules]) === JSON.stringify([b.ticket, b.status, b.workflowStatus, b.rules]));

@@ -239,7 +239,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
   const overview = board.data?.overview ?? null;
-  const attentionRows = overview === null ? [] : buildAttentionRows(overview, tickets);
+  const attentionRows = overview === null ? [] : buildAttentionRows(overview, tickets, board.data?.settings.rules ?? []);
   const filteredTickets = filterBoardTickets(tickets, filters);
   const progress = phaseProgress(tickets);
   const settingsStatuses = board.data?.settings.statuses ?? [];

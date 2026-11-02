@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { AttentionCommandRequest, AttentionRun, BlockedTicket } from '../src/renderer/api';
+import type { AttentionCommandRequest, AttentionRun, BlockedTicket, BoardRuleView } from '../src/renderer/api';
 import { buildAttentionRows } from '../src/renderer/boards/attentionModel';
 import { boardTicketSummary } from './boardFixtures';
 import { member, overviewFixture, team } from './teamsFixtures';
@@ -94,6 +94,38 @@ describe('buildAttentionRows', () => {
     expect(rows[1]?.reason).toBe('QA stopped the run.');
   });
 
+  it('includes unclaimed during tickets and excludes claimed, ready and blocked tickets', () => {
+    const rules = [{ during: 'developing' }] as BoardRuleView[];
+    const rows = buildAttentionRows(overview({}), [
+      boardTicketSummary({ key: 'T-1', status: 'in-progress', workflowStatus: 'developing' }),
+      boardTicketSummary({ key: 'T-2', status: 'in-progress', workflowStatus: 'developing', assignee: 'dev' }),
+      boardTicketSummary({ key: 'T-3', status: 'todo', workflowStatus: 'dev-ready' }),
+      boardTicketSummary({ key: 'T-4', status: 'in-progress', workflowStatus: 'blocked' }),
+    ], rules);
+    expect(rows.map(row => [row.key, row.source])).toEqual([['T-4', 'blocked'], ['T-1', 'stuck']]);
+  });
+
+  it('treats a during workflow status as stuck regardless of its board column', () => {
+    const rules = [{ during: 'developing' }] as BoardRuleView[];
+    const rows = buildAttentionRows(overview({}), [
+      boardTicketSummary({ key: 'T-5', status: 'backlog', workflowStatus: 'developing' }),
+      boardTicketSummary({ key: 'T-6', status: 'done', workflowStatus: 'developing', assignee: 'dev' }),
+      boardTicketSummary({ key: 'T-7', status: 'backlog', workflowStatus: 'dev-ready' }),
+    ], rules);
+
+    expect(rows.map(row => [row.key, row.source])).toEqual([['T-5', 'stuck']]);
+  });
+
+  it('treats empty and whitespace-only assignees as unclaimed', () => {
+    const rules = [{ during: 'developing' }] as BoardRuleView[];
+    const rows = buildAttentionRows(overview({}), [
+      boardTicketSummary({ key: 'T-8', workflowStatus: 'developing', assignee: '' }),
+      boardTicketSummary({ key: 'T-9', workflowStatus: 'developing', assignee: '  \t' }),
+      boardTicketSummary({ key: 'T-10', workflowStatus: 'developing', assignee: ' dev ' }),
+    ], rules);
+    expect(rows.map(row => [row.key, row.source])).toEqual([['T-8', 'stuck'], ['T-9', 'stuck']]);
+  });
+
   it('lists only delegated commands waiting for approval, with the approver role and the ticket key from its run', () => {
     const rows = buildAttentionRows(overview({
       runs: [attentionRun({ status: 'running' })],
@@ -143,9 +175,9 @@ describe('buildAttentionRows', () => {
       blocked: [blockedTicket()],
       runs: [attentionRun()],
       commandRequests: [commandRequest()],
-    }));
+    }), [boardTicketSummary({ key: 'T-500', workflowStatus: 'developing' })], [{ during: 'developing' }] as BoardRuleView[]);
 
-    expect(rows.map((row) => row.source)).toEqual(['blocked', 'command', 'run']);
+    expect(rows.map((row) => row.source)).toEqual(['blocked', 'stuck', 'command', 'run']);
   });
 
   it('returns no rows when nothing needs attention', () => {

@@ -3,22 +3,15 @@ import { emptyPhase, percentDone, phaseSegments, phaseState } from '../src/rende
 import { boardPhase } from './boardFixtures';
 
 describe('phase progress', () => {
-  it('groups all status counts including unknown statuses and sums to the ticket count', () => {
-    const phase = boardPhase({ ticketCount: 12, counts: { done: 2, close: 1, 'review-ready': 2, 'merge-conflict': 1, 'dev-ready': 2, backlog: 1, blocked: 1, custom: 2 } });
+  it('counts columns separately including unknown columns', () => {
+    const phase = boardPhase({ ticketCount: 12, counts: { done: 2, closed: 1, 'in-progress': 3, todo: 2, backlog: 2, custom: 2 } });
     const segments = phaseSegments(phase, []);
-    expect(segments).toEqual({ done: 3, inReview: 3, inProgress: 2, intake: 1, blocked: 1, other: 2 });
-    expect(Object.values(segments).reduce((a, b) => a + b, 0)).toBe(phase.ticketCount);
+    expect(segments).toEqual({ done: 2, closed: 1, inProgress: 3, todo: 2, backlog: 2, other: 2 });
+    expect(Object.values(segments).reduce((a, b) => a + b, 0)).toBe(12);
+    expect(percentDone(phase)).toBe(25);
   });
-  it('uses blocked tickets only when the count is absent', () => {
-    const tickets = [{ status: 'blocked' }, { status: 'blocked' }, { status: 'done' }];
-    const phase = boardPhase({ ticketCount: 3, counts: { done: 1 } });
-    const segments = phaseSegments(phase, [], tickets);
-    expect(segments.blocked).toBe(2);
-    expect(Object.values(segments).reduce((a, b) => a + b, 0)).toBe(phase.ticketCount);
-    expect(phaseSegments({ ...phase, counts: { done: 1, blocked: 0 } }, [], tickets).blocked).toBe(0);
-  });
-  it('rounds finished percentages and identifies empty and phase states', () => {
-    const phase = boardPhase({ ticketCount: 3, counts: { done: 1, close: 1 } });
+  it('rounds completion including closed and identifies empty and phase states', () => {
+    const phase = boardPhase({ ticketCount: 3, counts: { done: 1, closed: 1 } });
     expect(percentDone(phase)).toBe(67);
     expect(phaseState(phase)).toBe('current');
     expect(phaseState({ ...phase, current: false })).toBe('open');

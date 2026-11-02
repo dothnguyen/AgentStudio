@@ -1,41 +1,29 @@
-import type { BoardPhase, BoardTicketSummary } from '../api';
-import { BLOCKED_STATUS, type BoardStatusInfo } from './boardLaneModel';
-const DONE_TICKET_STATUSES = ['done', 'close'];
-const REVIEW_STATUSES = ['review-ready', 'plan-merge-ready', 'plan-merge-conflict', 'merge-ready', 'merge-conflict'];
-const BUILD_STATUSES = ['dev-ready', 'qa-ready', 'need-escalate'];
-const INTAKE_STATUSES = ['backlog', 'unpack-ready', 'refine-ready'];
+import type { BoardPhase } from '../api';
+import type { BoardStatusInfo } from './boardLaneModel';
 
 export interface PhaseSegments {
   done: number;
-  inReview: number;
+  closed: number;
   inProgress: number;
-  intake: number;
-  blocked: number;
+  todo: number;
+  backlog: number;
   other: number;
 }
 
-/** Counts are authoritative, including statuses no longer present in board settings. */
-export function phaseSegments(phase: BoardPhase, _statuses: readonly BoardStatusInfo[], tickets?: readonly Pick<BoardTicketSummary, 'status'>[]): PhaseSegments {
-  const segments: PhaseSegments = { done: 0, inReview: 0, inProgress: 0, intake: 0, blocked: 0, other: 0 };
-  for (const [status, count] of Object.entries(phase.counts)) {
-    if (DONE_TICKET_STATUSES.includes(status)) segments.done += count;
-    else if (status === BLOCKED_STATUS) segments.blocked += count;
-    else {
-      if (REVIEW_STATUSES.includes(status)) segments.inReview += count;
-      else if (BUILD_STATUSES.includes(status)) segments.inProgress += count;
-      else if (INTAKE_STATUSES.includes(status)) segments.intake += count;
-      else segments.other += count;
-    }
-  }
-  if (!Object.prototype.hasOwnProperty.call(phase.counts, BLOCKED_STATUS) && tickets !== undefined) {
-    segments.blocked = tickets.filter(ticket => ticket.status === BLOCKED_STATUS).length;
-  }
-  return segments;
+/** Phase counts are keyed by board column, independent of workflow status. */
+export function phaseSegments(phase: BoardPhase, _statuses: readonly BoardStatusInfo[]): PhaseSegments {
+  const counts = phase.counts;
+  const known = new Set(['done', 'closed', 'in-progress', 'todo', 'backlog']);
+  return {
+    done: counts.done ?? 0, closed: counts.closed ?? 0,
+    inProgress: counts['in-progress'] ?? 0, todo: counts.todo ?? 0,
+    backlog: counts.backlog ?? 0,
+    other: Object.entries(counts).reduce((sum, [column, count]) => sum + (known.has(column) ? 0 : count), 0),
+  };
 }
 
 export function percentDone(phase: BoardPhase): number {
-  const done = DONE_TICKET_STATUSES.reduce((sum, status) => sum + (phase.counts[status] ?? 0), 0);
-  return phase.ticketCount === 0 ? 0 : Math.round(done / phase.ticketCount * 100);
+  return phase.ticketCount === 0 ? 0 : Math.round(((phase.counts.done ?? 0) + (phase.counts.closed ?? 0)) / phase.ticketCount * 100);
 }
 
 export function phaseState(phase: BoardPhase): 'current' | 'open' | 'closed' {

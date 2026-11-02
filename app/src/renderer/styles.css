@@ -2273,10 +2273,10 @@ ul[aria-label="Workspaces"] {
 .boards-milestone-track { display: flex; width: 100%; height: 8px; border-radius: var(--radius-pill); background: var(--chip-bg); overflow: hidden; }
 .boards-milestone-segment { height: 100%; }
 .boards-milestone-done { background: #4caf80; }
-.boards-milestone-inReview { background: #5b9cff; }
+.boards-milestone-closed { background: #5b9cff; }
 .boards-milestone-inProgress { background: #8dcaf2; }
-.boards-milestone-intake { background: #9ba2ab; }
-.boards-milestone-blocked { background: #e6ad4e; }
+.boards-milestone-backlog { background: #9ba2ab; }
+.boards-milestone-todo { background: #e6ad4e; }
 .boards-milestone-other { background: #606873; }
 .boards-milestone-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 12px; }
 .boards-milestone-legend li { display: flex; align-items: center; gap: 6px; }

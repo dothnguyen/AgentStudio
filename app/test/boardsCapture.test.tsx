@@ -86,7 +86,7 @@ describe('boards v1 capture app', () => {
     if (mode === 'phases') {
       expect(view.getByText('Phase 07 - Upcoming')).toBeTruthy();
       expect(view.getByText('No tickets yet')).toBeTruthy();
-      expect(view.getByRole('img', { name: /1 blocked/ })).toBeTruthy();
+      expect(view.getByRole('img', { name: /other/ })).toBeTruthy();
     } else if (mode === 'backlog-collapsed') {
       expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
     } else if (mode === 'backlog-filtered') {

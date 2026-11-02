@@ -18,7 +18,7 @@ export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenP
     </button>{onOpenPhases && <button type="button" className="boards-backlog-progress-link" onClick={onOpenPhases}>Phase progress</button>}</div>
     <div id={bodyId} className="boards-backlog-group-body" hidden={!expanded}>
       {expanded && <>
-      {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
+      {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} workflowStatus={settings.workflowStatuses.find((status) => status.id === ticket.workflowStatus) ?? { id: ticket.workflowStatus }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
       {!showAll && group.tickets.length > 50 && <button type="button" className="boards-backlog-more" onClick={() => setShowAll(true)}>Show {group.tickets.length - 50} more</button>}
       </>}
     </div>

@@ -3,7 +3,8 @@ import type { BacklogSort } from './backlogModel';
 
 export interface BacklogFilters {
   query: string;
-  statuses: string[];
+  columns: string[];
+  workflowStatuses: string[];
   phases: string[];
   activity: Array<'working' | 'blocked' | 'waiting' | 'ready' | 'finished'>;
   owner: string | null;
@@ -13,14 +14,15 @@ export interface BacklogFilters {
 }
 
 export const DEFAULT_BACKLOG_FILTERS: BacklogFilters = {
-  query: '', statuses: [], phases: [], activity: [], owner: null,
+  query: '', columns: [], workflowStatuses: [], phases: [], activity: [], owner: null,
   priority: 'any', hasOpenDeps: 'any', sort: 'priority',
 };
 
 export function matchesBacklogFilters(ticket: BoardTicketSummary, filters: BacklogFilters): boolean {
   const query = filters.query.trim().toLowerCase();
   if (query && !ticket.key.toLowerCase().includes(query) && !ticket.title.toLowerCase().includes(query)) return false;
-  if (filters.statuses.length && !filters.statuses.includes(ticket.status)) return false;
+  if (filters.columns.length && !filters.columns.includes(ticket.status)) return false;
+  if (filters.workflowStatuses.length && !filters.workflowStatuses.includes(ticket.workflowStatus)) return false;
   if (filters.phases.length && (ticket.phase === null || !filters.phases.includes(ticket.phase))) return false;
   const activity = ticket.activity.state === 'not started'
     ? (ticket.activity.waitingFor ? 'waiting' : 'ready') : ticket.activity.state;
@@ -39,7 +41,7 @@ export function filterBacklogTickets(tickets: readonly BoardTicketSummary[], fil
 }
 
 export function activeFilterCount(filters: BacklogFilters): number {
-  return Number(filters.query !== '') + Number(filters.statuses.length > 0) + Number(filters.phases.length > 0)
+  return Number(filters.query !== '') + Number(filters.columns.length > 0) + Number(filters.workflowStatuses.length > 0) + Number(filters.phases.length > 0)
     + Number(filters.activity.length > 0) + Number(filters.owner !== null) + Number(filters.priority !== 'any')
     + Number(filters.hasOpenDeps !== 'any');
 }

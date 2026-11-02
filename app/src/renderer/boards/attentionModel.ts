@@ -2,13 +2,14 @@ import type {
   AttentionRun,
   BoardTicketSummary,
   TeamOverview,
+  BoardRuleView,
 } from '../api';
 import { blockedReasonLine } from './ticketCardModel';
 
 /** How many rows the Needs attention card shows before its "Show N more" button. */
 export const ATTENTION_ROW_LIMIT = 4;
 
-export type AttentionSource = 'blocked' | 'command' | 'run';
+export type AttentionSource = 'blocked' | 'stuck' | 'command' | 'run';
 
 export interface AttentionRow {
   /** A stable list key; two sources can name the same ticket. */
@@ -148,9 +149,16 @@ function runRows(overview: TeamOverview): AttentionRow[] {
 export function buildAttentionRows(
   overview: TeamOverview,
   boardTickets: readonly BoardTicketSummary[] = [],
+  rules: readonly BoardRuleView[] = [],
 ): AttentionRow[] {
+  const during = new Set(rules.map(rule => rule.during).filter((value): value is string => Boolean(value)));
+  const stuck: AttentionRow[] = boardTickets.filter(ticket => ticket.workflowStatus !== 'blocked' && during.has(ticket.workflowStatus) && !(ticket.assignee?.trim())).map(ticket => ({
+    id: `stuck-${ticket.key}`, source: 'stuck', key: ticket.key, title: ticket.title,
+    reason: 'Unclaimed ticket is in a workflow in-progress status.', ticketKey: ticket.key,
+  }));
   return [
     ...blockedRows(overview, boardTickets),
+    ...stuck,
     ...commandRows(overview),
     ...runRows(overview),
   ];

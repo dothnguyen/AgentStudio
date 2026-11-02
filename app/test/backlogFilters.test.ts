@@ -3,12 +3,12 @@ import { DEFAULT_BACKLOG_FILTERS as defaults, activeFilterCount, filterBacklogTi
 import { boardTicketSummary } from './boardFixtures';
 
 describe('backlog filters', () => {
-  const ticket = boardTicketSummary({ key: 'T-114', title: 'Edit Dialogs', status: 'dev-ready', phase: 'phase-05', priority: 99,
+  const ticket = boardTicketSummary({ key: 'T-114', title: 'Edit Dialogs', status: 'todo', workflowStatus: 'dev-ready', phase: 'phase-05', priority: 99,
     activity: { state: 'working', agent: 'dev' }, openDependsOn: ['T-1'] });
 
   it('provides empty filters with priority sorting by default', () => {
     expect(defaults).toEqual({
-      query: '', statuses: [], phases: [], activity: [], owner: null,
+      query: '', columns: [], workflowStatuses: [], phases: [], activity: [], owner: null,
       priority: 'any', hasOpenDeps: 'any', sort: 'priority',
     });
     expect(isDefaultFilters(defaults)).toBe(true);
@@ -20,8 +20,10 @@ describe('backlog filters', () => {
   });
 
   it('matches each selection and combines selections with AND and values with OR', () => {
-    expect(matchesBacklogFilters(ticket, { ...defaults, statuses: ['backlog', 'dev-ready'] })).toBe(true);
-    expect(matchesBacklogFilters(ticket, { ...defaults, statuses: ['backlog'] })).toBe(false);
+    expect(matchesBacklogFilters(ticket, { ...defaults, columns: ['backlog', 'todo'] })).toBe(true);
+    expect(matchesBacklogFilters(ticket, { ...defaults, columns: ['backlog'] })).toBe(false);
+    expect(matchesBacklogFilters(ticket, { ...defaults, workflowStatuses: ['dev-ready'], columns: ['todo'] })).toBe(true);
+    expect(matchesBacklogFilters(ticket, { ...defaults, workflowStatuses: ['other'] })).toBe(false);
     expect(matchesBacklogFilters(ticket, { ...defaults, phases: ['phase-06', 'phase-05'] })).toBe(true);
     expect(matchesBacklogFilters(boardTicketSummary({ phase: null }), { ...defaults, phases: ['phase-05'] })).toBe(false);
     expect(matchesBacklogFilters(ticket, { ...defaults, activity: ['blocked', 'working'] })).toBe(true);
@@ -30,7 +32,7 @@ describe('backlog filters', () => {
     expect(matchesBacklogFilters(ticket, { ...defaults, hasOpenDeps: 'yes' })).toBe(true);
     expect(matchesBacklogFilters(ticket, { ...defaults, hasOpenDeps: 'no' })).toBe(false);
     expect(matchesBacklogFilters(boardTicketSummary(), { ...defaults, hasOpenDeps: 'no' })).toBe(true);
-    const filters = { ...defaults, query: 'dialog', statuses: ['dev-ready'], phases: ['phase-05'], activity: ['working' as const], owner: 'dev', priority: 'urgent' as const, hasOpenDeps: 'yes' as const };
+    const filters = { ...defaults, query: 'dialog', columns: ['todo'], phases: ['phase-05'], activity: ['working' as const], owner: 'dev', priority: 'urgent' as const, hasOpenDeps: 'yes' as const };
     expect(matchesBacklogFilters(ticket, filters)).toBe(true);
     expect(matchesBacklogFilters(ticket, { ...filters, phases: ['phase-06'] })).toBe(false);
     expect(filterBacklogTickets([boardTicketSummary(), ticket], filters)).toEqual([ticket]);
@@ -59,13 +61,13 @@ describe('backlog filters', () => {
 
   it('counts filter categories and treats sort as a non-default without counting it', () => {
     expect(activeFilterCount(defaults)).toBe(0);
-    expect(isDefaultFilters({ ...defaults, statuses: [] })).toBe(true);
+    expect(isDefaultFilters({ ...defaults, columns: [] })).toBe(true);
     expect(activeFilterCount({ ...defaults, sort: 'key' })).toBe(0);
     expect(isDefaultFilters({ ...defaults, sort: 'key' })).toBe(false);
-    const filters = { ...defaults, query: 'x', statuses: ['a', 'b'], phases: ['p'], activity: ['ready' as const], owner: 'dev', priority: 'low' as const, hasOpenDeps: 'no' as const };
-    expect(activeFilterCount(filters)).toBe(7);
+    const filters = { ...defaults, query: 'x', columns: ['a', 'b'], workflowStatuses: ['dev-ready'], phases: ['p'], activity: ['ready' as const], owner: 'dev', priority: 'low' as const, hasOpenDeps: 'no' as const };
+    expect(activeFilterCount(filters)).toBe(8);
     expect(isDefaultFilters(filters)).toBe(false);
-    for (const filter of [{ query: 'x' }, { statuses: ['a'] }, { phases: ['p'] }, { activity: ['ready' as const] }, { owner: 'dev' }, { priority: 'low' as const }, { hasOpenDeps: 'no' as const }]) {
+    for (const filter of [{ query: 'x' }, { columns: ['a'] }, { workflowStatuses: ['a'] }, { phases: ['p'] }, { activity: ['ready' as const] }, { owner: 'dev' }, { priority: 'low' as const }, { hasOpenDeps: 'no' as const }]) {
       expect(activeFilterCount({ ...defaults, ...filter })).toBe(1);
       expect(isDefaultFilters({ ...defaults, ...filter })).toBe(false);
     }

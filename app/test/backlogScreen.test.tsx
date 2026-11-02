@@ -190,26 +190,31 @@ describe('BacklogScreen', () => {
 describe('backlog toolbar', () => {
   it('filters, removes chips, clears filters and hides empty groups', async () => {
     const settings = boardSettingsFixture();
-    settings.statuses = [{ id: 'dev-ready', name: 'Dev ready', kind: null }, { id: 'backlog', name: 'Backlog', kind: null }];
+    settings.workflowStatuses = [{ id: 'dev-ready', name: 'Dev ready', kind: null }];
     const tickets = [
-      boardTicketSummary({ key: 'T-1', status: 'dev-ready', activity: { state: 'working', agent: 'Alex' } }),
+      boardTicketSummary({ key: 'T-1', status: 'todo', workflowStatus: 'dev-ready', activity: { state: 'working', agent: 'Alex' } }),
       boardTicketSummary({ key: 'T-2', status: 'backlog' }),
       boardTicketSummary({ key: 'T-3', phase: 'phase-06', status: 'backlog' }),
     ];
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
     await settle();
     const user = userEvent.setup();
-    await user.click(view.getByRole('button', { name: 'Status' }));
+    expect(view.getByRole('button', { name: /Open T-1/ }).textContent).toContain('Todo · Dev ready');
+    await user.click(view.getByRole('button', { name: 'Column' }));
+    await user.click(view.getByRole('checkbox', { name: 'To do' }));
+    expect(view.getByText('1 of 3 tickets')).toBeTruthy();
+    await user.click(view.getByRole('button', { name: 'Remove Column: To do' }));
+    await user.click(view.getByRole('button', { name: 'Workflow status' }));
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
-    expect(view.getByRole('button', { name: 'Status · 1' }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: 'Workflow status · 1' }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByText('1 of 3 tickets')).toBeTruthy();
     expect(view.getByRole('button', { name: /Phase 05 Current 1 of 2 tickets/ })).toBeTruthy();
     expect(view.queryByRole('button', { name: /Phase 06/ })).toBeNull();
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
     expect(view.queryByText('1 of 3 tickets')).toBeNull();
-    expect(view.getByRole('button', { name: 'Status' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Workflow status' })).toBeTruthy();
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
-    await user.click(view.getByRole('button', { name: 'Remove Status: Dev ready' }));
+    await user.click(view.getByRole('button', { name: 'Remove Workflow status: Dev ready' }));
     expect(view.queryByText('1 of 3 tickets')).toBeNull();
     await user.selectOptions(view.getByLabelText('Owner'), 'Alex');
     await user.selectOptions(view.getByLabelText('Priority'), 'low');
