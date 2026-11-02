@@ -574,6 +574,37 @@ def _ticket_event(conn, ticket_id: str, name: str, actor: str, from_status, to_s
                   json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))))
 
 
+def column_for(config: dict, current_column: str, target: str, claimed: bool) -> str:
+    if target == BLOCKED_STATUS:
+        return current_column
+    status = config["byId"].get(target)
+    if status is None:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Status {target!r} is not on this board.",
+                      data={"status": target, "statuses": config_status_ids(config)})
+    kind = status["kind"]
+    if kind == "initial":
+        return "backlog"
+    if kind in TERMINAL_KINDS:
+        return kind
+    if claimed and target in config.get("duringToRule", {}):
+        return "in-progress"
+    return "in-progress" if current_column == "in-progress" else "todo"
+
+
+def set_workflow(tx, ticket: dict, to: str, actor: str, reason, config: dict, claimed: bool = False) -> None:
+    try:
+        column = column_for(config, ticket["status"], to, claimed)
+    except AsError as exc:
+        if exc.code == BOARD_STATUS_UNKNOWN:
+            exc.data["key"] = ticket["key"]
+        raise
+    tx.conn.execute("UPDATE tickets SET workflow_status = ?, status = ?, updated_at = ? WHERE id = ?",
+                    (to, column, utcnow(), ticket["id"]))
+    _ticket_event(tx.conn, ticket["id"], "ticket.workflow_changed", actor, ticket["workflow_status"], to,
+                  {"ticketId": ticket["id"], "key": ticket["key"], "from": ticket["workflow_status"],
+                   "to": to, "fromColumn": ticket["status"], "toColumn": column, "reason": reason})
+
+
 def get_ticket(conn, workspace: str, key: str) -> dict:
     row = conn.execute("SELECT * FROM tickets WHERE workspace = ? AND key = ?", (workspace, key)).fetchone()
     if row is None:

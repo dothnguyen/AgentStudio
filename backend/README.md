@@ -383,6 +383,9 @@ agent rule `when` statuses and `todoDefault` is one of those entries. Agent rule
 action rules may provide it. Each `during` must be a distinct kindless workflow status that no rule
 uses as `when`. The parser exposes the fixed Kanban columns and workflow routing metadata; board
 execution has not yet been migrated to this schema. Version 2 remains supported unchanged.
+The workflow transition helper records both the workflow status and its derived Kanban column, along
+with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
+statuses use `in-progress`, and other working statuses retain `in-progress` or otherwise use `todo`.
 
 ```bash
 agent-studio board rules check --workspace ~/work/project      # validate board.json against roles + workflows
