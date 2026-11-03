@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Tickets that need a person</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+button,textarea{font-family:inherit}
+</style>
+</head><body>
+
+<div style="width: 1200px; height: 1080px; box-sizing: border-box; padding: 32px; background: #111316; font-family: Inter, 'Segoe UI', system-ui, sans-serif; color: #e7e9ec; font-size: 14px; display: flex; flex-direction: column; gap: 28px">
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">On the board: In Progress column</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+      <div style="background: #16191d; border: 1px solid #4a3d22; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #8d949e"><span style="font-family: 'JetBrains Mono', monospace">C-031</span><span>Publish · Publisher</span></div>
+        <div style="font-weight: 600">Launch post for the spring catalogue</div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.14); color: #f0c47a; font-weight: 500">Waiting for approval</span><span style="color: #8d949e">12 min</span></div>
+        <div style="color: #c4cad2; font-size: 13px">Publish this post?</div>
+        <div style="display: flex; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">Approve</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Reject…</button>
+        </div>
+      </div>
+
+      <div style="background: #16191d; border: 1px solid #22304a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #8d949e"><span style="font-family: 'JetBrains Mono', monospace">T-201</span><span>Develop · dev</span></div>
+        <div style="font-weight: 600">Apply pass/fail by the workflow's end and limits</div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-weight: 500">Needs your answer</span><span style="color: #8d949e">4 min</span></div>
+        <div style="color: #c4cad2; font-size: 13px">Should a blocked run keep its round count when unblocked?</div>
+        <button type="button" style="align-self: flex-start; height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Answer…</button>
+      </div>
+
+      <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #8d949e"><span style="font-family: 'JetBrains Mono', monospace">T-197</span><span>Develop</span></div>
+        <div style="font-weight: 600">Load and validate a board's workflows</div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px"><span style="padding: 2px 8px; border-radius: 5px; background: #22262c; color: #c4cad2; font-weight: 500">Paused · usage limit</span></div>
+        <div style="color: #8d949e; font-size: 13px">Back in Dev ready; the next free Developer picks it up. Not counted as a fail.</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">On the ticket page</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+
+      <div style="background: #16191d; border: 1px solid #4a3d22; border-radius: 10px; overflow: hidden">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #23262c; display: flex; justify-content: space-between; gap: 8px">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <div style="font-weight: 600">Waiting for your approval</div>
+            <div style="color: #8d949e; font-size: 12px">Workflow Publish · step <span style="font-family: 'JetBrains Mono', monospace">approve</span> · since 10:14</div>
+          </div>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 15px">Publish this post?</div>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #c4cad2">Note (optional; sent to the next step if you reject)
+            <textarea rows="3" style="box-sizing: border-box; padding: 8px 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px; resize: vertical">Swap the hero image for the approved one in the brand folder.</textarea>
+          </label>
+          <div style="display: flex; gap: 8px; justify-content: flex-end">
+            <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Reject</button>
+            <button type="button" style="height: 34px; padding: 0 16px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">Approve</button>
+          </div>
+          <div style="color: #8d949e; font-size: 12px">Approve → step publish. Reject → the workflow fails: the ticket goes to To edit.</div>
+        </div>
+      </div>
+
+      <div style="background: #16191d; border: 1px solid #22304a; border-radius: 10px; overflow: hidden">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #23262c; display: flex; flex-direction: column; gap: 4px">
+          <div style="font-weight: 600">The agent asked a question</div>
+          <div style="color: #8d949e; font-size: 12px">Workflow Develop · step <span style="font-family: 'JetBrains Mono', monospace">implement</span> · dev (Codex 6.1 Terra) · since 10:21</div>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="padding: 10px 12px; border-radius: 8px; background: #121418; border: 1px solid #23262c; font-size: 13px; line-height: 1.5; color: #d6dae0">Should a blocked run keep its round count when unblocked? The ticket says "same semantics as today" but today the operator move clears rounds_json.</div>
+          <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #c4cad2">Your answer
+            <textarea rows="3" style="box-sizing: border-box; padding: 8px 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px; resize: vertical">Keep today's behaviour: an operator unblock clears the round count.</textarea>
+          </label>
+          <div style="display: flex; justify-content: flex-end">
+            <button type="button" style="height: 34px; padding: 0 16px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">Send answer</button>
+          </div>
+          <div style="color: #8d949e; font-size: 12px">The same session continues with your answer. Waiting is not counted as a fail.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 8px">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">Needs attention card (Current Phase)</h2>
+    <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px">
+      <span><strong style="font-weight: 600">1</strong> waiting for approval</span>
+      <span><strong style="font-weight: 600">1</strong> needs an answer</span>
+      <span><strong style="font-weight: 600">0</strong> blocked</span>
+      <span style="color: #8d949e"><strong style="font-weight: 600; color: #c4cad2">1</strong> paused, will be picked up again</span>
+    </div>
+  </section>
+</div>
+</body></html>

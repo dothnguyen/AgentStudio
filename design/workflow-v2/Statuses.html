@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workflow statuses</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button,input,select{font-family:inherit}
+</style>
+</head><body>
+
+<div style="min-height: 1560px; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 240px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #5b9cff; color: #0b1220; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">&gt;_</div>
+      <div style="font-weight: 600; font-size: 15px">Agent Studio</div>
+    </div>
+    <div style="border: 1px solid #262a30; background: #16191d; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px">
+      <div style="font-weight: 600; font-size: 13px">Agent Studio</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">/mnt/c/Works/Proje…</div>
+    </div>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Home</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Teams</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Boards</a>
+    <div style="color: #e7e9ec; padding: 9px 10px; font-weight: 500">Workflow</div>
+    <a href="#" style="color: #e7e9ec; padding: 8px 10px 8px 26px; border-radius: 6px; background: #181b20; font-weight: 500">Statuses</a>
+    <a href="Prompts.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Workflow prompts</a>
+    <a href="Main.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Routing</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Agents</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Roles</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 8px; background: #151a22; border: 1px solid #22304a; color: #c4cdd9; font-size: 13px">
+      <span>You came here from <strong style="font-weight: 600">Add workflow</strong>. Your unsaved workflow is kept; new statuses appear in its lists when you go back.</span>
+      <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600">← Back to Add workflow</a>
+    </div>
+
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="max-width: 760px">
+        <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Statuses</h1>
+        <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Every status a ticket can be in on this board. Each workflow in Routing picks two: the status that starts it, and the status while it runs.</p>
+      </div>
+      <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add status</button>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      
+        <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Starts a workflow</div>
+          <div style="font-size: 22px; font-weight: 600">10</div>
+          <div style="color: #8d949e; font-size: 12px">A ticket waits here to be picked up</div>
+        </div>
+      
+        <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>While running</div>
+          <div style="font-size: 22px; font-weight: 600">10</div>
+          <div style="color: #8d949e; font-size: 12px">A workflow is working the ticket</div>
+        </div>
+      
+        <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #6fd38b"></span>Start, Done, Closed</div>
+          <div style="font-size: 22px; font-weight: 600">3</div>
+          <div style="color: #8d949e; font-size: 12px">Always exist; rename only</div>
+        </div>
+      
+        <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #4b5058"></span>Not used</div>
+          <div style="font-size: 22px; font-weight: 600">1</div>
+          <div style="color: #8d949e; font-size: 12px">No workflow uses it; set by hand</div>
+        </div>
+      
+    </div>
+
+    <section aria-labelledby="st-list" style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+      <div style="padding: 14px 22px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border-bottom: 1px solid #23262c">
+        <h2 id="st-list" style="margin: 0; font-size: 15px; font-weight: 600">Statuses</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+          <input placeholder="Filter by name or id" aria-label="Filter statuses" style="height: 32px; width: 220px; box-sizing: border-box; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px">
+          <select aria-label="Show" style="height: 32px; padding: 0 8px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px"><option>All statuses</option><option>Not used by any stage</option></select>
+        </div>
+      </div>
+      <div style="overflow-x: auto">
+        <div style="min-width: 980px">
+          <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 10px 22px; color: #8d949e; font-size: 12px; border-bottom: 1px solid #23262c">
+            <div></div><div>Name</div><div>ID</div><div>Type</div><div>Used by</div><div>Board column</div><div></div>
+          </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #8d949e"></span>Backlog
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">none</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: #22262c; color: #c4cad2; font-size: 12px">Start</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Where new tickets wait</div>
+              <div style="font-size: 13px; color: #a3a9b2">Backlog</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Backlog" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Unpack ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">unpack-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Unpack</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Unpack ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>unpacking
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">unpacking</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Unpack</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove unpacking" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Refine ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">refine-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Refine</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Refine ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>refining
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">refining</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Refine</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove refining" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Dev ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">dev-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Develop</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Dev ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>deving
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">deving</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Develop</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove deving" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>QA ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">qa-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">QA</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove QA ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>qa-ing
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">qa-ing</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">QA</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove qa-ing" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Needs escalation
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">need-escalate</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Escalation</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Needs escalation" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>escalating
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">escalating</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Escalation</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove escalating" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Review ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">review-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Review</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Review ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>reviewing
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">reviewing</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Review</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove reviewing" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Plan merge ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">plan-merge-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Plan merge</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Plan merge ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>plan-merging
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">plan-merging</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Plan merge</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove plan-merging" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Plan merge conflict
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">plan-merge-conflict</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Fix plan conflict</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Plan merge conflict" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>fixing-plan-conflict
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">fixing-plan-conflict</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Fix plan conflict</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove fixing-plan-conflict" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Merge ready
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">merge-ready</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Merge</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Merge ready" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>merging
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">merging</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Merge</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove merging" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #5b9cff"></span>Merge conflict
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">merge-conflict</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.14); color: #9ec3ff; font-size: 12px">Starts a workflow</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Fix merge conflict</div>
+              <div style="font-size: 13px; color: #a3a9b2">Todo or In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Merge conflict" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f0b453"></span>fixing-conflict
+                <span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">fixing-conflict</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 12px">While running</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Fix merge conflict</div>
+              <div style="font-size: 13px; color: #a3a9b2">In Progress</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove fixing-conflict" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #6fd38b"></span>Done
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">merged</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: rgba(74,194,107,0.12); color: #6fd38b; font-size: 12px">Done</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Reached by Merge, Plan merge</div>
+              <div style="font-size: 13px; color: #a3a9b2">Done</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Done" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #6b7280"></span>Close
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">closed</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: #22262c; color: #a3a9b2; font-size: 12px">Closed</span></div>
+              <div style="font-size: 13px; color: #c4cad2">Set by a person</div>
+              <div style="font-size: 13px; color: #a3a9b2">Closed</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="" aria-label="Remove Close" title="In use" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: #4b5058"></span>Waiting for operator
+                
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">waiting-for-operator</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: transparent; color: #8d949e; font-size: 12px">Not used</span></div>
+              <div style="font-size: 13px; color: #c4cad2">—</div>
+              <div style="font-size: 13px; color: #a3a9b2">Set by hand</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" aria-label="Remove Waiting for operator" title="Remove this status" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #f0a3a3; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          
+        </div>
+      </div>
+      <div style="padding: 12px 22px; color: #8d949e; font-size: 12px">A status used by a workflow, or by any ticket, cannot be removed. Start, Done and Closed always exist: rename them instead.</div>
+    </section>
+  </main>
+</div>
+</body></html>

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routing - a non-code board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 1700px; box-sizing: border-box; padding: 32px 40px 56px; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column; gap: 20px">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+    <div style="max-width: 800px">
+      <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Routing</h1>
+      <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Each workflow starts when a ticket reaches its status. A free member with the workflow's role works through the steps, and the result sets the ticket's next status.</p>
+    </div>
+    <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add workflow</a>
+  </header>
+
+  <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 8px; background: rgba(240,180,83,0.10); border: 1px solid #4a3d22; color: #f0c47a; font-size: 13px">
+    <span style="font-weight: 600">1 problem:</span>
+    <span>Fact check — no workflow ends in To fact check and tickets cannot start there, so it never runs. Point a workflow's pass or fail at it, allow starting there, or remove it.</span>
+  </div>
+
+  <sc-for list="{{rows}}" as="w" hint-placeholder-count="4">
+    <article style="background: #16191d; border: 1px solid {{w.border}}; border-radius: 10px; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: {{w.color}}"></span>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600">{{w.name}}</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">{{w.file}}</span>
+          <sc-if value="{{w.isDefault}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE · DEFAULT</span></sc-if>
+          <sc-if value="{{w.startOnly}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span></sc-if>
+          <sc-if value="{{w.unreachable}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.14); color: #f0c47a; font-size: 11px; font-weight: 600">NOT REACHABLE</span></sc-if>
+        </div>
+        <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr)">
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">{{w.starts}}</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">{{w.running}}</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span>{{w.role}}</span></div>
+            <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">{{w.where}}</span></div>
+          </div>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{w.steps}}" as="s" hint-placeholder-count="2">
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">{{s.n}}</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: {{s.kindBg}}; color: {{s.kindColor}}; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">{{s.kind}}</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">{{s.id}}</span>
+                    <span style="color: #a3a9b2; font-size: 12px">{{s.detail}}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ {{s.passWord}}</span> <span style="color: #c4cad2">→ {{s.pass}}</span></span>
+                    <span><span style="color: #f48771">✗ {{s.failWord}}</span> <span style="color: #c4cad2">→ {{s.fail}}</span></span>
+                  </div>
+                </div>
+              </li>
+            </sc-for>
+          </ol>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #6fd38b; font-size: 12px">Pass</span><span>{{w.pass}}</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span>{{w.fail}}</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to {{w.starts}}</span></div>
+          </div>
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+          <div style="font-size: 12px; color: #c4cad2">{{w.limits}}</div>
+        </div>
+      </div>
+    </article>
+  </sc-for>
+
+  <section aria-labelledby="g-empty" style="background: #16191d; border: 1px dashed #2a2e35; border-radius: 10px; padding: 28px 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+    <h2 id="g-empty" style="margin: 0; font-size: 15px; font-weight: 600">A new board with no workflows yet</h2>
+    <p style="margin: 0; max-width: 560px; color: #8d949e; font-size: 13px">Tickets go from Backlog to Done only by hand. Add a workflow to have a role work tickets automatically: pick the status that starts it, add its steps, and say which status it sets when it passes or fails.</p>
+    <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add the first workflow</a>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var K = { agent: ['AGENT', 'rgba(91,156,255,0.16)', '#9ec3ff'], check: ['CHECK', 'rgba(111,211,139,0.14)', '#6fd38b'], approval: ['APPROVAL', 'rgba(240,180,83,0.14)', '#f0c47a'] };
+    function steps(list) {
+      return list.map(function (s, i) {
+        var k = K[s[0]]; var appr = s[0] === 'approval';
+        return { n: i + 1, kind: k[0], kindBg: k[1], kindColor: k[2], id: s[1], detail: s[2], pass: s[3], fail: s[4], passWord: appr ? 'approved' : 'pass', failWord: appr ? 'rejected' : 'fail' };
+      });
+    }
+    function w(o) { o.isDefault = !!o.isDefault; o.startOnly = !!o.start && !o.isDefault; o.unreachable = !!o.unreachable; o.border = o.unreachable ? '#4a3d22' : '#262a30'; return o; }
+    var rows = [
+      w({ name: 'Draft', file: 'draft.yaml', color: '#5b9cff', starts: 'To draft', running: 'Drafting', role: 'Writer', where: 'Main workspace', start: true, isDefault: true,
+        steps: steps([['agent', 'write', 'write-draft.md · edits files', 'step 2 (spelling)', 'end: fail'], ['check', 'spelling', 'check set docs (spell check, link check)', 'end: pass', 'back to step 1, up to 2 times, then end: fail']]),
+        pass: 'To edit', fail: 'To draft', limits: 'Max 3 runs, then blocked' }),
+      w({ name: 'Edit', file: 'edit.yaml', color: '#5b9cff', starts: 'To edit', running: 'Editing', role: 'Editor', where: 'Main workspace', start: false,
+        steps: steps([['agent', 'review', 'edit-review.md · read only', 'end: pass', 'end: fail']]),
+        pass: 'To publish', fail: 'To draft', limits: '2 fails in a row → Needs rework' }),
+      w({ name: 'Publish', file: 'publish.yaml', color: '#5b9cff', starts: 'To publish', running: 'Publishing', role: 'Publisher', where: 'No workspace', start: false,
+        steps: steps([['approval', 'approve', '"Publish this post?"', 'step 2 (publish)', 'end: fail, with your note'], ['agent', 'publish', 'publish-post.md · read only', 'end: pass', 'end: fail']]),
+        pass: 'Published (done)', fail: 'To edit', limits: 'No limits' }),
+      w({ name: 'Fact check', file: 'fact-check.yaml', color: '#8d949e', starts: 'To fact check', running: 'Fact checking', role: 'Researcher', where: 'Main workspace', start: false, unreachable: true,
+        steps: steps([['agent', 'check_facts', 'fact-check.md · read only', 'end: pass', 'end: fail']]),
+        pass: 'To edit', fail: 'To draft', limits: 'No limits' })
+    ];
+    return { rows: rows };
+  }
+}
+</script>
+</body>
+</html>

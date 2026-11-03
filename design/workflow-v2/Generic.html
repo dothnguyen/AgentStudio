@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Routing - a non-code board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button{font-family:inherit}
+</style>
+</head><body>
+
+<div style="min-height: 1700px; box-sizing: border-box; padding: 32px 40px 56px; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px; display: flex; flex-direction: column; gap: 20px">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+    <div style="max-width: 800px">
+      <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Routing</h1>
+      <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Each workflow starts when a ticket reaches its status. A free member with the workflow's role works through the steps, and the result sets the ticket's next status.</p>
+    </div>
+    <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add workflow</a>
+  </header>
+
+  <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 8px; background: rgba(240,180,83,0.10); border: 1px solid #4a3d22; color: #f0c47a; font-size: 13px">
+    <span style="font-weight: 600">1 problem:</span>
+    <span>Fact check — no workflow ends in To fact check and tickets cannot start there, so it never runs. Point a workflow's pass or fail at it, allow starting there, or remove it.</span>
+  </div>
+
+  
+    <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600">Draft</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">draft.yaml</span>
+          <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE · DEFAULT</span>
+          
+          
+        </div>
+        <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr)">
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">To draft</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Drafting</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span>Writer</span></div>
+            <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Main workspace</span></div>
+          </div>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">write</span>
+                    <span style="color: #a3a9b2; font-size: 12px">write-draft.md · edits files</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ step 2 (spelling)</span></span>
+                    <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                  </div>
+                </div>
+              </li>
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">2</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(111,211,139,0.14); color: #6fd38b; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">CHECK</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">spelling</span>
+                    <span style="color: #a3a9b2; font-size: 12px">check set docs (spell check, link check)</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                    <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ back to step 1, up to 2 times, then end: fail</span></span>
+                  </div>
+                </div>
+              </li>
+            
+          </ol>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #6fd38b; font-size: 12px">Pass</span><span>To edit</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span>To draft</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to To draft</span></div>
+          </div>
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+          <div style="font-size: 12px; color: #c4cad2">Max 3 runs, then blocked</div>
+        </div>
+      </div>
+    </article>
+  
+    <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600">Edit</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">edit.yaml</span>
+          
+          
+          
+        </div>
+        <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr)">
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">To edit</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Editing</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span>Editor</span></div>
+            <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Main workspace</span></div>
+          </div>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">review</span>
+                    <span style="color: #a3a9b2; font-size: 12px">edit-review.md · read only</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                    <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                  </div>
+                </div>
+              </li>
+            
+          </ol>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #6fd38b; font-size: 12px">Pass</span><span>To publish</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span>To draft</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to To edit</span></div>
+          </div>
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+          <div style="font-size: 12px; color: #c4cad2">2 fails in a row → Needs rework</div>
+        </div>
+      </div>
+    </article>
+  
+    <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600">Publish</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">publish.yaml</span>
+          
+          
+          
+        </div>
+        <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr)">
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">To publish</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Publishing</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span>Publisher</span></div>
+            <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">No workspace</span></div>
+          </div>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(240,180,83,0.14); color: #f0c47a; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">APPROVAL</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">approve</span>
+                    <span style="color: #a3a9b2; font-size: 12px">"Publish this post?"</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ approved</span> <span style="color: #c4cad2">→ step 2 (publish)</span></span>
+                    <span><span style="color: #f48771">✗ rejected</span> <span style="color: #c4cad2">→ end: fail, with your note</span></span>
+                  </div>
+                </div>
+              </li>
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">2</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">publish</span>
+                    <span style="color: #a3a9b2; font-size: 12px">publish-post.md · read only</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                    <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                  </div>
+                </div>
+              </li>
+            
+          </ol>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #6fd38b; font-size: 12px">Pass</span><span>Published (done)</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span>To edit</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to To publish</span></div>
+          </div>
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+          <div style="font-size: 12px; color: #c4cad2">No limits</div>
+        </div>
+      </div>
+    </article>
+  
+    <article style="background: #16191d; border: 1px solid #4a3d22; border-radius: 10px; overflow: hidden">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+          <span style="width: 9px; height: 9px; border-radius: 50%; background: #8d949e"></span>
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600">Fact check</h2>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">fact-check.yaml</span>
+          
+          
+          <span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.14); color: #f0c47a; font-size: 11px; font-weight: 600">NOT REACHABLE</span>
+        </div>
+        <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr)">
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">To fact check</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Fact checking</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span>Researcher</span></div>
+            <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Main workspace</span></div>
+          </div>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+          <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            
+              <li style="display: flex; gap: 10px">
+                <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                    <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">check_facts</span>
+                    <span style="color: #a3a9b2; font-size: 12px">fact-check.md · read only</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                    <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                    <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                  </div>
+                </div>
+              </li>
+            
+          </ol>
+        </div>
+        <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #6fd38b; font-size: 12px">Pass</span><span>To edit</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span>To draft</span></div>
+            <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to To fact check</span></div>
+          </div>
+          <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+          <div style="font-size: 12px; color: #c4cad2">No limits</div>
+        </div>
+      </div>
+    </article>
+  
+
+  <section aria-labelledby="g-empty" style="background: #16191d; border: 1px dashed #2a2e35; border-radius: 10px; padding: 28px 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center">
+    <h2 id="g-empty" style="margin: 0; font-size: 15px; font-weight: 600">A new board with no workflows yet</h2>
+    <p style="margin: 0; max-width: 560px; color: #8d949e; font-size: 13px">Tickets go from Backlog to Done only by hand. Add a workflow to have a role work tickets automatically: pick the status that starts it, add its steps, and say which status it sets when it passes or fails.</p>
+    <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add the first workflow</a>
+  </section>
+</div>
+</body></html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workflow statuses</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 1560px; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 240px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #5b9cff; color: #0b1220; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">&gt;_</div>
+      <div style="font-weight: 600; font-size: 15px">Agent Studio</div>
+    </div>
+    <div style="border: 1px solid #262a30; background: #16191d; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px">
+      <div style="font-weight: 600; font-size: 13px">Agent Studio</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">/mnt/c/Works/Proje…</div>
+    </div>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Home</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Teams</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Boards</a>
+    <div style="color: #e7e9ec; padding: 9px 10px; font-weight: 500">Workflow</div>
+    <a href="#" style="color: #e7e9ec; padding: 8px 10px 8px 26px; border-radius: 6px; background: #181b20; font-weight: 500">Statuses</a>
+    <a href="Prompts.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Workflow prompts</a>
+    <a href="Main.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Routing</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Agents</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Roles</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+
+    <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 8px; background: #151a22; border: 1px solid #22304a; color: #c4cdd9; font-size: 13px">
+      <span>You came here from <strong style="font-weight: 600">Add workflow</strong>. Your unsaved workflow is kept; new statuses appear in its lists when you go back.</span>
+      <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600">← Back to Add workflow</a>
+    </div>
+
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="max-width: 760px">
+        <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Statuses</h1>
+        <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Every status a ticket can be in on this board. Each workflow in Routing picks two: the status that starts it, and the status while it runs.</p>
+      </div>
+      <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add status</button>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{summary}}" as="c" hint-placeholder-count="4">
+        <div style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #a3a9b2; font-size: 13px"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{c.color}}"></span>{{c.label}}</div>
+          <div style="font-size: 22px; font-weight: 600">{{c.count}}</div>
+          <div style="color: #8d949e; font-size: 12px">{{c.hint}}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <section aria-labelledby="st-list" style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+      <div style="padding: 14px 22px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border-bottom: 1px solid #23262c">
+        <h2 id="st-list" style="margin: 0; font-size: 15px; font-weight: 600">Statuses</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+          <input placeholder="Filter by name or id" aria-label="Filter statuses" style="height: 32px; width: 220px; box-sizing: border-box; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px">
+          <select aria-label="Show" style="height: 32px; padding: 0 8px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px"><option>All statuses</option><option>Not used by any stage</option></select>
+        </div>
+      </div>
+      <div style="overflow-x: auto">
+        <div style="min-width: 980px">
+          <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 10px 22px; color: #8d949e; font-size: 12px; border-bottom: 1px solid #23262c">
+            <div></div><div>Name</div><div>ID</div><div>Type</div><div>Used by</div><div>Board column</div><div></div>
+          </div>
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: 28px 1.4fr 1.2fr 0.9fr 1.6fr 1fr 140px; gap: 14px; padding: 11px 22px; border-bottom: 1px solid #1f2328; align-items: center">
+              <svg width="12" height="16" viewBox="0 0 12 16" role="img" aria-label="Drag to reorder"><circle cx="3" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="3" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="8" r="1.3" fill="#5a616b"></circle><circle cx="3" cy="13" r="1.3" fill="#5a616b"></circle><circle cx="9" cy="13" r="1.3" fill="#5a616b"></circle></svg>
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{r.color}}"></span>{{r.name}}
+                <sc-if value="{{r.noName}}" hint-placeholder-val="{{false}}"><span style="padding: 1px 6px; border-radius: 4px; background: rgba(240,180,83,0.12); color: #f0c47a; font-size: 11px">needs a name</span></sc-if>
+              </div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #a3a9b2">{{r.id}}</div>
+              <div><span style="padding: 2px 8px; border-radius: 5px; background: {{r.typeBg}}; color: {{r.typeColor}}; font-size: 12px">{{r.type}}</span></div>
+              <div style="font-size: 13px; color: #c4cad2">{{r.usedBy}}</div>
+              <div style="font-size: 13px; color: #a3a9b2">{{r.column}}</div>
+              <div style="display: flex; gap: 6px; justify-content: flex-end">
+                <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 12px">Rename</button>
+                <button type="button" disabled="{{r.locked}}" aria-label="Remove {{r.name}}" title="{{r.removeHint}}" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: {{r.removeColor}}; font-size: 12px">Remove</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="padding: 12px 22px; color: #8d949e; font-size: 12px">A status used by a workflow, or by any ticket, cannot be removed. Start, Done and Closed always exist: rename them instead.</div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var T = {
+      start: { label: 'Start', bg: '#22262c', color: '#c4cad2', dot: '#8d949e', column: 'Backlog' },
+      waiting: { label: 'Starts a workflow', bg: 'rgba(91,156,255,0.14)', color: '#9ec3ff', dot: '#5b9cff', column: 'Todo or In Progress' },
+      working: { label: 'While running', bg: 'rgba(240,180,83,0.12)', color: '#f0c47a', dot: '#f0b453', column: 'In Progress' },
+      done: { label: 'Done', bg: 'rgba(74,194,107,0.12)', color: '#6fd38b', dot: '#6fd38b', column: 'Done' },
+      closed: { label: 'Closed', bg: '#22262c', color: '#a3a9b2', dot: '#6b7280', column: 'Closed' },
+      unused: { label: 'Not used', bg: 'transparent', color: '#8d949e', dot: '#4b5058', column: 'Set by hand' }
+    };
+    function r(id, name, type, usedBy) {
+      var t = T[type];
+      var locked = type !== 'unused';
+      return { id: id, name: name || id, noName: !name, type: t.label, typeBg: t.bg, typeColor: t.color, color: t.dot, column: t.column, usedBy: usedBy, locked: locked, removeColor: locked ? '#5a616b' : '#f0a3a3', removeHint: locked ? 'In use' : 'Remove this status' };
+    }
+    var rows = [
+      r('none', 'Backlog', 'start', 'Where new tickets wait'),
+      r('unpack-ready', 'Unpack ready', 'waiting', 'Unpack'),
+      r('unpacking', '', 'working', 'Unpack'),
+      r('refine-ready', 'Refine ready', 'waiting', 'Refine'),
+      r('refining', '', 'working', 'Refine'),
+      r('dev-ready', 'Dev ready', 'waiting', 'Develop'),
+      r('deving', '', 'working', 'Develop'),
+      r('qa-ready', 'QA ready', 'waiting', 'QA'),
+      r('qa-ing', '', 'working', 'QA'),
+      r('need-escalate', 'Needs escalation', 'waiting', 'Escalation'),
+      r('escalating', '', 'working', 'Escalation'),
+      r('review-ready', 'Review ready', 'waiting', 'Review'),
+      r('reviewing', '', 'working', 'Review'),
+      r('plan-merge-ready', 'Plan merge ready', 'waiting', 'Plan merge'),
+      r('plan-merging', '', 'working', 'Plan merge'),
+      r('plan-merge-conflict', 'Plan merge conflict', 'waiting', 'Fix plan conflict'),
+      r('fixing-plan-conflict', '', 'working', 'Fix plan conflict'),
+      r('merge-ready', 'Merge ready', 'waiting', 'Merge'),
+      r('merging', '', 'working', 'Merge'),
+      r('merge-conflict', 'Merge conflict', 'waiting', 'Fix merge conflict'),
+      r('fixing-conflict', '', 'working', 'Fix merge conflict'),
+      r('merged', 'Done', 'done', 'Reached by Merge, Plan merge'),
+      r('closed', 'Close', 'closed', 'Set by a person'),
+      r('waiting-for-operator', 'Waiting for operator', 'unused', '—')
+    ];
+    var summary = [
+      { label: 'Starts a workflow', count: 10, hint: 'A ticket waits here to be picked up', color: '#5b9cff' },
+      { label: 'While running', count: 10, hint: 'A workflow is working the ticket', color: '#f0b453' },
+      { label: 'Start, Done, Closed', count: 3, hint: 'Always exist; rename only', color: '#6fd38b' },
+      { label: 'Not used', count: 1, hint: 'No workflow uses it; set by hand', color: '#4b5058' }
+    ];
+    return { rows: rows, summary: summary };
+  }
+}
+</script>
+</body>
+</html>

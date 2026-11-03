@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workflow - Routing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 3000px; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 240px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #5b9cff; color: #0b1220; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">&gt;_</div>
+      <div style="font-weight: 600; font-size: 15px">Agent Studio</div>
+    </div>
+    <div style="border: 1px solid #262a30; background: #16191d; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px">
+      <div style="font-weight: 600; font-size: 13px">Agent Studio</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">/mnt/c/Works/Proje…</div>
+    </div>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Home</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Teams</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Boards</a>
+    <div style="color: #e7e9ec; padding: 9px 10px; font-weight: 500">Workflow</div>
+    <a href="Statuses.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Statuses</a>
+    <a href="Prompts.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Workflow prompts</a>
+    <a href="#" style="color: #e7e9ec; padding: 8px 10px 8px 26px; border-radius: 6px; background: #181b20; font-weight: 500">Routing</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Agents</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Roles</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 20px">
+
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="max-width: 800px">
+        <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Routing</h1>
+        <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Each workflow starts when a ticket reaches its status. A free member with the workflow's role picks the ticket up, works through the steps, and the result sets the ticket's next status, where the next workflow takes over.</p>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 1px solid #2a2e35; background: #16191d; color: #e7e9ec; font-size: 13px">Worktrees: main</button>
+        <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add workflow</a>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between">
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <input placeholder="Filter by workflow, status, role or prompt" aria-label="Filter workflows" style="height: 32px; width: 300px; box-sizing: border-box; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px">
+        <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #16191d; color: #c4cad2; font-size: 13px">Expand all</button>
+        <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #a3a9b2; font-size: 13px">Collapse all</button>
+      </div>
+      <span style="color: #8d949e; font-size: 12px">10 workflows · no problems</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-radius: 8px; background: #151a22; border: 1px solid #22304a; color: #c4cdd9; font-size: 13px">
+      <strong style="font-weight: 600">In every workflow:</strong>
+      a paused run (usage limit, crash) or a cancelled run goes back to its start status and is not counted as a fail; a question from the agent waits for an answer and then the same session continues.
+    </div>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="color: #8d949e; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 6px">{{g.title}}</div>
+        <sc-for list="{{g.rows}}" as="w" hint-placeholder-count="3">
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: {{w.color}}"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">{{w.name}}</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">{{w.file}}</span>
+                <sc-if value="{{w.isDefault}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE · DEFAULT</span></sc-if>
+                <sc-if value="{{w.startOnly}}" hint-placeholder-val="{{true}}"><span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span></sc-if>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">{{w.starts}}</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">{{w.running}}</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{w.initial}}</span>{{w.role}}</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">{{w.where}}</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  <sc-for list="{{w.steps}}" as="s" hint-placeholder-count="2">
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">{{s.n}}</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: {{s.kindBg}}; color: {{s.kindColor}}; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">{{s.kind}}</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">{{s.id}}</span>
+                          <span style="color: #a3a9b2; font-size: 12px">{{s.detail}}</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ {{s.pass}}</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ {{s.fail}}</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  </sc-for>
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{w.passColor}}"></span>{{w.pass}}</span><sc-if value="{{w.hasRelease}}" hint-placeholder-val="{{false}}"><span style="color: #8d949e; font-size: 12px">{{w.release}}</span></sc-if></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{w.failColor}}"></span>{{w.fail}}</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to {{w.starts}}</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <sc-for list="{{w.limits}}" as="l" hint-placeholder-count="2"><li>{{l}}</li></sc-for>
+                </ul>
+                <sc-if value="{{w.hasCreated}}" hint-placeholder-val="{{false}}">
+                  <div style="color: #8d949e; font-size: 12px">{{w.created}}</div>
+                </sc-if>
+              </div>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+    </sc-for>
+
+    <section aria-labelledby="ends-title" style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 18px 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <div>
+        <h2 id="ends-title" style="margin: 0 0 4px; font-size: 15px; font-weight: 600">Start and end</h2>
+        <p style="margin: 0; color: #8d949e; font-size: 13px">New tickets wait in <strong style="color: #c4cad2; font-weight: 500">Backlog</strong>. Workflows finish tickets in <strong style="color: #c4cad2; font-weight: 500">Done</strong>; a person can move any ticket to <strong style="color: #c4cad2; font-weight: 500">Close</strong>.</p>
+      </div>
+      <a href="Statuses.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Manage statuses (23) →</a>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var C = { lane: '#5b9cff', done: '#6fd38b', start: '#8d949e', detour: '#f0b453', auto: '#b48cff' };
+    var K = { agent: ['AGENT', 'rgba(91,156,255,0.16)', '#9ec3ff'], check: ['CHECK', 'rgba(111,211,139,0.14)', '#6fd38b'], action: ['ACTION', 'rgba(180,140,255,0.16)', '#c9b0ff'], approval: ['APPROVAL', 'rgba(240,180,83,0.14)', '#f0c47a'] };
+    function steps(list) {
+      return list.map(function (s, i) { var k = K[s[0]]; return { n: i + 1, kind: k[0], kindBg: k[1], kindColor: k[2], id: s[1], detail: s[2], pass: s[3], fail: s[4] }; });
+    }
+    function w(o) {
+      o.isDefault = !!o.isDefault; o.startOnly = o.start && !o.isDefault;
+      o.hasRelease = !!o.release; o.hasCreated = !!o.created;
+      o.initial = o.role === 'Automatic' ? 'A' : o.role.charAt(0);
+      return o;
+    }
+    var implement = ['agent', 'implement', 'board-develop.md · edits files · may ask for test-unit, test-touched, app-deps-install', 'step 2 (tests)', 'end: fail'];
+    var tests = ['check', 'tests', 'check set code · skips commands already passed on this code', 'end: pass', 'back to step 1, up to 3 times, then end: fail'];
+    var groups = [
+      { title: 'Main path', rows: [
+        w({ name: 'Unpack', file: 'board-unpack.yaml', color: C.lane, starts: 'Unpack ready', running: 'Unpacking', role: 'ProductOwner', where: 'Isolated worktree', start: true,
+          steps: steps([['agent', 'unpack', 'board-unpack.md · edits files', 'end: pass', 'end: fail']]),
+          pass: 'Plan merge ready', passColor: C.auto, fail: 'Backlog', failColor: C.start, limits: ['Max 2 runs, then blocked'], created: 'Tickets the agent creates wait in Backlog.' }),
+        w({ name: 'Plan merge', file: 'merge-plan-merge-ready.yaml', color: C.auto, starts: 'Plan merge ready', running: 'Plan merging', role: 'Automatic', where: 'Runs on the board, one ticket at a time', start: false,
+          steps: steps([['action', 'merge', 'merge the ticket branch into main', 'end: pass', 'end: fail']]),
+          pass: 'Done', passColor: C.done, release: 'Then moves the tickets it created from Backlog to Refine ready.', fail: 'Plan merge conflict', failColor: C.detour, limits: ['Priority 0 after a fail'] }),
+        w({ name: 'Refine', file: 'board-refine.yaml', color: C.lane, starts: 'Refine ready', running: 'Refining', role: 'TeamLead', where: 'Isolated worktree', start: true,
+          steps: steps([['agent', 'refine', 'board-refine.md · read only', 'end: pass', 'end: fail']]),
+          pass: 'Dev ready', passColor: C.lane, fail: 'Backlog', failColor: C.start, limits: ['Max 2 runs, then blocked'] }),
+        w({ name: 'Develop', file: 'board-develop.yaml', color: C.lane, starts: 'Dev ready', running: 'Developing', role: 'Developer', where: 'Isolated worktree · sync base first · waits for dependencies', start: true, isDefault: true,
+          steps: steps([implement, tests]),
+          pass: 'QA ready', passColor: C.lane, fail: 'Dev ready', failColor: C.lane, limits: ['Max 6 runs, then blocked'] }),
+        w({ name: 'QA', file: 'board-qa.yaml', color: C.lane, starts: 'QA ready', running: 'Testing', role: 'QA', where: 'Isolated worktree', start: true,
+          steps: steps([
+            ['agent', 'add_tests', 'board-qa-tests.md · edits test files', 'step 2 (tests)', 'end: fail'],
+            ['check', 'tests', 'check set code', 'step 3 (verdict)', 'step 3 (verdict), which must then fail'],
+            ['agent', 'verdict', 'board-qa.md · read only', 'end: pass', 'end: fail']]),
+          pass: 'Review ready', passColor: C.lane, fail: 'Dev ready', failColor: C.lane, limits: ['3 fails in a row → Needs escalation', 'Priority 0 after a fail'] }),
+        w({ name: 'Review', file: 'board-review.yaml', color: C.lane, starts: 'Review ready', running: 'Reviewing', role: 'Reviewer', where: 'Isolated worktree', start: true,
+          steps: steps([['agent', 'review', 'board-review.md · read only', 'end: pass', 'end: fail']]),
+          pass: 'Merge ready', passColor: C.auto, fail: 'Dev ready', failColor: C.lane, limits: ['3 fails in a row → Needs escalation', 'Priority 0 after a fail'] }),
+        w({ name: 'Merge', file: 'merge-merge-ready.yaml', color: C.auto, starts: 'Merge ready', running: 'Merging', role: 'Automatic', where: 'Runs on the board, one ticket at a time', start: false,
+          steps: steps([['action', 'merge', 'merge the ticket branch into main', 'end: pass', 'end: fail']]),
+          pass: 'Done', passColor: C.done, fail: 'Merge conflict', failColor: C.detour, limits: ['Priority 0 after a fail'] })
+      ] },
+      { title: 'Detours', rows: [
+        w({ name: 'Escalation', file: 'board-senior-develop.yaml', color: C.detour, starts: 'Needs escalation', running: 'Escalating', role: 'SeniorDeveloper', where: 'Isolated worktree · sync base first', start: true,
+          steps: steps([implement, tests]),
+          pass: 'QA ready', passColor: C.lane, fail: 'Needs escalation', failColor: C.detour, limits: ['Max 3 runs, then blocked', 'Priority 0 after a fail'] }),
+        w({ name: 'Fix merge conflict', file: 'board-resolve-merge.yaml', color: C.detour, starts: 'Merge conflict', running: 'Fixing conflict', role: 'TeamLead', where: 'Isolated worktree · sync base first', start: true,
+          steps: steps([['agent', 'resolve', 'board-resolve-merge.md · edits files', 'end: pass', 'end: fail']]),
+          pass: 'Merge ready', passColor: C.auto, fail: 'Merge conflict', failColor: C.detour, limits: ['Max 3 runs, then blocked', 'Priority 0 after a fail'] }),
+        w({ name: 'Fix plan conflict', file: 'board-resolve-merge-plan-merge-conflict.yaml', color: C.detour, starts: 'Plan merge conflict', running: 'Fixing plan conflict', role: 'TeamLead', where: 'Isolated worktree · sync base first', start: true,
+          steps: steps([['agent', 'resolve', 'board-resolve-merge.md · edits files', 'end: pass', 'end: fail']]),
+          pass: 'Plan merge ready', passColor: C.auto, fail: 'Plan merge conflict', failColor: C.detour, limits: ['Max 3 runs, then blocked', 'Priority 0 after a fail'] })
+      ] }
+    ];
+    return { groups: groups };
+  }
+}
+</script>
+</body>
+</html>

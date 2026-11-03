@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Add status</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0b0d10}
+button,input{font-family:inherit}
+</style>
+</head><body>
+
+<div style="width: 600px; height: 640px; box-sizing: border-box; padding: 20px; background: #0b0d10; font-family: Inter, 'Segoe UI', system-ui, sans-serif; color: #e7e9ec; font-size: 14px">
+  <div role="dialog" aria-labelledby="as-title" style="background: #16191d; border: 1px solid #2a2e35; border-radius: 12px; overflow: hidden">
+    <div style="padding: 20px 24px 14px; border-bottom: 1px solid #23262c; display: flex; justify-content: space-between; gap: 12px">
+      <div>
+        <h2 id="as-title" style="margin: 0 0 4px; font-size: 17px; font-weight: 600">Add status</h2>
+        <p style="margin: 0; color: #8d949e; font-size: 13px">Stages pick their waiting and working statuses from this list.</p>
+      </div>
+      <button type="button" aria-label="Close" style="width: 32px; height: 32px; border-radius: 7px; border: 0; background: transparent; color: #a3a9b2; font-size: 18px">×</button>
+    </div>
+    <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 16px">
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #c4cad2">Name
+        <input value="Fact checking" style="height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: 7px; border: 1px solid #5b9cff; background: #121418; color: #e7e9ec; font-size: 14px">
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #c4cad2">ID
+        <input value="fact-checking" style="height: 36px; box-sizing: border-box; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-family: 'JetBrains Mono', monospace; font-size: 13px">
+        <span style="color: #8d949e; font-size: 12px">Made from the name. Used in the CLI and in board.json; it cannot change after the status is created.</span>
+      </label>
+      <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 8px">
+        <legend style="padding: 0 0 6px; font-size: 13px; color: #c4cad2">Type</legend>
+        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #5b9cff; border-radius: 8px; background: rgba(91,156,255,0.06); font-size: 13px">
+          <input type="radio" name="kind" checked="" style="margin-top: 2px; accent-color: #5b9cff">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Normal</span><span style="color: #8d949e">A stage can use it as its waiting or working status, or you set it on tickets by hand.</span></span>
+        </label>
+        <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #23262c; border-radius: 8px; font-size: 13px">
+          <input type="radio" name="kind" style="margin-top: 2px; accent-color: #5b9cff">
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-weight: 500">Done</span><span style="color: #8d949e">Another way to finish, e.g. Published or Shipped. The ticket goes to the Done column.</span></span>
+        </label>
+      </fieldset>
+      <p style="margin: 0; color: #8d949e; font-size: 12px">The board already has its start status (Backlog) and its closed status (Close); there is only one of each.</p>
+    </div>
+    <div style="padding: 14px 24px; border-top: 1px solid #23262c; display: flex; justify-content: flex-end; gap: 8px">
+      <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Cancel</button>
+      <button type="button" style="height: 34px; padding: 0 16px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">Add status</button>
+    </div>
+  </div>
+</div>
+</body></html>

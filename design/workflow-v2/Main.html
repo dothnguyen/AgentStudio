@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Workflow - Routing</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button{font-family:inherit}
+</style>
+</head><body>
+
+<div style="min-height: 3000px; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 240px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #5b9cff; color: #0b1220; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">&gt;_</div>
+      <div style="font-weight: 600; font-size: 15px">Agent Studio</div>
+    </div>
+    <div style="border: 1px solid #262a30; background: #16191d; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px">
+      <div style="font-weight: 600; font-size: 13px">Agent Studio</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">/mnt/c/Works/Proje…</div>
+    </div>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Home</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Teams</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Boards</a>
+    <div style="color: #e7e9ec; padding: 9px 10px; font-weight: 500">Workflow</div>
+    <a href="Statuses.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Statuses</a>
+    <a href="Prompts.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Workflow prompts</a>
+    <a href="#" style="color: #e7e9ec; padding: 8px 10px 8px 26px; border-radius: 6px; background: #181b20; font-weight: 500">Routing</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Agents</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Roles</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 20px">
+
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="max-width: 800px">
+        <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Routing</h1>
+        <p style="margin: 0; color: #a3a9b2; line-height: 1.5">Each workflow starts when a ticket reaches its status. A free member with the workflow's role picks the ticket up, works through the steps, and the result sets the ticket's next status, where the next workflow takes over.</p>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 1px solid #2a2e35; background: #16191d; color: #e7e9ec; font-size: 13px">Worktrees: main</button>
+        <a href="AddStage.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ Add workflow</a>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between">
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <input placeholder="Filter by workflow, status, role or prompt" aria-label="Filter workflows" style="height: 32px; width: 300px; box-sizing: border-box; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px">
+        <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #16191d; color: #c4cad2; font-size: 13px">Expand all</button>
+        <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #a3a9b2; font-size: 13px">Collapse all</button>
+      </div>
+      <span style="color: #8d949e; font-size: 12px">10 workflows · no problems</span>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px; border-radius: 8px; background: #151a22; border: 1px solid #22304a; color: #c4cdd9; font-size: 13px">
+      <strong style="font-weight: 600">In every workflow:</strong>
+      a paused run (usage limit, crash) or a cancelled run goes back to its start status and is not counted as a fail; a question from the agent waits for an answer and then the same session continues.
+    </div>
+
+    
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="color: #8d949e; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 6px">Main path</div>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Unpack</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-unpack.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Unpack ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Unpacking</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>ProductOwner</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">unpack</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-unpack.md · edits files</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #b48cff"></span>Plan merge ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #8d949e"></span>Backlog</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Unpack ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 2 runs, then blocked</li>
+                </ul>
+                
+                  <div style="color: #8d949e; font-size: 12px">Tickets the agent creates wait in Backlog.</div>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #b48cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Plan merge</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">merge-plan-merge-ready.yaml</span>
+                
+                
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Plan merge ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Plan merging</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">A</span>Automatic</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Runs on the board, one ticket at a time</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(180,140,255,0.16); color: #c9b0ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">ACTION</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">merge</span>
+                          <span style="color: #a3a9b2; font-size: 12px">merge the ticket branch into main</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #6fd38b"></span>Done</span><span style="color: #8d949e; font-size: 12px">Then moves the tickets it created from Backlog to Refine ready.</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453"></span>Plan merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Plan merge ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Refine</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-refine.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Refine ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Refining</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>TeamLead</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">refine</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-refine.md · read only</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>Dev ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #8d949e"></span>Backlog</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Refine ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 2 runs, then blocked</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Develop</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-develop.yaml</span>
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE · DEFAULT</span>
+                
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Dev ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Developing</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">D</span>Developer</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree · sync base first · waits for dependencies</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">implement</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-develop.md · edits files · may ask for test-unit, test-touched, app-deps-install</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ step 2 (tests)</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">2</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(111,211,139,0.14); color: #6fd38b; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">CHECK</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">tests</span>
+                          <span style="color: #a3a9b2; font-size: 12px">check set code · skips commands already passed on this code</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ back to step 1, up to 3 times, then end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>QA ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>Dev ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Dev ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 6 runs, then blocked</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">QA</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-qa.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">QA ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Testing</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">Q</span>QA</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">add_tests</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-qa-tests.md · edits test files</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ step 2 (tests)</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">2</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(111,211,139,0.14); color: #6fd38b; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">CHECK</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">tests</span>
+                          <span style="color: #a3a9b2; font-size: 12px">check set code</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ step 3 (verdict)</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ step 3 (verdict), which must then fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">3</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">verdict</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-qa.md · read only</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>Review ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>Dev ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to QA ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>3 fails in a row → Needs escalation</li><li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #5b9cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Review</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-review.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Review ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Reviewing</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span>Reviewer</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">review</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-review.md · read only</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #b48cff"></span>Merge ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>Dev ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Review ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>3 fails in a row → Needs escalation</li><li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #b48cff"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Merge</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">merge-merge-ready.yaml</span>
+                
+                
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Merge ready</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Merging</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">A</span>Automatic</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Runs on the board, one ticket at a time</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(180,140,255,0.16); color: #c9b0ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">ACTION</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">merge</span>
+                          <span style="color: #a3a9b2; font-size: 12px">merge the ticket branch into main</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #6fd38b"></span>Done</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453"></span>Merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Merge ready</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+      </div>
+    
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="color: #8d949e; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; padding-top: 6px">Detours</div>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #f0b453"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Escalation</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-senior-develop.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Needs escalation</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Escalating</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>SeniorDeveloper</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree · sync base first</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">implement</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-develop.md · edits files · may ask for test-unit, test-touched, app-deps-install</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ step 2 (tests)</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">2</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(111,211,139,0.14); color: #6fd38b; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">CHECK</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">tests</span>
+                          <span style="color: #a3a9b2; font-size: 12px">check set code · skips commands already passed on this code</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ back to step 1, up to 3 times, then end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #5b9cff"></span>QA ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453"></span>Needs escalation</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Needs escalation</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 3 runs, then blocked</li><li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #f0b453"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Fix merge conflict</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-resolve-merge.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Fixing conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>TeamLead</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree · sync base first</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">resolve</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-resolve-merge.md · edits files</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #b48cff"></span>Merge ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453"></span>Merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Merge conflict</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 3 runs, then blocked</li><li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+          <article style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #23262c; background: #181b20">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+                <span style="width: 9px; height: 9px; border-radius: 50%; background: #f0b453"></span>
+                <h2 style="margin: 0; font-size: 15px; font-weight: 600">Fix plan conflict</h2>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">board-resolve-merge-plan-merge-conflict.yaml</span>
+                
+                <span style="padding: 2px 8px; border-radius: 5px; background: rgba(91,156,255,0.10); color: #9ec3ff; font-size: 11px; font-weight: 600">START HERE</span>
+              </div>
+              <a href="EditStage.dc.html" style="display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Edit</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.7fr) minmax(0, 1.15fr); gap: 0">
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Picks up</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Starts at</span><span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">Plan merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">While running</span><span style="padding: 2px 8px; border-radius: 5px; background: rgba(240,180,83,0.12); color: #f0c47a">Fixing plan conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 92px; color: #8d949e; font-size: 12px">Role</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 20px; height: 20px; border-radius: 5px; background: #1f2630; color: #9ec3ff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>TeamLead</span></div>
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 92px; flex: none; color: #8d949e; font-size: 12px">Works in</span><span style="color: #c4cad2">Isolated worktree · sync base first</span></div>
+                </div>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid #23262c">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Steps</div>
+                <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+                  
+                    <li style="display: flex; gap: 10px">
+                      <span style="flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #2a2e35; color: #a3a9b2; font-size: 11px; display: flex; align-items: center; justify-content: center">1</span>
+                      <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+                        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+                          <span style="padding: 0 6px; border-radius: 4px; background: rgba(91,156,255,0.16); color: #9ec3ff; font-size: 10px; font-weight: 600; letter-spacing: 0.03em">AGENT</span>
+                          <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #e7e9ec">resolve</span>
+                          <span style="color: #a3a9b2; font-size: 12px">board-resolve-merge.md · edits files</span>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px">
+                          <span><span style="color: #6fd38b">✓ pass</span> <span style="color: #c4cad2">→ end: pass</span></span>
+                          <span><span style="color: #f48771">✗ fail</span> <span style="color: #c4cad2">→ end: fail</span></span>
+                        </div>
+                      </div>
+                    </li>
+                  
+                </ol>
+              </div>
+
+              <div style="padding: 14px 18px; display: flex; flex-direction: column; gap: 10px">
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase">Ends</div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+                  <div style="display: flex; align-items: flex-start; gap: 8px"><span style="width: 56px; flex: none; color: #6fd38b; font-size: 12px">Pass</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #b48cff"></span>Plan merge ready</span></span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #f48771; font-size: 12px">Fail</span><span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f0b453"></span>Plan merge conflict</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px"><span style="width: 56px; color: #a3a9b2; font-size: 12px">Blocked</span><span style="color: #c4cad2">Blocked, back to Plan merge conflict</span></div>
+                </div>
+                <div style="color: #8d949e; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 4px">Limits</div>
+                <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #c4cad2">
+                  <li>Max 3 runs, then blocked</li><li>Priority 0 after a fail</li>
+                </ul>
+                
+              </div>
+            </div>
+          </article>
+        
+      </div>
+    
+
+    <section aria-labelledby="ends-title" style="background: #16191d; border: 1px solid #262a30; border-radius: 10px; padding: 18px 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
+      <div>
+        <h2 id="ends-title" style="margin: 0 0 4px; font-size: 15px; font-weight: 600">Start and end</h2>
+        <p style="margin: 0; color: #8d949e; font-size: 13px">New tickets wait in <strong style="color: #c4cad2; font-weight: 500">Backlog</strong>. Workflows finish tickets in <strong style="color: #c4cad2; font-weight: 500">Done</strong>; a person can move any ticket to <strong style="color: #c4cad2; font-weight: 500">Close</strong>.</p>
+      </div>
+      <a href="Statuses.dc.html" style="display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Manage statuses (23) →</a>
+    </section>
+  </main>
+</div>
+</body></html>

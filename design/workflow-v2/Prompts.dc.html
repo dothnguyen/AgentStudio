@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workflow prompts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#111316}
+a{color:#7fb2ff;text-decoration:none}a:hover{color:#a9cbff}
+button,input,select{font-family:inherit}
+</style>
+</helmet>
+<div style="min-height: 1500px; display: flex; flex-wrap: wrap; background: #111316; color: #e7e9ec; font-family: Inter, 'Segoe UI', system-ui, sans-serif; font-size: 14px">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; max-width: 240px; box-sizing: border-box; background: #0d0f12; border-right: 1px solid #23262c; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px">
+      <div style="width: 26px; height: 26px; border-radius: 6px; background: #5b9cff; color: #0b1220; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px">&gt;_</div>
+      <div style="font-weight: 600; font-size: 15px">Agent Studio</div>
+    </div>
+    <div style="border: 1px solid #262a30; background: #16191d; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px">
+      <div style="font-weight: 600; font-size: 13px">Agent Studio</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8d949e">/mnt/c/Works/Proje…</div>
+    </div>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Home</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Teams</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Boards</a>
+    <div style="color: #e7e9ec; padding: 9px 10px; font-weight: 500">Workflow</div>
+    <a href="Statuses.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Statuses</a>
+    <a href="#" style="color: #e7e9ec; padding: 8px 10px 8px 26px; border-radius: 6px; background: #181b20; font-weight: 500">Workflow prompts</a>
+    <a href="Main.dc.html" style="color: #b9bec6; padding: 8px 10px 8px 26px; border-radius: 6px">Routing</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Agents</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Roles</a>
+    <a href="#" style="color: #b9bec6; padding: 9px 10px; border-radius: 6px">Configuration</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 32px 40px 56px; display: flex; flex-direction: column; gap: 22px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div style="max-width: 780px">
+        <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 600">Workflow prompts</h1>
+        <p style="margin: 0; color: #a3a9b2; line-height: 1.5">The instructions an agent gets for one agent step of a workflow. Placeholders such as the ticket text are filled in when the step starts. Files live in <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">.agent-studio/workflows/prompts/</span>.</p>
+      </div>
+      <a href="NewPrompt.dc.html" style="display: inline-flex; align-items: center; height: 34px; padding: 0 14px; border-radius: 7px; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">+ New prompt</a>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start">
+
+      <section aria-labelledby="p-list" style="flex: 1 1 320px; max-width: 380px; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #23262c; display: flex; flex-direction: column; gap: 10px">
+          <h2 id="p-list" style="margin: 0; font-size: 15px; font-weight: 600">Prompts</h2>
+          <input placeholder="Filter prompts" aria-label="Filter prompts" style="height: 32px; box-sizing: border-box; padding: 0 10px; border-radius: 7px; border: 1px solid #2a2e35; background: #121418; color: #e7e9ec; font-size: 13px">
+        </div>
+        <div style="padding: 8px 16px 4px; color: #8d949e; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase">Board prompts (7)</div>
+        <sc-for list="{{prompts}}" as="p" hint-placeholder-count="7">
+          <button type="button" style="width: 100%; text-align: left; border: 0; border-left: 3px solid {{p.mark}}; background: {{p.bg}}; color: #e7e9ec; padding: 10px 16px 10px 13px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #1f2328">
+            <span style="display: flex; justify-content: space-between; gap: 8px; width: 100%"><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500">{{p.file}}</span><span style="color: #8d949e; font-size: 12px">{{p.words}} words</span></span>
+            <span style="color: #a3a9b2; font-size: 12px">{{p.usedBy}}</span>
+          </button>
+        </sc-for>
+        <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; color: #a3a9b2; padding: 12px 16px; font-size: 13px">▸ Other prompts (4) · used by story-delivery</button>
+      </section>
+
+      <section aria-labelledby="p-edit" style="flex: 999 1 560px; min-width: 0; background: #16191d; border: 1px solid #262a30; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column">
+        <div style="padding: 16px 20px; border-bottom: 1px solid #23262c; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <h2 id="p-edit" style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500">board-qa.md</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: #8d949e">Used by
+              <span style="padding: 2px 8px; border-radius: 5px; background: #1e2228; color: #c4cad2">QA workflow · step verdict · QA</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: flex-start">
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Duplicate</button>
+            <button type="button" disabled="" title="Used by 1 workflow step" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #2a2e35; background: transparent; color: #5a616b; font-size: 13px">Delete</button>
+          </div>
+        </div>
+
+        <div style="padding: 12px 20px; border-bottom: 1px solid #23262c; display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+          <span style="color: #8d949e; font-size: 12px; margin-right: 4px">Insert placeholder</span>
+          <sc-for list="{{holes}}" as="h" hint-placeholder-count="8">
+            <button type="button" title="{{h.help}}" style="height: 26px; padding: 0 8px; border-radius: 5px; border: 1px solid {{h.border}}; background: {{h.bg}}; color: {{h.color}}; font-family: 'JetBrains Mono', monospace; font-size: 12px">{{h.label}}</button>
+          </sc-for>
+        </div>
+
+        <label style="display: block; padding: 0">
+          <span style="position: absolute; left: -9999px">Prompt text</span>
+          <pre style="margin: 0; padding: 16px 20px; min-height: 620px; box-sizing: border-box; background: #121418; color: #d6dae0; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word">{{text}}</pre>
+        </label>
+
+        <div style="padding: 12px 20px; border-top: 1px solid #23262c; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+          <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center; color: #8d949e; font-size: 12px">
+            <span>285 words · about 380 tokens</span>
+            <span style="color: #6fd38b">Placeholders OK</span>
+            <span style="color: #f0b453">Unsaved changes</span>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button type="button" style="height: 34px; padding: 0 14px; border-radius: 7px; border: 1px solid #2a2e35; background: #1b1f24; color: #e7e9ec; font-size: 13px">Revert</button>
+            <button type="button" style="height: 34px; padding: 0 16px; border-radius: 7px; border: 0; background: #5b9cff; color: #0b1220; font-weight: 600; font-size: 13px">Save prompt</button>
+          </div>
+        </div>
+        <div style="padding: 0 20px 14px; color: #8d949e; font-size: 12px">Saved changes apply to steps that start afterwards; runs already in progress keep the prompt they started with.</div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    function p(file, words, usedBy, selected) {
+      return { file: file, words: words, usedBy: usedBy, bg: selected ? '#1b2230' : 'transparent', mark: selected ? '#5b9cff' : 'transparent' };
+    }
+    var prompts = [
+      p('board-develop.md', 420, 'Develop · implement, Escalation · implement'),
+      p('board-qa-tests.md', 150, 'QA · add tests'),
+      p('board-qa.md', 285, 'QA · verdict', true),
+      p('board-refine.md', 408, 'Refine · refine'),
+      p('board-resolve-merge.md', 147, 'Fix merge conflict · resolve, Fix plan conflict · resolve'),
+      p('board-review.md', 239, 'Review · review'),
+      p('board-unpack.md', 363, 'Unpack · unpack')
+    ];
+    function h(name, help, used) {
+      return { label: '{{' + name + '}}', help: help, bg: used ? 'rgba(91,156,255,0.12)' : '#1b1f24', color: used ? '#9ec3ff' : '#a3a9b2', border: used ? '#2b3f63' : '#2a2e35' };
+    }
+    var holes = [
+      h('task', 'The ticket being worked', true),
+      h('validation', 'Results of the previous check step', true),
+      h('summary', 'Summary from the previous step', true),
+      h('findings', 'Findings from earlier rounds', false),
+      h('delegated_commands', 'Commands this step may ask the coordinator to run', false),
+      h('diff', 'The change on the branch (large)', false),
+      h('stage', 'This step id', false),
+      h('visit', 'Which attempt of this step this is', false)
+    ];
+    var o = '{{', c = '}}';
+    var text = 'QA VERDICT for the ticket. Check each "Done when" item and acceptance criterion in TASK against the change and its tests. The diff is not included here: see the change with `git log main..HEAD --stat` and `git diff main...HEAD` (or `git diff main...HEAD -- PATH` for one file), and read changed files where the diff is not enough. You cannot change files.\n\n'
+      + 'TESTS. The coordinator already ran the checks for this change; VALIDATION shows the result. A failing check is a blocker: quote the failing tests.\n\n'
+      + 'UI tickets with a mockup: if you can view the image, compare the ticket\'s assigned regions with it; a concrete mismatch with an explicit design requirement is a blocker. If you cannot view it, say so; never claim a comparison you did not make.\n\n'
+      + 'LIVE CHECKS (launching the app, real provider accounts, a live end-to-end run) need a person. Never fail for them or ask for recorded evidence; list each as "OPERATOR CHECK: <what to run and what to see>" (it does not affect the verdict).\n\n'
+      + 'BLOCKER: a failing test; an unmet acceptance criterion or "Done when" item; a concrete bug (input -> wrong result); a criterion with no test. Everything else is a SUGGESTION. Fail only with at least one blocker. Write "BLOCKER: file:line - what is wrong - how to reproduce - what correct looks like" or "SUGGESTION: ...", blockers first, at most 10 suggestions.\n\n'
+      + 'Shell: read-only, one simple command at a time (`git diff main...HEAD`, `git log`, `git status`, `rg PATTERN`, `ls`, `cat FILE`). No `cd`, `&&`, `;`, pipes, loops or `find`; a denied command pauses the whole run. Read files with your file tools. Do not look at other tickets\' branches or worktrees.\n\n'
+      + o + 'task' + c + '\n' + o + 'validation' + c + '\n' + o + 'summary' + c;
+    return { prompts: prompts, holes: holes, text: text };
+  }
+}
+</script>
+</body>
+</html>
