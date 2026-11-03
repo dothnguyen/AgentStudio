@@ -32,7 +32,7 @@ The startup window uses a compact dark workbench layout. It supports keyboard na
 shows visible focus outlines, and disables nonessential loading animation when the operating system's
 reduced-motion preference is enabled.
 
-Opening a workspace shows its dashboard. The header reports the current connection state and the time
+Opening a workspace shows its dashboard. Use the sidebar footer’s **Switch workspace** button to return to the workspace list. The header reports the current connection state and the time
 the latest team response reached the renderer. Team and Board status load independently; Refresh asks
 both settled sections to reload without duplicating a request that is already in flight; callers wait
 for that request to finish, and responses

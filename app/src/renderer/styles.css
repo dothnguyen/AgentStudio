@@ -193,15 +193,6 @@ code,
 .sidebar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 2px 8px; }
 .sidebar-brand-tile { display: flex; flex: none; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 7px; color: #0d0f12; background: #5b9cff; }
 .sidebar-product { min-width: 0; overflow: hidden; color: #e7e9ec; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-selector { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 0; padding: 10px; text-align: left; color: #e7e9ec; border: 1px solid #23262c; border-radius: 8px; background: #14171b; }
-.workspace-selector:hover:not(:disabled) { color: #e7e9ec; border-color: #2a2e35; background: #181b20; }
-.workspace-avatar { display: flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #9ec3ff; background: #1f2630; font-size: 11px; font-weight: 600; line-height: 1; }
-.workspace-selector-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
-.workspace-selector-chevron { color: #8d949e; }
-.workspace-name,
-.workspace-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-name { color: #e7e9ec; font-size: 13px; font-weight: 600; }
-.workspace-path { color: #8d949e; font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; }
 .workspace-sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .workspace-sidebar nav button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 0; padding: 8px 10px; text-align: left; color: #b9bec6; border: 0; border-radius: 6px; background: transparent; font-weight: 400; }
 .workspace-sidebar nav button:hover:not(:disabled) { color: #e7e9ec; background: #181b20; }

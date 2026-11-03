@@ -182,7 +182,6 @@ describe('dashboard accessibility', () => {
     const board = within(result.getByRole('region', { name: 'Board status' }));
     const team = within(result.getByRole('region', { name: 'Team status' }));
     const ordered = [
-      result.getByRole('button', { name: /^Current workspace: / }),
       result.getByRole('button', { name: 'Home' }),
       result.getByRole('button', { name: 'Teams' }),
       result.getByRole('button', { name: 'Boards' }),
@@ -285,8 +284,6 @@ describe('dashboard accessibility', () => {
     expect(name.textContent).toBe(workspace.name);
     expect(name.getAttribute('title')).toBe(workspace.name);
     expect(c.querySelector('.dashboard-path')!.textContent).toBe(workspace.path);
-    expect(c.querySelector('.workspace-name')!.getAttribute('title')).toBe(workspace.name);
-    expect(c.querySelector('.workspace-path')!.getAttribute('title')).toBe(workspace.path);
     const boardText = result.getByRole('region', { name: 'Board status' }).textContent!;
     expect(boardText).toContain(phase);
     expect(boardText).toContain(ticket);

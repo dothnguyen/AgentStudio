@@ -181,8 +181,6 @@ describe('dashboard styles', () => {
     const flat = squash(css);
     expect(flat).toMatch(/\.workspace-sidebar \{[^}]*gap: 18px;[^}]*border-right: 1px solid #23262c;[^}]*background: #0d0f12;/);
     expect(flat).toMatch(/\.sidebar-brand-tile \{[^}]*width: 26px;[^}]*height: 26px;[^}]*border-radius: 7px;[^}]*background: #5b9cff;/);
-    expect(flat).toMatch(/\.workspace-selector \{[^}]*padding: 10px;[^}]*border: 1px solid #23262c;[^}]*border-radius: 8px;[^}]*background: #14171b;/);
-    expect(flat).toMatch(/\.workspace-avatar \{[^}]*width: 28px;[^}]*height: 28px;[^}]*background: #1f2630;/);
     expect(flat).toMatch(/\.workspace-sidebar nav button \{[^}]*padding: 8px 10px;[^}]*color: #b9bec6;[^}]*border-radius: 6px;/);
     expect(flat).toMatch(/\.sidebar-footer \{[^}]*margin-top: auto;[^}]*padding-top: 12px;[^}]*border-top: 1px solid #23262c;/);
     expect(flat).toMatch(/\.workspace-shell \{[^}]*grid-template-columns: 240px minmax\(0, 1fr\);/);
@@ -216,7 +214,6 @@ describe('dashboard styles', () => {
     expect(flat).toMatch(/\.dashboard-header \{[^}]*flex-wrap: wrap/);
     expect(flat).toMatch(/\.breadcrumb ol \{[^}]*flex-wrap: wrap/);
     expect(flat).toMatch(/\.dashboard-workspace-name \{[^}]*overflow-wrap: anywhere/);
-    expect(flat).toMatch(/\.workspace-name, \.workspace-path \{[^}]*text-overflow: ellipsis/);
     expect(flat).toMatch(/\.workspace-sidebar nav button\[aria-current="page"\] \{[^}]*background: #181b20;[^}]*font-weight: 500;/);
     expect(flat).toMatch(/button:focus-visible[^{]*\{ outline: 2px solid var\(--focus\)/);
   });

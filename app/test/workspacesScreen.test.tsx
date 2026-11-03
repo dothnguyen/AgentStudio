@@ -179,8 +179,7 @@ describe('WorkspacesScreen', () => {
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
     expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Beta');
-    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
-    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/b');
+    expect(result.container.querySelector('.dashboard-path')?.textContent).toBe('/home/me/b');
     expect(result.queryByRole('button', { name: 'Back' })).toBeNull();
   });
 
@@ -204,7 +203,6 @@ describe('WorkspacesScreen', () => {
 
     await act(async () => refresh.resolve(ok(ws('a', 'Alpha', '/a'), added)));
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Beta');
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
     expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Beta');
   });
@@ -244,8 +242,8 @@ describe('WorkspacesScreen', () => {
     await settle();
 
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Renamed in registry');
-    expect(result.container.querySelector('.workspace-path')?.textContent).toBe(refreshed.path);
+    expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Renamed in registry');
+    expect(result.container.querySelector('.dashboard-path')?.textContent).toBe(refreshed.path);
   });
 
   it('prefers the created id when the refreshed list also contains a path match', async () => {
@@ -263,8 +261,8 @@ describe('WorkspacesScreen', () => {
     await settle();
 
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('ID match');
-    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/registry/id-match');
+    expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('ID match');
+    expect(result.container.querySelector('.dashboard-path')?.textContent).toBe('/registry/id-match');
   });
 
   it('existing path refreshes without a duplicate and selects it', async () => {
@@ -450,8 +448,7 @@ describe('WorkspacesScreen', () => {
     fireEvent.click(result.container.querySelector('.ws-row')!);
 
     expect(result.container.querySelector('.workspace-shell')).toBeTruthy();
-    expect(result.container.querySelector('.workspace-name')?.textContent).toBe('Alpha');
-    expect(result.container.querySelector('.workspace-path')?.textContent).toBe('/home/me/a');
+    expect(result.container.querySelector('.dashboard-path')?.textContent).toBe('/home/me/a');
     expect(result.getByRole('heading', { level: 1 }).textContent).toBe('Workspace overview');
     expect(result.container.querySelector('.dashboard-workspace-name')?.textContent).toBe('Alpha');
     expect(result.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
