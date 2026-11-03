@@ -451,8 +451,8 @@ backlog; agent-created tickets use the parent rule's configured status, the agen
 with the board column derived from that workflow status.
 
 The scheduler picks unassigned tickets in the todo or in-progress column by their workflow status; backlog
-tickets are not claimed. Claims move the workflow to the rule's during status and the column to in-progress.
-Dependencies are finished when their column is done or closed; caps count assigned tickets in the during status.
+tickets are not claimed. Workflows are considered by priority and name; claims move tickets to their whileRunning status and the in-progress column. Any free member of the workflow role can claim a ticket. Dependencies are finished when their column is done or closed; workflows may wait for them.
+Structured workflow end directives can release tickets created by the run on pass or fail, and specify the return status used when a blocked ticket is unblocked.
 
 **Agents adding tickets over MCP.** A member with `"canAddTickets": true` in `teams/<id>.json` gets a per-assignment
 MCP server (`agent-studio mcp`, stdio JSON-RPC, standard library only) when the board works one of its tickets: the

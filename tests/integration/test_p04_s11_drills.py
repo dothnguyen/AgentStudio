@@ -202,14 +202,18 @@ class MergeConflict(DrillCase):
         self.assertTrue(r["ok"], r)
         self.seed(first["worktreePath"], "from first\n")
         self.seed(second["worktreePath"], "from second\n")
-        self.wait_status("T-001", ("merged",), timeout=180)
+        winner = self.wait_for(
+            lambda: next((key for key in ("T-001", "T-002")
+                          if self.ticket(key)["workflowStatus"] == "merged"), None),
+            180, "one ticket to merge")
+        loser = "T-002" if winner == "T-001" else "T-001"
         conflict = self.wait_for(
-            lambda: next((e for e in self.events("T-002") if e["name"] == "ticket.merge_conflict"), None),
+            lambda: next((e for e in self.events(loser) if e["name"] == "ticket.merge_conflict"), None),
             120, "merge conflict")
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket("T-002")["workflowStatus"], "build")
+        self.assertEqual(self.ticket(loser)["workflowStatus"], "build")
         with open(os.path.join(self.ws, "shared.txt")) as f:
-            self.assertEqual(f.read(), "from first\n")
+            self.assertEqual(f.read(), "from first\n" if winner == "T-001" else "from second\n")
 
 
 class RoundLimit(DrillCase):

@@ -149,6 +149,47 @@ class Binding(SchedCase):
 
 
 class TickRules(SchedCase):
+    def test_structured_end_directives_apply_to_finished_runs(self):
+        config = {"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "working"},
+            {"id": "return"}, {"id": "released"},
+            {"id": "done", "kind": "done"}], "todoEntry": [],
+            "todoDefault": None, "ticketFields": [], "rules": []}
+        definition = {"version": 2, "startsAt": "ready", "whileRunning": "working", "role": "worker",
+                      "end": {"pass": {"status": "done", "releaseCreatedTickets": {"from": "none", "to": "released"}},
+                              "fail": {"status": "return", "releaseCreatedTickets": {"from": "none", "to": "released"}},
+                              "blocked": {"status": "blocked", "returnTo": "return"}},
+                      "stages": [{"id": "work", "role": "worker", "permission": "read_only",
+                                  "prompt": "work", "next": {"done": "$succeed"}}]}
+        with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
+            json.dump(definition, f)
+        self.write_board(config)
+        for run_status, expected in [('succeeded', 'done'), ('failed', 'return'), ('cancelled', 'blocked')]:
+            with self.subTest(run_status=run_status):
+                with self.store.transaction() as tx:
+                    parent = boardmodel.ticket_add(tx, self.ws, {'title': 'parent', 'priority': 100})['ticket']
+                    tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?", (parent['id'],))
+                    tx.conn.execute("UPDATE board_state SET run_status = 'running' WHERE workspace = ?", (self.ws,))
+                tick = self.tick()
+                self.assertEqual(tick['claimed'], 1, tick)
+                run = self.ticket(parent['key'])['active_run_id']
+                assignment = self.conn.execute('SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?', (run,)).fetchone()[0]
+                with self.store.transaction() as tx:
+                    child = boardmodel.ticket_add(tx, self.ws, {'title': 'child', 'priority': 100})['ticket']
+                    tx.conn.execute('UPDATE tickets SET created_by_assignment = ? WHERE id = ?', (assignment, child['id']))
+                    tx.conn.execute("UPDATE board_state SET run_status = 'stopped' WHERE workspace = ?", (self.ws,))
+                self.finish(run, run_status)
+                self.assertEqual(self.tick()['applied'], 1)
+                row = self.ticket(parent['key'])
+                self.assertEqual(row['workflow_status'], expected)
+                self.assertEqual(self.ticket(child['key'])['workflow_status'], 'none' if run_status == 'cancelled' else 'released')
+                if run_status == 'cancelled':
+                    self.assertEqual(row['return_status'], 'return')
+                    with self.store.transaction() as tx:
+                        boardmodel.ticket_unblock(tx, self.ws, {'key': parent['key']})
+                    self.assertEqual(self.ticket(parent['key'])['workflow_status'], 'return')
+                self.free_member()
+
     def test_merge_conflict_uses_during_and_leaves_ticket_in_progress(self):
         from types import SimpleNamespace
         config = boardmodel.load_config(self.ws)
@@ -233,8 +274,7 @@ class TickRules(SchedCase):
             self.assertEqual(boardsched._deps_open(tx, waiting["id"], config), 0)
             tx.conn.execute("UPDATE tickets SET status = 'in-progress', workflow_status = ?, assignee = ? WHERE id = ?", (rule["during"], self.worker, dep["id"]))
             self.assertEqual(boardsched._deps_open(tx, waiting["id"], config), 1)
-            self.assertEqual(boardsched._active_under_rule(tx, self.ws, rule), 1)
-            self.assertEqual(boardsched._claiming_rule(tx, self.ws, dict(tx.conn.execute("SELECT * FROM tickets WHERE id = ?", (dep["id"],)).fetchone())), rule)
+            self.assertEqual(boardsched._claiming_workflow(tx, self.ws, dict(tx.conn.execute("SELECT * FROM tickets WHERE id = ?", (dep["id"],)).fetchone()))["startsAt"], rule["when"]["status"])
 
     @patch("agent_studio.providers.probe_many", return_value={"fake": {"available": True}})
     def test_quota_failover_reclaims_ticket_with_fallback_agent(self, probe):
@@ -472,14 +512,154 @@ class TickRules(SchedCase):
         self.assertEqual(self.ticket("T-001")["workflow_status"], "merged")
         self.assertIsNotNone(self.ticket("T-002")["active_run_id"])
 
-    def test_cap(self):
-        self.write_board(rules_board_json(cap=1))
-        self.add_ticket("one")
-        self.add_ticket("two")
-        self.tick()
-        self.tick()
-        claimed = [k for k in ("T-001", "T-002") if self.ticket(k)["active_run_id"]]
-        self.assertEqual(claimed, ["T-001"])  # one active claim under the rule at a time
+    def test_no_cap_and_no_preferred_agent_reservation(self):
+        config = {"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "working"},
+            {"id": "done", "kind": "done"}], "todoEntry": [],
+            "todoDefault": None, "ticketFields": [], "rules": []}
+        definition = {"version": 2, "startsAt": "ready", "whileRunning": "working", "role": "worker",
+                      "priority": 3, "workspace": "main", "syncBase": False,
+                      "waitForDependencies": False, "end": {"pass": "done", "fail": "ready"},
+                      "stages": [{"id": "work", "role": "worker", "permission": "read_only",
+                                  "prompt": "work", "next": {"done": "$succeed"}}]}
+        with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
+            json.dump(definition, f)
+        self.write_board(config)
+        with self.store.transaction() as tx:
+            other = tx.create("agent", {"team_id": self.team, "ordinal": 1, "provider_id": "fake",
+                                        "role": "worker", "display_name": "other", "pane_state": "alive"})
+            tx.transition("agent", other, "idle")
+            tickets = [boardmodel.ticket_add(tx, self.ws, {"title": title, "priority": priority})['ticket']
+                       for title, priority in (("one", 10), ("two", 20))]
+            for ticket in tickets:
+                tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?",
+                                (ticket['id'],))
+        self.conn.execute("UPDATE tickets SET preferred_agent_id = ? WHERE key = 'T-001'", ('unavailable',))
+        def fake_start(tx, args, ctx):
+            task = tx.create('task', {'team_id': self.team, 'origin': 'workflow', 'workspace': self.ws, 'goal': 'test'})
+            run = tx.create('workflow_run', {'team_id': self.team, 'task_id': task, 'workflow': args['definition']})
+            return {'workflowRunId': run}
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=False), \
+             patch.object(boardsched.worktrees, 'is_clean', return_value=True), \
+             patch.object(boardsched, '_start', side_effect=fake_start):
+            self.assertEqual(self.tick()['claimed'], 2)
+        self.assertEqual({self.ticket(k)['assignee'] for k in ('T-001', 'T-002')}, {self.worker, other})
+
+    def test_board_workflow_waits_for_open_dependencies(self):
+        config = {"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "working"},
+            {"id": "done", "kind": "done"}], "todoEntry": [],
+            "todoDefault": None, "ticketFields": [], "rules": []}
+        definition = {"version": 2, "startsAt": "ready", "whileRunning": "working", "role": "worker",
+                      "priority": 3, "workspace": "main", "syncBase": False,
+                      "waitForDependencies": True, "end": {"pass": "done", "fail": "ready"},
+                      "stages": [{"id": "work", "role": "worker", "permission": "read_only",
+                                  "prompt": "work", "next": {"done": "$succeed"}}]}
+        with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
+            json.dump(definition, f)
+        self.write_board(config)
+        with self.store.transaction() as tx:
+            dependency = boardmodel.ticket_add(tx, self.ws, {"title": "dependency", "priority": 100})['ticket']
+            blocked = boardmodel.ticket_add(tx, self.ws, {"title": "blocked", "priority": 100})['ticket']
+            for ticket in (dependency, blocked):
+                tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?",
+                                (ticket['id'],))
+            boardmodel.ticket_depend(tx, self.ws, {"key": blocked['key'], "on": [dependency['key']], "remove": []})
+
+        def fake_start(tx, args, ctx):
+            task = tx.create('task', {'team_id': self.team, 'origin': 'workflow', 'workspace': self.ws, 'goal': 'test'})
+            run = tx.create('workflow_run', {'team_id': self.team, 'task_id': task, 'workflow': args['definition']})
+            return {'workflowRunId': run}
+
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=False), \
+             patch.object(boardsched.worktrees, 'is_clean', return_value=True), \
+             patch.object(boardsched, '_start', side_effect=fake_start):
+            self.assertEqual(self.tick()['claimed'], 1)
+            self.assertIsNone(self.ticket(blocked['key'])['assignee'])
+            with self.store.transaction() as tx:
+                tx.conn.execute("UPDATE tickets SET status = 'done' WHERE id = ?", (dependency['id'],))
+            self.assertEqual(self.tick()['claimed'], 0)  # the only member remains occupied by the dependency
+            with self.store.transaction() as tx:
+                tx.conn.execute("UPDATE tickets SET assignee = NULL, active_run_id = NULL WHERE id = ?",
+                                (dependency['id'],))
+            self.assertEqual(self.tick()['claimed'], 1)
+        self.assertIsNotNone(self.ticket(blocked['key'])['assignee'])
+
+    def test_workflow_order_problems_and_action_only(self):
+        workflows = [dict(name='z', startsAt='z', whileRunning='zr', role='worker', priority=1),
+                     dict(name='b', startsAt='b', whileRunning='br', role='worker', priority=1),
+                     dict(name='a', startsAt='a', whileRunning='ar', role='worker', priority=0),
+                     dict(name='bad', startsAt='bad', whileRunning='bad-run', role='worker', priority=0),
+                     dict(name='action', startsAt='action', whileRunning='action-run', role=None, priority=0)]
+        index = {'workflows': workflows, 'problems': [{'workflow': 'bad', 'path': 'role', 'message': 'bad role'}]}
+        seen = []
+        def pick(tx, workspace, wf, config, current):
+            seen.append(wf['name'])
+            return None
+        with self.store.transaction() as tx, patch.object(boardsched.boardworkflows, 'load', return_value=index), \
+             patch.object(boardsched, '_pick_ticket', side_effect=pick):
+            claimed, errors = boardsched._claim(tx, self.ws, {'id': self.team}, {}, self.ctx)
+        self.assertEqual(claimed, 0)
+        self.assertEqual(seen, ['a', 'b', 'z'])
+        self.assertEqual([(e['workflow'], e['path']) for e in errors], [('bad', 'role')])
+
+    def test_board_workflow_definition_claims_and_starts_by_name(self):
+        config = {"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "working"},
+            {"id": "done", "kind": "done"}], "todoEntry": [],
+            "todoDefault": None, "ticketFields": [], "rules": []}
+        definition = {"version": 2, "startsAt": "ready", "whileRunning": "working", "role": "worker",
+                      "priority": 3, "workspace": "main", "syncBase": False, "waitForDependencies": True,
+                      "end": {"pass": "done", "fail": "ready"},
+                      "stages": [{"id": "work", "role": "worker", "permission": "read_only",
+                                  "prompt": "work", "next": {"done": "$succeed"}}]}
+        with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
+            json.dump(definition, f)
+        self.write_board(config)
+        with self.store.transaction() as tx:
+            ticket = boardmodel.ticket_add(tx, self.ws, {'title': 'board workflow', 'priority': 100})['ticket']
+            tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?", (ticket['id'],))
+        with patch.object(boardsched, '_start', return_value={'workflowRunId': 'run'}) as start:
+            result = self.tick()
+        self.assertEqual((result['claimed'], result['errors']), (1, []))
+        self.assertEqual(start.call_args.args[1]['definition'], 'board-work')
+        self.assertEqual(self.ticket(ticket['key'])['workflow_status'], 'working')
+
+    def test_main_workflow_waits_when_busy_or_dirty(self):
+        self.write_board(rules_board_json(workspace='main'))
+        self.add_ticket()
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=True):
+            self.assertEqual(self.tick()['claimed'], 0)
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=False), \
+             patch.object(boardsched.worktrees, 'is_clean', return_value=False):
+            self.assertEqual(self.tick()['claimed'], 0)
+        self.assertIsNone(self.ticket('T-001')['assignee'])
+
+    def test_board_workflow_waits_when_main_checkout_is_busy_or_dirty(self):
+        config = {"version": 3, "workflowStatuses": [
+            {"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "working"},
+            {"id": "done", "kind": "done"}], "todoEntry": [],
+            "todoDefault": None, "ticketFields": [], "rules": []}
+        definition = {"version": 2, "startsAt": "ready", "whileRunning": "working", "role": "worker",
+                      "workspace": "main", "syncBase": False,
+                      "end": {"pass": "done", "fail": "ready"},
+                      "stages": [{"id": "work", "role": "worker", "permission": "read_only",
+                                  "prompt": "work", "next": {"done": "$succeed"}}]}
+        with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
+            json.dump(definition, f)
+        self.write_board(config)
+        with self.store.transaction() as tx:
+            ticket = boardmodel.ticket_add(tx, self.ws, {"title": "board workflow", "priority": 100})['ticket']
+            tx.conn.execute("UPDATE tickets SET status = 'todo', workflow_status = 'ready' WHERE id = ?",
+                            (ticket['id'],))
+
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=True):
+            self.assertEqual(self.tick()['claimed'], 0)
+        with patch.object(boardsched.tasks, '_mutating_in_workspace', return_value=False), \
+             patch.object(boardsched.worktrees, 'is_clean', return_value=False):
+            self.assertEqual(self.tick()['claimed'], 0)
+        self.assertIsNone(self.ticket(ticket['key'])['assignee'])
+        self.assertIsNone(self.ticket(ticket['key'])['active_run_id'])
 
     def test_busy_member_is_never_claimed(self):
         self.add_ticket()

@@ -1117,7 +1117,7 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
             "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
     workflow_status = ticket.get("workflow_status") or ticket["status"]
     rule = (config["duringToRule"].get(workflow_status) or config["rulesByStatus"].get(workflow_status)
-            or (rule if ticket.get("workflow_status") is None else None))
+            or rule)
     if rule is None:
         raise AsError(BOARD_RULE_MISSING, f"Status {workflow_status!r} has no rule, so the run outcome "
                                           f"cannot be applied.", data={"key": ticket["key"],
@@ -1154,7 +1154,9 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
     if target == BLOCKED_STATUS:
         # a blocked ticket returns to the queue it was claimed from (the rule's when status), not the
         # during status it sits in while worked
-        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), rule["when"]["status"],
+        return_status = (rule.get("blockedReturnTo", rule["when"]["status"])
+                         if outcome == "blocked" and reason is None else rule["when"]["status"])
+        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), return_status,
                   reason, now)
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)

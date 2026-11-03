@@ -64,10 +64,13 @@ def load(workspace, config):
         wf = {'name': name, 'startsAt': board.starts_at, 'whileRunning': board.while_running,
               'role': board.role, 'steps': [{'id': s.id, 'kind': s.kind} for s in definition.stages],
               'end': frozen['end'], 'limits': frozen['limits']}
+        for key in ('priority', 'workspace', 'syncBase', 'waitForDependencies', 'createdTickets'):
+            if key in frozen:
+                wf[key] = frozen[key]
         workflows.append(wf)
 
         def status(path, value):
-            if value not in statuses:
+            if value not in statuses and not (path == 'end.blocked.status' and value == boardmodel.BLOCKED_STATUS):
                 problem(name, path, f'Unknown workflow status {value!r}.')
 
         status('startsAt', board.starts_at)

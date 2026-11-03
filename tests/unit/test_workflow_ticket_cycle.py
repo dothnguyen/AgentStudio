@@ -20,6 +20,8 @@ class TicketCycle(SchedCase):
         self.assertEqual(config['version'], 3)
         config['baseBranch'] = subprocess.check_output(
             ['git', '-C', self.ws, 'symbolic-ref', '--short', 'HEAD'], text=True).strip()
+        source_workflows = os.path.join(os.path.dirname(source), 'workflows')
+        shutil.copytree(source_workflows, os.path.join(self.ws, '.agent-studio', 'workflows'), dirs_exist_ok=True)
         self.write_board(config)
         self.addCleanup(shutil.rmtree, self.ctx['stateDir'], True)
         with self.store.transaction() as tx:

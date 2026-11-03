@@ -324,7 +324,6 @@ def complete_pending_switches(store: Store, ctx: dict) -> None:
                                          "_pending": True}, ctx)
                 if ticket:
                     boardsched._release_with_run(tx, team["workspace"], dict(ticket), "agent_switch_cancelled")
-                    tx.conn.execute("UPDATE tickets SET preferred_agent_id = ? WHERE id = ?", (agent["id"], ticket["id"]))
             except AsError as e:
                 tx.update("agent", agent["id"], {"pending_agent": None, "pending_assignment": None},
                           "agent.switch_failed", {"toAgent": agent["pending_agent"], "assignmentId": agent["pending_assignment"],

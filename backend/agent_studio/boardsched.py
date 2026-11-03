@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import os
 
-from . import boardmodel, gitws, tasks, worktrees
+from . import boardmodel, boardworkflows, gitws, tasks, worktrees
 from .protocol import AsError, BOARD_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .state import utcnow
 
@@ -138,10 +138,16 @@ def _apply_finished(tx, workspace: str) -> int:
             _release_with_run(tx, workspace, ticket, "usage_limit")
             applied += 1
             continue
-        rule = _claiming_rule(tx, workspace, ticket)
+        rule = _legacy_rule(_claiming_workflow(tx, workspace, ticket))
         _commit_worktree(tx, ticket, rule)
         _settle_main(tx, workspace, ticket, rule, run["status"])
-        boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]}, rule=rule)
+        result = boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]}, rule=rule)
+        if result['applied'] and rule:
+            policy = rule.get('releaseCreatedTickets', {}).get(result['outcome'])
+            if policy:
+                parent = boardmodel.get_ticket(tx.conn, workspace, row['key'])
+                _promote_created_tickets(tx, parent, {'onPassCreatedTickets': policy,
+                                                       'onPass': parent['workflow_status']})
         applied += 1
     return applied
 
@@ -253,8 +259,8 @@ def _recover(tx, workspace: str, ctx: dict) -> dict:
 
 
 def _return_status(tx, workspace: str, ticket: dict) -> str:
-    rule = _claiming_rule(tx, workspace, ticket)
-    return rule["when"]["status"] if rule else ticket["workflow_status"]
+    rule = _claiming_workflow(tx, workspace, ticket)
+    return rule["startsAt"] if rule else ticket["workflow_status"]
 
 
 def _ticket_event_note(tx, ticket: dict, name: str, payload: dict) -> None:
@@ -284,12 +290,39 @@ def ticket_retry(tx, workspace: str, args: dict, ctx: dict) -> dict:
         "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
 
 
-def _claiming_rule(tx, workspace: str, ticket: dict) -> dict:
-    """The rule that claimed the ticket: the one whose `during` status it sits in, else the one for its
-    status (a ticket worked without a `during` status stays in the rule's `when` status)."""
-    config = boardmodel.load_config(workspace)
+def _claiming_workflow(tx, workspace: str, ticket: dict) -> dict:
+    index = boardworkflows.load(workspace, boardmodel.load_config(workspace))
     status = ticket["workflow_status"]
-    return config["duringToRule"].get(status) or config["rulesByStatus"].get(status)
+    found = index["byRunning"].get(status) or index["byStart"].get(status)
+    if found is None:
+        config = boardmodel.load_config(workspace)
+        legacy = config["duringToRule"].get(status) or config["rulesByStatus"].get(status)
+        if legacy:
+            return {"startsAt": legacy["when"]["status"], "end": {"pass": legacy["onPass"], "fail": legacy["onFail"]}, "workspace": legacy.get("workspace")}
+    return found
+
+
+def _legacy_rule(workflow):
+    """Adapt a workflow for the existing outcome applier and commit helpers."""
+    if not workflow:
+        return None
+    end = workflow['end']
+    def target(value):
+        return value['status'] if isinstance(value, dict) else value
+    rule = {'when': {'status': workflow['startsAt']}, 'workspace': workflow.get('workspace'),
+            'onPass': target(end['pass']), 'onFail': target(end['fail'])}
+    if 'blocked' in end:
+        rule['onBlocked'] = target(end['blocked'])
+        if isinstance(end['blocked'], dict) and 'returnTo' in end['blocked']:
+            rule['blockedReturnTo'] = end['blocked']['returnTo']
+    rule['releaseCreatedTickets'] = {
+        outcome: value['releaseCreatedTickets'] for outcome, value in end.items()
+        if isinstance(value, dict) and 'releaseCreatedTickets' in value}
+    for source, dest in [('maxRuns', 'maxRounds'), ('failuresInARow', 'onFailureLimit'),
+                         ('onFailPriority', 'onFailPriority')]:
+        if source in workflow.get('limits', {}):
+            rule[dest] = workflow['limits'][source]
+    return rule
 
 
 def _rule_order(config):
@@ -313,58 +346,45 @@ def _free_members(tx, team_id: str, role: str) -> list:
     return [dict(r) for r in rows]
 
 
-def _active_under_rule(tx, workspace: str, rule: dict) -> int:
-    return tx.conn.execute(
-        "SELECT COUNT(*) FROM tickets WHERE workspace = ? AND workflow_status = ? AND assignee IS NOT NULL",
-        (workspace, rule["during"])).fetchone()[0]
-
-
 def _claim(tx, workspace: str, team: dict, config: dict, ctx: dict):
     claimed, errors = 0, []
     current = boardmodel.effective_current_phase(tx.conn, workspace)
-    for rule in _rule_order(config):
-        if "action" in rule:  # coordinator-only actions run in their own pass
+    index = boardworkflows.load(workspace, config)
+    problems = index['problems']
+    for problem in problems:
+        errors.append({'workspace': workspace, 'code': 'BOARD_WORKFLOW_INVALID',
+                       'message': problem['message'], 'workflow': problem['workflow'], 'path': problem['path']})
+    invalid = {p['workflow'] for p in problems}
+    for wf in sorted(index['workflows'], key=lambda w: (w.get('priority', 100), w['name'])):
+        if not wf.get('role') or wf['name'] in invalid or '' in invalid:
             continue
         try:
-            cap = rule.get("cap")
-            if cap is not None and _active_under_rule(tx, workspace, rule) >= cap:
-                continue
-            if rule.get("workspace") == "main" and (tasks._mutating_in_workspace(tx, workspace)
-                                                    or not worktrees.is_clean(workspace)):
-                continue  # the main checkout is held; this rule waits
-            members = _free_members(tx, team["id"], rule["role"])
-            if not members:
-                continue
-            ticket = _pick_ticket(tx, workspace, rule, config, current, members)
-            if ticket is None:
-                continue
-            member = next((m for m in members if m["id"] == ticket.get("preferred_agent_id")), members[0])
-            if _start_ticket(tx, workspace, team, member, rule, ticket, config, ctx) is not None:
+            while True:
+                if wf.get('workspace') == 'main' and (tasks._mutating_in_workspace(tx, workspace)
+                                                       or not worktrees.is_clean(workspace)):
+                    break
+                members = _free_members(tx, team['id'], wf['role'])
+                ticket = _pick_ticket(tx, workspace, wf, config, current) if members else None
+                if ticket is None:
+                    break
+                if _start_ticket(tx, workspace, team, members[0], wf, ticket, config, ctx) is None:
+                    break
                 claimed += 1
-        except AsError as e:  # one rule's problem never blocks the others
-            errors.append({"workspace": workspace, "code": e.code, "message": e.message})
+        except AsError as e:
+            errors.append({'workspace': workspace, 'code': e.code, 'message': e.message})
     return claimed, errors
 
 
-def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, members=None):
+def _pick_ticket(tx, workspace: str, workflow: dict, config: dict, current: dict):
     rows = tx.conn.execute(
         "SELECT * FROM tickets WHERE workspace = ? AND workflow_status = ? "
         "AND status IN ('todo', 'in-progress') AND assignee IS NULL "
-        "ORDER BY priority, created_at, key", (workspace, rule["when"]["status"])).fetchall()
+        "ORDER BY priority, created_at, key", (workspace, workflow['startsAt'])).fetchall()
     for row in rows:
         ticket = dict(row)
-        preferred = ticket.get("preferred_agent_id")
-        if preferred and members is not None and not any(m["id"] == preferred for m in members):
-            # A stopped/replaced runtime cannot satisfy an old reservation.
-            prior = tx.conn.execute("SELECT t.status FROM agents a JOIN teams t ON t.id = a.team_id WHERE a.id = ?",
-                                    (preferred,)).fetchone()
-            if prior and prior["status"] == "running":
-                continue
-            tx.conn.execute("UPDATE tickets SET preferred_agent_id = NULL WHERE id = ?", (ticket["id"],))
-            ticket["preferred_agent_id"] = None
         if not boardmodel.ticket_in_scope(ticket, current):
             continue
-        if rule.get("requiresDeps") and _deps_open(tx, ticket["id"], config):
+        if workflow.get('waitForDependencies') and _deps_open(tx, ticket['id'], config):
             continue
         return ticket
     return None
@@ -373,7 +393,7 @@ def _pick_ticket(tx, workspace: str, rule: dict, config: dict, current: dict, me
 def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, ticket: dict, config: dict,
                   ctx: dict):
     lease = lease_time(config)
-    status = rule["during"]
+    status = rule["whileRunning"] or rule["startsAt"]
     # claim first: the engine's run-workspace check accepts a ticket worktree only while it is claimed
     tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, updated_at = ? WHERE id = ?",
                     (member["id"], lease, utcnow(), ticket["id"]))
@@ -389,10 +409,10 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
                                 (created["branch"], created["path"], utcnow(), ticket["id"]))
                 ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
             run_workspace = ticket["worktree_path"]
-            _commit_leftovers(tx, ticket, rule)
+            _commit_leftovers(tx, ticket, _legacy_rule(rule))
             if rule.get("syncBase"):
                 _sync_base(tx, ticket, config)
-        start_args = {"teamId": team["id"], "definition": rule["workflow"],
+        start_args = {"teamId": team["id"], "definition": rule.get("workflow", rule["name"]),
                       "text": _task_text(ticket), "bindings": {rule["role"]: member["id"]}}
         if run_workspace != workspace:
             start_args["workspace"] = run_workspace
@@ -401,15 +421,14 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
         # validation stage from being mistaken for an abandoned pre-start claim.
         tx.conn.execute("UPDATE tickets SET active_run_id = ?, lease_until = NULL, updated_at = ? WHERE id = ?",
                         (started["workflowRunId"], utcnow(), ticket["id"]))
-        tx.conn.execute("UPDATE tickets SET preferred_agent_id = NULL WHERE id = ?", (ticket["id"],))
-        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.claimed", "coordinator", rule["when"]["status"],
+        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.claimed", "coordinator", rule["startsAt"],
                                  status, {"ticketId": ticket["id"], "key": ticket["key"],
                                           "agentId": member["id"], "run": started["workflowRunId"],
-                                          "rule": rule["when"]["status"], "workspace": rule.get("workspace")})
+                                          "rule": rule["startsAt"], "workspace": rule.get("workspace")})
         return started["workflowRunId"]
     except AsError as e:
         boardmodel.release_claim(tx, boardmodel.get_ticket(tx.conn, workspace, ticket["key"]),
-                                 f"start_failed:{e.code}", to_status=rule["when"]["status"],
+                                 f"start_failed:{e.code}", to_status=rule["startsAt"],
                                  detail={"workspace": run_workspace, **_start_detail(e)})
         return None
 
