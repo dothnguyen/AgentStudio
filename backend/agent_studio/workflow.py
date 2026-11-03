@@ -64,6 +64,8 @@ def _write_private(path: str, text: str) -> None:
 
 
 def _validation_text(val: dict) -> str:
+    if "report" in val:
+        return val["report"]
     if val.get("error"):
         return f"Validation could not run: {val['error']}"
     head = validation.output_head(val.get("outputPath", ""), 32 * 1024)
@@ -189,8 +191,9 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
                       remediation="Commit or stash your changes first (definition files and prompts included).")
     config = validation.load_config(ws)
     commands = delegation.load_config(ws)
-    if commands:
+    if commands or any(st.checks is not None for st in definition.stages):
         delegation.check_definition(definition, commands)
+    if commands:
         config["delegatedCommands"] = commands
     holder = tasks._mutating_in_workspace(tx, ws)
     if holder:
@@ -286,12 +289,19 @@ def _enter_validation(tx: Tx, wf_id: str, st: "workflowdef.Stage", ctx: dict, fr
     sdir = os.path.join(workflow_dir(ctx["stateDir"], wf_id), f"{n:02d}-{st.id}")
     marker = os.path.join(sdir, "stage.txt")
     _write_private(marker, f"validation stage {st.id}, visit {visit}\n")
-    proc = validation.spawn(sdir, wf_workspace(tx, wf), _loads(wf["config_json"], {}))
-    crashpoints.hit("after_validator_spawn")
+    if st.checks is not None:
+        cfg = delegation.run_config(wf)
+        check_set = cfg["checkSets"][st.checks]
+        selected = delegation.select_checks(check_set, delegation.changed_paths(wf_workspace(tx, wf)))
+        val_state = {"state": "running", "checks": selected, "reuseIfTested": check_set["reuseIfTested"]}
+    else:
+        proc = validation.spawn(sdir, wf_workspace(tx, wf), _loads(wf["config_json"], {}))
+        crashpoints.hit("after_validator_spawn")
+        val_state = {"state": "running", "process": proc}
     sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": st.id,
                                      "attempt": attempt, "phase": "validating", "prompt_path": marker,
                                      "stage_type": "validation", "visit": visit,
-                                     "validation_json": {"state": "running", "process": proc}},
+                                     "validation_json": val_state},
                    event="stage_attempt.validating",
                    payload={"stage": st.id, "visit": visit, "sourceAssignmentId": from_assignment})
     tx.update("workflow_run", wf_id, {"current_stage": st.id, "current_agent_id": None}, "workflow_run.stage_entered",
@@ -449,6 +459,8 @@ def _advance_action(tx, wf, sa, ctx, cancel):
 def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:
     sdir = os.path.dirname(sa["prompt_path"])
     val_state = _loads(sa["validation_json"], {}) or {}
+    if "checks" in val_state:
+        return _advance_checks(tx, wf, sa, ctx, cancel, val_state)
     res = validation.result(sdir)
     if res is None:
         if procid.matches(val_state.get("process") or {}) and not cancel:
@@ -477,6 +489,64 @@ def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> 
     else:
         _route(tx, tx.get("workflow_run", wf["id"]), _stage_of(wf, sa["stage"]), "pass" if res["passed"] else "fail",
                None, source, ctx)
+    return True
+
+
+def _advance_checks(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool, state: dict) -> bool:
+    reqs = [r for r in delegation.requests_for(tx, workflow_run_id=wf["id"]) if r["stage_attempt_id"] == sa["id"]]
+    if cancel:
+        for r in reqs:
+            delegation.cancel_request(tx, r, "cancelled by the operator")
+        _end(tx, wf, "cancelled", "cancelled by the operator")
+        return True
+    running = next((r for r in reqs if r["status"] == "running"), None)
+    if running:
+        proc = _loads(running["process_json"], {}) or {}
+        res = delegation.result(proc.get("dir", ""))
+        if res is None and delegation.alive(proc):
+            return False
+        if res is None:
+            res = delegation.result(proc.get("dir", "")) or {"passed": False, "error": "command process lost"}
+        tx.transition("command_request", running["id"], "succeeded" if res.get("passed") else "failed",
+                      set_values={"result_json": res}, payload={"command": running["command_id"], "exitCode": res.get("exitCode")})
+        return True
+    failed = any(r["status"] == "failed" for r in reqs)
+    if not failed and len(reqs) < len(state["checks"]):
+        cid = state["checks"][len(reqs)]
+        command = delegation.run_config(wf)["commands"][cid]
+        argv = delegation.render_argv(command, {})
+        previous = delegation.requests_for(tx, workflow_run_id=wf["id"])
+        fingerprint = delegation.workspace_fingerprint(wf_workspace(tx, wf)) if state["reuseIfTested"] else None
+        latest = next((r for r in reversed(previous) if r["command_id"] == cid
+                       and r["status"] in ("running", "succeeded", "failed", "cancelled")), None)
+        prior = _loads(latest["result_json"], {}) if latest else {}
+        reuse = bool(fingerprint and latest and latest["status"] == "succeeded" and prior.get("workspaceFingerprint") == fingerprint)
+        ordinal = max((r["ordinal"] for r in previous), default=0) + 1
+        rid = tx.create("command_request", {"team_id": wf["team_id"], "workflow_run_id": wf["id"],
+                        "stage_attempt_id": sa["id"], "stage": sa["stage"], "visit": sa["visit"],
+                        "ordinal": ordinal, "command_id": cid, "params_json": {}, "argv_json": argv,
+                        "reason": "workflow check", "source": "marker"}, state="approved")
+        if reuse:
+            tx.transition("command_request", rid, "running")
+            tx.transition("command_request", rid, "succeeded", set_values={"result_json": dict(prior, reused=True)})
+        else:
+            req = tx.get("command_request", rid)
+            run_dir = os.path.join(os.path.dirname(sa["prompt_path"]), f"check-{ordinal:02d}")
+            proc = delegation.spawn(run_dir, wf_workspace(tx, wf), req, command)
+            tx.transition("command_request", rid, "running", set_values={"process_json": proc})
+        return True
+    parts = []
+    for r in reqs:
+        res = _loads(r["result_json"], {}) or {}
+        status = "reused" if res.get("reused") else ("passed" if r["status"] == "succeeded" else "failed")
+        parts.append(f"{r['command_id']}: {status}" + ("\n" + (res.get("outputTail") or res.get("error") or "") if status == "failed" else ""))
+    result = {"state": "done", "passed": not failed, "report": "Checks:\n" + ("\n".join(parts) or "(no commands selected)")}
+    source = _prev_assignment(tx, wf["id"])
+    tx.update("stage_attempt", sa["id"], {"phase": "done", "validation_json": result,
+              "outcome": "validation_" + ("failed" if failed else "passed")}, "stage_attempt.validated",
+              {"stage": sa["stage"], "passed": not failed})
+    tx.transition("stage_attempt", sa["id"], "completed")
+    _route(tx, tx.get("workflow_run", wf["id"]), _stage_of(wf, sa["stage"]), "fail" if failed else "pass", None, source, ctx)
     return True
 
 
@@ -796,6 +866,9 @@ def _stop_active(tx: Tx, wf: dict, sa: Optional[dict], ctx: dict) -> None:
     if not sa:
         return
     if sa["phase"] == "validating":
+        for r in delegation.requests_for(tx, workflow_run_id=wf["id"]):
+            if r["stage_attempt_id"] == sa["id"]:
+                delegation.cancel_request(tx, r, "the workflow stopped")
         _kill((_loads(sa["validation_json"], {}) or {}).get("process"))
     elif sa["phase"] == "delegating":
         for r in delegation.requests_for(tx, assignment_id=sa["assignment_id"]):
@@ -859,6 +932,9 @@ def cancel(tx: Tx, args: dict, ctx: dict) -> dict:
             tx.note("workflow_run", wf["id"], "workflow_run.cancel_requested", {"assignmentId": a["id"]})
             return dict(out, outcome="cancel_requested", status="running")
     elif wf["status"] == "running" and sa and sa["phase"] == "validating":
+        for r in delegation.requests_for(tx, workflow_run_id=wf["id"]):
+            if r["stage_attempt_id"] == sa["id"]:
+                delegation.cancel_request(tx, r, "the workflow stopped")
         _kill((_loads(sa["validation_json"], {}) or {}).get("process"))
     elif sa and sa["phase"] == "delegating":
         for r in delegation.requests_for(tx, assignment_id=sa["assignment_id"]):

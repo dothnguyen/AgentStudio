@@ -293,6 +293,13 @@ def check_definition(definition, config: Optional[dict]) -> None:
     starts)."""
     known = set((config or {}).get("commands", {}))
     for st in definition.stages:
+        if getattr(st, "checks", None) is not None:
+            check_set = (config or {}).get("checkSets", {}).get(st.checks)
+            if check_set is None:
+                raise AsError(DELEGATION_CONFIG_INVALID, f"Stage {st.id!r} names unknown check set {st.checks!r}.")
+            for cid in {r["command"] for r in check_set["run"]} | ({check_set["otherwise"]} if "otherwise" in check_set else set()):
+                if config["commands"][cid]["params"]:
+                    raise AsError(DELEGATION_CONFIG_INVALID, f"Check command {cid!r} requires parameters.")
         for cid in (getattr(st, "pass_requires_commands", None) or ()):
             if cid not in known:
                 raise AsError(DELEGATION_CONFIG_INVALID, f"Stage {st.id!r} requires {cid!r} to pass, but it is not in "

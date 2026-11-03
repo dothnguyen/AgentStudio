@@ -512,7 +512,10 @@ sections holding each result.
   validates and freezes these definitions; defining one does not itself run commands. `select_checks` accepts the
   result of `changed_paths(workspace)` and selects matching commands in rule order without duplicates, or
   `otherwise` when none match. Unknown changes select every rule's command. `**` crosses directories (and `**/`
-  can match zero directories); `*` and `?` stay within a path segment.
+  can match zero directories); `*` and `?` stay within a path segment. A workflow check step runs the selected
+  commands in order through the delegated command runner, stopping on failure and routing to `next.fail`. Commands
+  in a check set cannot require parameters. With `reuseIfTested`, a command is recorded as reused when its newest
+  run succeeded on the current workspace fingerprint. The following agent receives the check results in `{{validation}}`.
 - `{param}` tokens fill whole argv elements only; each value must match its `pattern`, may not start with `-`, and
   every declared param is required. `cwd` must resolve inside the workspace.
 - `network: false` only withholds the proxy variables; the coordinator itself has no network sandbox.
