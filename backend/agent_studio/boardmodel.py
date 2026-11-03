@@ -12,6 +12,7 @@ import json
 import copy
 import os
 import re
+from typing import Optional
 
 from . import roles as rolefiles, workflowdef
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
@@ -33,8 +34,14 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 FIELD_TYPES = ("text", "number")
 EVENTS_SHOWN = 50
 BLOCKED_STATUS = "blocked"            # reserved ticket status; boards may not configure an id like it
-RUN_OUTCOMES = {"succeeded": "pass", "failed": "fail", "paused": "blocked", "cancelled": "blocked"}
-FINISHED_RUN_STATES = tuple(RUN_OUTCOMES)
+RUN_RESULTS = ("pass", "fail", "blocked", "paused", "cancelled")
+FINISHED_RUN_STATES = ("succeeded", "failed", "paused", "cancelled")
+# Pause/failure codes that mean infrastructure trouble, not a problem with the work: the run's result is
+# "paused" and nothing is counted.
+PAUSE_CODES = frozenset({"USAGE_LIMIT", "AUTH_REQUIRED", "PROVIDER_UNAVAILABLE", "PROVIDER_NOT_FOUND",
+                         "PROVIDER_START_FAILED", "PROVIDER_CRASHED", "PROVIDER_ERROR", "TIMEOUT",
+                         "RUNNER_GONE", "RUNNER_NEVER_STARTED", "RUNNER_NO_START",
+                         "VALIDATION_LOST", "VALIDATION_ERROR"})
 WORKSPACE_MODES = ("main", "worktree", "none")
 BUILTIN_DEFINITIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflows")
 
@@ -1097,21 +1104,101 @@ def check_rules(workspace: str, config: dict) -> list:
     return problems
 
 
+# ---- run results ------------------------------------------------------------------------------------------
+
+def _usage_limited(conn, run_id: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM assignments a JOIN workflow_runs w ON w.task_id = a.task_id "
+        "WHERE w.id = ? AND a.diagnostic_code = 'USAGE_LIMIT' LIMIT 1", (run_id,)).fetchone()
+    return row is not None
+
+
+def _paused_on_usage_limit(conn, run_id: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM stage_attempts s JOIN assignments a ON a.id = s.assignment_id "
+        "WHERE s.workflow_run_id = ? AND s.status = 'active' AND a.status = 'failed' "
+        "AND a.diagnostic_code = 'USAGE_LIMIT' LIMIT 1", (run_id,)).fetchone() is not None
+
+
+def _pause_code(conn, run_id: str) -> Optional[str]:
+    """The infrastructure code that paused a run, from its pause event or its active assignment."""
+    row = conn.execute("SELECT payload_json FROM events WHERE workflow_run_id = ? "
+                       "AND name = 'workflow_run.paused' ORDER BY seq DESC LIMIT 1", (run_id,)).fetchone()
+    if row is not None:
+        payload = json.loads(row["payload_json"] or "{}") or {}
+        if payload.get("diagnosticCode"):
+            return payload["diagnosticCode"]
+    row = conn.execute(
+        "SELECT a.diagnostic_code FROM stage_attempts s JOIN assignments a ON a.id = s.assignment_id "
+        "WHERE s.workflow_run_id = ? AND s.status = 'active' ORDER BY s.rowid DESC LIMIT 1", (run_id,)).fetchone()
+    return row["diagnostic_code"] if row is not None else None
+
+
+def _hit_limit(conn, run_id: str) -> bool:
+    """True when a step or visit limit ended the run (its routed event carries wouldEnter)."""
+    row = conn.execute("SELECT payload_json FROM events WHERE workflow_run_id = ? "
+                       "AND name = 'workflow_run.routed' ORDER BY seq DESC LIMIT 1", (run_id,)).fetchone()
+    return row is not None and "wouldEnter" in (json.loads(row["payload_json"] or "{}") or {})
+
+
+def run_result(conn, run: dict) -> str:
+    """The result of a finished run: pass, fail, blocked, paused or cancelled."""
+    status = run["status"]
+    if status == "succeeded":
+        return "pass"
+    if status == "cancelled":
+        return "cancelled"
+    if status == "failed":
+        if _usage_limited(conn, run["id"]):
+            return "paused"
+        if _hit_limit(conn, run["id"]):
+            return "blocked"
+        return "fail"
+    if status == "paused":
+        if _paused_on_usage_limit(conn, run["id"]) or _pause_code(conn, run["id"]) in PAUSE_CODES:
+            return "paused"
+        return "blocked"
+    raise AsError(TICKET_BUSY, f"Run {run['id']} is {status}; only finished runs are applied.",
+                  data={"run": run["id"]})
+
+
+def starts_at(rule: dict) -> str:
+    return rule.get("startsAt") or rule["when"]["status"]
+
+
+def blocked_end(rule: dict) -> tuple:
+    """(status, returnTo) for a blocked result."""
+    end = (rule.get("end") or {}).get("blocked") or {}
+    if isinstance(end, str):  # a v3 onBlocked target adapted from a board workflow
+        end = {"status": end, "returnTo": rule.get("blockedReturnTo")}
+    return (end.get("status") or rule.get("onBlocked") or BLOCKED_STATUS,
+            end.get("returnTo") or rule.get("blockedReturnTo") or starts_at(rule))
+
+
+def _operator_moved_since_claim(conn, ticket_id: str) -> bool:
+    claim = conn.execute("SELECT MAX(id) FROM ticket_events WHERE ticket_id = ? AND name = 'ticket.claimed'",
+                         (ticket_id,)).fetchone()[0]
+    moved = conn.execute("SELECT MAX(id) FROM ticket_events WHERE ticket_id = ? "
+                         "AND name = 'ticket.workflow_changed' AND actor = 'operator'",
+                         (ticket_id,)).fetchone()[0]
+    return moved is not None and (claim is None or moved > claim)
+
+
 # ---- outcome applier --------------------------------------------------------------------------------------
 
-def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict:
+def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None, result: str = None) -> dict:
     """Apply a finished run to its ticket by the rule for the ticket's status (or the claiming rule the
     scheduler passes): move to onPass/onFail/onBlocked, count the round for that rule, block with a reason
-    when maxRounds is hit, and release the claim. The ticket keeps the run id it was last applied for, so a
-    late or replayed outcome is a no-op."""
+    when maxRounds is hit, and release the claim. A paused or cancelled run releases the claim without
+    counting anything. The ticket keeps the run id it was last applied for, so a late or replayed outcome is
+    a no-op."""
     config = load_config(workspace)
     ticket = get_ticket(tx.conn, workspace, args["key"])
-    run = tx.conn.execute("SELECT id, status FROM workflow_runs WHERE id = ?", (args["run"],)).fetchone()
+    run = tx.conn.execute("SELECT id, status, transition_reason FROM workflow_runs WHERE id = ?",
+                          (args["run"],)).fetchone()
     if run is None:
         raise AsError("NOT_FOUND", f"Workflow run {args['run']} does not exist.")
-    if run["status"] not in FINISHED_RUN_STATES:
-        raise AsError(TICKET_BUSY, f"Run {run['id']} is {run['status']}; only finished runs are applied.",
-                      data={"key": ticket["key"], "run": run["id"]})
+    outcome = result if result is not None else run_result(tx.conn, dict(run))
     if ticket["run_id"] == run["id"]:
         return {"applied": False, "ticket": _ticket_json(tx.conn, tx.conn.execute(
             "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone())}
@@ -1122,19 +1209,45 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
         raise AsError(BOARD_RULE_MISSING, f"Status {workflow_status!r} has no rule, so the run outcome "
                                           f"cannot be applied.", data={"key": ticket["key"],
                                                                        "status": workflow_status})
-    outcome = RUN_OUTCOMES[run["status"]]
     rounds = json.loads(ticket["rounds_json"] or "{}")
     rule_status_id = rule["when"]["status"]
+    if outcome in ("paused", "cancelled"):
+        moved = outcome == "cancelled" and _operator_moved_since_claim(tx.conn, ticket["id"])
+        to = None if moved else starts_at(rule)
+        if outcome == "paused":
+            reason = _pause_code(tx.conn, run["id"]) or run["transition_reason"]
+            if reason is None and _usage_limited(tx.conn, run["id"]):
+                reason = "USAGE_LIMIT"
+        else:
+            reason = run["transition_reason"]
+        if ticket.get("workflow_status") is not None and to is not None:
+            set_workflow(tx, ticket, to, "coordinator", outcome, config,
+                         outcome_values=(run["id"], ticket["rounds_json"], None, None),
+                         column_override=ticket["status"])
+        else:
+            tx.conn.execute("UPDATE tickets SET run_id = ?, active_run_id = NULL, assignee = NULL, "
+                            "lease_until = NULL, updated_at = ? WHERE id = ?",
+                            (run["id"], utcnow(), ticket["id"]))
+        old = ticket.get("workflow_status") or ticket["status"]
+        payload = {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "result": outcome,
+                   "reason": reason, "to": to}
+        if outcome == "cancelled":
+            payload["operatorMoved"] = bool(moved)
+        _ticket_event(tx.conn, ticket["id"], f"ticket.run_{outcome}", "coordinator", old,
+                      to if to is not None else old, payload)
+        return {"applied": True, "outcome": outcome, "rule": rule_status_id,
+                "rounds": rounds.get(rule_status_id, 0), "reason": reason,
+                "ticket": _ticket_json(tx.conn, tx.conn.execute("SELECT * FROM tickets WHERE id = ?",
+                                                                (ticket["id"],)).fetchone())}
     rounds[rule_status_id] = rounds.get(rule_status_id, 0) + 1
+    blocked_status, return_to = blocked_end(rule)
     target, reason = None, None
     if outcome == "pass":
         target = rule["onPass"]
     elif outcome == "fail":
         target = rule["onFail"]
-    elif "onBlocked" in rule:
-        target = rule["onBlocked"]
     else:
-        target, reason = BLOCKED_STATUS, f"RUN_BLOCKED:{run['id']}"
+        target, reason = blocked_status, f"RUN_BLOCKED:{run['id']}"
     policy = rule.get("onFailureLimit")
     if policy:
         failure_key = f"failures:{rule_status_id}"
@@ -1147,17 +1260,14 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
                 rounds.pop(failure_key, None)
             else:
                 rounds[failure_key] = failures
-    if reason != f"FAILURE_LIMIT:{rule_status_id}" and target != BLOCKED_STATUS and outcome != "pass" and rule.get("maxRounds") \
+    if reason != f"FAILURE_LIMIT:{rule_status_id}" and target not in (BLOCKED_STATUS, blocked_status) \
+            and outcome != "pass" and rule.get("maxRounds") \
             and rounds[rule_status_id] >= rule["maxRounds"]:
         target, reason = BLOCKED_STATUS, f"ROUND_LIMIT:{rule_status_id}"
     now = utcnow()
-    if target == BLOCKED_STATUS:
-        # a blocked ticket returns to the queue it was claimed from (the rule's when status), not the
-        # during status it sits in while worked
-        return_status = (rule.get("blockedReturnTo", rule["when"]["status"])
-                         if outcome == "blocked" and reason is None else rule["when"]["status"])
-        values = (BLOCKED_STATUS, run["id"], json.dumps(rounds, sort_keys=True), return_status,
-                  reason, now)
+    if target in (BLOCKED_STATUS, blocked_status):
+        # a blocked ticket returns to the queue it was claimed from (end.blocked.returnTo, default startsAt)
+        values = (target, run["id"], json.dumps(rounds, sort_keys=True), return_to, reason, now)
     else:
         values = (target, run["id"], json.dumps(rounds, sort_keys=True), None, None, now)
     if ticket.get("workflow_status") is not None:
@@ -1166,12 +1276,12 @@ def apply_run_outcome(tx, workspace: str, args: dict, rule: dict = None) -> dict
         tx.conn.execute("UPDATE tickets SET status = ?, run_id = ?, rounds_json = ?, return_status = ?, "
                         "blocked_reason = ?, updated_at = ?, active_run_id = NULL, assignee = NULL, "
                         "lease_until = NULL WHERE id = ?", values + (ticket["id"],))
-    if outcome != "pass":
+    if outcome in ("fail", "blocked"):
         findings = _run_findings(tx.conn, run["id"])
         if findings:  # the next agent only sees the ticket, so a failed run's findings travel in its body
             append_body(tx, ticket["id"], f"## Findings from {rule_status_id}, round {rounds[rule_status_id]}\n"
                         + "\n".join(f"- {f}" for f in findings))
-        if "onFailPriority" in rule and target != BLOCKED_STATUS:
+        if "onFailPriority" in rule and target not in (BLOCKED_STATUS, blocked_status):
             bump_priority(tx, ticket["id"], rule["onFailPriority"])
     _ticket_event(tx.conn, ticket["id"], "ticket.outcome_applied", "coordinator", workflow_status, target,
                   {"ticketId": ticket["id"], "key": ticket["key"], "run": run["id"], "outcome": outcome,

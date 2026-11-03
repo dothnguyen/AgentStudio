@@ -111,7 +111,7 @@ class RecoveryCase(unittest.TestCase):
                          names)
 
     def test_started_run_is_not_released_when_claim_lease_is_expired(self):
-        run = self.make_run("paused")
+        run = self.make_run("running")
         self.claim(run)
         self.make_unavailable()
         self.tick()
@@ -119,7 +119,7 @@ class RecoveryCase(unittest.TestCase):
         self.assertEqual((ticket["workflow_status"], ticket["status"], ticket["assignee"], ticket["active_run_id"]),
                          ("in-progress", "in-progress", self.worker, run))
         self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?",
-                                           (run,)).fetchone()[0], "paused")
+                                           (run,)).fetchone()[0], "running")
         self.assertEqual([e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")],
                          ["ticket.created", "ticket.claimed"])
 
@@ -136,11 +136,11 @@ class RecoveryCase(unittest.TestCase):
         self.tick()
         ticket = self.ticket()
         self.assertEqual((ticket["workflow_status"], ticket["status"], ticket["assignee"]),
-                         ("none", "backlog", None))
+                         ("none", "in-progress", None))
         self.assertIsNone(ticket["rounds_json"])  # no round counted
         self.assertEqual(ticket["run_id"], run)
         names = [e["name"] for e in self.conn.execute("SELECT name FROM ticket_events ORDER BY id")]
-        self.assertEqual(names[-1], "ticket.claim_released")
+        self.assertEqual(names[-1], "ticket.run_paused")
 
     def test_ticket_retry_clears_a_stuck_claim(self):
         run = self.make_run("running")

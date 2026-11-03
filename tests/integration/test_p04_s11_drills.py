@@ -149,27 +149,27 @@ class RunnerKilled(DrillCase):
         self.start_and_run()
         claimed = self.wait_claimed("T-001")
         run = claimed["activeRunId"]
+        rc, stopped, p = self.sb.run("team", "stop-board", "--workspace", self.ws, "--json")
+        self.assertTrue(stopped["ok"], (stopped, p.stderr))  # keep the freed ticket from being claimed again
 
         pid = self.wait_for(self._runner_pid, 60, "runner process")
         os.kill(pid, signal.SIGKILL)
 
         # Assignment reconciliation, not the ticket's pre-start lease, owns a runner that disappears after
-        # workflow start. The uncertain run pauses for an operator instead of discarding possible work.
+        # workflow start. The uncertain run pauses and the board releases it.
         conn = self.db()
-        paused = self.wait_for(
-            lambda: (lambda row: row if row and row["status"] == "paused" else None)(
-                conn.execute("SELECT status, transition_reason FROM workflow_runs WHERE id = ?", (run,)).fetchone()),
-            timeout=60, message="runner-gone workflow to pause")
-        self.assertIn("reconciling", paused["transition_reason"])
+        event = self.wait_for(
+            lambda: conn.execute("SELECT payload_json FROM ticket_events WHERE name = 'ticket.run_paused' "
+                                 "ORDER BY id DESC LIMIT 1").fetchone(),
+            timeout=60, message="ticket.run_paused event")
+        self.assertEqual(json.loads(event["payload_json"])["reason"], "RUNNER_GONE")
         ticket = self.ticket("T-001")
-        self.assertEqual((ticket["status"], ticket["activeRunId"], ticket["leaseUntil"]),
-                         ("in-progress", run, None))
+        self.assertEqual((ticket["assignee"], ticket["workflowStatus"], ticket["rounds"]),
+                         (None, "build", None))
+        self.assertEqual(conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0],
+                         "failed")
         names = [e["name"] for e in self.events("T-001")]
         self.assertNotIn("ticket.lease_expired", names)
-        diagnostic = conn.execute(
-            "SELECT diagnostic_code FROM assignments WHERE task_id = "
-            "(SELECT task_id FROM workflow_runs WHERE id = ?) ORDER BY created_at DESC LIMIT 1", (run,)).fetchone()[0]
-        self.assertEqual(diagnostic, "RUNNER_GONE")
 
     def _runner_pid(self):
         row = self.db().execute(

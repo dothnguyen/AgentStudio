@@ -164,7 +164,7 @@ class TickRules(SchedCase):
         with open(os.path.join(self.ws, '.agent-studio', 'workflows', 'board-work.json'), 'w') as f:
             json.dump(definition, f)
         self.write_board(config)
-        for run_status, expected in [('succeeded', 'done'), ('failed', 'return'), ('cancelled', 'blocked')]:
+        for run_status, expected in [('succeeded', 'done'), ('failed', 'return'), ('cancelled', 'ready')]:
             with self.subTest(run_status=run_status):
                 with self.store.transaction() as tx:
                     parent = boardmodel.ticket_add(tx, self.ws, {'title': 'parent', 'priority': 100})['ticket']
@@ -184,10 +184,8 @@ class TickRules(SchedCase):
                 self.assertEqual(row['workflow_status'], expected)
                 self.assertEqual(self.ticket(child['key'])['workflow_status'], 'none' if run_status == 'cancelled' else 'released')
                 if run_status == 'cancelled':
-                    self.assertEqual(row['return_status'], 'return')
-                    with self.store.transaction() as tx:
-                        boardmodel.ticket_unblock(tx, self.ws, {'key': parent['key']})
-                    self.assertEqual(self.ticket(parent['key'])['workflow_status'], 'return')
+                    self.assertIsNone(row['return_status'])  # cancelled releases, nothing is blocked or counted
+                    self.assertIsNone(row['rounds_json'])
                 self.free_member()
 
     def test_merge_conflict_uses_during_and_leaves_ticket_in_progress(self):
@@ -332,9 +330,9 @@ class TickRules(SchedCase):
                          "failed")
         self.assertIsNone(self.ticket("T-001")["rounds_json"])
         names = [r[0] for r in self.conn.execute("SELECT name FROM ticket_events ORDER BY id").fetchall()]
-        self.assertEqual(names, ["ticket.created", "ticket.workflow_changed", "ticket.claimed", "ticket.workflow_changed", "ticket.claim_released", "ticket.workflow_changed", "ticket.claimed"])
+        self.assertEqual(names, ["ticket.created", "ticket.workflow_changed", "ticket.claimed", "ticket.workflow_changed", "ticket.run_paused", "ticket.workflow_changed", "ticket.claimed"])
 
-    def test_other_paused_failure_keeps_its_claim(self):
+    def test_other_infrastructure_pause_is_released_and_reclaimed(self):
         self.add_ticket()
         self.tick()
         original = self.ticket("T-001")["active_run_id"]
@@ -344,10 +342,15 @@ class TickRules(SchedCase):
             tx.transition("assignment", assignment, "failed", set_values={
                 "diagnostic_code": "PROVIDER_ERROR", "result_json": {"diagnosticCode": "PROVIDER_ERROR"}})
         workflow.advance(self.store, self.ctx)
-        self.tick()
-        self.assertEqual(self.ticket("T-001")["active_run_id"], original)
+        tick = self.tick()
+        self.assertEqual(tick["errors"], [])
+        ticket = self.ticket("T-001")
+        self.assertNotEqual(ticket["active_run_id"], original)  # released, then a free member claimed it again
+        self.assertIsNone(ticket["rounds_json"])
         self.assertEqual(self.conn.execute("SELECT status FROM workflow_runs WHERE id = ?", (original,)).fetchone()[0],
-                         "paused")
+                         "failed")
+        names = [r[0] for r in self.conn.execute("SELECT name FROM ticket_events ORDER BY id").fetchall()]
+        self.assertIn("ticket.run_paused", names)
 
     def test_paused_quota_failure_after_team_stop_releases_claim(self):
         self.add_ticket()

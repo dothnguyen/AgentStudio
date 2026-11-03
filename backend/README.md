@@ -400,9 +400,27 @@ For a v3 board, the same command converts each rule to a v2 board workflow file 
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
 statuses use `in-progress`, and other working statuses retain `in-progress` or otherwise use `todo`.
-Run outcomes resolve the rule from the ticket's `during` or `when` workflow status and transition to its
-configured outcome status. A blocked outcome without a target, or a round limit, records the rule's
-`when` status as the return status. Outcome events report workflow statuses, and replaying a run is a no-op.
+### Run results
+
+Every finished or paused run of a claimed ticket has exactly one of five results, resolved from the
+ticket's `during` or `when` workflow status and transitioned to its configured target:
+
+- `pass` — the run succeeded; the ticket moves to `onPass`/the workflow's `end.pass` target.
+- `fail` — the run failed for a reason about the work; the ticket moves to `onFail`, the round is counted
+  and the rule's failure limit applies.
+- `blocked` — the run was paused without an infrastructure code, or ended by a step or visit limit; the
+  ticket moves to `end.blocked.status` (default `blocked`, or v3 `onBlocked`) and its return status is
+  `end.blocked.returnTo` (default `startsAt`). The round is counted. A round limit also blocks.
+- `paused` — infrastructure trouble: usage limit, provider, runner or validation-process codes listed in
+  `boardmodel.PAUSE_CODES`. The claim is released back to `startsAt`, the Kanban column stays, and no
+  round or failure is counted. The event is `ticket.run_paused`, and the run is ended `failed` with reason
+  `ended by the board: paused`. The scheduler can claim the ticket again later.
+- `cancelled` — the run was cancelled. The claim is released back to `startsAt` unless the operator moved
+  the ticket, and nothing is counted. The event is `ticket.run_cancelled`.
+
+A paused run waiting for input is left alone. A blocked result records `end.blocked.returnTo` (default
+`startsAt`, the rule's `when` status for v3 rules) as the return status. Outcome events report workflow
+statuses, and replaying a run is a no-op.
 The mutating `ticket.workflow` command accepts `workspace`, `key`, `to`, and optional `reason`.
 It changes an unclaimed ticket in `todo` or `in-progress` to a different kindless workflow status,
 excluding `blocked` and rule `during` statuses, while preserving the column.

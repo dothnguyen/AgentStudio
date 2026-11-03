@@ -10,7 +10,7 @@ PAIR = {"version": 1, "description": "pair", "stages": [
     {"id": "build", "role": "developer", "permission": "workspace_write", "maxVisits": 2, "prompt": "Do.\n{{task}}",
      "next": {"done": "look"}},
     {"id": "look", "role": "reviewer", "permission": "read_only", "maxVisits": 2, "prompt": "Look.\n{{task}}",
-     "next": {"pass": "$succeed", "fail": "build"}}]}
+     "next": {"pass": "$succeed", "fail": "$fail"}}]}
 ROLES = {"version": 1, "roles": {"developer": {}, "reviewer": {}}}
 BOARD = {"version": 2,
          "statuses": [{"id": "todo", "kind": "initial"}, {"id": "verify"}, {"id": "done", "kind": "done"}],

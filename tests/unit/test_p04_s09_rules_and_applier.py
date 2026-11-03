@@ -261,7 +261,8 @@ class OutcomeApplier(ApplierCase):
         self.add("cancelled one")
         run = self.make_run("cancelled")
         got = self.apply("T-002", run)
-        self.assertEqual((got["outcome"], got["ticket"]["status"]), ("blocked", "blocked"))
+        self.assertEqual((got["outcome"], got["ticket"]["status"], got["rounds"]),
+                         ("cancelled", "none", 0))
 
     def test_on_blocked_rule_target_is_used_when_configured(self):
         self.write_config(RULES_CONFIG)
