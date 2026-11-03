@@ -822,10 +822,10 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
 
     The call rides the normal command path and names the assignment it belongs to. The coordinator checks
     that the assignment is active and its member may add tickets, resolves the team's canonical board
-    workspace, records `createdBy`, puts the ticket in the claiming rule's configured status (falling back
-    to the board default) and requested phase, enforces a duplicate check, and links
-    dependencies. The server sends the same idempotency key for a retried call, so the coordinator's receipt
-    deduplicates it."""
+    workspace, records `createdBy` and the parent ticket, puts the ticket in the running board workflow's
+    `createdTickets` status (falling back to `agentTicketStatus`, then the initial status) and requested phase,
+    enforces a duplicate check, and links dependencies. The server sends the same idempotency key for a retried
+    call, so the coordinator's receipt deduplicates it."""
     assignment_id = args["assignment"]
     row = tx.conn.execute(
         "SELECT a.id, a.agent_id, a.status, a.team_id, ag.can_add_tickets, ag.member_id, "
@@ -858,15 +858,20 @@ def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
         else _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
     created_status = config["agentStatus"]
     parent = tx.conn.execute(
-        "SELECT t.workflow_status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
+        "SELECT t.id, t.workflow_status FROM stage_attempts sa JOIN workflow_runs wr ON wr.id = sa.workflow_run_id "
         "JOIN tickets t ON t.active_run_id = wr.id "
         "WHERE sa.assignment_id = ? AND t.workspace = ? LIMIT 1", (assignment_id, workspace)).fetchone()
+    parent_id = None
     if parent is not None:
-        parent_rule = next((r for r in config["rules"] if r.get("during") == parent["workflow_status"]), None) \
-            or config["rulesByStatus"].get(parent["workflow_status"])
-        if parent_rule is not None:
-            created_status = parent_rule.get("createdTicketStatus", created_status)
+        parent_id = parent["id"]
+        # The ticket is created by a workflow run: the workflow that is running it decides where its
+        # children are held until that workflow (or a later one) releases them.
+        from . import boardworkflows
+        workflow = boardworkflows.load(workspace, config)["byRunning"].get(parent["workflow_status"])
+        if workflow is not None and workflow.get("createdTickets"):
+            created_status = workflow["createdTickets"]
     added = ticket_add(tx, workspace, dict(args, priority=args.get("priority", 100), _workflow_status=created_status,
+                                           _parent_ticket_id=parent_id,
                                            createdByMember=member_id, createdByAssignment=assignment_id))
     deps = []
     for key in list(dict.fromkeys(args.get("dependsOn") or [])):
@@ -891,10 +896,12 @@ def ticket_add(tx, workspace: str, args: dict) -> dict:
     ident, key, workflow_status = new_id(), next_key(tx.conn, workspace), args.get("_workflow_status") or config["initial"]
     status = column_for(config, "backlog", workflow_status, False)
     now = utcnow()
-    tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, status, workflow_status, priority, assignee, "
-                    "lease_until, created_by_member, created_by_assignment, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
-                    (ident, workspace, key, args["title"], args.get("body"), phase["id"], status, workflow_status,
+    tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, parent_ticket_id, status, "
+                    "workflow_status, priority, assignee, lease_until, created_by_member, created_by_assignment, "
+                    "created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)",
+                    (ident, workspace, key, args["title"], args.get("body"), phase["id"],
+                     args.get("_parent_ticket_id"), status, workflow_status,
                      args["priority"], args.get("createdByMember"), args.get("createdByAssignment"), now, now))
     _ticket_event(tx.conn, ident, "ticket.created", "operator", None, status,
                   {"ticketId": ident, "key": key, "title": args["title"], "phase": phase["slug"],

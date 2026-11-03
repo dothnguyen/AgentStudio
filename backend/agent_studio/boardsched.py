@@ -137,12 +137,9 @@ def _apply_finished(tx, workspace: str, ctx: dict) -> int:
                                                       workflow=workflow, result=result)
         if run["status"] == "paused":
             _end_paused_run(tx, row["run"], result, ctx)
-        if applied_result['applied'] and rule:
-            policy = rule.get('releaseCreatedTickets', {}).get(applied_result['outcome'])
-            if policy:
-                parent = boardmodel.get_ticket(tx.conn, workspace, row['key'])
-                _promote_created_tickets(tx, parent, {'onPassCreatedTickets': policy,
-                                                       'onPass': parent['workflow_status']})
+        if applied_result['applied'] and applied_result['outcome'] == 'pass':
+            parent = boardmodel.get_ticket(tx.conn, workspace, row['key'])
+            _release_created_tickets(tx, workspace, parent, workflow)
         applied += 1
     return applied
 
@@ -333,9 +330,6 @@ def _legacy_rule(workflow):
         rule['onBlocked'] = target(end['blocked'])
         if isinstance(end['blocked'], dict) and 'returnTo' in end['blocked']:
             rule['blockedReturnTo'] = end['blocked']['returnTo']
-    rule['releaseCreatedTickets'] = {
-        outcome: value['releaseCreatedTickets'] for outcome, value in end.items()
-        if isinstance(value, dict) and 'releaseCreatedTickets' in value}
     for source, dest in [('maxRuns', 'maxRounds'), ('failuresInARow', 'onFailureLimit'),
                          ('onFailPriority', 'onFailPriority')]:
         if source in workflow.get('limits', {}):
@@ -555,7 +549,6 @@ def _run_action_workflow(tx, workspace: str, team_id: str, wf: dict, steps: list
     task_id, run_id = _start_action_run(tx, team_id, workspace, wf, ticket, steps)
     _claim_action(tx, workspace, wf, ticket, config, run_id)
     ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
-    prior_run_id = ticket.get("run_id")
     outcome, reason, failed_step, merged = "pass", None, None, False
     for index, step in enumerate(steps, 1):
         if step.get("action") == "merge":
@@ -579,14 +572,9 @@ def _run_action_workflow(tx, workspace: str, team_id: str, wf: dict, steps: list
     applied = boardmodel.apply_run_outcome(tx, workspace, {"key": ticket["key"], "run": run_id}, workflow=wf)
     if failed_step == "merge":
         _record_merge_failure(tx, workspace, ticket, rule, reason)
-    if applied.get("applied"):
-        policy = rule.get("releaseCreatedTickets", {}).get(applied.get("outcome"))
-        if policy:
-            parent = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
-            if prior_run_id:  # created tickets belong to the workflow run that made them, not this action
-                parent = dict(parent, run_id=prior_run_id)
-            _promote_created_tickets(tx, parent, {"onPassCreatedTickets": policy,
-                                                  "onPass": parent["workflow_status"]})
+    if applied.get("applied") and applied.get("outcome") == "pass":
+        parent = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+        _release_created_tickets(tx, workspace, parent, wf)
     return True
 
 
@@ -716,40 +704,29 @@ def merge_ticket(tx, workspace, ticket, config, ctx):
     return True, None
 
 
-def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:
-    """Apply an action rule's configured transition to tickets created by the parent's workflow.
+def _release_created_tickets(tx, workspace: str, parent: dict, workflow) -> list:
+    """Release the children this ticket created when its workflow passes.
 
-    The relationship already exists through ``created_by_assignment`` and stage attempts, so this remains
-    generic: no role, workflow, or status name is embedded in the scheduler. The transition happens only after
-    the action succeeds (for today's ``merge`` action, after the branch has landed on the base checkout).
+    The parent link is stored on the child (``parent_ticket_id``), so a later workflow can release children an
+    earlier one created (for example an unpack workflow creates, the plan-merge workflow releases). Only
+    children currently held in the pass release's ``from`` status move; each move is one
+    ``ticket.workflow_changed`` event with the parent in its reason.
     """
-    policy = rule.get("onPassCreatedTickets")
-    run_id = parent.get("run_id")
-    if not policy or not run_id:
-        return
+    end = (workflow or {}).get('end') or {}
+    pass_end = end.get('pass')
+    policy = pass_end.get('releaseCreatedTickets') if isinstance(pass_end, dict) else None
+    if not isinstance(policy, dict) or not policy.get('from') or not policy.get('to'):
+        return []
+    config = boardmodel.load_config(workspace)
     rows = tx.conn.execute(
-        "SELECT * FROM tickets WHERE created_by_assignment IN "
-        "(SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ? AND assignment_id IS NOT NULL) "
-        "AND workflow_status = ? ORDER BY created_at, key", (run_id, policy["from"])).fetchall()
+        "SELECT * FROM tickets WHERE parent_ticket_id = ? AND workflow_status = ? ORDER BY created_at, key",
+        (parent['id'], policy['from'])).fetchall()
     keys = []
     for row in rows:
         child = dict(row)
-        _set_status(tx, child, policy["to"])
-        boardmodel._ticket_event(
-            tx.conn, child["id"], "ticket.created_status_promoted", "coordinator", policy["from"], policy["to"],
-            {"ticketId": child["id"], "key": child["key"], "parentKey": parent["key"],
-             "parentTicketId": parent["id"], "run": run_id, "from": policy["from"], "to": policy["to"]})
-        keys.append(child["key"])
-    if keys:
-        boardmodel._ticket_event(
-            tx.conn, parent["id"], "ticket.created_tickets_promoted", "coordinator",
-            rule["onPass"], rule["onPass"],
-            {"ticketId": parent["id"], "key": parent["key"], "run": run_id, "tickets": keys,
-             "from": policy["from"], "to": policy["to"]})
-
-
-def _set_status(tx, ticket: dict, status: str) -> None:
-    boardmodel.set_workflow(tx, ticket, status, "coordinator", None, boardmodel.load_config(ticket["workspace"]))
+        boardmodel.set_workflow(tx, child, policy['to'], 'coordinator', f"released by {parent['key']}", config)
+        keys.append(child['key'])
+    return keys
 
 
 # ---- lease helper ------------------------------------------------------------------------------------------

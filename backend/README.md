@@ -465,20 +465,24 @@ with `phase` as the phase slug. A dependency or dependent whose ticket row no lo
 `key` and reports null `title`, `status` and `phase` instead of failing the command. `events` is still the newest
 50 (`EVENTS_SHOWN`) events oldest first, and `eventsTruncated` is true when the ticket has more than that.
 
-The rules decide who works which status and what happens on pass/fail/blocked; agent rules may set
-`createdTicketStatus`, while action rules may set `onPassCreatedTickets: {from, to}` to hold tickets created by a
-workflow and promote them only after its follow-up action succeeds. `ticket apply KEY RUN` feeds a finished workflow
-run through the rules (the board's scheduler does this itself for its claims). Recovery: see
+The rules decide who works which status and what happens on pass/fail/blocked. A board workflow's
+`createdTickets` holds tickets created while its run is working; a workflow's
+`end.pass.releaseCreatedTickets: {from, to}` releases the ticket's children from `from` to `to` only when that
+workflow passes (a fail never releases). Children record their `parent_ticket_id`, so a later workflow can release
+tickets an earlier one created. Legacy rules may set `createdTicketStatus` and
+`onPassCreatedTickets: {from, to}`; they are converted to the same workflow fields. `ticket apply KEY RUN` feeds a
+finished workflow run through the rules (the board's scheduler does this itself for its claims). Recovery: see
 [RECOVERY.md](RECOVERY.md), section "The generic board (P04)".
 
 Merge rules select tickets by workflow status and use their `during`, `onPass` and `onFail` workflow statuses.
-Created-ticket promotion also compares workflow statuses. Operator tickets start at the initial workflow status in
-backlog; agent-created tickets use the parent rule's configured status, the agent default, or the initial status,
-with the board column derived from that workflow status.
+Created-ticket release also compares workflow statuses. Operator tickets start at the initial workflow status in
+backlog; agent-created tickets use the running workflow's `createdTickets`, the agent default, or the initial
+status, with the board column derived from that workflow status.
 
 The scheduler picks unassigned tickets in the todo or in-progress column by their workflow status; backlog
 tickets are not claimed. Workflows are considered by priority and name; claims move tickets to their whileRunning status and the in-progress column. Any free member of the workflow role can claim a ticket. Dependencies are finished when their column is done or closed; workflows may wait for them.
-Structured workflow end directives can release tickets created by the run on pass or fail, and specify the return status used when a blocked ticket is unblocked.
+Structured workflow end directives can release tickets created by the parent on pass (never on fail), and specify the
+return status used when a blocked ticket is unblocked.
 
 **Agents adding tickets over MCP.** A member with `"canAddTickets": true` in `teams/<id>.json` gets a per-assignment
 MCP server (`agent-studio mcp`, stdio JSON-RPC, standard library only) when the board works one of its tickets: the
@@ -487,9 +491,9 @@ visible), the Codex adapter passes the equivalent `mcp_servers.agent-studio.*` c
 six tools — `ticket_add`, `ticket_update`, `ticket_list`, `ticket_show`, `phase_list`, `board_show` — and every call rides the same
 validated command path as the CLI: agents never touch the database, and the coordinator stays the only writer.
 `ticket_add` from an agent is checked by the coordinator: the assignment must be active and its member allowed
-(`FORBIDDEN`); a worktree assignment still targets the team's canonical board; the ticket lands in the claiming
-rule's `createdTicketStatus`, falling back to `agentTicketStatus`, and the requested phase (default when omitted). An
-open ticket with the same title is refused
+(`FORBIDDEN`); a worktree assignment still targets the team's canonical board; the ticket lands in the running
+workflow's `createdTickets`, falling back to `agentTicketStatus`, records its `parent_ticket_id`, and the requested
+phase (default when omitted). An open ticket with the same title is refused
 (`TICKET_DUPLICATE`), and a retried call with the same idempotency key returns the first result. Members without the
 switch get no MCP server and their assignments are unchanged.
 

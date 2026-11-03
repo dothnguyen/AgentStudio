@@ -178,13 +178,15 @@ class TickRules(SchedCase):
                 assignment = self.conn.execute('SELECT assignment_id FROM stage_attempts WHERE workflow_run_id = ?', (run,)).fetchone()[0]
                 with self.store.transaction() as tx:
                     child = boardmodel.ticket_add(tx, self.ws, {'title': 'child', 'priority': 100})['ticket']
-                    tx.conn.execute('UPDATE tickets SET created_by_assignment = ? WHERE id = ?', (assignment, child['id']))
+                    tx.conn.execute('UPDATE tickets SET created_by_assignment = ?, parent_ticket_id = ? '
+                                    'WHERE id = ?', (assignment, parent['id'], child['id']))
                     tx.conn.execute("UPDATE board_state SET run_status = 'stopped' WHERE workspace = ?", (self.ws,))
                 self.finish(run, run_status)
                 self.assertEqual(self.tick()['applied'], 1)
                 row = self.ticket(parent['key'])
                 self.assertEqual(row['workflow_status'], expected)
-                self.assertEqual(self.ticket(child['key'])['workflow_status'], 'none' if run_status == 'cancelled' else 'released')
+                self.assertEqual(self.ticket(child['key'])['workflow_status'],
+                                 'released' if run_status == 'succeeded' else 'none')
                 if run_status == 'cancelled':
                     self.assertIsNone(row['return_status'])  # cancelled releases, nothing is blocked or counted
                     self.assertIsNone(row['rounds_json'])
@@ -552,7 +554,7 @@ class TickRules(SchedCase):
         self.assertFalse(os.path.exists(os.path.join(self.ws, "plan.md")))
 
         self.finish(parent["active_run_id"])
-        self.tick()  # apply the run, merge its branch, then promote only tickets created by that run
+        self.tick()  # apply the run, merge its branch, then release only tickets created by that parent
         self.assertEqual((self.ticket("T-001")["workflow_status"], self.ticket("T-001")["status"]), ("merged", "done"))
         self.assertEqual((self.ticket("T-002")["workflow_status"], self.ticket("T-002")["status"]), ("refine-ready", "todo"))
         self.assertEqual((self.ticket("T-003")["workflow_status"], self.ticket("T-003")["status"]),
@@ -560,7 +562,7 @@ class TickRules(SchedCase):
         self.assertTrue(os.path.exists(os.path.join(self.ws, "plan.md")))
         child_events = [r[0] for r in self.conn.execute(
             "SELECT name FROM ticket_events WHERE ticket_id = ? ORDER BY id", (child["id"],)).fetchall()]
-        self.assertEqual(child_events, ["ticket.created", "ticket.workflow_changed", "ticket.created_status_promoted"])
+        self.assertEqual(child_events, ["ticket.created", "ticket.workflow_changed"])
 
     def test_only_the_effective_current_phase_is_claimed(self):
         with self.store.transaction() as tx:

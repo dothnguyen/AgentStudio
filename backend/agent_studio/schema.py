@@ -574,3 +574,10 @@ MIGRATION_19 = [
 
 # v20: record the commit produced by a board ticket merge.
 MIGRATION_20 = ["ALTER TABLE tickets ADD COLUMN merged_commit TEXT"]
+
+# v21: the ticket that created this one. Board workflows release a parent's children on pass; the link
+# survives later workflows, so a plan-merge can release tickets an earlier unpack created.
+MIGRATION_21 = [
+    "ALTER TABLE tickets ADD COLUMN parent_ticket_id TEXT REFERENCES tickets(id)",
+    "CREATE INDEX tickets_by_parent ON tickets (parent_ticket_id)",
+]
