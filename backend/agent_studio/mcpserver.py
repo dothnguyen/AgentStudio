@@ -243,6 +243,10 @@ OPERATOR_READ_TOOLS = [
      "inputSchema": _op_schema()},
 ]
 OPERATOR_WRITE_TOOLS = [
+    {"name": "workflow_approve", "description": "Approve or reject a waiting workflow stage.",
+     "inputSchema": {"type": "object", "properties": {"workflowRunId": {"type": "string"},
+         "stage": {"type": "string"}, "approve": {"type": "boolean"}, "note": {"type": "string"}},
+         "required": ["workflowRunId", "stage", "approve"]}},
     {"name": "ticket_add", "description": "Add a ticket to the board.",
      "inputSchema": _op_schema({"title": {"type": "string", "maxLength": 200}, "body": {"type": "string"},
                                 "priority": {"type": "integer", "minimum": 0, "maximum": 1000},
@@ -361,6 +365,11 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
         data = call("command.catalog", {})
         return text(_json_text(data), **data)
     # ---- changes (--allow-writes) ----
+    if name == "workflow_approve":
+        extra = dict(_optional(args, "note"), workflowRunId=_need(args, "workflowRunId"),
+                     stage=_need(args, "stage"), approve=args.get("approve"))
+        data = call("workflow.approve", extra, True, ws=False)
+        return text(_json_text(data), **data)
     if name == "ticket_add":
         extra = dict(_optional(args, "body", "phase"), title=_need(args, "title"),
                      priority=args.get("priority", 100))

@@ -184,6 +184,7 @@ HANDLERS = {
     "task.direct": lambda args, tx, ctx: tasks.task_direct(tx, args, ctx),
     "assignment.cancel": lambda args, tx, ctx: tasks.assignment_cancel(tx, args, ctx),
     "workflow.start": lambda args, tx, ctx: workflow.start(tx, args, ctx),
+    "workflow.approve": lambda args, tx, ctx: workflow.approve(tx, args, ctx),
     "workflow.cancel": lambda args, tx, ctx: workflow.cancel(tx, args, ctx),
     "workflow.retry": lambda args, tx, ctx: workflow.retry(tx, args, ctx),
     "assignment.resolve": lambda args, tx, ctx: resolve.resolve(tx, args, ctx),

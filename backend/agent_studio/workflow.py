@@ -178,7 +178,7 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
     ws = tasks.run_workspace(tx, team, args.get("workspace"))
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
-    if any(stage.kind in ("action", "approval") for stage in definition.stages):
+    if any(stage.kind == "action" for stage in definition.stages):
         raise AsError(workflowdef.WORKFLOW_DEFINITION_INVALID, "step kind not supported yet")
     first = definition.stages[0]
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)
@@ -256,6 +256,17 @@ def _enter(tx: Tx, wf_id: str, stage: str, ctx: dict, from_assignment: Optional[
     """Enter a stage by routing: an agent stage gets an assignment (its ID is returned), a validation stage starts
     the validator."""
     st = _stage_of(tx.get("workflow_run", wf_id), stage)
+    if st.kind == "approval":
+        wf = tx.get("workflow_run", wf_id)
+        attempt, visit, _ = _visit(tx, wf_id, st.id, True)
+        sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id,
+                       "stage": st.id, "attempt": attempt, "visit": visit, "phase": "waiting_approval",
+                       "stage_type": "approval", "artifacts_json": {"ask": st.step_value}},
+                       event="stage_attempt.waiting_approval", payload={"stage": st.id, "ask": st.step_value})
+        tx.update("workflow_run", wf_id, {"current_stage": st.id, "current_agent_id": None},
+                  "workflow_run.stage_entered", {"toStage": st.id, "type": "approval", "stageAttemptId": sa,
+                                                 "fromAssignmentId": from_assignment})
+        return None
     if st.type == "validation":
         _enter_validation(tx, wf_id, st, ctx, from_assignment)
         return None
@@ -348,6 +359,11 @@ def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
     if not is_definition_run(wf):
         return _legacy_run(tx, wf, sa, cancel)
     if sa is None:
+        return False
+    if sa["phase"] == "waiting_approval":
+        if cancel:
+            _end(tx, wf, "cancelled", "cancelled by the operator")
+            return True
         return False
     if sa["phase"] == "validating":
         return _advance_validation(tx, wf, sa, ctx, cancel)
@@ -778,6 +794,23 @@ def retry(tx: Tx, args: dict, ctx: dict) -> dict:
                                  **({"debugProviderOptions": args["debugProviderOptions"]}
                                     if args.get("debugProviderOptions") is not None else {})), ctx)
     return dict(r, workflowRunId=wf["id"])
+
+
+def approve(tx: Tx, args: dict, ctx: dict) -> dict:
+    wf = tx.get("workflow_run", args["workflowRunId"])
+    sa = _current_attempt(tx, wf["id"])
+    if wf["status"] != "running" or not sa or sa["phase"] != "waiting_approval":
+        raise AsError("WORKFLOW_NOT_WAITING", "Workflow is not waiting for approval.")
+    if sa["stage"] != args["stage"]:
+        raise AsError("WORKFLOW_WRONG_STAGE", "Workflow is waiting on a different stage.")
+    outcome = "pass" if args["approve"] else "fail"
+    findings = [args["note"]] if args.get("note") else []
+    tx.update("stage_attempt", sa["id"], {"phase": "done", "outcome": "verdict_" + outcome,
+              "verdict_json": {"verdict": outcome, "findings": findings}}, "stage_attempt.verdict",
+              {"stage": sa["stage"], "verdict": outcome, "findings": findings})
+    tx.transition("stage_attempt", sa["id"], "completed")
+    _route(tx, tx.get("workflow_run", wf["id"]), _stage_of(wf, sa["stage"]), outcome, findings, None, ctx)
+    return {"workflowRunId": wf["id"], "stage": sa["stage"], "outcome": outcome}
 
 
 def cancel(tx: Tx, args: dict, ctx: dict) -> dict:

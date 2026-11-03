@@ -264,6 +264,9 @@ def workflow_detail(conn, wf_id: str) -> dict:
         out = {"dbId": db_id(conn), "cursor": head(conn), "workflowRun": row_to_json(wf),
                "stageAttempts": [row_to_json(r) for r in stages], "task": row_to_json(task),
                "assignments": [row_to_json(a) for a in assignments], "events": [event_to_json(e) for e in events]}
+        waiting = next((r for r in stages if r["status"] == "active" and r["phase"] == "waiting_approval"), None)
+        out["waitingApproval"] = ({"stage": waiting["stage"], "ask": json.loads(waiting["artifacts_json"])["ask"],
+                                   "since": waiting["created_at"]} if waiting and wf["status"] == "running" else None)
         out["visits"] = visits_per_stage(out["stageAttempts"])
         out["route"] = route_text(out["events"], out["workflowRun"].get("currentStage"))
         from . import delegation

@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import tests.helpers  # noqa: F401
-from agent_studio import workflowdef, workflow
+from agent_studio import workflowdef, workflow, cli, dispatch, mcpserver
 from agent_studio.protocol import AsError
 
 
@@ -119,7 +119,7 @@ class StepTests(unittest.TestCase):
             self.assertEqual(workflowdef.load(workspace, "flow").stages[0].prompt, "Hello {{task}}")
 
     def test_start_refuses_unsupported_kinds(self):
-        for kind, value in (("action", "merge"), ("approval", {"ask": "Proceed?"})):
+        for kind, value in (("action", "merge"),):
             d = self.parse([{"id": "a", kind: value}])
             class Tx:
                 def get(self, *args):
@@ -128,3 +128,26 @@ class StepTests(unittest.TestCase):
                 with self.assertRaises(AsError) as e:
                     workflow._start_definition(Tx(), {"teamId": "team", "definition": "x"}, {})
             self.assertEqual((e.exception.code, str(e.exception)), ("WORKFLOW_DEFINITION_INVALID", "step kind not supported yet"))
+
+
+class ApprovalInterfaceTests(unittest.TestCase):
+    def test_cli_approval_decisions_and_validation(self):
+        run = "00000000-0000-4000-8000-000000000001"
+        for option, value in (("--yes", True), ("--no", False)):
+            request = cli._human_request(["workflow", "approve", run, "gate", option, "--note", "change it"])
+            self.assertEqual(request["command"], "workflow.approve")
+            self.assertEqual(dispatch._validate_workflow_approve(request["args"]),
+                             {"workflowRunId": run, "stage": "gate", "approve": value, "note": "change it"})
+            self.assertTrue(request["idempotencyKey"])
+        with self.assertRaises(AsError):
+            dispatch._validate_workflow_approve({"workflowRunId": run, "stage": "gate", "approve": "yes"})
+        with self.assertRaises(AsError):
+            cli._human_request(["workflow", "approve", run, "gate"])
+
+    def test_mcp_approval_is_write_gated_and_forwards_arguments(self):
+        self.assertNotIn("workflow_approve", {t["name"] for t in mcpserver.operator_tools(False)})
+        self.assertIn("workflow_approve", {t["name"] for t in mcpserver.operator_tools(True)})
+        args = {"workflowRunId": "run", "stage": "gate", "approve": False, "note": "fix"}
+        with patch.object(mcpserver, "_call", return_value={"outcome": "fail"}) as call:
+            mcpserver._operator_tool_call("workflow_approve", args, {"allowWrites": True, "session": "s"}, 1)
+        self.assertEqual(call.call_args.args[:3], ("workflow.approve", args, True))

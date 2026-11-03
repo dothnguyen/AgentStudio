@@ -82,6 +82,7 @@ USAGE = """agent-studio <command>
   workflow start --team ID --developer ID --reviewer ID (--text TEXT | --text-file PATH|-) [--workspace PATH] [--wait]
                                            the P00 form: same as --definition developer-reviewer
   workflow show --workflow ID              stages, verdicts, validation, handoffs and history
+  workflow approve RUN STAGE --yes|--no [--note TEXT]  decide a waiting approval
   workflow cancel --workflow ID            cancel a running or paused workflow
   workflow retry --workflow ID             run the current stage again (waiting_input / stuck / failed stage)
   ticket add (--workspace PATH | cwd) --title TEXT [--body TEXT] [--priority N] [--phase ID]
@@ -424,7 +425,13 @@ def _human_request(argv) -> dict:
     tk.add_argument("--key")
     tk.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
     wf_p = sub.add_parser("workflow", add_help=False)
-    wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate", "retry"])
+    wf_p.add_argument("action", choices=["start", "show", "cancel", "list", "validate", "retry", "approve"])
+    wf_p.add_argument("run", nargs="?")
+    wf_p.add_argument("stage", nargs="?")
+    decision = wf_p.add_mutually_exclusive_group()
+    decision.add_argument("--yes", action="store_true")
+    decision.add_argument("--no", action="store_true")
+    wf_p.add_argument("--note")
     wf_p.add_argument("--team")
     wf_p.add_argument("--workspace")
     wf_p.add_argument("--developer")
@@ -533,7 +540,15 @@ def _human_request(argv) -> dict:
             req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)
             req["_wait"] = ns.wait
     elif ns.cmd == "workflow":
-        if ns.action in ("list", "validate"):
+        if ns.action == "approve":
+            if not ns.run or not ns.stage or not (ns.yes or ns.no):
+                raise AsError(BAD_REQUEST, "workflow approve needs RUN STAGE and --yes or --no")
+            args = {"workflowRunId": ns.run, "stage": ns.stage, "approve": ns.yes}
+            if ns.note is not None:
+                args["note"] = ns.note
+            req.update(command="workflow.approve", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
+                       timeoutMs=ns.timeout_ms)
+        elif ns.action in ("list", "validate"):
             if not ns.team:
                 raise AsError(BAD_REQUEST, f"workflow {ns.action} needs --team ID")
             args = {"teamId": ns.team}

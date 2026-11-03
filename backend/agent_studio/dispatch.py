@@ -785,6 +785,18 @@ def _validate_workflow_id(args):
     return {"workflowRunId": validate_uuid(args.get("workflowRunId"), "workflowRunId")}
 
 
+def _validate_workflow_approve(args):
+    out = _validate_workflow_id(args)
+    out["stage"] = req_text(args, "stage", 128, allow_empty=False)
+    if not isinstance(args.get("approve"), bool):
+        raise AsError(BAD_REQUEST, "approve must be a boolean.")
+    out["approve"] = args["approve"]
+    note = req_text(args, "note", 2000, required=False)
+    if note is not None:
+        out["note"] = note
+    return out
+
+
 def _workflow_show(args, req):
     wf_id = validate_uuid(args.get("workflowRunId"), "workflowRunId")
     conn = _reader()
@@ -1162,6 +1174,7 @@ COMMANDS = {
     "assignment.cancel": _inbox("assignment.cancel", _validate_cancel),
     "assignment.resolve": _inbox("assignment.resolve", _validate_resolve),
     "workflow.start": _inbox("workflow.start", _validate_workflow_start),
+    "workflow.approve": _inbox("workflow.approve", _validate_workflow_approve),
     "workflow.cancel": _inbox("workflow.cancel", _validate_workflow_id),
     "workflow.retry": _inbox("workflow.retry", _validate_workflow_retry),
     "workflow.show": _workflow_show,
