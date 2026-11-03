@@ -110,6 +110,7 @@ const ROWS: Array<[string, Record<string, unknown>, string, Record<string, unkno
   [C.managementBoardPhases, {}, 'phase.list', {}],
   [C.managementBoardTickets, {}, 'ticket.list', { summary: true }],
   [C.managementBoardTickets, { phase: 'phase-05' }, 'ticket.list', { summary: true, phase: 'phase-05' }],
+  [C.managementBoardTickets, { unassigned: true }, 'ticket.list', { summary: true, unassigned: true }],
   [C.managementBoardTicket, { key: 'T-134' }, 'ticket.show', { key: 'T-134' }],
   [C.managementCreateAgent, { agent: { id: 'ada', name: 'Ada', provider: 'claude' } }, 'agentdef.create', { agent: { id: 'ada', name: 'Ada', provider: 'claude' } }],
   [C.managementUpdateAgent, { agentDefId: 'ada', changes: { model: null } }, 'agentdef.update', { agentDefId: 'ada', changes: { model: null } }],

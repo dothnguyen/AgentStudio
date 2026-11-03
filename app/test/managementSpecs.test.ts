@@ -76,6 +76,7 @@ describe('managementSpecs', () => {
       ['boardPhases', {}, 'phase.list', {}],
       ['boardTickets', {}, 'ticket.list', { summary: true }],
       ['boardTickets', { phase: 'phase-05' }, 'ticket.list', { summary: true, phase: 'phase-05' }],
+      ['boardTickets', { unassigned: true }, 'ticket.list', { summary: true, unassigned: true }],
       ['boardTicket', { key: 'T-134' }, 'ticket.show', { key: 'T-134' }],
     ];
     for (const [method, request, command, args] of rows) {

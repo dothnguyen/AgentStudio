@@ -9,82 +9,144 @@ import { boardSettingsFixture, fakeManagement, managementError } from './teamsFi
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const ok = <T,>(data: T) => ({ ok: true as const, data });
-const list = (count: number) => boardTicketListFixture({ tickets: Array.from({ length: count }, (_, i) => boardTicketSummary({ key: `T-${i}`, phase: i ? null : 'phase-05' })) });
+const list = (count: number) => boardTicketListFixture({ tickets: Array.from({ length: count }, (_, i) => boardTicketSummary({ key: `T-${i}`, phase: 'phase-05' })) });
 const settle = () => act(async () => {});
 
 describe('BacklogScreen', () => {
+  it('loads unassigned tickets on expansion, counts them initially and caches them', async () => {
+    const phases = boardPhasesFixture({ unassignedTicketCount: 1 });
+    const count = phases.phases.reduce((sum, phase) => sum + phase.ticketCount, 0);
+    const unassigned = boardTicketSummary({ key: 'T-99', phase: null });
+    const assigned = boardTicketSummary({ key: 'T-98', phase: 'phase-05' });
+    const fake = fakeManagement({ boardPhases: [ok(phases)], boardTickets: [ok(boardTicketListFixture({ tickets: [assigned] })), ok(boardTicketListFixture({ tickets: [unassigned] }))] });
+    const onTicketCount = vi.fn();
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} onTicketCount={onTicketCount} refreshMs={0} />);
+    await settle();
+    const group = view.getByRole('button', { name: /No phase 1 tickets/ });
+    expect(group.getAttribute('aria-expanded')).toBe('false');
+    expect(view.queryByRole('button', { name: /Open T-99/ })).toBeNull();
+    expect(view.getByText(`${count + 1} tickets`)).toBeTruthy();
+    expect(onTicketCount).toHaveBeenLastCalledWith(count + 1);
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }]]);
+    fireEvent.click(group);
+    await settle();
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { unassigned: true }]]);
+    expect(fake.boardTickets.mock.calls.some(([, input]) => Object.keys(input as object).length === 0)).toBe(false);
+    expect(view.getByRole('button', { name: /Open T-99/ })).toBeTruthy();
+    expect(view.getAllByRole('button', { name: /Open T-98/ })).toHaveLength(1);
+    fireEvent.click(group);
+    fireEvent.click(group);
+    await settle();
+    expect(fake.boardTickets).toHaveBeenCalledTimes(2);
+  });
+  it('retries and refreshes the unassigned group after it has been loaded', async () => {
+    const unassigned = (key: string) => ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key, phase: null })] }));
+    const fake = fakeManagement({ boardPhases: [ok(boardPhasesFixture({ unassignedTicketCount: 1 }))], boardTickets: [ok(list(1)), managementError('DOWN', 'Unavailable'), unassigned('T-99'), ok(list(1)), unassigned('T-100')] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: /No phase/ }));
+    await settle();
+    expect(view.getByRole('alert').textContent).toContain('DOWN');
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    await settle();
+    expect(view.getByRole('button', { name: /Open T-99/ })).toBeTruthy();
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(fake.boardTickets.mock.calls.slice(-2)).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { unassigned: true }]]);
+    expect(view.getByRole('button', { name: /Open T-100/ })).toBeTruthy();
+  });
   it('limits initially rendered rows for a 300 ticket backlog and removes collapsed rows', async () => {
     const tickets = Array.from({ length: 300 }, (_, i) => boardTicketSummary({ key: `T-${i}`, phase: 'phase-05' }));
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
     await settle();
     expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(50);
     expect(view.getByRole('button', { name: 'Show 250 more' })).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: /Phase 05 Current 300 tickets/ }));
+    fireEvent.click(view.getByRole('button', { name: /Phase 05 Current/ }));
     expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
   });
 
-  it('loads all tickets and renders the header and grouped body', async () => {
-    const fake = fakeManagement({ boardTickets: [ok(list(2))] });
+  it('loads only the current phase, then caches phases expanded by the operator', async () => {
+    const phases = boardPhasesFixture();
+    phases.phases[0] = { ...phases.phases[0]!, ticketCount: 1, counts: { done: 1, blocked: 0 } };
+    phases.phases[1] = { ...phases.phases[1]!, ticketCount: 1, counts: { blocked: 1 } };
+    const fake = fakeManagement({ boardPhases: [ok(phases)], boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', phase: 'phase-05' })] })), ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', phase: 'phase-06' })] }))] });
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} />);
     await settle();
-    expect(view.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe('Boards/Backlog');
-    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Backlog');
-    expect(view.getByText('Every ticket on the board, grouped by phase.')).toBeTruthy();
-    expect(view.getByText('2 tickets')).toBeTruthy();
-    expect(view.getByTestId('backlog-body').children.length).toBe(3);
-    expect(view.getByRole('button', { name: /Phase 05 Current 1 tickets/ })).toBeTruthy();
-    expect(fake.boardTickets).toHaveBeenCalledWith(workspaceA.id, {});
-    expect(fake.boardPhases).toHaveBeenCalledWith(workspaceA.id);
-    expect(fake.boardSettings).toHaveBeenCalledWith(workspaceA.id);
-  });
-
-  it('orders groups, displays counts, and toggles closed and open groups', async () => {
-    const phases = boardPhasesFixture();
-    phases.phases[1] = { ...phases.phases[1]!, status: 'closed' };
-    const tickets = [
-      boardTicketSummary({ key: 'T-1', status: 'done', activity: { state: 'finished' } }),
-      boardTicketSummary({ key: 'T-2', activity: { state: 'blocked' } }),
-      boardTicketSummary({ key: 'T-3', phase: 'phase-06' }),
-    ];
-    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardPhases: [ok(phases)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }]]);
+    const current = view.getByRole('button', { name: /Phase 05 Current 1 tickets · 1 done/ });
+    const other = view.getByRole('button', { name: /Phase 06 1 tickets · 0 done · 1 blocked/ });
+    expect(current.getAttribute('aria-expanded')).toBe('true');
+    expect(other.getAttribute('aria-expanded')).toBe('false');
+    expect(view.queryByRole('button', { name: /Open T-2/ })).toBeNull();
+    fireEvent.click(other);
     await settle();
-    const headers = Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-group-header'));
-    expect(headers.map((header) => header.textContent)).toEqual(['▾Phase 05Current2 tickets · 1 done · 1 blocked', '▸Phase 06Closed1 tickets · 0 done']);
-    expect(headers[0]?.getAttribute('aria-expanded')).toBe('true');
-    expect(headers[1]?.getAttribute('aria-expanded')).toBe('false');
-    const user = userEvent.setup();
-    headers[0]!.focus();
-    await user.keyboard('{Enter}');
-    expect(headers[0]?.getAttribute('aria-expanded')).toBe('false');
-    const body = view.container.querySelector(`[id="${headers[0]!.getAttribute('aria-controls')}"]`)!;
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }]]);
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+    fireEvent.click(other);
+    expect(view.queryByRole('button', { name: /Open T-2/ })).toBeNull();
+    fireEvent.click(other);
+    await settle();
+    expect(fake.boardTickets).toHaveBeenCalledTimes(2);
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+  });
+  it('keeps non-current open phases collapsed and applies the row limit within a loaded phase', async () => {
+    const phases = boardPhasesFixture();
+    phases.phases[0] = { ...phases.phases[0]!, status: 'open', current: false, ticketCount: 0 };
+    phases.phases[1] = { ...phases.phases[1]!, status: 'open', current: false, ticketCount: 51 };
+    const tickets = Array.from({ length: 51 }, (_, index) => boardTicketSummary({ key: `T-${index + 1}`, phase: 'phase-06' }));
+    const fake = fakeManagement({ boardPhases: [ok(phases)], boardTickets: [ok(boardTicketListFixture({ tickets }))] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} />);
+    await settle();
+
+    expect(fake.boardTickets.mock.calls).toEqual([]);
+    expect(view.getByRole('button', { name: /Phase 05/ }).getAttribute('aria-expanded')).toBe('false');
+    const later = view.getByRole('button', { name: /Phase 06 51 tickets/ });
+    expect(later.getAttribute('aria-expanded')).toBe('false');
+    const body = view.container.querySelector(`#${later.getAttribute('aria-controls')}`)!;
     expect(body.querySelectorAll('.boards-backlog-row')).toHaveLength(0);
-    expect(body.hasAttribute('hidden')).toBe(true);
-    headers[1]!.focus();
-    await user.keyboard(' ');
-    expect(view.getByRole('button', { name: /Open T-3/ })).toBeTruthy();
-  });
-  it('keeps non-current open groups expanded and sorts tickets by priority by default', async () => {
-    const phases = boardPhasesFixture();
-    phases.phases[0] = { ...phases.phases[0]!, current: false };
-    const tickets = [
-      boardTicketSummary({ key: 'T-30', phase: 'phase-06', priority: 30 }),
-      boardTicketSummary({ key: 'T-10', phase: 'phase-06', priority: 10 }),
-      boardTicketSummary({ key: 'T-20', phase: 'phase-06', priority: 20 }),
-    ];
-    const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardPhases: [ok(phases)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
-    await settle();
 
-    const headers = Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-group-header'));
-    expect(Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-group-header strong')).map((name) => name.textContent))
-      .toEqual(['Phase 05', 'Phase 06']);
-    expect(headers[0]?.getAttribute('aria-expanded')).toBe('true');
-    expect(headers[1]?.getAttribute('aria-expanded')).toBe('true');
-    expect(Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-row')).map((row) => row.getAttribute('aria-label')))
-      .toEqual([
-        'Open T-10: Boards v1: Current Phase board and ticket page',
-        'Open T-20: Boards v1: Current Phase board and ticket page',
-        'Open T-30: Boards v1: Current Phase board and ticket page',
-      ]);
+    fireEvent.click(later);
+    await settle();
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-06' }]]);
+    expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(50);
+    expect(view.getByRole('button', { name: 'Show 1 more' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Show 1 more' }));
+    expect(view.container.querySelectorAll('.boards-backlog-row')).toHaveLength(51);
+  });
+  it('shows a phase-scoped loading state and refreshes every loaded phase', async () => {
+    let resolveTickets!: (value: ReturnType<typeof ok<ReturnType<typeof boardTicketListFixture>>>) => void;
+    const pending = new Promise<ReturnType<typeof ok<ReturnType<typeof boardTicketListFixture>>>>(resolve => { resolveTickets = resolve; });
+    const fake = fakeManagement({ boardTickets: [ok(list(1)), pending, ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-3', phase: 'phase-05' })] })), ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-4', phase: 'phase-06' })] }))] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    expect(view.getByRole('status').textContent).toContain('Loading tickets');
+    expect(view.getByRole('button', { name: /Open T-0/ })).toBeTruthy();
+    await act(async () => { resolveTickets(ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', phase: 'phase-06' })] }))); });
+    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(fake.boardTickets.mock.calls.slice(-2)).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }]]);
+    expect(view.queryByRole('button', { name: /Open T-0/ })).toBeNull();
+    expect(view.getByRole('button', { name: /Open T-3/ })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    expect(view.getByRole('button', { name: /Open T-4/ })).toBeTruthy();
+  });
+  it('retries a failed phase request when that phase is expanded', async () => {
+    const failure = managementError('DOWN', 'Unavailable');
+    const fake = fakeManagement({ boardTickets: [ok(list(1)), failure, ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', phase: 'phase-06' })] }))] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const phase = view.getByRole('button', { name: /Phase 06/ });
+    fireEvent.click(phase);
+    await settle();
+    expect(view.getByRole('alert').textContent).toContain('DOWN');
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }]]);
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    await settle();
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }], [workspaceA.id, { phase: 'phase-06' }]]);
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
   });
   it('shows row activity, priority, owner, status, time and navigates', async () => {
     vi.useFakeTimers();
@@ -170,9 +232,7 @@ describe('BacklogScreen', () => {
   it('shows the empty board state', async () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardTickets: [ok(list(0))] }).api} />);
     await settle();
-    expect(view.getByText('0 tickets')).toBeTruthy();
-    expect(view.getByText('No tickets yet')).toBeTruthy();
-    expect(view.getAllByText('No tickets in this phase.').length).toBeGreaterThan(0);
+    expect(view.getByText('No tickets in this phase.')).toBeTruthy();
   });
   it('refreshes on the event and five second poll', async () => {
     vi.useFakeTimers();
@@ -180,9 +240,9 @@ describe('BacklogScreen', () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     await act(async () => { window.dispatchEvent(new Event('board-changed')); });
-    expect(view.getByText('2 tickets')).toBeTruthy();
+    expect(view.getByRole('button', { name: /Open T-1/ })).toBeTruthy();
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
-    expect(view.getByText('3 tickets')).toBeTruthy();
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenCalledTimes(3);
   });
 });
@@ -208,8 +268,8 @@ describe('backlog toolbar', () => {
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
     expect(view.getByRole('button', { name: 'Workflow status · 1' }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByText('1 of 3 tickets')).toBeTruthy();
-    expect(view.getByRole('button', { name: /Phase 05 Current 1 of 2 tickets/ })).toBeTruthy();
-    expect(view.queryByRole('button', { name: /Phase 06/ })).toBeNull();
+    expect(view.getByRole('button', { name: /Phase 05 Current/ })).toBeTruthy();
+    expect(view.getByRole('button', { name: /Phase 06/ })).toBeTruthy();
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
     expect(view.queryByText('1 of 3 tickets')).toBeNull();
     expect(view.getByRole('button', { name: 'Workflow status' })).toBeTruthy();

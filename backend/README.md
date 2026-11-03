@@ -423,7 +423,8 @@ ticket keeps its usual fields (`key`, `title`, `status`, `priority`, `phase`, `p
 `rounds`, `blockedReason`, `returnStatus`, `activity`, `updatedAt`) but has no `body`, and gains `dependsOn` (all
 dependency keys) and `openDependsOn` (the dependency keys whose status is not a done/closed kind). The default
 output is unchanged. `status` filters by column; `workflowStatus` (CLI `--workflow-status`) filters by workflow status.
-Both filters combine with `phase` and `summary`. Tickets expose the column as `status` and the workflow state as
+Both filters combine with `phase` and `summary`. `unassigned: true` returns only tickets with no phase (it cannot be
+combined with `phase`). Tickets expose the column as `status` and the workflow state as
 `workflowStatus`. `phase.list` and `phase.show` count columns; `board.show` returns per-phase `columns` and
 `workflow` count maps and a `columnWorkflow` breakdown without ticket lists. `ticket workflow KEY ID [--reason TEXT]` changes the workflow status; operator MCP clients can use `ticket_workflow`. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
 and each rule’s `during` value.

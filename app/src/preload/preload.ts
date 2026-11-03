@@ -82,7 +82,7 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       boardSettings: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardSettings, w, {}),
       boardPhases: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardPhases, w, {}),
       boardTickets: (w, input) =>
-        ipc.invoke(PRELOAD_CHANNELS.managementBoardTickets, w, input.phase === undefined ? {} : { phase: input.phase }),
+        ipc.invoke(PRELOAD_CHANNELS.managementBoardTickets, w, input.unassigned === true ? { unassigned: true } : input.phase === undefined ? {} : { phase: input.phase }),
       boardTicket: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementBoardTicket, w, { key: input.key }),
       createAgent: (w, agent) => ipc.invoke(PRELOAD_CHANNELS.managementCreateAgent, w, { agent }),
       updateAgent: (w, agentDefId, changes) =>

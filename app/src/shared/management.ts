@@ -380,6 +380,7 @@ export interface BoardPhase extends BoardPhaseRef {
   counts: Record<string, number>;
 }
 export interface BoardPhases {
+  unassignedTicketCount?: number;
   workspace: string;
   currentPhase: BoardPhaseRef;
   phases: BoardPhase[];
@@ -672,7 +673,7 @@ export interface ManagementApi {
   validateTeam(workspaceId: string, teamDefId: string): R<TeamValidation>;
   boardSettings(workspaceId: string): R<BoardSettings>;
   boardPhases(workspaceId: string): R<BoardPhases>;
-  boardTickets(workspaceId: string, input: { phase?: string }): R<BoardTicketList>;
+  boardTickets(workspaceId: string, input: { phase?: string; unassigned?: boolean }): R<BoardTicketList>;
   boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;
   createAgent(workspaceId: string, agent: AgentDefInput): R<AgentDefResult>;
   updateAgent(workspaceId: string, agentDefId: string, changes: AgentDefChanges): R<AgentDefResult>;

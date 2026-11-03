@@ -637,7 +637,11 @@ def phase_list(conn, workspace: str) -> dict:
         per_status = dict(counts, **_phase_counts(conn, row["id"], config)) if row["id"] else dict(counts)
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
                            ticketCount=sum(per_status.values()), counts=per_status))
-    return {"workspace": workspace, "currentPhase": current, "phases": phases}
+    unassigned_count = conn.execute(
+        "SELECT COUNT(*) FROM tickets WHERE workspace = ? AND phase_id IS NULL", (workspace,)
+    ).fetchone()[0]
+    return {"workspace": workspace, "currentPhase": current, "phases": phases,
+            "unassignedTicketCount": unassigned_count}
 
 
 def phase_detail(conn, workspace: str, slug: str) -> dict:
@@ -1370,7 +1374,8 @@ def _dependency_keys(conn, ticket_id: str, terminal) -> tuple:
     return keys, [r["key"] for r in rows if r["status"] not in terminal]
 
 
-def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = False, workflow_status=None) -> dict:
+def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = False, workflow_status=None,
+                unassigned: bool = False) -> dict:
     config = load_config(workspace)
     if status is not None and status not in KANBAN_COLUMNS:
         raise AsError(BOARD_STATUS_UNKNOWN, f"Status {status!r} is not on this board.",
@@ -1388,6 +1393,8 @@ def ticket_list(conn, workspace: str, status=None, phase=None, summary: bool = F
     if phase is not None:
         clauses.append("phase_id = ?")
         params.append(get_phase(conn, workspace, phase)["id"])
+    if unassigned:
+        clauses.append("phase_id IS NULL")
     rows = conn.execute("SELECT * FROM tickets WHERE " + " AND ".join(clauses) +
                         " ORDER BY priority, created_at, key", params).fetchall()
     tickets = []

@@ -68,6 +68,7 @@ describe('preload', () => {
     m.boardPhases('ws', x);
     m.boardTickets('ws', {}, x);
     m.boardTickets('ws', { phase: 'phase-05' }, x);
+    m.boardTickets('ws', { unassigned: true }, x);
     m.boardTicket('ws', { key: 'T-134' }, x);
     m.createAgent('ws', { name: 'Ada', provider: 'claude' }, x);
     m.updateAgent('ws', 'ada', { model: null }, x);
@@ -125,6 +126,7 @@ describe('preload', () => {
       [P.managementBoardPhases, 'ws', {}],
       [P.managementBoardTickets, 'ws', {}],
       [P.managementBoardTickets, 'ws', { phase: 'phase-05' }],
+      [P.managementBoardTickets, 'ws', { unassigned: true }],
       [P.managementBoardTicket, 'ws', { key: 'T-134' }],
       [P.managementCreateAgent, 'ws', { agent: { name: 'Ada', provider: 'claude' } }],
       [P.managementUpdateAgent, 'ws', { agentDefId: 'ada', changes: { model: null } }],

@@ -613,6 +613,10 @@ def _validate_ticket_list(args):
     phase = req_text(args, "phase", 64, required=False, allow_empty=False)
     if phase is not None:
         out["phase"] = _slug_arg(phase, "phase")
+    if "unassigned" in args:
+        out["unassigned"] = req_bool(args, "unassigned")
+        if out["unassigned"] and phase is not None:
+            raise AsError(BAD_REQUEST, "ticket.list takes either 'phase' or 'unassigned', not both.")
     return out
 
 
@@ -699,7 +703,8 @@ def _ticket_list(args, req):
     conn = _reader()
     try:
         return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"), clean.get("phase"),
-                                      clean.get("summary", False), clean.get("workflowStatus"))
+                                      clean.get("summary", False), clean.get("workflowStatus"),
+                                      unassigned=clean.get("unassigned", False))
     finally:
         conn.close()
 

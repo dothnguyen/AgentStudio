@@ -1,16 +1,17 @@
 import { useId, useState } from 'react';
 import type { JSX } from 'react';
-import type { BoardSettings } from '../api';
+import type { ApiError, BoardSettings } from '../api';
 import type { BacklogGroup } from './backlogModel';
+import { BoardErrorCard } from './CurrentPhaseScreen';
 import { BacklogRow } from './BacklogRow';
 
-export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo }: { group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
+export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo, phaseState, error, onExpand, onRetry }: { phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
   const bodyId = useId();
-  const [expanded, setExpanded] = useState(group.current || !group.closed);
+  const [expanded, setExpanded] = useState(group.current);
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? group.tickets : group.tickets.slice(0, 50);
   return <section className="boards-backlog-group">
-    <div className="boards-backlog-group-heading"><button type="button" className="boards-backlog-group-header" aria-expanded={expanded} aria-controls={bodyId} onClick={() => setExpanded((value) => !value)}>
+    <div className="boards-backlog-group-heading"><button type="button" className="boards-backlog-group-header" aria-expanded={expanded} aria-controls={bodyId} onClick={() => { if (!expanded) onExpand(); setExpanded(!expanded); }}>
       <span aria-hidden="true">{expanded ? '▾' : '▸'}</span><strong>{group.name}</strong>
       {group.current && <span className="boards-phase-pill">Current</span>}
       {group.closed && <span className="boards-phase-pill boards-backlog-closed">Closed</span>}
@@ -18,8 +19,8 @@ export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenP
     </button>{onOpenPhases && <button type="button" className="boards-backlog-progress-link" onClick={onOpenPhases}>Phase progress</button>}</div>
     <div id={bodyId} className="boards-backlog-group-body" hidden={!expanded}>
       {expanded && <>
-      {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} workflowStatus={settings.workflowStatuses.find((status) => status.id === ticket.workflowStatus) ?? { id: ticket.workflowStatus }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
-      {!showAll && group.tickets.length > 50 && <button type="button" className="boards-backlog-more" onClick={() => setShowAll(true)}>Show {group.tickets.length - 50} more</button>}
+      {phaseState === 'loading' || !phaseState ? <p role="status">Loading tickets…</p> : phaseState === 'error' ? <BoardErrorCard title="Could not load phase tickets" error={error ?? null} onRetry={onRetry} /> : visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} workflowStatus={settings.workflowStatuses.find((status) => status.id === ticket.workflowStatus) ?? { id: ticket.workflowStatus }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
+      {phaseState === 'ready' && !showAll && group.tickets.length > 50 && <button type="button" className="boards-backlog-more" onClick={() => setShowAll(true)}>Show {group.tickets.length - 50} more</button>}
       </>}
     </div>
   </section>;

@@ -677,7 +677,7 @@ describe('T-135 sidebar Boards group and routes', () => {
     fireEvent.click(within(view.getByRole('region', { name: 'Phase 05' })).getByRole('button', { name: 'View tickets' }));
     await settle();
     expect(view.getByRole('button', { name: 'Remove Phase: Phase 05' })).toBeTruthy();
-    expect(nav.getByRole('button', { name: 'Backlog' }).querySelector('.boards-nav-count')?.textContent).toBe(String(boardTicketListFixture().tickets.length));
+    expect(nav.getByRole('button', { name: 'Backlog' }).querySelector('.boards-nav-count')?.textContent).toBe(String(phases.phases.reduce((total, phase) => total + phase.ticketCount, 0)));
     fireEvent.change(view.getByLabelText('Priority'), { target: { value: 'urgent' } });
     fireEvent.click(view.getByRole('button', { name: 'Open T-114: Roles v2: edit dialogs and the New role dialog' }));
     await settle();

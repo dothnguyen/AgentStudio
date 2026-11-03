@@ -260,8 +260,9 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementBoardPhases, 'boardPhases', 'phase.list', {}),
   spec(C.managementBoardTickets, 'boardTickets', 'ticket.list', {
     phase: { kind: 'slug' },
+    unassigned: { kind: 'bool' },
   }, {
-    map: ({ phase }) => phase === undefined ? { summary: true } : { summary: true, phase },
+    map: ({ phase, unassigned }) => unassigned === true ? { summary: true, unassigned: true } : phase === undefined ? { summary: true } : { summary: true, phase },
   }),
   spec(C.managementBoardTicket, 'boardTicket', 'ticket.show', {
     key: { kind: 'ticketKey', required: true },

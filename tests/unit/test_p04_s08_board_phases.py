@@ -47,6 +47,34 @@ class PhaseCommands(PhaseCase):
         self.assertEqual(listed["currentPhase"]["slug"], "default")
         self.assertEqual([name for name, _e, _p in self.phase_events()], ["phase.created"])
 
+    def test_phase_list_counts_unassigned_tickets_for_the_workspace(self):
+        self.add("assigned")
+        self.add("unassigned")
+        # A legacy import can expose unassigned rows; use a temporary copy to model them.
+        self.conn.execute("CREATE TEMP TABLE tickets AS SELECT * FROM main.tickets")
+        self.conn.execute("UPDATE tickets SET phase_id = NULL WHERE key = 'T-002'")
+        listed = boardmodel.phase_list(self.conn, self.ws)
+        self.assertEqual(listed["unassignedTicketCount"], 1)
+        self.assertEqual(sum(phase["ticketCount"] for phase in listed["phases"]), 1)
+        self.assertEqual([ticket["phase"] for ticket in boardmodel.ticket_list(self.conn, self.ws)["tickets"]],
+                         ["default", None])
+
+    def test_ticket_list_unassigned_returns_only_tickets_without_a_phase(self):
+        self.add("assigned")
+        self.add("unassigned")
+        self.conn.execute("CREATE TEMP TABLE tickets AS SELECT * FROM main.tickets")
+        self.conn.execute("UPDATE tickets SET phase_id = NULL WHERE key = 'T-002'")
+        listed = boardmodel.ticket_list(self.conn, self.ws, summary=True, unassigned=True)
+        self.assertEqual([(ticket["key"], ticket["phase"]) for ticket in listed["tickets"]], [("T-002", None)])
+
+    def test_ticket_list_unassigned_argument_is_validated(self):
+        from agent_studio import dispatch
+        self.assertTrue(dispatch._validate_ticket_list({"workspace": self.ws, "unassigned": True})["unassigned"])
+        for args in ({"unassigned": "yes"}, {"unassigned": True, "phase": "default"}):
+            with self.assertRaises(AsError) as caught:
+                dispatch._validate_ticket_list(dict(args, workspace=self.ws))
+            self.assertEqual(caught.exception.code, "BAD_REQUEST")
+
     def test_add_appends_and_inserts_with_renumbering(self):
         self.add("first")
         added = self.phase("add", id="build-out", name="Build out")["phase"]
