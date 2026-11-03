@@ -17,7 +17,7 @@ class TicketCycle(SchedCase):
         source = os.path.join(os.path.dirname(__file__), '..', '..', '.agent-studio', 'board.json')
         with open(source, encoding='utf-8') as f:
             config = json.load(f)
-        self.assertEqual(config['version'], 2)
+        self.assertEqual(config['version'], 3)
         config['baseBranch'] = subprocess.check_output(
             ['git', '-C', self.ws, 'symbolic-ref', '--short', 'HEAD'], text=True).strip()
         self.write_board(config)

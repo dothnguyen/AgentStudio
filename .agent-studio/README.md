@@ -163,3 +163,9 @@ agent-studio workflow start --team $TEAM --developer $DEV --reviewer $QA \
     --text "Implement the story in $S ..." --wait --pretty
 agent-studio workflow show --workflow $WF --pretty                # stages, diff path, test output, QA verdict
 ```
+
+## Board columns and workflow status
+
+Tickets have a fixed column (`status`: `backlog`, `todo`, `in-progress`, `done`, or `closed`) and a separate `workflowStatus` for routing. New operator tickets start in backlog with the initial workflow status `none`. Moving to todo uses a configured entry status; claims move tickets to in-progress and the rule's `during` workflow status. Done and closed use terminal workflow statuses (`merged` and `closed` in this workspace). Backlog resets the workflow; reopening done or closed requires a forced move to todo or backlog.
+
+Use `agent-studio ticket workflow KEY ID [--reason TEXT]` to change the workflow status of an unclaimed todo or in-progress ticket without moving its column. Run `agent-studio board upgrade --dry-run` to preview a v2 config upgrade and `agent-studio board upgrade` to persist it; the latter backs up the original config. Upgrade the installed Agent Studio together with this workspace config before running the board.

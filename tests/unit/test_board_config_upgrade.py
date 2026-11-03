@@ -72,28 +72,29 @@ class BoardConfigUpgradeTests(unittest.TestCase):
         self.assertEqual(parsed['todoEntry'], [])
         self.assertIsNone(parsed['todoDefault'])
 
-    def test_repository_board_upgrades_and_loads_without_writing(self):
+    def test_repository_board_is_valid_v3_config(self):
         path = os.path.join(os.path.dirname(__file__), '..', '..', '.agent-studio', 'board.json')
         with open(path, encoding='utf-8') as f:
             raw = json.load(f)
-        before = copy.deepcopy(raw)
-        upgraded, mapping = boardmodel.upgrade_config(raw)
-        parsed = boardmodel.parse_config(upgraded)
-        self.assertEqual(raw, before)
-        self.assertEqual(mapping, {s['id']: {'backlog': 'none', 'done': 'merged', 'close': 'closed'}.get(s['id'], s['id']) for s in raw['statuses']})
+        self.assertEqual(raw['version'], 3)
+        parsed = boardmodel.parse_config(raw)
+        self.assertEqual(parsed['version'], 3)
         self.assertEqual(parsed['todoDefault'], 'dev-ready')
+        self.assertEqual([status['id'] for status in raw['workflowStatuses'] if status.get('kind') == 'initial'],
+                         ['none'])
+        self.assertEqual([status['id'] for status in raw['workflowStatuses'] if status.get('kind') == 'done'],
+                         ['merged'])
+        self.assertEqual([status['id'] for status in raw['workflowStatuses'] if status.get('kind') == 'closed'],
+                         ['closed'])
+        self.assertTrue(all(rule.get('during') for rule in parsed['rules']))
+        self.assertEqual(set(parsed['todoEntry']), {
+            rule['when']['status'] for rule in parsed['rules'] if 'action' not in rule
+        })
         self.assertEqual(parsed['rulesByStatus']['plan-merge-ready']['onPassCreatedTickets']['from'], 'none')
         self.assertEqual(parsed['rulesByStatus']['merge-ready']['onPass'], 'merged')
-        with tempfile.TemporaryDirectory() as workspace:
-            os.mkdir(os.path.join(workspace, '.agent-studio'))
-            filename = os.path.join(workspace, '.agent-studio', 'board.json')
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(raw, f)
-            loaded = boardmodel.load_config(workspace)
-            with open(filename, encoding='utf-8') as f:
-                self.assertEqual(json.load(f), before)
-        self.assertEqual(loaded['upgradedFrom'], mapping)
-        self.assertEqual(loaded['version'], 3)
+        self.assertEqual(raw['upgradedFrom']['backlog'], 'none')
+        self.assertEqual(raw['upgradedFrom']['done'], 'merged')
+        self.assertEqual(raw['upgradedFrom']['close'], 'closed')
 
     def test_all_references_and_existing_during_are_rewritten(self):
         raw = {'version': 2, 'statuses': [{'id': 'start', 'kind': 'initial'}, {'id': 'ready'},
