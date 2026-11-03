@@ -255,7 +255,12 @@ class TickRules(SchedCase):
              patch.object(boardsched, "merge_ticket", side_effect=merge_while_claimed) as merge:
             tick = self.tick()
         self.assertEqual((tick["merged"], tick["errors"]), (1, []))
-        self.assertEqual(self.ticket("T-001")["workflow_status"], "done")
+        row = self.ticket("T-001")
+        self.assertEqual(row["workflow_status"], "done")
+        self.assertEqual(json.loads(row["rounds_json"]), {"board-merge": 1})
+        event = self.conn.execute("SELECT payload_json FROM ticket_events WHERE ticket_id = ? AND "
+                                  "name = 'ticket.outcome_applied'", (row["id"],)).fetchone()
+        self.assertEqual(json.loads(event["payload_json"])["workflow"], "board-merge")
         merge.assert_called_once()
 
     def test_file_action_only_merge_conflict_uses_end_fail(self):

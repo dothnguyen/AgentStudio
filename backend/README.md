@@ -406,12 +406,14 @@ statuses use `in-progress`, and other working statuses retain `in-progress` or o
 Every finished or paused run of a claimed ticket has exactly one of five results, resolved from the
 ticket's `during` or `when` workflow status and transitioned to its configured target:
 
-- `pass` — the run succeeded; the ticket moves to `onPass`/the workflow's `end.pass` target.
-- `fail` — the run failed for a reason about the work; the ticket moves to `onFail`, the round is counted
-  and the rule's failure limit applies.
+- `pass` — the run succeeded; the ticket moves to the workflow's `end.pass` target (or `onPass` for a v3
+  rule).
+- `fail` — the run failed for a reason about the work; the ticket moves to `end.fail` (or `onFail`), the
+  workflow's round is counted and its `limits.failuresInARow` limit applies.
 - `blocked` — the run was paused without an infrastructure code, or ended by a step or visit limit; the
   ticket moves to `end.blocked.status` (default `blocked`, or v3 `onBlocked`) and its return status is
-  `end.blocked.returnTo` (default `startsAt`). The round is counted. A round limit also blocks.
+  `end.blocked.returnTo` (default the workflow's `startsAt`, or the rule's `when` status for a v3 rule).
+  The workflow's round is counted. A `limits.maxRuns` round limit also blocks.
 - `paused` — infrastructure trouble: usage limit, provider, runner or validation-process codes listed in
   `boardmodel.PAUSE_CODES`. The claim is released back to `startsAt`, the Kanban column stays, and no
   round or failure is counted. The event is `ticket.run_paused`, and the run is ended `failed` with reason
@@ -419,9 +421,14 @@ ticket's `during` or `when` workflow status and transitioned to its configured t
 - `cancelled` — the run was cancelled. The claim is released back to `startsAt` unless the operator moved
   the ticket, and nothing is counted. The event is `ticket.run_cancelled`.
 
+Rounds are keyed by the workflow name; hitting `limits.maxRuns` blocks with `ROUND_LIMIT:<workflow>` and
+the consecutive-failure limit routes to its configured status with `FAILURE_LIMIT:<workflow>`, resetting
+after a pass. A failed run's findings are appended under `## Findings from <workflow>, round N`, and
+`limits.onFailPriority` sets the ticket priority after a fail.
+
 A paused run waiting for input is left alone. A blocked result records `end.blocked.returnTo` (default
-`startsAt`, the rule's `when` status for v3 rules) as the return status. Outcome events report workflow
-statuses, and replaying a run is a no-op.
+`startsAt`) as the return status. The `ticket.outcome_applied` event reports the workflow statuses and
+carries the workflow name (with the existing outcome fields), and replaying a run is a no-op.
 The mutating `ticket.workflow` command accepts `workspace`, `key`, `to`, and optional `reason`.
 It changes an unclaimed ticket in `todo` or `in-progress` to a different kindless workflow status,
 excluding `blocked` and rule `during` statuses, while preserving the column.

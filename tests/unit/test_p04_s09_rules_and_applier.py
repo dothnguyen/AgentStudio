@@ -5,7 +5,7 @@ import unittest
 
 from tests import helpers  # noqa: F401  (puts backend on sys.path)
 from tests.helpers import fresh
-from agent_studio import boardmodel
+from agent_studio import boardmodel, boardsched
 from agent_studio.protocol import AsError
 from tests.unit.test_p04_s07_board_model import BoardCase
 from tests.unit.test_board_config_v3 import config as workflow_config
@@ -373,10 +373,11 @@ class WorkflowOutcomeApplier(ApplierCase):
         self.assertEqual((event["from_status"], event["to_status"]), ("working", "ready"))
         self.assertEqual(json.loads(event["payload_json"]), {
             "ticketId": self.ticket["id"], "key": self.ticket["key"], "run": run,
-            "outcome": "fail", "rule": "ready", "rounds": 1, "to": "ready", "reason": None,
+            "outcome": "fail", "rule": "ready", "workflow": "ready", "rounds": 1, "to": "ready",
+            "reason": None,
         })
 
-    def test_round_limit_and_blocked_outcome_preserve_column_and_return_status(self):
+    def test_round_limit_applies_to_failed_and_blocked_outcomes(self):
         del self.config["rules"][0]["onFailureLimit"]
         self.write_config(self.config)
         self.apply(self.ticket["key"], self.make_run("failed"))
@@ -386,12 +387,13 @@ class WorkflowOutcomeApplier(ApplierCase):
         self.assertEqual((row["workflow_status"], row["status"], row["return_status"], row["blocked_reason"]),
                          ("blocked", "in-progress", "ready", "ROUND_LIMIT:ready"))
         self.assertEqual(result["reason"], "ROUND_LIMIT:ready")
+        # A blocked outcome that reaches the run limit reports the limit, not the run that happened to block.
         self.claim("working")
         run = self.make_run("paused")
         self.apply(self.ticket["key"], run)
         row = boardmodel.get_ticket(self.conn, self.ws, self.ticket["key"])
         self.assertEqual((row["workflow_status"], row["status"], row["return_status"], row["blocked_reason"]),
-                         ("blocked", "in-progress", "ready", f"RUN_BLOCKED:{run}"))
+                         ("blocked", "in-progress", "ready", "ROUND_LIMIT:ready"))
 
     def test_on_blocked_target_is_a_workflow_status(self):
         self.config["rules"][0]["onBlocked"] = "merge-ready"
@@ -399,6 +401,35 @@ class WorkflowOutcomeApplier(ApplierCase):
         result = self.apply(self.ticket["key"], self.make_run("paused"))
         self.assertEqual((result["ticket"]["workflowStatus"], result["ticket"]["status"]),
                          ("merge-ready", "in-progress"))
+
+
+class LegacyRuleFallback(ApplierCase):
+    """A board whose workflow definition cannot load still applies the rule's limits through the fallback."""
+
+    def fallback_config(self, **extra):
+        config = json.loads(json.dumps(BLOCKABLE_CONFIG))
+        config["rules"][0].update(workflow="missing-definition", **extra)
+        self.write_config(config)
+
+    def test_fallback_workflow_keeps_max_rounds_and_on_fail_priority(self):
+        self.fallback_config(maxRounds=1, onFailPriority=7)
+        self.add("legacy fallback")
+        run = self.make_run("failed")
+        with self.store.transaction() as tx:
+            ticket = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
+            # A migrated legacy row can still carry its status in the old column (backfill fills the other).
+            workflow = boardsched._claiming_workflow(
+                tx, self.ws, dict(ticket, workflow_status=ticket["workflow_status"] or ticket["status"]))
+            self.assertEqual((workflow["name"], workflow["startsAt"], workflow["limits"]),
+                             ("none", "none", {"maxRuns": 1, "onFailPriority": 7}))
+            got = boardmodel.apply_run_outcome(tx, self.ws, {"key": "T-001", "run": run},
+                                               workflow=workflow)
+        row = self.conn.execute("SELECT status, blocked_reason, priority, rounds_json "
+                                "FROM tickets WHERE key = 'T-001'").fetchone()
+        self.assertEqual((row["status"], row["blocked_reason"], row["priority"]),
+                         ("blocked", "ROUND_LIMIT:none", 7))
+        self.assertEqual(json.loads(row["rounds_json"]), {"none": 1})
+        self.assertEqual((got["applied"], got["reason"]), (True, "ROUND_LIMIT:none"))
 
 
 class Unblock(ApplierCase):

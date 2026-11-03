@@ -125,7 +125,8 @@ def _apply_finished(tx, workspace: str, ctx: dict) -> int:
             continue
         ticket = boardmodel.get_ticket(tx.conn, workspace, row["key"])
         result = boardmodel.run_result(tx.conn, dict(run))
-        rule = _legacy_rule(_claiming_workflow(tx, workspace, ticket))
+        workflow = _claiming_workflow(tx, workspace, ticket)
+        rule = _legacy_rule(workflow)
         if result in ("pass", "fail", "blocked"):
             _commit_worktree(tx, ticket, rule)
         # a non-succeeded run's files are stashed, so even a paused or cancelled run on `workspace: main`
@@ -133,7 +134,7 @@ def _apply_finished(tx, workspace: str, ctx: dict) -> int:
         _settle_main(tx, workspace, ticket, rule, run["status"])
         # apply before ending a paused run: ending it cancels the assignment that carries the pause code
         applied_result = boardmodel.apply_run_outcome(tx, workspace, {"key": row["key"], "run": row["run"]},
-                                                      rule=rule, result=result)
+                                                      workflow=workflow, result=result)
         if run["status"] == "paused":
             _end_paused_run(tx, row["run"], result, ctx)
         if applied_result['applied'] and rule:
@@ -311,7 +312,11 @@ def _claiming_workflow(tx, workspace: str, ticket: dict) -> dict:
         config = boardmodel.load_config(workspace)
         legacy = config["duringToRule"].get(status) or config["rulesByStatus"].get(status)
         if legacy:
-            return {"startsAt": legacy["when"]["status"], "end": {"pass": legacy["onPass"], "fail": legacy["onFail"]}, "workspace": legacy.get("workspace")}
+            # Keep the rule's routing and limits: the applier works from a workflow, so a fallback that
+            # dropped maxRounds/onFailPriority would silently stop enforcing them on a legacy board.
+            workflow = boardmodel._workflow_from_rule(legacy)
+            workflow["workspace"] = legacy.get("workspace")
+            return workflow
     return found
 
 
@@ -571,7 +576,7 @@ def _run_action_workflow(tx, workspace: str, team_id: str, wf: dict, steps: list
         boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merged", "coordinator", ticket["status"],
                                  rule["onPass"], {"ticketId": ticket["id"], "key": ticket["key"],
                                                   "branch": ticket["branch"], "to": rule["onPass"]})
-    applied = boardmodel.apply_run_outcome(tx, workspace, {"key": ticket["key"], "run": run_id}, rule=rule)
+    applied = boardmodel.apply_run_outcome(tx, workspace, {"key": ticket["key"], "run": run_id}, workflow=wf)
     if failed_step == "merge":
         _record_merge_failure(tx, workspace, ticket, rule, reason)
     if applied.get("applied"):
