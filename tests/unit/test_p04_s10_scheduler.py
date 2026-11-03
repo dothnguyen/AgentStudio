@@ -67,7 +67,9 @@ class SchedCase(unittest.TestCase):
         with self.store.transaction() as tx:
             ticket = boardmodel.ticket_add(tx, self.ws, {"title": title, "priority": 100, **extra})["ticket"]
             config = boardmodel.load_config(self.ws)
-            requested = extra.get("status", config["rules"][0]["when"]["status"])
+            requested = extra.get("status")
+            if requested is None:
+                requested = config["rules"][0]["when"]["status"]
             target = config.get("upgradedFrom", {}).get(requested, requested)
             column = boardmodel.column_for(config, "backlog", target, False)
             tx.conn.execute("UPDATE tickets SET status = ?, workflow_status = ? WHERE id = ?",
@@ -188,32 +190,117 @@ class TickRules(SchedCase):
                     self.assertIsNone(row['rounds_json'])
                 self.free_member()
 
+    def action_board(self):
+        self.write_board({
+            "version": 3,
+            "workflowStatuses": [{"id": "none", "kind": "initial"}, {"id": "ready"}, {"id": "merging"},
+                                 {"id": "merge-conflict"}, {"id": "done", "kind": "done"}],
+            "todoEntry": [], "todoDefault": None, "ticketFields": [],
+            "rules": [{"when": {"status": "ready"}, "during": "merging", "action": "merge",
+                       "onPass": "done", "onFail": "merge-conflict"}]})
+
     def test_merge_conflict_uses_during_and_leaves_ticket_in_progress(self):
-        from types import SimpleNamespace
-        config = boardmodel.load_config(self.ws)
-        initial = config["initial"]
-        during = config["rules"][0]["during"]
-        config["byId"]["merge-conflict"] = {"id": "merge-conflict", "kind": "active"}
-        self.add_ticket(status=initial)
+        self.action_board()
+        self.add_ticket(status="ready")
         with self.store.transaction() as tx:
             tx.conn.execute("UPDATE tickets SET branch = ? WHERE key = ?", ("feature", "T-001"))
-            ticket = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
-            rule = {"during": during, "onFail": "merge-conflict"}
-            results = [SimpleNamespace(returncode=0, stdout=config["baseBranch"].encode()),
-                       SimpleNamespace(returncode=0, stdout=config["baseBranch"].encode()),
-                       SimpleNamespace(returncode=1, stdout=b""),
-                       SimpleNamespace(returncode=0, stdout=b"shared.txt\n"),
-                       SimpleNamespace(returncode=0, stdout=b"")]
-            with patch.object(boardsched.tasks, "_mutating_in_workspace", return_value=None), \
-                 patch.object(boardsched.worktrees, "is_clean", return_value=True), \
-                 patch.object(boardsched.gitws, "run", side_effect=results), \
-                 patch.object(boardmodel, "load_config", return_value=config):
-                self.assertTrue(boardsched._merge_one(tx, self.ws, ticket, rule, config, self.ctx))
-            row = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
-            self.assertEqual((row["workflow_status"], row["status"]), ("merge-conflict", "in-progress"))
-            events = tx.conn.execute("SELECT from_status, to_status FROM ticket_events "
-                                     "WHERE name = 'ticket.workflow_changed' ORDER BY id").fetchall()
-            self.assertEqual([tuple(e) for e in events], [(initial, during), (during, "merge-conflict")])
+        with patch.object(boardsched, "_merge_hold", return_value=None), \
+             patch.object(boardsched, "merge_ticket", return_value=(False, "MERGE_CONFLICT: shared.txt")):
+            tick = self.tick()
+        self.assertEqual(tick["errors"], [])
+        self.assertEqual(tick["merged"], 1)
+        row = self.ticket("T-001")
+        self.assertEqual((row["workflow_status"], row["status"]), ("merge-conflict", "in-progress"))
+        self.assertIsNone(row["assignee"])
+        self.assertIsNone(row["active_run_id"])
+        events = self.conn.execute("SELECT from_status, to_status FROM ticket_events "
+                                   "WHERE name = 'ticket.workflow_changed' ORDER BY id").fetchall()
+        self.assertEqual([tuple(e) for e in events], [("ready", "merging"), ("merging", "merge-conflict")])
+        names = [r[0] for r in self.conn.execute(
+            "SELECT name FROM ticket_events WHERE ticket_id = ? ORDER BY id", (row["id"],)).fetchall()]
+        self.assertIn("ticket.merge_conflict", names)
+        self.assertIn("MERGE_CONFLICT: shared.txt", row["body"])
+
+    def test_action_only_workflow_processes_one_ticket_per_tick(self):
+        self.action_board()
+        self.add_ticket("first", status="ready")
+        self.add_ticket("second", status="ready")
+        with patch.object(boardsched, "_merge_hold", return_value=None), \
+             patch.object(boardsched, "merge_ticket", return_value=(True, None)):
+            first = self.tick()
+            self.assertEqual((first["merged"], self.ticket("T-001")["workflow_status"],
+                              self.ticket("T-002")["workflow_status"]), (1, "done", "ready"))
+            second = self.tick()
+        self.assertEqual((second["merged"], self.ticket("T-002")["workflow_status"]), (1, "done"))
+
+    def test_file_action_only_workflow_merges_to_end_pass(self):
+        with open(os.path.join(self.ws, ".agent-studio", "workflows", "board-merge.json"), "w") as f:
+            json.dump({"version": 2, "startsAt": "ready", "whileRunning": "merging",
+                       "end": {"pass": "done", "fail": "ready"},
+                       "steps": [{"id": "merge", "action": "merge"}]}, f)
+        self.write_board({"version": 3,
+                          "workflowStatuses": [{"id": "none", "kind": "initial"}, {"id": "ready"},
+                                               {"id": "merging"}, {"id": "done", "kind": "done"}],
+                          "todoEntry": [], "todoDefault": None, "ticketFields": [], "rules": []})
+        self.add_ticket(status="ready")
+        with self.store.transaction() as tx:
+            tx.conn.execute("UPDATE tickets SET branch = ? WHERE key = ?", ("feature", "T-001"))
+        def merge_while_claimed(tx, workspace, ticket, config, ctx):
+            row = tx.conn.execute("SELECT assignee, workflow_status FROM tickets WHERE id = ?",
+                                  (ticket["id"],)).fetchone()
+            self.assertEqual(tuple(row), ("coordinator", "merging"))
+            return True, None
+
+        with patch.object(boardsched, "_merge_hold", return_value=None), \
+             patch.object(boardsched, "merge_ticket", side_effect=merge_while_claimed) as merge:
+            tick = self.tick()
+        self.assertEqual((tick["merged"], tick["errors"]), (1, []))
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "done")
+        merge.assert_called_once()
+
+    def test_file_action_only_merge_conflict_uses_end_fail(self):
+        with open(os.path.join(self.ws, ".agent-studio", "workflows", "board-merge.json"), "w") as f:
+            json.dump({"version": 2, "startsAt": "ready", "whileRunning": "merging",
+                       "end": {"pass": "done", "fail": "failed"},
+                       "steps": [{"id": "merge", "action": "merge"}]}, f)
+        self.write_board({"version": 3,
+                          "workflowStatuses": [{"id": "none", "kind": "initial"}, {"id": "ready"},
+                                               {"id": "merging"}, {"id": "failed"},
+                                               {"id": "done", "kind": "done"}],
+                          "todoEntry": [], "todoDefault": None, "ticketFields": [], "rules": []})
+        self.add_ticket(status="ready")
+        with patch.object(boardsched, "_merge_hold", return_value=None), \
+             patch.object(boardsched, "merge_ticket", return_value=(False, "MERGE_CONFLICT: shared.txt")):
+            tick = self.tick()
+        self.assertEqual((tick["merged"], tick["errors"]), (1, []))
+        row = self.ticket("T-001")
+        self.assertEqual((row["workflow_status"], row["assignee"], row["active_run_id"]),
+                         ("failed", None, None))
+        self.assertIn("MERGE_CONFLICT: shared.txt", row["body"])
+
+    def test_action_only_check_step_runs_through_the_command_runner(self):
+        with open(os.path.join(self.ws, ".agent-studio", "commands.json"), "w") as f:
+            json.dump({"version": 1,
+                       "commands": {"tests": {"description": "run tests", "argv": ["true"]}},
+                       "checkSets": {"ci": {"run": [{"command": "tests", "when": ["**"]}],
+                                            "reuseIfTested": False}}}, f)
+        with open(os.path.join(self.ws, ".agent-studio", "workflows", "board-check.json"), "w") as f:
+            json.dump({"version": 2, "startsAt": "ready", "whileRunning": "checking",
+                       "end": {"pass": "done", "fail": "ready"},
+                       "steps": [{"id": "check", "check": {"checks": "ci"}}]}, f)
+        self.write_board({"version": 3,
+                          "workflowStatuses": [{"id": "none", "kind": "initial"}, {"id": "ready"},
+                                               {"id": "checking"}, {"id": "done", "kind": "done"}],
+                          "todoEntry": [], "todoDefault": None, "ticketFields": [], "rules": []})
+        self.add_ticket(status="ready")
+        with patch.object(boardsched.delegation, "spawn", return_value={"pid": 123}), \
+             patch.object(boardsched.delegation, "result", return_value={"passed": True, "exitCode": 0}), \
+             patch.object(boardsched.delegation, "changed_paths", return_value=["app/main.py"]):
+            tick = self.tick()
+        self.assertEqual((tick["merged"], tick["errors"]), (1, []))
+        self.assertEqual(self.ticket("T-001")["workflow_status"], "done")
+        request = self.conn.execute("SELECT command_id, status, reason FROM command_requests").fetchone()
+        self.assertEqual(tuple(request), ("tests", "succeeded", "workflow check"))
 
     def test_routing_claim_and_start_failure_return_workflow(self):
         self.write_board({"version": 3, "workflowStatuses": [

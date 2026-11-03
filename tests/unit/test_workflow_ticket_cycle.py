@@ -96,7 +96,7 @@ class TicketCycle(SchedCase):
         self.claim(key, 'qa-ing')
         self.complete(key, 'succeeded', 'review-ready')
         self.claim(key, 'reviewing')
-        with patch.object(boardsched, '_run_merge_actions', return_value=0):
+        with patch.object(boardsched, '_run_action_workflows', return_value=(0, [])):
             self.complete(key, 'succeeded', 'merge-ready')
         self.run_tick(running=False)
         self.pair(key, 'done', 'merged')

@@ -1,20 +1,23 @@
 """The board scheduler (P04-S10): binds a running team to a workspace board and works it.
 
 One coordinator tick, per workspace with a running board binding: apply finished runs through the S09
-applier (also while the board is stopped — running work finishes), perform coordinator-only `merge`
-actions, and (only while running) claim tickets by rule: rules in `priority` order, tickets of the
-effective current phase whose dependencies are finished, under the rule's `cap`, worked by a free member
-of the rule's role. A claim takes a lease, sets the rule's `during` status, creates the ticket's worktree
-when the rule's workspace mode says so, and starts the rule's workflow. Roles, workflows and statuses
-come from the board's configuration; nothing here names one. This module is coordinator glue (like the
-P03 scheduler it replaces): it may drive the engine and the retained worktree helpers.
+applier (also while the board is stopped — running work finishes), and (only while running) claim tickets
+by rule: rules in `priority` order, tickets of the effective current phase whose dependencies are
+finished, under the rule's `cap`, worked by a free member of the rule's role. A claim takes a lease, sets
+the rule's `during` status, creates the ticket's worktree when the rule's workspace mode says so, and
+starts the rule's workflow. Workflows with no role (only `action`/`check` steps) are run by the
+coordinator itself, after claims: it claims one ticket, sets `whileRunning`, executes the steps in order
+and applies the result. Roles, workflows and statuses come from the board's configuration; nothing here
+names one. This module is coordinator glue (like the P03 scheduler it replaces): it may drive the engine
+and the retained worktree helpers.
 """
 from __future__ import annotations
 
 import json
 import os
+import time
 
-from . import boardmodel, boardworkflows, gitws, tasks, worktrees
+from . import boardmodel, boardworkflows, delegation, gitws, tasks, workflowdef, worktrees
 from .protocol import AsError, BOARD_ALREADY_RUNNING, TEAM_NOT_RUNNING
 from .state import utcnow
 
@@ -79,15 +82,22 @@ def tick(store, ctx: dict) -> dict:
                 boardmodel.backfill_workflow(tx, workspace)
                 _recover(tx, workspace, ctx)
                 out["applied"] += _apply_finished(tx, workspace, ctx)
-                out["merged"] += _run_merge_actions(tx, workspace, ctx)
+                if row["run_status"] != "running":  # a stopped board still finishes action workflows
+                    config = boardmodel.load_config(workspace)
+                    merged, errors = _run_action_workflows(tx, workspace, row["team_id"], config, ctx)
+                    out["merged"] += merged
+                    out["errors"].extend(errors)
             if row["run_status"] == "running":
                 with store.transaction(actor="coordinator") as tx:
                     team = _team(tx.conn, row["team_id"])
+                    config = boardmodel.load_config(workspace)
                     if team is not None and team["status"] == "running":
-                        config = boardmodel.load_config(workspace)
                         claimed, errors = _claim(tx, workspace, team, config, ctx)
                         out["claimed"] += claimed
                         out["errors"].extend(errors)
+                    merged, errors = _run_action_workflows(tx, workspace, row["team_id"], config, ctx)
+                    out["merged"] += merged
+                    out["errors"].extend(errors)
             out["boards"] += 1
         except AsError as e:
             out["errors"].append({"workspace": workspace, "code": e.code, "message": e.message})
@@ -328,10 +338,6 @@ def _legacy_rule(workflow):
     return rule
 
 
-def _rule_order(config):
-    return sorted(config["rules"], key=lambda r: (r.get("priority", 0), config["rules"].index(r)))
-
-
 def _deps_open(tx, ticket_id: str, config) -> int:
     """Dependencies whose board column is not finished."""
     return tx.conn.execute(
@@ -477,48 +483,195 @@ def _start(tx, args: dict, ctx: dict) -> dict:
 
 # ---- coordinator-only actions ------------------------------------------------------------------------------
 
-def _run_merge_actions(tx, workspace: str, ctx: dict) -> int:
-    config = boardmodel.load_config(workspace)
-    merged = 0
-    for rule in _rule_order(config):
-        if rule.get("action") != "merge":
+def _run_action_workflows(tx, workspace: str, team_id: str, config: dict, ctx: dict):
+    """Run at most one action-only workflow ticket in this workspace, so merges never overlap.
+
+    Workflows with no role run in the coordinator itself: the same pick rules as a member workflow, then
+    their steps in order (merge through ``merge_ticket``, checks through the command runner). The result is
+    applied by the normal run-outcome applier, which releases the claim and moves the ticket to the
+    workflow's end status."""
+    index = boardworkflows.load(workspace, config)
+    current = boardmodel.effective_current_phase(tx.conn, workspace)
+    invalid = {p["workflow"] for p in index["problems"]}
+    errors = []
+    for wf in sorted(index["workflows"], key=lambda w: (w.get("priority", 100), w["name"])):
+        if wf.get("role") or wf["name"] in invalid or "" in invalid:
             continue
-        rows = tx.conn.execute(
-            "SELECT * FROM tickets WHERE workspace = ? AND workflow_status = ? AND branch IS NOT NULL "
-            "AND assignee IS NULL ORDER BY priority, created_at, key",
-            (workspace, rule["when"]["status"])).fetchall()
-        for row in rows:
-            if _merge_one(tx, workspace, dict(row), rule, config, ctx):
-                merged += 1
-    return merged
+        try:
+            steps = _workflow_steps(workspace, wf)
+        except AsError as e:
+            errors.append({"workspace": workspace, "code": e.code, "message": e.message})
+            continue
+        if not _action_only(steps):
+            continue
+        ticket = _pick_ticket(tx, workspace, wf, config, current)
+        if ticket is None:
+            continue
+        try:
+            processed = _run_action_workflow(tx, workspace, team_id, wf, steps, ticket, config, ctx)
+        except AsError as e:
+            errors.append({"workspace": workspace, "code": e.code, "message": e.message})
+            continue
+        return (1 if processed else 0), errors
+    return 0, errors
 
 
-def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) -> bool:
-    """Squash-merge the ticket branch into the base branch. The tick is single-threaded and synchronous,
-    so one merge at a time holds the main checkout; a dirty, busy or wrong-headed checkout holds the
-    ticket instead of failing the tick."""
-    reason = _merge_hold(tx, workspace, config, ctx)
-    if reason:
-        last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
-                               "ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
-        if last is None or last["name"] != "ticket.merge_held" or \
-                json.loads(last["payload_json"]).get("reason") != reason:
-            boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_held", "coordinator", ticket["status"],
-                                     ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"], "reason": reason})
-        return False
-    if rule.get("during"):
-        boardmodel.set_workflow(tx, ticket, rule["during"], "coordinator", None, config, claimed=True)
-        ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
-    passed, reason = merge_ticket(tx, workspace, ticket, config, ctx)
-    if not passed:
-        _move_by_rule(tx, workspace, ticket, rule, "onFail", reason)
-        return True
-    boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merged", "coordinator", ticket["status"],
-                             rule["onPass"], {"ticketId": ticket["id"], "key": ticket["key"],
-                                              "branch": ticket["branch"], "to": rule["onPass"]})
-    _set_status(tx, ticket, rule["onPass"])
-    _promote_created_tickets(tx, ticket, rule)
+def _workflow_steps(workspace: str, wf: dict) -> list:
+    """The executable stages of one board workflow. Converted rules already carry frozen stages; a
+    workflow file is read again because its summary keeps only ids and kinds."""
+    steps = wf.get("steps") or []
+    if wf.get("workflow") or any("action" in s or "checks" in s for s in steps):
+        return steps
+    definition = workflowdef.load(workspace, wf["name"])
+    out = []
+    for stage in definition.stages:
+        step = {"id": stage.id, "kind": stage.kind}
+        if stage.kind == "action":
+            step["action"] = stage.step_value
+        if stage.checks is not None:
+            step["checks"] = stage.checks
+        out.append(step)
+    return out
+
+
+def _action_only(steps: list) -> bool:
+    """True when every step is one the coordinator can run without a member: merge or a check set."""
+    return bool(steps) and all(s.get("action") == "merge" or s.get("checks") for s in steps)
+
+
+def _run_action_workflow(tx, workspace: str, team_id: str, wf: dict, steps: list, ticket: dict,
+                         config: dict, ctx: dict) -> bool:
+    has_merge = any(s.get("action") == "merge" for s in steps)
+    if has_merge:
+        reason = _merge_hold(tx, workspace, config, ctx)
+        if reason:  # the main checkout holds the ticket until it is free, like any merge action
+            _note_merge_held(tx, ticket, reason)
+            return False
+    task_id, run_id = _start_action_run(tx, team_id, workspace, wf, ticket, steps)
+    _claim_action(tx, workspace, wf, ticket, config, run_id)
+    ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+    prior_run_id = ticket.get("run_id")
+    outcome, reason, failed_step, merged = "pass", None, None, False
+    for index, step in enumerate(steps, 1):
+        if step.get("action") == "merge":
+            passed, reason = merge_ticket(tx, workspace, ticket, config, dict(ctx, mergeRunId=run_id))
+            if not passed:
+                outcome, failed_step = "fail", "merge"
+                break
+            merged = True
+            ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+            continue
+        passed, reason = _run_check_step(tx, workspace, team_id, run_id, step, index, ctx)
+        if not passed:
+            outcome, failed_step = "fail", "check"
+            break
+    _finish_action_run(tx, task_id, run_id, outcome, reason)
+    rule = _legacy_rule(wf)
+    if outcome == "pass" and merged:
+        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merged", "coordinator", ticket["status"],
+                                 rule["onPass"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                                  "branch": ticket["branch"], "to": rule["onPass"]})
+    applied = boardmodel.apply_run_outcome(tx, workspace, {"key": ticket["key"], "run": run_id}, rule=rule)
+    if failed_step == "merge":
+        _record_merge_failure(tx, workspace, ticket, rule, reason)
+    if applied.get("applied"):
+        policy = rule.get("releaseCreatedTickets", {}).get(applied.get("outcome"))
+        if policy:
+            parent = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+            if prior_run_id:  # created tickets belong to the workflow run that made them, not this action
+                parent = dict(parent, run_id=prior_run_id)
+            _promote_created_tickets(tx, parent, {"onPassCreatedTickets": policy,
+                                                  "onPass": parent["workflow_status"]})
     return True
+
+
+def _start_action_run(tx, team_id: str, workspace: str, wf: dict, ticket: dict, steps: list):
+    """A durable run row for the coordinator's steps, so the normal outcome applier and audit trail apply."""
+    task = tx.create("task", {"team_id": team_id, "origin": "workflow", "workspace": workspace,
+                              "goal": _task_text(ticket)})
+    tx.transition("task", task, "assigned")
+    tx.transition("task", task, "running")
+    run = tx.create("workflow_run", {"team_id": team_id, "task_id": task, "workflow": "definition",
+                                     "transition_reason": "coordinator action",
+                                     "definition_name": wf["name"], "step_count": len(steps),
+                                     "config_json": {"workflow": wf["name"]}})
+    tx.transition("workflow_run", run, "running")
+    return task, run
+
+
+def _claim_action(tx, workspace: str, wf: dict, ticket: dict, config: dict, run_id: str) -> None:
+    lease = lease_time(config)
+    tx.conn.execute("UPDATE tickets SET assignee = 'coordinator', lease_until = ?, active_run_id = ?, "
+                    "updated_at = ? WHERE id = ?", (lease, run_id, utcnow(), ticket["id"]))
+    ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+    running = wf.get("whileRunning")
+    if running and running != ticket["workflow_status"]:
+        boardmodel.set_workflow(tx, ticket, running, "coordinator", "claim", config, claimed=True)
+
+
+def _finish_action_run(tx, task_id: str, run_id: str, outcome: str, reason) -> None:
+    status = "succeeded" if outcome == "pass" else "failed"
+    tx.transition("workflow_run", run_id, status, set_values={"transition_reason": reason})
+    tx.transition("task", task_id, status)
+
+
+def _run_check_step(tx, workspace: str, team_id: str, run_id: str, step: dict, index: int, ctx: dict):
+    """Run one check set through the same vetted command runner the engine uses, in order, to completion."""
+    catalog = delegation.load_config(workspace)
+    check_set = (catalog or {}).get("checkSets", {}).get(step.get("checks"))
+    if check_set is None:
+        return False, f"CHECK_SET_MISSING: {step.get('checks')}"
+    selected = delegation.select_checks(check_set, delegation.changed_paths(workspace))
+    first = len(delegation.requests_for(tx, workflow_run_id=run_id))
+    for position, cid in enumerate(selected, 1):
+        ordinal = first + position
+        command = catalog["commands"][cid]
+        rid = tx.create("command_request", {
+            "team_id": team_id, "workflow_run_id": run_id, "stage_attempt_id": None, "assignment_id": None,
+            "stage": step["id"], "visit": 1, "ordinal": ordinal, "command_id": cid, "params_json": {},
+            "argv_json": delegation.render_argv(command, {}), "reason": "workflow check", "source": "marker"},
+            state="approved")
+        run_dir = os.path.join(ctx["stateDir"], "workflows", run_id, f"{index:02d}-{step['id']}",
+                               f"check-{ordinal:02d}")
+        proc = delegation.spawn(run_dir, workspace, tx.get("command_request", rid), command)
+        tx.transition("command_request", rid, "running", set_values={"process_json": proc})
+        result = _wait_check(run_dir, proc, command)
+        tx.transition("command_request", rid, "succeeded" if result.get("passed") else "failed",
+                      set_values={"result_json": result})
+        if not result.get("passed"):
+            return False, f"CHECK_FAILED: {cid}"
+    return True, None
+
+
+def _wait_check(run_dir: str, proc: dict, command: dict) -> dict:
+    deadline = time.monotonic() + command.get("timeoutMs", 600000) / 1000.0 + 60
+    while time.monotonic() < deadline:
+        result = delegation.result(run_dir)
+        if result is not None:
+            return result
+        if not delegation.alive(proc):
+            break
+        time.sleep(0.05)
+    delegation.stop(proc)
+    return delegation.result(run_dir) or {"passed": False, "error": "command process lost"}
+
+
+def _note_merge_held(tx, ticket: dict, reason: str) -> None:
+    last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
+                           "ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
+    if last is None or last["name"] != "ticket.merge_held" or \
+            json.loads(last["payload_json"]).get("reason") != reason:  # one event per hold, not one per tick
+        boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_held", "coordinator", ticket["status"],
+                                 ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                                    "reason": reason})
+
+
+def _record_merge_failure(tx, workspace: str, ticket: dict, rule: dict, reason: str) -> None:
+    boardmodel.append_body(tx, ticket["id"], f"## {reason}")
+    ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
+    boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_conflict", "coordinator", ticket["status"],
+                             rule["onFail"], {"ticketId": ticket["id"], "key": ticket["key"],
+                                              "reason": reason, "to": rule["onFail"]})
 
 
 def _merge_hold(tx, workspace, config, ctx):
@@ -588,16 +741,6 @@ def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:
             rule["onPass"], rule["onPass"],
             {"ticketId": parent["id"], "key": parent["key"], "run": run_id, "tickets": keys,
              "from": policy["from"], "to": policy["to"]})
-
-
-def _move_by_rule(tx, workspace: str, ticket: dict, rule: dict, target_key: str, reason: str) -> None:
-    _set_status(tx, ticket, rule[target_key])
-    boardmodel.append_body(tx, ticket["id"], f"## {reason}")
-    if "onFailPriority" in rule:
-        boardmodel.bump_priority(tx, ticket["id"], rule["onFailPriority"])
-    boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_conflict", "coordinator", ticket["status"],
-                             rule[target_key], {"ticketId": ticket["id"], "key": ticket["key"],
-                                                "reason": reason, "to": rule[target_key]})
 
 
 def _set_status(tx, ticket: dict, status: str) -> None:
