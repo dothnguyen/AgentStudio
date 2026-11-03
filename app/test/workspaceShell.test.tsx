@@ -68,7 +68,7 @@ describe('WorkspaceShell', () => {
     const nav = result.getByRole('navigation', { name: 'Workspace' });
 
     expect(Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent)).toEqual([
-      'Home', 'Teams', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration',
+      'Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
     const agents = within(nav).getAllByRole('button', { name: 'Agents' });
@@ -338,7 +338,7 @@ describe('WorkspaceShell', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
     expect(buttons).toHaveLength(13);
-    expect(buttons.slice(0, 12).map((button) => button.querySelector('.nav-label')?.textContent ?? button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Agents', 'Roles', 'Skills', 'Boards', 'Current Phase', 'Backlog', 'Phases', 'Routing', 'Configuration']);
+    expect(buttons.slice(0, 12).map((button) => button.querySelector('.nav-label')?.textContent ?? button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Boards', 'Current Phase', 'Backlog', 'Phases', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration']);
     expect(buttons[12].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
@@ -735,13 +735,13 @@ describe('Routing screen navigation', () => {
   );
   const settle = () => act(async () => {});
 
-  it('sidebar_shows_routing_after_boards_and_opens_one_h1_screen', async () => {
+  it('sidebar_shows_routing_after_skills_and_opens_one_h1_screen', async () => {
     const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
     const view = render(shell(fake));
     await settle();
     const nav = view.getByRole('navigation', { name: 'Workspace' });
     const labels = Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent);
-    expect(labels).toEqual(['Home', 'Teams', 'Agents', 'Roles', 'Skills', 'Boards', 'Routing', 'Configuration']);
+    expect(labels).toEqual(['Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration']);
     const routing = within(nav).getByRole('button', { name: 'Routing' });
     const icon = routing.querySelector('svg')!;
     expect(icon.getAttribute('data-icon')).toBe('routing');

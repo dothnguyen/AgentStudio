@@ -67,9 +67,6 @@ export function findNavItemById(items: readonly NavItem[], id: string): NavItem 
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'teams', label: 'Teams', icon: 'teams' },
-  { id: 'agents', label: 'Agents', icon: 'agents' },
-  { id: 'roles', label: 'Roles', icon: 'roles' },
-  { id: 'skills', label: 'Skills', icon: 'skills' },
   {
     id: 'boards',
     label: 'Boards',
@@ -77,6 +74,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
     route: BOARDS_DEFAULT_ROUTE,
     children: BOARD_NAV_ITEMS,
   },
+  { id: 'agents', label: 'Agents', icon: 'agents' },
+  { id: 'roles', label: 'Roles', icon: 'roles' },
+  { id: 'skills', label: 'Skills', icon: 'skills' },
   { id: 'routing', label: 'Routing', icon: 'routing' },
   { id: 'configuration', label: 'Configuration', icon: 'configuration' },
 ];

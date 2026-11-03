@@ -247,7 +247,7 @@ it('routing_docs_and_help_describe_the_standalone_screen_without_a_team_tab', ()
     expect(text, name).not.toMatch(/Routing tab/i);
     expect(text, name).not.toMatch(/\bthe routing tab\b/i);
   }
-  expect(appReadme).toContain('The Routing screen (its own sidebar section after Boards)');
+  expect(appReadme).toContain('The Routing screen (its own sidebar section after Skills)');
   expect(appReadme).toContain('the team page links to this screen instead of embedding a routing view');
   expect(designReadme).toContain('the team page links to this screen instead of embedding routing');
   expect(teamsScreen).toContain('Open Routing');

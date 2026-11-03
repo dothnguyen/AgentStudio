@@ -10,8 +10,8 @@ import {
 } from '../src/renderer/shell/navModel';
 
 describe('NAV_ITEMS', () => {
-  it('places_skills_after_roles_and_routing_after_boards_with_their_own_icons', () => {
-    expect(NAV_ITEMS.map((item) => item.id)).toEqual(['home', 'teams', 'agents', 'roles', 'skills', 'boards', 'routing', 'configuration']);
+  it('places_boards_after_teams_and_preserves_section_icons', () => {
+    expect(NAV_ITEMS.map((item) => item.id)).toEqual(['home', 'teams', 'boards', 'agents', 'roles', 'skills', 'routing', 'configuration']);
     expect(NAV_ITEMS.find((item) => item.id === 'skills')).toEqual({ id: 'skills', label: 'Skills', icon: 'skills' });
     expect(NAV_ITEMS.find((item) => item.id === 'routing')).toEqual({ id: 'routing', label: 'Routing', icon: 'routing' });
   });
