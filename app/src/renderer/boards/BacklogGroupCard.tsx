@@ -5,9 +5,9 @@ import type { BacklogGroup } from './backlogModel';
 import { BoardErrorCard } from './CurrentPhaseScreen';
 import { BacklogRow } from './BacklogRow';
 
-export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo, phaseState, error, onExpand, onRetry }: { phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
+export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo, phaseState, error, onExpand, onRetry, initiallyExpanded }: { initiallyExpanded: boolean; phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
   const bodyId = useId();
-  const [expanded, setExpanded] = useState(group.current);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? group.tickets : group.tickets.slice(0, 50);
   return <section className="boards-backlog-group">

@@ -18,6 +18,12 @@ export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, 
   const [query, setQuery] = useState(filters.query);
   useEffect(() => { const timer = window.setTimeout(() => setQuery(filters.query), 150); return () => window.clearTimeout(timer); }, [filters.query]);
   const active = activeFilterCount(filters) > 0;
+  const phaseFiltered = filters.phases.length > 0;
+  useEffect(() => {
+    if (board.data) for (const slug of filters.phases) {
+      if (board.data.phases.phases.some(phase => phase.slug === slug)) void board.loadPhase(slug);
+    }
+  }, [board.data, board.loadPhase, filters.phases]);
   const data = board.data;
   const knownPhases = new Set(data?.phases.phases.map(phase => phase.slug) ?? []);
   const loaded = Object.entries(board.phaseData).flatMap(([slug, phase]) =>
@@ -38,6 +44,7 @@ export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, 
     slug: null, name: 'No phase', description: null, current: false, closed: false, tickets: [],
     counts: { total: 0, done: 0, working: 0, blocked: 0, waiting: 0, ready: 0 },
   });
+  const visibleGroups = phaseFiltered ? groups.filter(group => group.slug !== null && filters.phases.includes(group.slug)) : groups;
   const noPhase = groups.find(group => group.slug === null);
   if (noPhase && !active) noPhase.counts.total = unassignedTotal;
   return (
@@ -56,9 +63,9 @@ export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, 
               <span className="boards-backlog-count">{total} tickets</span>
             </header>
             {data && <BacklogToolbar filters={filters} onChange={setFilters} settings={data.settings} phases={data.phases} tickets={loaded} resultCount={filtered.length} />}
-            {active && filtered.length === 0 && Object.values(board.phaseData).every(phase => phase.state !== 'loading') && <div className="boards-no-match"><p>No tickets match these filters</p><button type="button" onClick={() => setFilters({ ...DEFAULT_BACKLOG_FILTERS, sort: filters.sort })}>Clear filters</button></div>}
+            {active && filtered.length === 0 && Object.values(board.phaseData).every(phase => phase.state !== 'loading') && (!phaseFiltered || visibleGroups.every(group => board.phaseData[group.slug!]?.state === 'ready')) && <div className="boards-no-match"><p>No tickets match these filters</p><button type="button" onClick={() => setFilters({ ...DEFAULT_BACKLOG_FILTERS, sort: filters.sort })}>Clear filters</button></div>}
             {!active && total === 0 && <section className="boards-state-card"><h2>No tickets yet</h2></section>}
-            <div className="boards-backlog-groups" data-testid="backlog-body">{data && groups.map((group) => <BacklogGroupCard key={group.slug ?? "no-phase"} group={group} total={active ? group.slug === null ? unassignedTotal : data.phases.phases.find(phase => phase.slug === group.slug)?.ticketCount : undefined} phaseState={board.phaseData[group.slug ?? '']?.state} error={board.phaseData[group.slug ?? '']?.error} onExpand={() => { void board.loadPhase(group.slug ?? ''); }} onRetry={() => { void board.loadPhase(group.slug ?? '', true); }} settings={data.settings} onOpenTicket={onOpenTicket} onOpenPhases={onOpenPhases} onMoveToTodo={setMoving} />)}</div>
+            <div className="boards-backlog-groups" data-testid="backlog-body">{data && visibleGroups.map((group) => <BacklogGroupCard key={`${phaseFiltered ? 'filtered' : 'default'}-${group.slug ?? 'no-phase'}`} group={group} initiallyExpanded={phaseFiltered || group.current} total={active ? group.slug === null ? unassignedTotal : data.phases.phases.find(phase => phase.slug === group.slug)?.ticketCount : undefined} phaseState={board.phaseData[group.slug ?? '']?.state} error={board.phaseData[group.slug ?? '']?.error} onExpand={() => { void board.loadPhase(group.slug ?? ''); }} onRetry={() => { void board.loadPhase(group.slug ?? '', true); }} settings={data.settings} onOpenTicket={onOpenTicket} onOpenPhases={onOpenPhases} onMoveToTodo={setMoving} />)}</div>
           </>}
       {moving && data && <MoveToTodoDialog key={moving} ticketKey={moving} settings={data.settings} management={management} workspaceId={workspace.id} onClose={() => setMoving(null)} onSuccess={() => { setMoving(null); void board.reload(); }} />}
     </div>

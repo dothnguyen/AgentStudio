@@ -13,6 +13,40 @@ const list = (count: number) => boardTicketListFixture({ tickets: Array.from({ l
 const settle = () => act(async () => {});
 
 describe('BacklogScreen', () => {
+  it('shows and loads only selected phases, reuses their cache and restores default expansion', async () => {
+    const phaseTicket = (key: string, phase: string) => ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key, phase })] }));
+    const fake = fakeManagement({ boardTickets: [phaseTicket('T-1', 'phase-05'), phaseTicket('T-2', 'phase-06')] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Phase' }));
+    fireEvent.click(view.getByLabelText('Phase 06'));
+    await settle();
+    expect(view.queryByRole('button', { name: /Phase 05 Current/ })).toBeNull();
+    expect(view.queryByRole('button', { name: /No phase/ })).toBeNull();
+    expect(view.getByRole('button', { name: /Phase 06 .*tickets/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+    expect(fake.boardTickets.mock.calls).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }]]);
+    fireEvent.click(view.getByLabelText('Phase 05'));
+    await settle();
+    expect(view.getByRole('button', { name: /Phase 05 Current/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: /Phase 06 .*tickets/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: /Open T-1/ })).toBeTruthy();
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+    expect(view.queryByRole('button', { name: /No phase/ })).toBeNull();
+    expect(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-group')).toHaveLength(2);
+    expect(fake.boardTickets).toHaveBeenCalledTimes(2);
+    fireEvent.click(view.getByLabelText('Phase 06'));
+    expect(view.queryByRole('button', { name: /Phase 06 .*tickets/ })).toBeNull();
+    fireEvent.click(view.getByLabelText('Phase 06'));
+    await settle();
+    expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
+    expect(fake.boardTickets).toHaveBeenCalledTimes(2);
+    fireEvent.click(view.getByRole('button', { name: 'Clear all' }));
+    expect(view.getByRole('button', { name: /Phase 05 Current/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: /Phase 06 .*tickets/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(view.getByRole('button', { name: /No phase/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('loads unassigned tickets on expansion, counts them initially and caches them', async () => {
     const phases = boardPhasesFixture({ unassignedTicketCount: 1 });
     const count = phases.phases.reduce((sum, phase) => sum + phase.ticketCount, 0);
