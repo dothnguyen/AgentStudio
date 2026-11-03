@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -142,6 +142,12 @@ def _board_settings(args, req):
     finally:
         if conn is not None:
             conn.close()
+
+
+def _board_workflows(args, req):
+    ws = _catalog_workspace(args, {"workspace"}, "board.workflows")
+    result = boardworkflows.load(ws, boardmodel.load_config(ws))
+    return {"workflows": result["workflows"], "problems": result["problems"]}
 
 
 def _board_upgrade(args, req):
@@ -1197,6 +1203,7 @@ COMMANDS = {
     "board.summary": _board_summary,
     "board.upgrade": _board_upgrade,
     "board.settings": _board_settings,
+    "board.workflows": _board_workflows,
     "board.settings.update": _board_settings_update,
     "role.create": _role_create,
     "role.update": _role_update,
