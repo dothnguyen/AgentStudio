@@ -29,6 +29,24 @@ class StepTests(unittest.TestCase):
             {"pass": "ask", "fail": "$fail"}, {"pass": "$succeed", "fail": "$fail"}])
         self.assertEqual(workflowdef.from_json(json.loads(workflowdef.to_json(d))), d)
 
+    def test_agent_step_pass_requires_compiles_to_the_verdict_stage(self):
+        d = self.parse([
+            {"id": "add_tests", "agent": {"prompt": "work.md", "access": "write"}},
+            {"id": "tests", "check": {"checks": "code"}, "onFail": "verdict"},
+            {"id": "verdict", "agent": {"prompt": "work.md", "access": "read"},
+             "passRequires": ["tests"]},
+        ])
+        self.assertEqual(d.stages[2].pass_requires, ("tests",))
+        self.assertEqual(dict(d.stages[1].next), {"pass": "verdict", "fail": "verdict"})
+        self.assertEqual(d.stages[2].permission, "read_only")
+        frozen = json.loads(workflowdef.to_json(d))
+        self.assertEqual(workflowdef.from_json(frozen), d)
+
+    def test_pass_requires_on_a_non_agent_step_is_rejected(self):
+        with self.assertRaises(AsError) as caught:
+            self.parse([{"id": "a", "check": {"checks": "code"}, "passRequires": ["a"]}])
+        self.assertTrue(any(e["path"].endswith(".passRequires") for e in caught.exception.data["errors"]))
+
     def test_retry_sets_earlier_visit_limit(self):
         d = self.parse([{"id": "a", "agent": {"prompt": "work.md", "access": "read"}},
                         {"id": "b", "check": {"checks": "code"},

@@ -1,10 +1,12 @@
-version: 1
-description: Resolve a failed merge in the preserved ticket worktree, then return it to its merge action.
-maxSteps: 4
-stages:
-  - id: resolve
-    role: TeamLead
-    permission: workspace_write
-    maxVisits: 1
-    promptFile: workflows/prompts/board-resolve-merge.md
-    next: { pass: $succeed, fail: $fail }
+"version": 2
+"description": "Resolve a failed merge in the preserved ticket worktree, then return it to its merge action."
+"maxSteps": 4
+"stages": [{"id": "resolve", "role": "TeamLead", "permission": "workspace_write", "maxVisits": 1, "promptFile": "workflows/prompts/board-resolve-merge.md", "next": {"pass": "$succeed", "fail": "$fail"}}]
+"startsAt": "merge-conflict"
+"whileRunning": "fixing-conflict"
+"role": "TeamLead"
+"workspace": "worktree"
+"syncBase": true
+"priority": 0
+"end": {"pass": "merge-ready", "fail": "merge-conflict"}
+"limits": {"maxRuns": 3}

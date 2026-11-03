@@ -1,10 +1,10 @@
-version: 1
-description: Board stage review-ready. The Reviewer reviews the code of the ticket branch (code only; tests are not run).
-maxSteps: 4
-stages:
-  - id: review
-    role: Reviewer
-    permission: read_only
-    maxVisits: 1
-    promptFile: workflows/prompts/board-review.md
-    next: { pass: $succeed, fail: $fail }
+"version": 2
+"description": "Board stage review-ready. The Reviewer reviews the code of the ticket branch (code only; tests are not run)."
+"maxSteps": 4
+"stages": [{"id": "review", "role": "Reviewer", "permission": "read_only", "maxVisits": 1, "promptFile": "workflows/prompts/board-review.md", "next": {"pass": "$succeed", "fail": "$fail"}}]
+"startsAt": "review-ready"
+"whileRunning": "reviewing"
+"role": "Reviewer"
+"workspace": "worktree"
+"end": {"pass": "merge-ready", "fail": "dev-ready"}
+"limits": {"failuresInARow": {"count": 3, "status": "need-escalate"}, "onFailPriority": 0}

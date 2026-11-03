@@ -405,7 +405,8 @@ def _start_ticket(tx, workspace: str, team: dict, member: dict, rule: dict, tick
     # claim first: the engine's run-workspace check accepts a ticket worktree only while it is claimed
     tx.conn.execute("UPDATE tickets SET assignee = ?, lease_until = ?, updated_at = ? WHERE id = ?",
                     (member["id"], lease, utcnow(), ticket["id"]))
-    boardmodel.set_workflow(tx, ticket, status, "coordinator", "claim", config, claimed=True)
+    boardmodel.set_workflow(tx, ticket, status, "coordinator", "claim", config, claimed=True,
+                            column_override="in-progress")
     ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
     try:
         run_workspace = workspace
@@ -599,7 +600,8 @@ def _claim_action(tx, workspace: str, wf: dict, ticket: dict, config: dict, run_
     ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
     running = wf.get("whileRunning")
     if running and running != ticket["workflow_status"]:
-        boardmodel.set_workflow(tx, ticket, running, "coordinator", "claim", config, claimed=True)
+        boardmodel.set_workflow(tx, ticket, running, "coordinator", "claim", config, claimed=True,
+                                column_override="in-progress")
 
 
 def _finish_action_run(tx, task_id: str, run_id: str, outcome: str, reason) -> None:

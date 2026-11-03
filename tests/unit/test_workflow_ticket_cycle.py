@@ -17,11 +17,12 @@ class TicketCycle(SchedCase):
         source = os.path.join(os.path.dirname(__file__), '..', '..', '.agent-studio', 'board.json')
         with open(source, encoding='utf-8') as f:
             config = json.load(f)
-        self.assertEqual(config['version'], 3)
+        self.assertEqual(config['version'], 4)
         config['baseBranch'] = subprocess.check_output(
             ['git', '-C', self.ws, 'symbolic-ref', '--short', 'HEAD'], text=True).strip()
         source_workflows = os.path.join(os.path.dirname(source), 'workflows')
         shutil.copytree(source_workflows, os.path.join(self.ws, '.agent-studio', 'workflows'), dirs_exist_ok=True)
+        shutil.copy(os.path.join(os.path.dirname(source), 'roles.json'), os.path.join(self.ws, '.agent-studio'))
         self.write_board(config)
         self.addCleanup(shutil.rmtree, self.ctx['stateDir'], True)
         with self.store.transaction() as tx:
@@ -129,7 +130,7 @@ class TicketCycle(SchedCase):
             self.claim(key, 'deving')
             self.complete(key, 'failed', 'blocked' if attempt == 5 else 'dev-ready')
         row = self.ticket(key)
-        self.assertEqual((row['return_status'], row['blocked_reason']), ('dev-ready', 'ROUND_LIMIT:dev-ready'))
+        self.assertEqual((row['return_status'], row['blocked_reason']), ('dev-ready', 'ROUND_LIMIT:board-develop'))
         with self.store.transaction() as tx:
             boardmodel.ticket_unblock(tx, self.ws, {'key': key})
         self.pair(key, 'in-progress', 'dev-ready')

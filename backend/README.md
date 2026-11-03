@@ -150,9 +150,10 @@ Direct commands (no coordinator, no `idempotencyKey`; writes happen in the reque
   protectedRoutes, roles, workflows, runner}`. `board` and `roles` carry `state` (`ok|invalid|missing`),
   `sha256`, `message`; a missing or broken file is a state, never an error. `runner.status` is one of
   `unavailable|not_bound|stopped|team_not_running|disconnected|running`.
-- `board.settings.update {workspace, changes, expectedSha256?}` shallow-merges `changes` (keys `statuses`,
-  `ticketFields`, `rules`, `leaseSeconds`, `baseBranch`, `agentTicketStatus`; `null` removes a key) into the raw
-  `board.json`, validates it (schema, rules check, protected routes) and writes atomically. Invalid edits
+- `board.settings.update {workspace, changes, expectedSha256?}` shallow-merges `changes` (keys
+  `workflowStatuses`, `todoEntry`, `todoDefault`, `statuses`, `ticketFields`, `rules`, `leaseSeconds`,
+  `baseBranch`, `agentTicketStatus`; `null` removes a key) into the raw `board.json`, validates it (schema,
+  workflow references, protected routes) and writes atomically. Invalid edits
   (`BOARD_CONFIG_INVALID` with `data.problems`) and a stale `expectedSha256` (`CONFIG_CHANGED`) write nothing.
 - `board.workflows {workspace}` reads workspace workflow definitions and returns board workflow summaries (`name`, `startsAt`, `whileRunning`, `role`, step IDs and kinds, `end`, and `limits`) and structured `problems` with workflow, path, and message. It checks status references, status kinds, duplicate start and running statuses, and agent workflow roles against the board and role catalog. Invalid definition files are reported as problems.
 - Legacy board rules are converted in memory to workflows, retaining their loaded stages and routing settings; rule caps are discarded. Defining routing in both board rules and workflow files is reported as a problem. Missing rule workflow definitions are reported without discarding other converted rules.
@@ -379,7 +380,8 @@ Artifacts per stage live in `~/.local/state/agent-studio/workflows/<id>/<nn>-<st
 ## The board and its MCP server (P04)
 
 The generic board is configured per workspace in `.agent-studio/board.json` (workflow statuses with kinds
-`initial`/`done`/`closed`, `ticketFields`, `rules`, optional `leaseSeconds` and `baseBranch`). Tickets live in the
+`initial`/`done`/`closed`, `ticketFields`, optional `leaseSeconds` and `baseBranch`). Version 4 boards have no
+`rules`: every route lives in a workflow file under `.agent-studio/workflows/`. Tickets live in the
 state DB and always belong to a phase; the default phase is worked when no other is current.
 
 Version 3 uses `workflowStatuses` in place of `statuses`, with exactly one
@@ -397,6 +399,18 @@ the mapping. The command backs up the original under `.agent-studio/backups/`; a
 nothing. The persisted v3 `upgradedFrom` mapping remains available to later ticket migration. If a required renamed ID is already in use, the existing status receives a
 unique suffixed ID and references follow the mapping.
 For a v3 board, the same command converts each rule to a v2 board workflow file and writes a v4 board without rules. Shared workflow names receive a status suffix; merge workflows use `merge-<startsAt>`. Prompt files remain referenced in place. Existing workflow files and the board are backed up before replacement. A dry run lists the files to be written, and a v4 board is already upgraded. Version 4 keeps the v3 statuses and todo settings and routes through workflow files.
+
+A version 4 board workflow declares `startsAt`, `whileRunning`, an optional `role` (no role means the coordinator
+runs it), `workspace` (`main`/`worktree`), `syncBase`, `waitForDependencies`, `createdTickets`, `end`
+(`pass`, `fail`, optional `blocked`) and `limits`. Its `steps` are one of:
+`agent` (prompt file, `access: read|write`, optional `delegates`; the workflow's role is the agent), `check`
+(a check set from `commands.json`, selected by the changed paths), `action: merge` (the coordinator squash-merges
+the ticket branch), or `approval` (waits for an operator). `onPass` defaults to the next step or `end-pass`;
+`onFail` defaults to `end-fail`; a check can retry an earlier agent step with
+`onFail: {retry: implement, max: 3, then: end-fail}`. `passRequires: [tests]` on an agent step makes its pass
+count only when that check step passed. This workspace's develop, senior-develop and QA workflows use those
+steps: `implement` → `tests` (`checks: code`, retry 3), and `qa_tests` → `tests` → `qa` (`passRequires:
+[tests]`, with a failed check routed to the verdict).
 
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
@@ -465,7 +479,7 @@ with `phase` as the phase slug. A dependency or dependent whose ticket row no lo
 `key` and reports null `title`, `status` and `phase` instead of failing the command. `events` is still the newest
 50 (`EVENTS_SHOWN`) events oldest first, and `eventsTruncated` is true when the ticket has more than that.
 
-The rules decide who works which status and what happens on pass/fail/blocked. A board workflow's
+The workflows decide which status starts work and what happens on pass/fail/blocked. A board workflow's
 `createdTickets` holds tickets created while its run is working; a workflow's
 `end.pass.releaseCreatedTickets: {from, to}` releases the ticket's children from `from` to `to` only when that
 workflow passes (a fail never releases). Children record their `parent_ticket_id`, so a later workflow can release
@@ -558,15 +572,19 @@ sections holding each result.
 - `maxPerVisit` / `maxPerRun` count every request, rejected ones too, so an agent cannot loop.
 - `onDenialWithRequest: "delegate"` (default): an assignment that was denied a permission but also filed a request
   delegates instead of pausing; `"pause"` keeps the old behaviour.
-- `passRequiresCommands: [ids]` on a verdict stage: a `pass` counts only if one of those commands succeeded in the
-  same workflow run on exactly the code the stage hands over (HEAD, tracked changes and untracked files are
-  fingerprinted after each delegated run). Otherwise the pass becomes a `fail` with a BLOCKER finding and the event
-  `workflow_run.pass_rejected`. The board workflows use it instead of a validation stage, listing
-  `[test-all, test-backend, test-ui]`: when a stage lists those, the files the branch changed (committed since it left
+- `passRequiresCommands: [ids]` on a verdict stage (stage definitions): a `pass` counts only if one of those
+  commands succeeded in the same workflow run on exactly the code the stage hands over (HEAD, tracked changes and
+  untracked files are fingerprinted after each delegated run). Otherwise the pass becomes a `fail` with a BLOCKER
+  finding and the event `workflow_run.pass_rejected`. When a stage lists
+  `[test-all, test-backend, test-ui]`, the files the branch changed (committed since it left
   the base branch, uncommitted, untracked) pick the one that must have passed - only `app/` changed: `test-ui`
   (`scripts/validate.py --ui`); only `backend/` and `tests/`: `test-backend` (`--backend`: unit + all integration
   modules, no app); both, neither, or unknown: `test-all`. `scripts/` counts as both. `test-all` is accepted for any
-  change, and a stage listing other commands keeps "any one of them" semantics.
+  change, and a stage listing other commands keeps "any one of them" semantics. Board workflows use a `check` step
+  instead: `.agent-studio/workflows/board-develop.yaml`, `board-senior-develop.yaml` and `board-qa.yaml` run
+  `checks: code`, and QA's verdict step declares `passRequires: [tests]` so a failed check cannot pass. In this
+  workspace `code` maps `app/` changes to `test-ui`, `backend/` and `tests/` changes to `test-backend`, and other
+  changes to `test-unit`, reusing a command that already passed on the same code.
 - The prompt of a stage that may delegate gets a `DELEGATED_COMMANDS` section listing what it may ask for (use
   `{{delegated_commands}}` in a template to place it).
 

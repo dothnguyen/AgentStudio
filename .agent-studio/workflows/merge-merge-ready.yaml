@@ -1,0 +1,11 @@
+version: 2
+startsAt: merge-ready
+whileRunning: merging
+end:
+  pass: merged
+  fail: merge-conflict
+limits:
+  onFailPriority: 0
+steps:
+  - id: merge
+    action: merge

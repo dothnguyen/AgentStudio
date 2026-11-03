@@ -1,11 +1,26 @@
-version: 1
-description: Resolve escalated tickets in an isolated worktree, have the coordinator run the tests (a delegated test suite), and return them to QA only when the suite for the change passes on the final code.
-maxSteps: 4
-stages:
-  - id: develop
-    role: SeniorDeveloper
-    permission: workspace_write
-    maxVisits: 1
-    passRequiresCommands: [test-all, test-backend, test-ui]   # the suite the changed files need must pass in this run, on exactly this code
-    promptFile: workflows/prompts/board-develop.md
-    next: { pass: $succeed, fail: $fail }
+version: 2
+description: Resolve escalated tickets in an isolated worktree; the coordinator runs the check set for the change and sends a failure back to the developer up to three times.
+maxSteps: 10
+startsAt: need-escalate
+whileRunning: escalating
+role: SeniorDeveloper
+workspace: worktree
+syncBase: true
+priority: 0
+end:
+  pass: qa-ready
+  fail: need-escalate
+limits:
+  maxRuns: 3
+steps:
+  - id: implement
+    agent:
+      prompt: board-develop.md
+      access: write
+  - id: tests
+    check:
+      checks: code
+    onFail:
+      retry: implement
+      max: 3
+      then: end-fail

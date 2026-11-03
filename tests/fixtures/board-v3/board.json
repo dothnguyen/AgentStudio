@@ -1,0 +1,259 @@
+{
+  "version": 3,
+  "baseBranch": "main",
+  "leaseSeconds": 300,
+  "agentTicketStatus": "refine-ready",
+  "ticketFields": [],
+  "rules": [
+    {
+      "when": {
+        "status": "merge-ready"
+      },
+      "action": "merge",
+      "onPass": "merged",
+      "onFail": "merge-conflict",
+      "onFailPriority": 0,
+      "during": "merging"
+    },
+    {
+      "when": {
+        "status": "plan-merge-ready"
+      },
+      "action": "merge",
+      "onPass": "merged",
+      "onFail": "plan-merge-conflict",
+      "onFailPriority": 0,
+      "onPassCreatedTickets": {
+        "from": "none",
+        "to": "refine-ready"
+      },
+      "during": "plan-merging"
+    },
+    {
+      "when": {
+        "status": "merge-conflict"
+      },
+      "role": "TeamLead",
+      "workflow": "board-resolve-merge",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "merge-ready",
+      "onFail": "merge-conflict",
+      "maxRounds": 3,
+      "priority": 0,
+      "during": "fixing-conflict"
+    },
+    {
+      "when": {
+        "status": "plan-merge-conflict"
+      },
+      "role": "TeamLead",
+      "workflow": "board-resolve-merge",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "plan-merge-ready",
+      "onFail": "plan-merge-conflict",
+      "maxRounds": 3,
+      "priority": 0,
+      "during": "fixing-plan-conflict"
+    },
+    {
+      "when": {
+        "status": "review-ready"
+      },
+      "role": "Reviewer",
+      "workflow": "board-review",
+      "workspace": "worktree",
+      "onPass": "merge-ready",
+      "onFail": "dev-ready",
+      "onFailPriority": 0,
+      "onFailureLimit": {
+        "count": 3,
+        "status": "need-escalate"
+      },
+      "during": "reviewing"
+    },
+    {
+      "when": {
+        "status": "qa-ready"
+      },
+      "role": "QA",
+      "workflow": "board-qa",
+      "workspace": "worktree",
+      "onPass": "review-ready",
+      "onFail": "dev-ready",
+      "onFailPriority": 0,
+      "onFailureLimit": {
+        "count": 3,
+        "status": "need-escalate"
+      },
+      "during": "qa-ing"
+    },
+    {
+      "when": {
+        "status": "need-escalate"
+      },
+      "role": "SeniorDeveloper",
+      "workflow": "board-senior-develop",
+      "workspace": "worktree",
+      "syncBase": true,
+      "onPass": "qa-ready",
+      "onFail": "need-escalate",
+      "maxRounds": 3,
+      "priority": 0,
+      "during": "escalating"
+    },
+    {
+      "when": {
+        "status": "dev-ready"
+      },
+      "role": "Developer",
+      "workflow": "board-develop",
+      "workspace": "worktree",
+      "onPass": "qa-ready",
+      "onFail": "dev-ready",
+      "maxRounds": 6,
+      "requiresDeps": true,
+      "syncBase": true,
+      "during": "deving"
+    },
+    {
+      "when": {
+        "status": "refine-ready"
+      },
+      "role": "TeamLead",
+      "workflow": "board-refine",
+      "workspace": "worktree",
+      "onPass": "dev-ready",
+      "onFail": "none",
+      "maxRounds": 2,
+      "during": "refining"
+    },
+    {
+      "when": {
+        "status": "unpack-ready"
+      },
+      "role": "ProductOwner",
+      "workflow": "board-unpack",
+      "workspace": "worktree",
+      "createdTicketStatus": "none",
+      "onPass": "plan-merge-ready",
+      "onFail": "none",
+      "maxRounds": 2,
+      "during": "unpacking"
+    }
+  ],
+  "workflowStatuses": [
+    {
+      "id": "none",
+      "kind": "initial",
+      "name": "Backlog"
+    },
+    {
+      "id": "unpack-ready",
+      "name": "Unpack ready"
+    },
+    {
+      "id": "unpacking"
+    },
+    {
+      "id": "refine-ready",
+      "name": "Refine ready"
+    },
+    {
+      "id": "refining"
+    },
+    {
+      "id": "dev-ready",
+      "name": "Dev ready"
+    },
+    {
+      "id": "deving"
+    },
+    {
+      "id": "qa-ready",
+      "name": "QA ready"
+    },
+    {
+      "id": "qa-ing"
+    },
+    {
+      "id": "need-escalate",
+      "name": "Needs escalation"
+    },
+    {
+      "id": "escalating"
+    },
+    {
+      "id": "review-ready",
+      "name": "Review ready"
+    },
+    {
+      "id": "reviewing"
+    },
+    {
+      "id": "plan-merge-ready",
+      "name": "Plan merge ready"
+    },
+    {
+      "id": "plan-merging"
+    },
+    {
+      "id": "plan-merge-conflict",
+      "name": "Plan merge conflict"
+    },
+    {
+      "id": "fixing-plan-conflict"
+    },
+    {
+      "id": "merge-ready",
+      "name": "Merge ready"
+    },
+    {
+      "id": "merging"
+    },
+    {
+      "id": "merge-conflict",
+      "name": "Merge conflict"
+    },
+    {
+      "id": "fixing-conflict"
+    },
+    {
+      "id": "merged",
+      "kind": "done",
+      "name": "Done"
+    },
+    {
+      "id": "closed",
+      "kind": "closed",
+      "name": "Close"
+    }
+  ],
+  "todoEntry": [
+    "merge-conflict",
+    "plan-merge-conflict",
+    "review-ready",
+    "qa-ready",
+    "need-escalate",
+    "dev-ready",
+    "refine-ready",
+    "unpack-ready"
+  ],
+  "todoDefault": "dev-ready",
+  "upgradedFrom": {
+    "backlog": "none",
+    "unpack-ready": "unpack-ready",
+    "refine-ready": "refine-ready",
+    "dev-ready": "dev-ready",
+    "qa-ready": "qa-ready",
+    "need-escalate": "need-escalate",
+    "review-ready": "review-ready",
+    "plan-merge-ready": "plan-merge-ready",
+    "plan-merge-conflict": "plan-merge-conflict",
+    "merge-ready": "merge-ready",
+    "merge-conflict": "merge-conflict",
+    "done": "merged",
+    "close": "closed"
+  }
+}

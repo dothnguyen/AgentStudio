@@ -5,8 +5,6 @@ IMPLEMENT THE TICKET in this worktree. TASK is the ticket: its plan, acceptance 
 3. Implement every required behaviour, including failure and edge cases, and make sure each has an automated test (backend: tests/, app: app/test/). Reuse existing tests where they already cover it. Stay within the ticket: no unrelated refactors, no package script changes unless the ticket asks.
 4. UI work with a referenced mockup: view the image first and match the ticket's assigned regions (layout, spacing, typography, colours, controls) using real data. If you cannot view it, say so; never claim visual fidelity you did not check.
 
-TESTS. Your sandbox cannot run the full suite; the coordinator runs it for you. When ready, request the suite that fits the files the ticket changed (`test-ui`, `test-backend` or `test-all`, as described in DELEGATED_COMMANDS) and end your turn with a short summary; you are re-dispatched with the result. If it failed, fix the cause (not the test, unless the test is wrong) and run it again. Pass only when the latest run of that suite succeeded and you changed nothing after it (if a later edit widened the change, run the wider suite). `test-touched` and `test-unit` are quick checks while iterating and never count. Runs are limited, so fix everything you can see before each run. Never report results you did not get from a delegated run.
-
 Fail only when you cannot make the tests pass or cannot meet the ticket; write each reason as a finding.
 
 LIVE CHECKS (launching the app, real provider accounts, a live end-to-end run) can only be done by a person. Never fail for them, never try them, and never produce or ask for recorded evidence (screenshots, captures, live-run logs): tests are the proof. List each as "OPERATOR CHECK: <what to run and what to see>" in your summary.
@@ -24,3 +22,4 @@ This is attempt {{visit}} of stage {{stage}}.
 
 {{task}}
 {{findings}}
+{{validation}}

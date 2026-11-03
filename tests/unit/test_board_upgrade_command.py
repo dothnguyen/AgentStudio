@@ -70,19 +70,23 @@ class BoardUpgradeCommandTests(unittest.TestCase):
         with open(self.path, 'rb') as f:
             self.assertEqual(f.read(), before)
 
-    def test_repository_board_upgrade_backups_names_and_idempotence(self):
+    def test_upgrade_v3_fixture_writes_v4_workflows_backups_and_idempotence(self):
         source = Path(__file__).resolve().parents[2] / '.agent-studio'
-        shutil.copytree(source, self.folder, dirs_exist_ok=True, ignore=shutil.ignore_patterns('backups'))
-        before = {p.name: p.read_bytes() for p in (Path(self.folder) / 'workflows').glob('board-*')}
+        fixture = Path(__file__).resolve().parents[1] / 'fixtures' / 'board-v3' / 'board.json'
+        shutil.copy(fixture, self.path)
+        shutil.copy(source / 'roles.json', self.folder)
+        shutil.copytree(source / 'workflows', Path(self.folder) / 'workflows')
+        before = {p.name: p.read_bytes() for p in (Path(self.folder) / 'workflows').glob('*.yaml')
+                  if p.name != 'story-delivery.yaml'}
         board_before = Path(self.path).read_bytes()
         dry = self.call(dryRun=True)
         self.assertTrue(dry['ok'], dry)
         self.assertEqual(len(dry['data']['files']), 11)
         self.assertEqual(set(dry['data']['files']), {
-            '.agent-studio/workflows/merge-merge-ready.json',
-            '.agent-studio/workflows/merge-plan-merge-ready.json',
+            '.agent-studio/workflows/merge-merge-ready.yaml',
+            '.agent-studio/workflows/merge-plan-merge-ready.yaml',
             '.agent-studio/workflows/board-resolve-merge.yaml',
-            '.agent-studio/workflows/board-resolve-merge-plan-merge-conflict.json',
+            '.agent-studio/workflows/board-resolve-merge-plan-merge-conflict.yaml',
             '.agent-studio/workflows/board-review.yaml',
             '.agent-studio/workflows/board-qa.yaml',
             '.agent-studio/workflows/board-senior-develop.yaml',
@@ -92,18 +96,19 @@ class BoardUpgradeCommandTests(unittest.TestCase):
             '.agent-studio/board.json',
         })
         self.assertEqual(Path(self.path).read_bytes(), board_before)
-        self.assertEqual(before, {p.name: p.read_bytes() for p in (Path(self.folder) / 'workflows').glob('board-*')})
+        self.assertEqual(before, {p.name: p.read_bytes() for p in (Path(self.folder) / 'workflows').glob('*.yaml')
+                                  if p.name != 'story-delivery.yaml'})
         self.assertFalse((Path(self.folder) / 'backups').exists())
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(cli.main(['board', 'upgrade', '--workspace', self.workspace, '--dry-run']), 0)
-        self.assertIn('.agent-studio/workflows/merge-merge-ready.json', output.getvalue())
+        self.assertIn('.agent-studio/workflows/merge-merge-ready.yaml', output.getvalue())
         result = self.call()
         self.assertTrue(result['ok'], result)
         data = result['data']
         self.assertEqual(data['files'], dry['data']['files'])
-        self.assertIn('.agent-studio/workflows/board-resolve-merge-plan-merge-conflict.json', data['files'])
-        self.assertIn('.agent-studio/workflows/merge-merge-ready.json', data['files'])
+        self.assertIn('.agent-studio/workflows/board-resolve-merge-plan-merge-conflict.yaml', data['files'])
+        self.assertIn('.agent-studio/workflows/merge-merge-ready.yaml', data['files'])
         self.assertEqual(Path(data['backup']).read_bytes(), board_before)
         for name, content in before.items():
             self.assertIn(content, [Path(p).read_bytes() for p in data['backups']])
@@ -111,7 +116,7 @@ class BoardUpgradeCommandTests(unittest.TestCase):
                                   if Path(p).name.startswith('board-resolve-merge.yaml-'))
         self.assertEqual(overwritten_backup.read_bytes(), before['board-resolve-merge.yaml'])
         develop = (Path(self.folder) / 'workflows' / 'board-develop.yaml').read_text()
-        self.assertIn('workflows/prompts/board-develop.md', develop)
+        self.assertIn('board-develop.md', develop)
         self.assertNotIn('You are the developer', develop)
         board = json.loads(Path(self.path).read_text())
         self.assertEqual(board['version'], 4)

@@ -1,0 +1,19 @@
+version: 2
+description: Resolve a failed plan merge in the preserved ticket worktree, then return it to its merge action.
+maxSteps: 4
+startsAt: plan-merge-conflict
+whileRunning: fixing-plan-conflict
+role: TeamLead
+workspace: worktree
+syncBase: true
+priority: 0
+end:
+  pass: plan-merge-ready
+  fail: plan-merge-conflict
+limits:
+  maxRuns: 3
+steps:
+  - id: resolve
+    agent:
+      prompt: board-resolve-merge.md
+      access: write

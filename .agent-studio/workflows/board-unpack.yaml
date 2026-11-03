@@ -1,10 +1,11 @@
-version: 1
-description: Board stage unpack-ready. The ProductOwner turns a feature ticket into story files under phases/phase-NN/stories and one board ticket per story (via the board MCP tools).
-maxSteps: 4
-stages:
-  - id: unpack
-    role: ProductOwner
-    permission: workspace_write
-    maxVisits: 1
-    promptFile: workflows/prompts/board-unpack.md
-    next: { pass: $succeed, fail: $fail }
+"version": 2
+"description": "Board stage unpack-ready. The ProductOwner turns a feature ticket into story files under phases/phase-NN/stories and one board ticket per story (via the board MCP tools)."
+"maxSteps": 4
+"stages": [{"id": "unpack", "role": "ProductOwner", "permission": "workspace_write", "maxVisits": 1, "promptFile": "workflows/prompts/board-unpack.md", "next": {"pass": "$succeed", "fail": "$fail"}}]
+"startsAt": "unpack-ready"
+"whileRunning": "unpacking"
+"role": "ProductOwner"
+"workspace": "worktree"
+"createdTickets": "none"
+"end": {"pass": "plan-merge-ready", "fail": "none"}
+"limits": {"maxRuns": 2}

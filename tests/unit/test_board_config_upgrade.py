@@ -5,7 +5,7 @@ import os
 import tempfile
 import unittest
 
-from backend.agent_studio import boardmodel
+from backend.agent_studio import boardmodel, boardworkflows, workflowdef
 from tests.unit.test_board_config_v3 import config
 
 
@@ -72,13 +72,14 @@ class BoardConfigUpgradeTests(unittest.TestCase):
         self.assertEqual(parsed['todoEntry'], [])
         self.assertIsNone(parsed['todoDefault'])
 
-    def test_repository_board_is_valid_v3_config(self):
+    def test_repository_board_is_valid_v4_config_with_workflows(self):
         path = os.path.join(os.path.dirname(__file__), '..', '..', '.agent-studio', 'board.json')
         with open(path, encoding='utf-8') as f:
             raw = json.load(f)
-        self.assertEqual(raw['version'], 3)
+        self.assertEqual(raw['version'], 4)
+        self.assertNotIn('rules', raw)
         parsed = boardmodel.parse_config(raw)
-        self.assertEqual(parsed['version'], 3)
+        self.assertEqual(parsed['version'], 4)
         self.assertEqual(parsed['todoDefault'], 'dev-ready')
         self.assertEqual([status['id'] for status in raw['workflowStatuses'] if status.get('kind') == 'initial'],
                          ['none'])
@@ -86,15 +87,60 @@ class BoardConfigUpgradeTests(unittest.TestCase):
                          ['merged'])
         self.assertEqual([status['id'] for status in raw['workflowStatuses'] if status.get('kind') == 'closed'],
                          ['closed'])
-        self.assertTrue(all(rule.get('during') for rule in parsed['rules']))
+        self.assertEqual(parsed['rules'], [])
         self.assertEqual(set(parsed['todoEntry']), {
-            rule['when']['status'] for rule in parsed['rules'] if 'action' not in rule
+            'merge-conflict', 'plan-merge-conflict', 'review-ready', 'qa-ready',
+            'need-escalate', 'dev-ready', 'refine-ready', 'unpack-ready',
         })
-        self.assertEqual(parsed['rulesByStatus']['plan-merge-ready']['onPassCreatedTickets']['from'], 'none')
-        self.assertEqual(parsed['rulesByStatus']['merge-ready']['onPass'], 'merged')
         self.assertEqual(raw['upgradedFrom']['backlog'], 'none')
         self.assertEqual(raw['upgradedFrom']['done'], 'merged')
         self.assertEqual(raw['upgradedFrom']['close'], 'closed')
+        workspace = os.path.dirname(os.path.dirname(path))
+        loaded = boardworkflows.load(workspace, parsed)
+        self.assertEqual(loaded['problems'], [])
+        workflows = {wf['name']: wf for wf in loaded['workflows']}
+        self.assertEqual(set(workflows), {
+            'board-develop', 'board-senior-develop', 'board-qa', 'board-refine',
+            'board-resolve-merge', 'board-resolve-merge-plan-merge-conflict',
+            'board-review', 'board-unpack', 'merge-merge-ready', 'merge-plan-merge-ready',
+        })
+        self.assertEqual([(step['id'], step['kind']) for step in workflows['board-develop']['steps']],
+                         [('implement', 'verdict'), ('tests', 'validation')])
+        self.assertEqual([(step['id'], step['kind']) for step in workflows['board-senior-develop']['steps']],
+                         [('implement', 'verdict'), ('tests', 'validation')])
+        self.assertEqual([(step['id'], step['kind']) for step in workflows['board-qa']['steps']],
+                         [('qa_tests', 'verdict'), ('tests', 'validation'), ('qa', 'verdict')])
+        # Verify the committed workflows use coordinator checks and route their results
+        # through the intended retry/verdict gates, rather than merely having the right
+        # step labels.
+        definitions = {}
+        for name in ('board-develop', 'board-senior-develop', 'board-qa'):
+            definitions[name] = workflowdef.load(workspace, name)
+        for name in ('board-develop', 'board-senior-develop'):
+            stages = definitions[name].stages
+            self.assertEqual([(stage.id, stage.kind) for stage in stages],
+                             [('implement', 'verdict'), ('tests', 'validation')])
+            self.assertEqual(stages[1].checks, 'code')
+            self.assertEqual(stages[1].max_visits, 4)
+            self.assertEqual(stages[1].next['fail'], 'implement')
+            self.assertEqual(stages[0].pass_requires_commands, ())
+        qa_stages = definitions['board-qa'].stages
+        self.assertEqual(qa_stages[1].checks, 'code')
+        self.assertEqual(qa_stages[1].next['fail'], 'qa')
+        self.assertEqual(qa_stages[2].pass_requires, ('tests',))
+        self.assertEqual(qa_stages[2].pass_requires_commands, ())
+        prompts = os.path.join(workspace, '.agent-studio', 'workflows', 'prompts')
+        for name, removed in [
+            ('board-develop.md', 'Your sandbox cannot run the full suite'),
+            ('board-qa-tests.md', 'Then request the suite that fits'),
+            ('board-qa.md', 'The coordinator runs the suite outside your sandbox'),
+        ]:
+            with open(os.path.join(prompts, name), encoding='utf-8') as f:
+                text = f.read()
+            self.assertNotIn(removed, text)
+        for name in ('board-develop.md', 'board-qa.md'):
+            with open(os.path.join(prompts, name), encoding='utf-8') as f:
+                self.assertIn('{{validation}}', f.read())
 
     def test_all_references_and_existing_during_are_rewritten(self):
         raw = {'version': 2, 'statuses': [{'id': 'start', 'kind': 'initial'}, {'id': 'ready'},

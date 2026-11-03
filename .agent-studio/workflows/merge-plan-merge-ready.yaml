@@ -1,0 +1,15 @@
+version: 2
+startsAt: plan-merge-ready
+whileRunning: plan-merging
+end:
+  pass:
+    status: merged
+    releaseCreatedTickets:
+      from: none
+      to: refine-ready
+  fail: plan-merge-conflict
+limits:
+  onFailPriority: 0
+steps:
+  - id: merge
+    action: merge

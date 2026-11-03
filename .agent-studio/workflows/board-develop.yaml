@@ -1,11 +1,26 @@
-version: 1
-description: Board stage dev-ready. The Developer implements the ticket in its worktree, has the coordinator run the tests (a delegated test suite), and passes only when the suite for the change passes on the final code.
-maxSteps: 4
-stages:
-  - id: develop
-    role: Developer
-    permission: workspace_write
-    maxVisits: 1
-    passRequiresCommands: [test-all, test-backend, test-ui]   # the suite the changed files need must pass in this run, on exactly this code
-    promptFile: workflows/prompts/board-develop.md
-    next: { pass: $succeed, fail: $fail }
+version: 2
+description: Board stage dev-ready. The Developer implements the ticket in its worktree; the coordinator then runs the check set for the change and sends a failure back to the Developer up to three times.
+maxSteps: 10
+startsAt: dev-ready
+whileRunning: deving
+role: Developer
+workspace: worktree
+syncBase: true
+waitForDependencies: true
+end:
+  pass: qa-ready
+  fail: dev-ready
+limits:
+  maxRuns: 6
+steps:
+  - id: implement
+    agent:
+      prompt: board-develop.md
+      access: write
+  - id: tests
+    check:
+      checks: code
+    onFail:
+      retry: implement
+      max: 3
+      then: end-fail

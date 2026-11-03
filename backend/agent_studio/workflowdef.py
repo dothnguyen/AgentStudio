@@ -488,7 +488,7 @@ def _compile_steps(c: _Collector, obj: dict, prompts: Mapping) -> list:
             result.append({})
             continue
         for key in step:
-            if key not in ("id", "agent", "check", "action", "approval", "onPass", "onFail"):
+            if key not in ("id", "agent", "check", "action", "approval", "onPass", "onFail", "passRequires"):
                 c.err(f"{p}.{key}", "unknown key")
         kinds = [k for k in ("agent", "check", "action", "approval") if k in step]
         if len(kinds) != 1:
@@ -526,6 +526,11 @@ def _compile_steps(c: _Collector, obj: dict, prompts: Mapping) -> list:
             if kind == "action" and text != "merge":
                 c.err(p + ".action", "unknown action")
             st.update(stepKind=kind, stepValue=text)
+        if "passRequires" in step:
+            if kind == "agent":
+                st["passRequires"] = step["passRequires"]
+            else:
+                c.err(p + ".passRequires", "passRequires is allowed only on agent steps")
         def target(v):
             return {"end-pass": SUCCEED, "end-fail": FAIL}.get(v, v) if isinstance(v, str) else v
         passed = target(step.get("onPass", ids[i + 1] if i + 1 < len(ids) else "end-pass"))

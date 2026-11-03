@@ -164,8 +164,44 @@ agent-studio workflow start --team $TEAM --developer $DEV --reviewer $QA \
 agent-studio workflow show --workflow $WF --pretty                # stages, diff path, test output, QA verdict
 ```
 
-## Board columns and workflow status
+## Board columns and workflows
 
-Tickets have a fixed column (`status`: `backlog`, `todo`, `in-progress`, `done`, or `closed`) and a separate `workflowStatus` for routing. New operator tickets start in backlog with the initial workflow status `none`. Moving to todo uses a configured entry status; claims move tickets to in-progress and the rule's `during` workflow status. Done and closed use terminal workflow statuses (`merged` and `closed` in this workspace). Backlog resets the workflow; reopening done or closed requires a forced move to todo or backlog.
+Tickets have a fixed column (`status`: `backlog`, `todo`, `in-progress`, `done`, or `closed`) and a separate
+`workflowStatus` for routing. New operator tickets start in backlog with the initial workflow status `none`.
+This workspace uses a version 4 `.agent-studio/board.json`: `workflowStatuses` (with exactly one `initial`, at
+least one `done`, and at most one `closed` kind), `todoEntry`/`todoDefault`, and **no `rules`**. Routing lives in
+`.agent-studio/workflows/*.yaml`; `agent-studio board workflow list` and the `board.workflows` command show each
+workflow and report problems.
 
-Use `agent-studio ticket workflow KEY ID [--reason TEXT]` to change the workflow status of an unclaimed todo or in-progress ticket without moving its column. Run `agent-studio board upgrade --dry-run` to preview a v2 config upgrade and `agent-studio board upgrade` to persist it; the latter backs up the original config. Upgrade the installed Agent Studio together with this workspace config before running the board.
+A board workflow starts when a ticket reaches its `startsAt` status and claims it into `whileRunning`. It declares
+an optional `role` (no role means the coordinator runs it), `workspace` (`main` or `worktree`), `syncBase`,
+`waitForDependencies`, `createdTickets`, `end` (`pass`, `fail`, optional `blocked`) and `limits`. Its `steps` run
+in order:
+- `agent` — a prompt file under `workflows/prompts/`, `access: read|write`, and optional `delegates`; the
+  workflow's role is the agent.
+- `check` — runs a check set from `.agent-studio/commands.json` against the files the branch changed. The
+  `code` set runs `test-ui` for `app/` changes, `test-backend` for `backend/`/`tests/` changes, and `test-unit`
+  otherwise, reusing a run that already passed on the same code.
+- `action: merge` — the coordinator squash-merges the ticket branch itself.
+- `approval` — waits for an operator decision.
+
+`onPass` defaults to the next step (or `end-pass` on the last one) and `onFail` defaults to `end-fail`. A check
+can send work back, e.g. `onFail: {retry: implement, max: 3, then: end-fail}`; `passRequires: [tests]` on a
+verdict step makes its pass count only when that check passed. The develop and escalation workflows implement
+`implement` → `tests` (`checks: code`) with that retry. QA runs `qa_tests` → `tests` → `qa` (`passRequires:
+[tests]`).
+
+The board applies exactly one result per run: `pass` moves to `end.pass`; `fail` moves to `end.fail` and counts a
+round and the consecutive failures; `blocked` moves to `end.blocked.status` (default `blocked`) and remembers
+`end.blocked.returnTo`; `paused` and `cancelled` release the claim without counting. `limits.maxRuns` blocks
+with `ROUND_LIMIT:<workflow>`, `limits.failuresInARow` routes to its status with `FAILURE_LIMIT:<workflow>`,
+and `limits.onFailPriority` sets the priority after a failure. A workflow's `createdTickets` holds tickets the
+agent adds while it runs; `end.pass.releaseCreatedTickets: {from, to}` releases the ticket's children only when
+the workflow passes.
+
+Use `agent-studio ticket workflow KEY ID [--reason TEXT]` to change the workflow status of an unclaimed todo or
+in-progress ticket without moving its column. `agent-studio board upgrade --dry-run` previews an upgrade and
+`agent-studio board upgrade` persists it; the command backs up the board and any workflow files it replaces.
+Version 2 boards upgrade in memory, version 3 boards convert their rules to workflow files and become version 4,
+and a version 4 board is already upgraded. Upgrade the installed Agent Studio together with this workspace
+config before running the board.
