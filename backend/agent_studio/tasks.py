@@ -27,7 +27,7 @@ def _active_for_agent(tx: Tx, agent_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def _mutating_in_workspace(tx: Tx, workspace: str) -> Optional[str]:
+def _mutating_in_workspace(tx: Tx, workspace: str, exclude_workflow: Optional[str] = None) -> Optional[str]:
     row = tx.conn.execute(
         f"SELECT a.id FROM assignments a JOIN tasks t ON t.id = a.task_id WHERE t.workspace = ? "
         f"AND a.policy = 'workspace_write' AND a.status IN ({','.join('?' * len(ACTIVE))}) LIMIT 1",
@@ -35,7 +35,8 @@ def _mutating_in_workspace(tx: Tx, workspace: str) -> Optional[str]:
     if row:
         return f"assignment {row['id']}"
     row = tx.conn.execute("SELECT w.id FROM workflow_runs w JOIN tasks t ON t.id = w.task_id WHERE t.workspace = ? "
-                          "AND w.status IN ('queued', 'running', 'paused') LIMIT 1", (workspace,)).fetchone()
+                          "AND w.status IN ('queued', 'running', 'paused') AND (? IS NULL OR w.id != ?) LIMIT 1",
+                          (workspace, exclude_workflow, exclude_workflow)).fetchone()
     return f"workflow {row['id']}" if row else None
 
 

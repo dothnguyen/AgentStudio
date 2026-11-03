@@ -161,6 +161,7 @@ class TickRules(SchedCase):
             ticket = boardmodel.get_ticket(tx.conn, self.ws, "T-001")
             rule = {"during": during, "onFail": "merge-conflict"}
             results = [SimpleNamespace(returncode=0, stdout=config["baseBranch"].encode()),
+                       SimpleNamespace(returncode=0, stdout=config["baseBranch"].encode()),
                        SimpleNamespace(returncode=1, stdout=b""),
                        SimpleNamespace(returncode=0, stdout=b"shared.txt\n"),
                        SimpleNamespace(returncode=0, stdout=b"")]
@@ -521,5 +522,95 @@ class WorktreeRegistration(SchedCase):
             self.assertEqual(caught.exception.code, "WORKTREE_NOT_REGISTERED")
 
 
-if __name__ == "__main__":
-    unittest.main()
+class WorkflowMergeAction(SchedCase):
+    def start_action(self, linked=True):
+        path = os.path.join(self.ws, '.agent-studio', 'workflows', 'merge.json')
+        with open(path, 'w') as f:
+            json.dump({'version': 2, 'steps': [{'id': 'merge', 'action': 'merge'}]}, f)
+        if subprocess.run(['git', '-C', self.ws, 'status', '--porcelain'], stdout=subprocess.PIPE).stdout:
+            self.commit_board()
+        ticket = self.add_ticket()
+        with self.store.transaction() as tx:
+            run = workflow._start_definition(tx, {'teamId': self.team, 'definition': 'merge', 'text': 'merge'}, self.ctx)
+            if linked:
+                tx.conn.execute('UPDATE tickets SET active_run_id = ? WHERE id = ?',
+                                (run['workflowRunId'], ticket['id']))
+        return run['workflowRunId']
+
+    def assert_action_route(self, passed, reason, status):
+        run = self.start_action()
+        attempt = self.conn.execute('SELECT * FROM stage_attempts WHERE workflow_run_id = ?', (run,)).fetchone()
+        self.assertEqual((attempt['stage_type'], attempt['status'], attempt['phase']), ('action', 'active', 'acting'))
+        self.assertIsNone(attempt['prompt_path'])
+        with patch.object(boardsched, 'merge_ticket', return_value=(passed, reason)) as merge:
+            with self.store.transaction() as tx:
+                self.assertTrue(workflow._advance_one(tx, run, self.ctx))
+                self.assertEqual(tx.get('workflow_run', run)['status'], status)
+                attempt = tx.conn.execute('SELECT * FROM stage_attempts WHERE workflow_run_id = ?', (run,)).fetchone()
+                self.assertIsNone(attempt['assignment_id'])
+                self.assertEqual((attempt['phase'], attempt['status'], attempt['outcome']),
+                                 ('done', 'completed', 'validation_passed' if passed else 'validation_failed'))
+                self.assertEqual(json.loads(attempt['verdict_json'])['findings'], [reason] if reason else [])
+            merge.assert_called_once()
+
+    def test_action_routes_pass_without_assignment(self):
+        self.assert_action_route(True, None, 'succeeded')
+
+    def test_action_routes_fail_without_assignment(self):
+        self.assert_action_route(False, 'MERGE_CONFLICT: x', 'failed')
+
+    def test_action_without_ticket_pauses_with_error(self):
+        run = self.start_action(linked=False)
+        with self.store.transaction() as tx:
+            workflow._advance_one(tx, run, self.ctx)
+            self.assertEqual(tx.get('workflow_run', run)['status'], 'paused')
+            event = tx.conn.execute("SELECT payload_json FROM events WHERE entity_id = ? AND name = 'workflow_run.paused' ORDER BY seq DESC", (run,)).fetchone()
+            self.assertEqual(json.loads(event[0])['diagnosticCode'], 'ACTION_NO_TICKET')
+
+    def test_merge_ticket_clean_and_conflict(self):
+        ticket = self.add_ticket()
+        def git(*args, cwd=None):
+            return subprocess.run(['git', '-C', cwd or self.ws, *args], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with open(os.path.join(self.ws, 'shared'), 'w') as f:
+            f.write('base\n')
+        git('add', 'shared')
+        git('commit', '-qm', 'base')
+        from agent_studio import worktrees
+        created = worktrees.create(self.ws, ticket['key'], 'merge', git('symbolic-ref', '--short', 'HEAD').stdout.decode().strip(), state_dir=self.ctx['stateDir'])
+        branch_dir = created['path']
+        with open(os.path.join(branch_dir, 'shared'), 'w') as f:
+            f.write('branch\n')
+        git('commit', '-qam', 'branch', cwd=branch_dir)
+        with open(os.path.join(self.ws, 'shared'), 'w') as f:
+            f.write('main\n')
+        git('commit', '-qam', 'main')
+        config = boardmodel.load_config(self.ws)
+        config['baseBranch'] = git('symbolic-ref', '--short', 'HEAD').stdout.decode().strip()
+        with self.store.transaction() as tx:
+            tx.conn.execute('UPDATE tickets SET branch = ?, worktree_path = ? WHERE id = ?', (created['branch'], branch_dir, ticket['id']))
+            row = boardmodel.get_ticket(tx.conn, self.ws, ticket['key'])
+            passed, reason = boardsched.merge_ticket(tx, self.ws, row, config, self.ctx)
+            self.assertFalse(passed)
+            self.assertIn('shared', reason)
+            self.assertTrue(os.path.isdir(branch_dir))
+            self.assertIsNone(tx.conn.execute('SELECT merged_commit FROM tickets WHERE id = ?', (ticket['id'],)).fetchone()[0])
+        git('revert', '--no-edit', 'HEAD')
+        with self.store.transaction() as tx:
+            row = boardmodel.get_ticket(tx.conn, self.ws, ticket['key'])
+            self.assertEqual(boardsched.merge_ticket(tx, self.ws, row, config, self.ctx), (True, None))
+            updated = tx.conn.execute('SELECT merged_commit, worktree_path FROM tickets WHERE id = ?', (ticket['id'],)).fetchone()
+            self.assertEqual(updated['merged_commit'], git('rev-parse', 'HEAD').stdout.decode().strip())
+            self.assertIsNone(updated['worktree_path'])
+
+    def test_merge_ticket_without_branch_fails_without_touching_checkout(self):
+        ticket = self.add_ticket()
+        config = boardmodel.load_config(self.ws)
+        config['baseBranch'] = subprocess.run(
+            ['git', '-C', self.ws, 'symbolic-ref', '--short', 'HEAD'], check=True,
+            stdout=subprocess.PIPE).stdout.decode().strip()
+        with self.store.transaction() as tx:
+            row = boardmodel.get_ticket(tx.conn, self.ws, ticket['key'])
+            self.assertEqual(boardsched.merge_ticket(tx, self.ws, row, config, self.ctx),
+                             (False, 'MERGE_NO_BRANCH'))
+            self.assertIsNone(tx.conn.execute('SELECT merged_commit FROM tickets WHERE id = ?',
+                                              (ticket['id'],)).fetchone()[0])

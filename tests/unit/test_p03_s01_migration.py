@@ -69,12 +69,13 @@ class BoardTableDrop(unittest.TestCase):
         self.assertEqual(state.migrate(conn, path), state.SCHEMA_VERSION)
 
         # v10 dropped the P03 board (its data is not migrated); v11/v12 created the generic tables in their
-        # place. run_id and blocked_reason returned in v12 with new meaning; these P03 columns are gone.
+        # place. Some columns returned in later versions with new meaning; these P03 columns are gone.
         self.assertFalse(P03_ONLY & tables(conn))
         self.assertTrue(REUSED <= tables(conn))
         self.assertIn("phases", tables(conn))
-        p03_columns = {"kind", "story_path", "severity", "dev_rounds", "merged_commit", "assignee_agent_id"}
+        p03_columns = {"kind", "story_path", "severity", "dev_rounds", "assignee_agent_id"}
         self.assertFalse(p03_columns & columns(conn, "tickets"))
+        self.assertIn("merged_commit", columns(conn, "tickets"))
         self.assertTrue({"phase_id", "created_by_member", "rounds_json"} <= columns(conn, "tickets"))
         self.assertEqual(dump(conn, "teams", "*"), preserved["teams"])
         self.assertEqual(dump(conn, "agents", agent_cols), preserved["agents"])

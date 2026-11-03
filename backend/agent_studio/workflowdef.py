@@ -523,6 +523,8 @@ def _compile_steps(c: _Collector, obj: dict, prompts: Mapping) -> list:
             text = value if kind == "action" else value.get("ask") if isinstance(value, dict) and set(value) == {"ask"} else None
             if not isinstance(text, str) or not text.strip():
                 c.err(p + "." + kind, "requires non-empty text")
+            if kind == "action" and text != "merge":
+                c.err(p + ".action", "unknown action")
             st.update(stepKind=kind, stepValue=text)
         def target(v):
             return {"end-pass": SUCCEED, "end-fail": FAIL}.get(v, v) if isinstance(v, str) else v

@@ -24,7 +24,7 @@ class WorkflowStatusMigration(unittest.TestCase):
             "PRAGMA index_info(tickets_by_workspace_workflow)")], ["workspace", "workflow_status"])
 
     def test_fresh_database_has_nullable_workflow_status_and_index(self):
-        self.assertEqual(state.migrate(self.conn, self.path), 19)
+        self.assertEqual(state.migrate(self.conn, self.path), 20)
         self.assert_workflow_schema()
 
     def test_version_18_ticket_is_preserved_with_null_workflow_status(self):
@@ -44,7 +44,7 @@ class WorkflowStatusMigration(unittest.TestCase):
         self.conn.execute("COMMIT")
         self.assertEqual(state.current_version(self.conn), 18)
 
-        self.assertEqual(state.migrate(self.conn, self.path), 19)
+        self.assertEqual(state.migrate(self.conn, self.path), 20)
         self.assert_workflow_schema()
         row = self.conn.execute("SELECT key, title, status, workflow_status FROM tickets").fetchone()
         self.assertEqual(tuple(row), ("T-1", "Existing", "ready", None))

@@ -571,3 +571,6 @@ MIGRATION_19 = [
     "ALTER TABLE tickets ADD COLUMN workflow_status TEXT",
     "CREATE INDEX tickets_by_workspace_workflow ON tickets (workspace, workflow_status)",
 ]
+
+# v20: record the commit produced by a board ticket merge.
+MIGRATION_20 = ["ALTER TABLE tickets ADD COLUMN merged_commit TEXT"]

@@ -31,3 +31,7 @@ YAML is read by `backend/agent_studio/yamlsubset.py`, a small stdlib parser. It 
 - A document whose root is not a block mapping, including an empty document.
 
 **Why `next` and not `on`**: YAML 1.1 parsers read an unquoted `on:` as the boolean `true`, so a key named `on` would silently change meaning between tools. The key is `next`.
+
+## Coordinator merge step
+
+A version 2 board workflow can use `steps: [{id: merge, action: merge}]` to squash-merge its linked ticket's branch into the board's base branch. The coordinator runs the action without an agent; it routes pass or fail according to the step's `onPass` and `onFail` settings. A failure includes its reason as a finding and retains the ticket worktree. A successful merge records the resulting commit on the ticket and removes its worktree. A run without a linked ticket pauses with `ACTION_NO_TICKET`. Unknown actions are rejected when the workflow is loaded.

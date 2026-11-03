@@ -118,16 +118,9 @@ class StepTests(unittest.TestCase):
                     {"id": "a", "agent": {"prompt": "work.md", "access": "read"}}]}, f)
             self.assertEqual(workflowdef.load(workspace, "flow").stages[0].prompt, "Hello {{task}}")
 
-    def test_start_refuses_unsupported_kinds(self):
-        for kind, value in (("action", "merge"),):
-            d = self.parse([{"id": "a", kind: value}])
-            class Tx:
-                def get(self, *args):
-                    return {"status": "running", "id": "team"}
-            with patch.object(workflow.tasks, "run_workspace", return_value="/tmp"), patch.object(workflow.workflowdef, "load", return_value=d):
-                with self.assertRaises(AsError) as e:
-                    workflow._start_definition(Tx(), {"teamId": "team", "definition": "x"}, {})
-            self.assertEqual((e.exception.code, str(e.exception)), ("WORKFLOW_DEFINITION_INVALID", "step kind not supported yet"))
+    def test_unknown_action_is_rejected(self):
+        with self.assertRaises(AsError):
+            self.parse([{"id": "a", "action": "unknown"}])
 
 
 class ApprovalInterfaceTests(unittest.TestCase):

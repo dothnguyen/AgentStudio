@@ -475,50 +475,65 @@ def _merge_one(tx, workspace: str, ticket: dict, rule: dict, config: dict, ctx) 
     """Squash-merge the ticket branch into the base branch. The tick is single-threaded and synchronous,
     so one merge at a time holds the main checkout; a dirty, busy or wrong-headed checkout holds the
     ticket instead of failing the tick."""
-    base = config["baseBranch"]
-    hold = tasks._mutating_in_workspace(tx, workspace)
-    if not hold:
-        if not worktrees.is_clean(workspace):
-            hold = "MAIN_CHECKOUT_DIRTY"
-        else:
-            head = gitws.run(workspace, "symbolic-ref", "--short", "HEAD", check=False)
-            if head.returncode != 0 or head.stdout.decode().strip() != base:
-                hold = "MAIN_CHECKOUT_WRONG_BRANCH"
-    if hold:
-        reason = hold if isinstance(hold, str) else "MAIN_CHECKOUT_BUSY"
+    reason = _merge_hold(tx, workspace, config, ctx)
+    if reason:
         last = tx.conn.execute("SELECT name, payload_json FROM ticket_events WHERE ticket_id = ? "
                                "ORDER BY id DESC LIMIT 1", (ticket["id"],)).fetchone()
         if last is None or last["name"] != "ticket.merge_held" or \
-                json.loads(last["payload_json"]).get("reason") != reason:  # one event per hold, not one per tick
+                json.loads(last["payload_json"]).get("reason") != reason:
             boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merge_held", "coordinator", ticket["status"],
-                                     ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"],
-                                                        "reason": reason})
+                                     ticket["status"], {"ticketId": ticket["id"], "key": ticket["key"], "reason": reason})
         return False
     if rule.get("during"):
         boardmodel.set_workflow(tx, ticket, rule["during"], "coordinator", None, config, claimed=True)
         ticket = boardmodel.get_ticket(tx.conn, workspace, ticket["key"])
-    result = gitws.run(workspace, "merge", "--squash", ticket["branch"], check=False)
-    if result.returncode != 0:
-        raw = gitws.run(workspace, "diff", "--name-only", "--diff-filter=U", check=False).stdout
-        files = [line for line in raw.decode("utf-8", "replace").splitlines() if line]
-        gitws.run(workspace, "reset", "--merge", check=False)
-        _move_by_rule(tx, workspace, ticket, rule, "onFail",
-                      f"MERGE_CONFLICT: {', '.join(files) if files else 'merge failed'}")
+    passed, reason = merge_ticket(tx, workspace, ticket, config, ctx)
+    if not passed:
+        _move_by_rule(tx, workspace, ticket, rule, "onFail", reason)
         return True
-    if gitws.run(workspace, "diff", "--cached", "--quiet", check=False).returncode == 0:
-        gitws.run(workspace, "reset", "--merge", check=False)  # nothing to merge: the branch is already in base
-    else:
-        gitws.run(workspace, "commit", "-m", f"{ticket['key']}: {ticket['title']}")
     boardmodel._ticket_event(tx.conn, ticket["id"], "ticket.merged", "coordinator", ticket["status"],
                              rule["onPass"], {"ticketId": ticket["id"], "key": ticket["key"],
                                               "branch": ticket["branch"], "to": rule["onPass"]})
     _set_status(tx, ticket, rule["onPass"])
     _promote_created_tickets(tx, ticket, rule)
+    return True
+
+
+def _merge_hold(tx, workspace, config, ctx):
+    hold = tasks._mutating_in_workspace(tx, workspace, exclude_workflow=ctx.get("mergeRunId"))
+    if not hold:
+        if not worktrees.is_clean(workspace):
+            hold = "MAIN_CHECKOUT_DIRTY"
+        else:
+            head = gitws.run(workspace, "symbolic-ref", "--short", "HEAD", check=False)
+            if head.returncode != 0 or head.stdout.decode().strip() != config["baseBranch"]:
+                hold = "MAIN_CHECKOUT_WRONG_BRANCH"
+    return hold if isinstance(hold, str) else ("MAIN_CHECKOUT_BUSY" if hold else None)
+
+
+def merge_ticket(tx, workspace, ticket, config, ctx):
+    """Merge a ticket branch into the base checkout, retaining its worktree on failure."""
+    reason = _merge_hold(tx, workspace, config, ctx)
+    if reason:
+        return False, reason
+    if not ticket.get("branch"):
+        return False, "MERGE_NO_BRANCH"
+    result = gitws.run(workspace, "merge", "--squash", ticket["branch"], check=False)
+    if result.returncode != 0:
+        raw = gitws.run(workspace, "diff", "--name-only", "--diff-filter=U", check=False).stdout
+        files = [line for line in raw.decode("utf-8", "replace").splitlines() if line]
+        gitws.run(workspace, "reset", "--merge", check=False)
+        return False, f"MERGE_CONFLICT: {', '.join(files) if files else 'merge failed'}"
+    if gitws.run(workspace, "diff", "--cached", "--quiet", check=False).returncode == 0:
+        gitws.run(workspace, "reset", "--merge", check=False)
+    else:
+        gitws.run(workspace, "commit", "-F", "-", input_bytes=f"{ticket['key']}: {ticket['title']}\n".encode())
+    commit = gitws.run(workspace, "rev-parse", "HEAD").stdout.decode().strip()
+    tx.conn.execute("UPDATE tickets SET merged_commit = ?, updated_at = ? WHERE id = ?", (commit, utcnow(), ticket["id"]))
     if ticket.get("worktree_path"):
         worktrees.remove(workspace, ticket["worktree_path"], state_dir=ctx["stateDir"])
-        tx.conn.execute("UPDATE tickets SET worktree_path = NULL, updated_at = ? WHERE id = ?",
-                        (utcnow(), ticket["id"]))
-    return True
+        tx.conn.execute("UPDATE tickets SET worktree_path = NULL, updated_at = ? WHERE id = ?", (utcnow(), ticket["id"]))
+    return True, None
 
 
 def _promote_created_tickets(tx, parent: dict, rule: dict) -> None:

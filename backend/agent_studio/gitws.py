@@ -25,11 +25,11 @@ def _git() -> str:
     return shutil.which("git") or "/usr/bin/git"
 
 
-def run(workspace: str, *args: str, check: bool = True, timeout: float = 60) -> subprocess.CompletedProcess:
+def run(workspace: str, *args: str, check: bool = True, timeout: float = 60, input_bytes: Optional[bytes] = None) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0", LC_ALL="C")
     try:
-        p = subprocess.run([_git(), "-C", workspace] + SAFE + list(args), stdin=subprocess.DEVNULL,
+        p = subprocess.run([_git(), "-C", workspace] + SAFE + list(args), input=input_bytes, stdin=subprocess.DEVNULL if input_bytes is None else None,
                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as e:
         raise AsError(GIT_FAILED, f"git could not be run: {e}")

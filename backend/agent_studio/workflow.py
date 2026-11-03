@@ -178,8 +178,7 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
     ws = tasks.run_workspace(tx, team, args.get("workspace"))
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
-    if any(stage.kind == "action" for stage in definition.stages):
-        raise AsError(workflowdef.WORKFLOW_DEFINITION_INVALID, "step kind not supported yet")
+
     first = definition.stages[0]
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)
     base = gitws.require_repo(ws)
@@ -256,6 +255,14 @@ def _enter(tx: Tx, wf_id: str, stage: str, ctx: dict, from_assignment: Optional[
     """Enter a stage by routing: an agent stage gets an assignment (its ID is returned), a validation stage starts
     the validator."""
     st = _stage_of(tx.get("workflow_run", wf_id), stage)
+    if st.kind == "action":
+        wf = tx.get("workflow_run", wf_id)
+        attempt, visit, _ = _visit(tx, wf_id, stage, True)
+        sa = tx.create("stage_attempt", {"team_id": wf["team_id"], "workflow_run_id": wf_id, "stage": stage,
+                                         "attempt": attempt, "phase": "acting", "stage_type": "action", "visit": visit})
+        tx.update("workflow_run", wf_id, {"current_stage": stage, "current_agent_id": None}, "workflow_run.stage_entered",
+                  {"toStage": stage, "type": "action", "stageAttemptId": sa, "fromAssignmentId": from_assignment})
+        return None
     if st.kind == "approval":
         wf = tx.get("workflow_run", wf_id)
         attempt, visit, _ = _visit(tx, wf_id, st.id, True)
@@ -360,6 +367,8 @@ def _advance_one(tx: Tx, wf_id: str, ctx: dict) -> bool:
         return _legacy_run(tx, wf, sa, cancel)
     if sa is None:
         return False
+    if _stage_of(wf, sa["stage"]).kind == "action":
+        return _advance_action(tx, wf, sa, ctx, cancel)
     if sa["phase"] == "waiting_approval":
         if cancel:
             _end(tx, wf, "cancelled", "cancelled by the operator")
@@ -411,6 +420,30 @@ def _last_summary(tx: Tx, wf_id: str) -> str:
         if text:
             return text
     return ""
+
+
+def _advance_action(tx, wf, sa, ctx, cancel):
+    if cancel:
+        _end(tx, wf, "cancelled", "cancelled by the operator")
+        return True
+    row = tx.conn.execute("SELECT * FROM tickets WHERE active_run_id = ?", (wf["id"],)).fetchone()
+    if row is None:
+        _pause(tx, wf, sa, "action requires a linked ticket", "ACTION_NO_TICKET")
+        return True
+    from . import boardsched, boardmodel
+    ticket = dict(row)
+    workspace = ticket["workspace"]
+    passed, reason = boardsched.merge_ticket(tx, workspace, ticket, boardmodel.load_config(workspace),
+                                             dict(ctx, mergeRunId=wf["id"]))
+    outcome = "pass" if passed else "fail"
+    findings = [reason] if reason else []
+    tx.update("stage_attempt", sa["id"], {"phase": "done", "outcome": "validation_" + ("passed" if passed else "failed"),
+                                          "verdict_json": {"verdict": outcome, "findings": findings}},
+              "stage_attempt.completed", {"stage": sa["stage"], "outcome": outcome, "findings": findings})
+    tx.transition("stage_attempt", sa["id"], "completed")
+    _route(tx, tx.get("workflow_run", wf["id"]), _stage_of(wf, sa["stage"]), outcome, findings,
+           _prev_assignment(tx, wf["id"]), ctx)
+    return True
 
 
 def _advance_validation(tx: Tx, wf: dict, sa: dict, ctx: dict, cancel: bool) -> bool:

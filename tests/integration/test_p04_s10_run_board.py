@@ -215,17 +215,29 @@ class WorktreesAndMerge(RunBoardCase):
         self.seed(first["worktreePath"], "shared.txt", "from first\n")
         self.seed(second["worktreePath"], "shared.txt", "from second\n")
 
-        self.wait_status("T-001", ("merged",), timeout=120)  # the first merge lands
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            tickets = [self.ticket_json(key) for key in ("T-001", "T-002")]
+            merged = next((t for t in tickets if t["workflowStatus"] == "merged"), None)
+            if merged:
+                break
+            time.sleep(0.3)
+        self.assertIsNotNone(merged, tickets)
+        winner = merged["key"]
+        loser = "T-002" if winner == "T-001" else "T-001"
+        winning_content = "from first\n" if winner == "T-001" else "from second\n"
+        winning_worktree = first["worktreePath"] if winner == "T-001" else second["worktreePath"]
+        losing_worktree = second["worktreePath"] if winner == "T-001" else first["worktreePath"]
         with open(os.path.join(self.ws, "shared.txt")) as f:
-            self.assertEqual(f.read(), "from first\n")
-        self.assertFalse(os.path.isdir(first["worktreePath"]))  # the worktree is cleaned up
+            self.assertEqual(f.read(), winning_content)
+        self.assertFalse(os.path.isdir(winning_worktree))  # the worktree is cleaned up
 
-        conflict = self.wait_event("T-002", "ticket.merge_conflict", timeout=90)  # the second conflicts
+        conflict = self.wait_event(loser, "ticket.merge_conflict", timeout=90)
         self.assertIn("MERGE_CONFLICT", json.dumps(conflict["payload"]))
-        self.assertEqual(self.ticket_json("T-002")["workflowStatus"], "build")  # onFail returned it to the queue
+        self.assertEqual(self.ticket_json(loser)["workflowStatus"], "build")  # onFail returned it to the queue
         with open(os.path.join(self.ws, "shared.txt")) as f:
-            self.assertEqual(f.read(), "from first\n")  # the base branch is untouched by the conflict
-        self.assertTrue(os.path.isdir(second["worktreePath"]))  # kept for the fixing round
+            self.assertEqual(f.read(), winning_content)  # the base branch is untouched by the conflict
+        self.assertTrue(os.path.isdir(losing_worktree))  # kept for the fixing round
         status = subprocess.run(["git", "-C", self.ws, "status", "--porcelain"], stdout=subprocess.PIPE,
                                 text=True).stdout
         self.assertEqual(status, "")  # never leaves the checkout dirty
