@@ -16,7 +16,11 @@ class BoardWorkflowTests(unittest.TestCase):
         self.ws = self.tmp.name
         self.base = os.path.join(self.ws, '.agent-studio')
         os.makedirs(os.path.join(self.base, 'workflows'))
-        self.write('board.json', config())
+        raw = config()
+        raw['rules'] = []
+        raw['todoEntry'] = []
+        raw['todoDefault'] = None
+        self.write('board.json', raw)
         self.write('roles.json', {'version': 1, 'roles': {'Developer': {}}})
         self.cfg = boardmodel.load_config(self.ws)
         self.obj = {'version': 2, 'startsAt': 'ready', 'whileRunning': 'working',
@@ -36,7 +40,7 @@ class BoardWorkflowTests(unittest.TestCase):
 
     def test_valid_index_and_dispatch_shape(self):
         self.write('workflows/develop.json', self.obj)
-        self.write('workflows/other.json', {'version': 2})
+        self.write('workflows/other.json', {'version': 2, 'stages': self.obj['stages']})
         result = self.index()
         self.assertEqual(result['problems'], [])
         wf = result['workflows'][0]
@@ -55,7 +59,7 @@ class BoardWorkflowTests(unittest.TestCase):
                          stages=[{'id': 'check', 'type': 'validation', 'next': {'pass': '$succeed', 'fail': '$fail'}}])
         agentless.pop('role')
         self.write('workflows/agentless.json', agentless)
-        self.write('workflows/not-board.json', {'version': 2})
+        self.write('workflows/not-board.json', {'version': 2, 'stages': self.obj['stages']})
         result = self.index()
         self.assertEqual(result['problems'], [])
         self.assertEqual([wf['name'] for wf in result['workflows']], ['agentless'])
@@ -99,3 +103,55 @@ class BoardWorkflowTests(unittest.TestCase):
                             for path, message in problems))
         self.assertTrue(any(path == 'whileRunning' and 'no kind' in message
                             for path, message in problems))
+
+    def test_rules_map_all_fields_and_preserve_stages(self):
+        source = {'version': 2, 'stages': self.obj['stages']}
+        self.write('workflows/develop.json', source)
+        rule = {'when': {'status': 'ready'}, 'during': 'working', 'role': 'Developer',
+                'workflow': 'develop', 'workspace': 'worktree', 'syncBase': False,
+                'requiresDeps': False, 'priority': 0, 'createdTicketStatus': 'backlog',
+                'onPass': 'done', 'onFail': 'ready', 'onBlocked': 'closed', 'maxRounds': 3,
+                'onFailureLimit': {'count': 2, 'status': 'ready'}, 'onFailPriority': 0, 'cap': 5}
+        merge = {'when': {'status': 'merge-ready'}, 'during': 'merging', 'action': 'merge',
+                 'onPass': 'done', 'onFail': 'ready',
+                 'onPassCreatedTickets': {'from': 'backlog', 'to': 'ready'}}
+        self.cfg['rules'] = [rule, merge]
+        result = self.index()
+        self.assertEqual(result['problems'], [])
+        wf, action = result['workflows']
+        from agent_studio import workflowdef
+        stages = json.loads(workflowdef.to_json(workflowdef.load(self.ws, 'develop')))['stages']
+        self.assertEqual(wf, {'name': 'ready', 'startsAt': 'ready', 'whileRunning': 'working',
+            'role': 'Developer', 'workflow': 'develop', 'steps': stages, 'workspace': 'worktree',
+            'syncBase': False, 'waitForDependencies': False, 'priority': 0, 'createdTickets': 'backlog',
+            'end': {'pass': 'done', 'fail': 'ready', 'blocked': {'status': 'closed'}},
+            'limits': {'maxRuns': 3, 'failuresInARow': {'count': 2, 'status': 'ready'}, 'onFailPriority': 0}})
+        self.assertEqual(action['steps'], [{'id': 'merge', 'action': 'merge'}])
+        self.assertIsNone(action['role'])
+        self.assertEqual(action['end'], {'pass': {'status': 'done', 'releaseCreatedTickets':
+                         {'from': 'backlog', 'to': 'ready'}}, 'fail': 'ready'})
+        self.assertEqual(result['byStart']['ready'], wf)
+        self.assertEqual(result['byRunning']['merging'], action)
+
+    def test_mixing_rules_and_board_workflow_reports_problem(self):
+        self.write('workflows/develop.json', self.obj)
+        self.cfg['rules'] = [config()['rules'][1]]
+        result = self.index()
+        self.assertTrue(any('board.json rules and board workflow files both define routing' in p['message']
+                            for p in result['problems']))
+        self.assertEqual([wf['startsAt'] for wf in result['workflows']], ['merge-ready'])
+
+    def test_missing_rule_workflow_reports_problem_and_keeps_other_rules(self):
+        self.cfg['rules'] = config()['rules']
+        result = self.index()
+        self.assertEqual([wf['startsAt'] for wf in result['workflows']], ['merge-ready'])
+        self.assertEqual(result['problems'][0]['path'], 'rules[0].workflow')
+
+    def test_repository_board_converts_all_rules(self):
+        workspace = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
+        result = boardworkflows.load(workspace, boardmodel.load_config(workspace))
+        self.assertEqual(result['problems'], [])
+        self.assertEqual({wf['startsAt'] for wf in result['workflows']},
+                         {'merge-ready', 'plan-merge-ready', 'merge-conflict', 'plan-merge-conflict',
+                          'review-ready', 'qa-ready', 'need-escalate', 'dev-ready', 'refine-ready', 'unpack-ready'})
+        self.assertEqual(len(result['workflows']), 10)

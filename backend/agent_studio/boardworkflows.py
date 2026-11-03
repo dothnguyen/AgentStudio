@@ -1,8 +1,40 @@
 """Read and cross-check board workflow definitions."""
 import json
 
-from . import rolecatalog, workflowdef
+from . import boardmodel, rolecatalog, workflowdef
 from .protocol import AsError
+
+
+def from_rules(workspace, config):
+    """Convert validated legacy rules into independent in-memory workflows."""
+    workflows = []
+    for rule in config.get('rules', []):
+        start = rule['when']['status']
+        wf = {'name': start, 'startsAt': start, 'whileRunning': rule.get('during'),
+              'role': rule.get('role'), 'end': {'pass': rule['onPass'], 'fail': rule['onFail']},
+              'limits': {}}
+        if rule.get('action') == 'merge':
+            wf['steps'] = [{'id': 'merge', 'action': 'merge'}]
+            if 'onPassCreatedTickets' in rule:
+                wf['end']['pass'] = {'status': rule['onPass'],
+                                     'releaseCreatedTickets': dict(rule['onPassCreatedTickets'])}
+        else:
+            definition = workflowdef.load(workspace, rule['workflow'], boardmodel.BUILTIN_DEFINITIONS_DIR)
+            wf['steps'] = json.loads(workflowdef.to_json(definition))['stages']
+            wf['workflow'] = rule['workflow']
+        for source, target in [('workspace', 'workspace'), ('syncBase', 'syncBase'),
+                               ('requiresDeps', 'waitForDependencies'), ('priority', 'priority'),
+                               ('createdTicketStatus', 'createdTickets')]:
+            if source in rule:
+                wf[target] = rule[source]
+        if 'onBlocked' in rule:
+            wf['end']['blocked'] = {'status': rule['onBlocked']}
+        for source, target in [('maxRounds', 'maxRuns'), ('onFailureLimit', 'failuresInARow'),
+                               ('onFailPriority', 'onFailPriority')]:
+            if source in rule:
+                wf['limits'][target] = rule[source]
+        workflows.append(wf)
+    return workflows
 
 
 def load(workspace, config):
@@ -64,11 +96,24 @@ def load(workspace, config):
             elif board.role not in roles:
                 problem(name, 'role', f'Unknown role {board.role!r}.')
 
+    if config.get('rules'):
+        if workflows:
+            problem('', 'rules', 'board.json rules and board workflow files both define routing')
+        converted = []
+        for i, rule in enumerate(config['rules']):
+            try:
+                converted.extend(from_rules(workspace, {'rules': [rule]}))
+            except AsError as error:
+                problem(rule['when']['status'], f'rules[{i}].workflow', error.message)
+        workflows = converted
+
     by_start, by_running = {}, {}
     starts = {wf['startsAt'] for wf in workflows}
     for wf in workflows:
         for key, index in [('startsAt', by_start), ('whileRunning', by_running)]:
             value = wf[key]
+            if value is None:
+                continue
             if value in index:
                 problem(wf['name'], key, f'Status {value!r} is already used by another workflow.')
             else:
