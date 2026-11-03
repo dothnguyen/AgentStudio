@@ -77,6 +77,12 @@ TOOLS = [
 ]
 
 
+for _name, _description in (("board_workflows", "List board workflows and their problems."),
+                             ("prompt_list", "List workflow prompts and their users.")):
+    TOOLS.append({"name": _name, "description": _description,
+                  "inputSchema": {"type": "object", "properties": {}}})
+
+
 class JsonRpcError(Exception):
     def __init__(self, code: int, message: str, data=None):
         super().__init__(message)
@@ -124,6 +130,10 @@ def _ids(request_id, assignment: str, agent: str, args: dict) -> str:
 
 
 def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: str, request_id) -> dict:
+    if name in ("board_workflows", "prompt_list"):
+        data = _call("board.workflows" if name == "board_workflows" else "prompt.list",
+                     {"workspace": workspace}, write=False, assignment=assignment, agent=agent)
+        return {"content": [{"type": "text", "text": json.dumps(data)}], **data}
     if name == "ticket_add":
         if not isinstance(args.get("title"), str) or not args["title"].strip():
             raise AsError(BAD_REQUEST, "ticket_add needs a title.")
@@ -242,6 +252,10 @@ OPERATOR_READ_TOOLS = [
     {"name": "command_catalog", "description": "The workspace's delegated command catalog.",
      "inputSchema": _op_schema()},
 ]
+OPERATOR_READ_TOOLS.extend([
+    {"name": "board_workflows", "description": "List board workflows.", "inputSchema": _op_schema()},
+    {"name": "prompt_list", "description": "List workflow prompts.", "inputSchema": _op_schema()},
+])
 OPERATOR_WRITE_TOOLS = [
     {"name": "workflow_approve", "description": "Approve or reject a waiting workflow stage.",
      "inputSchema": {"type": "object", "properties": {"workflowRunId": {"type": "string"},
@@ -325,6 +339,9 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
     def text(body: str, **data) -> dict:
         return {"content": [{"type": "text", "text": _clip(body)}], **data}
 
+    if name in ("board_workflows", "prompt_list"):
+        data = call("board.workflows" if name == "board_workflows" else "prompt.list", {})
+        return text(_json_text(data), **data)
     if name == "workspace_list":
         data = call("workspace.list", {}, ws=False)
         return text(_json_text(data), **data)

@@ -35,3 +35,5 @@ YAML is read by `backend/agent_studio/yamlsubset.py`, a small stdlib parser. It 
 ## Coordinator merge step
 
 A version 2 board workflow can use `steps: [{id: merge, action: merge}]` to squash-merge its linked ticket's branch into the board's base branch. The coordinator runs the action without an agent; it routes pass or fail according to the step's `onPass` and `onFail` settings. A failure includes its reason as a finding and retains the ticket worktree. A successful merge records the resulting commit on the ticket and removes its worktree. A run without a linked ticket pauses with `ACTION_NO_TICKET`. Unknown actions are rejected when the workflow is loaded.
+
+Board workflow files can be managed with `agent-studio board workflow list|show|save|delete`; prompt files with `agent-studio prompt list|show|save|delete`. Save reads a JSON definition or prompt text from `--file`. Updates and deletes require the SHA-256 returned by show via `--expected-sha256`; omit it when creating a file. The read-only MCP tools `board_workflows` and `prompt_list` expose the corresponding lists.

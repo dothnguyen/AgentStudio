@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, workflowcatalog, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -148,6 +148,34 @@ def _board_workflows(args, req):
     ws = _catalog_workspace(args, {"workspace"}, "board.workflows")
     result = boardworkflows.load(ws, boardmodel.load_config(ws))
     return {"workflows": result["workflows"], "problems": result["problems"]}
+
+
+def _workflow_catalog(args, req, command):
+    kind, action = command.split('.')
+    allowed = {'workspace'} | ({'name'} if action != 'list' else set())
+    if action in ('save', 'delete'):
+        allowed.add('expectedSha256')
+        if 'expectedSha256' not in args or (action == 'delete' and args['expectedSha256'] is None):
+            raise AsError(BAD_REQUEST, 'expectedSha256 is required.')
+    if action == 'save':
+        allowed.add('definition' if kind == 'boardworkflow' else 'text')
+    ws = _catalog_workspace(args, allowed, command)
+    if action == 'list':
+        return _board_workflows(args, req) if kind == 'boardworkflow' else workflowcatalog.prompt_list(ws)
+    name = args.get('name')
+    if action == 'show':
+        return workflowcatalog.show(ws, name) if kind == 'boardworkflow' else workflowcatalog.prompt_show(ws, name)
+    sha = _sha_arg(args)
+    if action == 'save':
+        return (workflowcatalog.save(ws, name, args.get('definition'), sha) if kind == 'boardworkflow'
+                else workflowcatalog.prompt_save(ws, name, args.get('text'), sha))
+    if kind == 'prompt':
+        return workflowcatalog.prompt_delete(ws, name, sha)
+    conn = _reader()
+    try:
+        return workflowcatalog.delete(ws, name, sha, conn)
+    finally:
+        conn.close()
 
 
 def _board_upgrade(args, req):
@@ -1203,6 +1231,8 @@ COMMANDS = {
     "board.summary": _board_summary,
     "board.upgrade": _board_upgrade,
     "board.settings": _board_settings,
+    **{f"{kind}.{action}": (lambda args, req, command=f"{kind}.{action}": _workflow_catalog(args, req, command))
+       for kind in ("boardworkflow", "prompt") for action in ("list", "show", "save", "delete")},
     "board.workflows": _board_workflows,
     "board.settings.update": _board_settings_update,
     "role.create": _role_create,

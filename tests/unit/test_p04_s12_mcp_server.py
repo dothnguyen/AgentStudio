@@ -76,7 +76,8 @@ class Protocol(ServerCase):
         listed = self.rpc("tools/list")
         names = [t["name"] for t in listed["result"]["tools"]]
         self.assertEqual(names, ["ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list",
-                                 "board_show", "delegated_commands_list", "delegated_command_request"])
+                                 "board_show", "delegated_commands_list", "delegated_command_request",
+                                 "board_workflows", "prompt_list"])
         self.assertEqual(self.rpc("ping")["result"], {})
         self.assertIsNone(self.rpc("notifications/initialized"))
 
