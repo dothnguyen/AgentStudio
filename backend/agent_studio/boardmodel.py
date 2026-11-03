@@ -165,15 +165,15 @@ def parse_config(raw) -> dict:
         raise _invalid([("root", "must be a JSON object")])
     problems = []
     version = raw.get("version")
-    v3 = version == 3
-    allowed_keys = tuple(k for k in _TOP_KEYS if k != "statuses") if v3 else _V2_TOP_KEYS
+    v3 = version in (3, 4)
+    allowed_keys = tuple(k for k in _TOP_KEYS if k != "statuses" and not (version == 4 and k == "rules")) if v3 else _V2_TOP_KEYS
     unknown = sorted(set(raw) - set(allowed_keys))
     if unknown:
         problems.append(("root", f"unknown keys {', '.join(unknown)}; the P03 software-board shape is gone "
                                  f"(expected version {3 if v3 else 2} with "
                                  f"{', '.join(k for k in allowed_keys if k != 'version')})"))
-    if version not in (2, CONFIG_VERSION) or isinstance(version, bool):
-        problems.append(("version", "must be 2 or 3"))
+    if version not in (2, 3, 4) or isinstance(version, bool):
+        problems.append(("version", "must be 2, 3 or 4"))
     status_key = "workflowStatuses" if v3 else "statuses"
     statuses = raw.get(status_key)
     if not isinstance(statuses, list) or not statuses:
@@ -368,7 +368,7 @@ def parse_config(raw) -> dict:
             problems.append(("todoEntry", "must be a non-empty list when agent rules exist"))
             todo_entry = []
         for i, value in enumerate(todo_entry):
-            if not isinstance(value, str) or value not in agent_whens or value not in known:
+            if not isinstance(value, str) or value not in known or (version == 3 and value not in agent_whens):
                 problems.append((f"todoEntry[{i}]", "must be the when status of an agent rule"))
         todo_default = raw.get("todoDefault")
         if not (not agent_whens and not todo_entry and todo_default is None) and (not isinstance(todo_default, str) or todo_default not in todo_entry):

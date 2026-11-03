@@ -5,9 +5,11 @@ import copy
 import hashlib
 import json
 import os
+import shutil
+import tempfile
 from datetime import datetime, timezone
 
-from . import boardmodel, roles, workflowdef
+from . import boardmodel, boardworkflows, roles, workflowdef, workflowcatalog, yamlsubset
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, CONFIG_CHANGED, ROLE_NOT_FOUND
 
 PROTECTED_ROUTES = {"merge-conflict": "TeamLead", "plan-merge-conflict": "TeamLead"}
@@ -213,7 +215,7 @@ def update_board(workspace, changes, expected_sha256=None, conn=None):
         else:
             candidate[key] = copy.deepcopy(value)
     cfg = boardmodel.parse_config(candidate)
-    if "workflowStatuses" in changes and current.get("version") == 3:
+    if "workflowStatuses" in changes and current.get("version") in (3, 4):
         removed = {s["id"] for s in current.get("workflowStatuses", [])} - {s["id"] for s in candidate["workflowStatuses"]}
         if removed:
             if conn is None:
@@ -240,6 +242,68 @@ def update_role(workspace, role_id, description, expected_sha256=None):
     return result
 
 
+def _upgrade_v4(workspace, raw, data, dry_run):
+    if any("action" in rule and rule["action"] != "merge" for rule in raw.get("rules", [])):
+        raise AsError(BAD_REQUEST, "Only merge actions can be converted to board workflows.")
+    converted = boardworkflows.from_rules(workspace, raw)
+    definitions = []
+    used = set()
+    for rule, wf in zip(raw.get("rules", []), converted):
+        start = wf["startsAt"]
+        name = "merge-" + start if rule.get("action") == "merge" else rule["workflow"]
+        if name in used:
+            name += "-" + start
+        if name in used:
+            raise AsError(BAD_REQUEST, "Workflow names collide during upgrade.")
+        used.add(name)
+        workflowcatalog._name(name)
+        if rule.get("action") == "merge":
+            definition = {"version": 2, "steps": [{"id": "merge", "action": "merge"}]}
+        else:
+            source = workflowdef._locate(workspace, rule["workflow"], boardmodel.BUILTIN_DEFINITIONS_DIR)[0]
+            with open(source, encoding="utf-8") as f:
+                text = f.read()
+            definition = yamlsubset.loads(text) if source.endswith((".yaml", ".yml")) else json.loads(text)
+            definition["version"] = 2
+        for key in ("startsAt", "whileRunning", "role", "workspace", "syncBase", "waitForDependencies", "priority", "createdTickets", "end", "limits"):
+            if wf.get(key) is not None:
+                definition[key] = wf[key]
+        definitions.append((name, definition))
+    upgraded = dict(raw, version=4)
+    upgraded.pop("rules", None)
+    boardmodel.parse_config(upgraded)
+    # Validate and save the entire conversion in a copy before modifying the board.
+    with tempfile.TemporaryDirectory() as temp:
+        shutil.copytree(_path(workspace, ""), _path(temp, ""), symlinks=True)
+        _write_json(_path(temp, "board.json"), upgraded)
+        files = []
+        for name, definition in definitions:
+            dest = workflowcatalog._wf_path(temp, name, True)
+            workflowcatalog.save(temp, name, definition, workflowcatalog._sha(workflowcatalog._read(dest)))
+            files.append(os.path.relpath(dest, temp))
+        problems = boardworkflows.load(temp, boardmodel.load_config(temp))["problems"]
+        if problems:
+            raise AsError("BOARD_WORKFLOW_INVALID", "Invalid board workflows.", data={"problems": problems})
+        files.append(os.path.join(boardmodel.CONFIG_DIR, "board.json"))
+        if dry_run:
+            return {"upgraded": True, "files": files, "backup": None}
+        backup_dir = _path(workspace, "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        backups = []
+        for rel in files:
+            original = _read_bytes(os.path.join(workspace, rel))
+            if original is not None:
+                backup = os.path.join(backup_dir, os.path.basename(rel) + "-" + stamp + ".bak")
+                with open(backup, "xb") as f:
+                    f.write(original)
+                backups.append(backup)
+        for rel in files:
+            with open(os.path.join(temp, rel), "rb") as f:
+                workflowcatalog._write(os.path.join(workspace, rel), f.read())
+        return {"upgraded": True, "files": files, "backup": backups[-1], "backups": backups}
+
+
 def upgrade_board(workspace, dry_run=False):
     path = _path(workspace, "board.json")
     data = _read_bytes(path)
@@ -250,8 +314,10 @@ def upgrade_board(workspace, dry_run=False):
     except (ValueError, UnicodeDecodeError) as e:
         raise boardmodel._invalid([("root", f"cannot be read or is not valid JSON: {e}")])
     boardmodel.parse_config(raw)
-    if raw["version"] == 3:
+    if raw["version"] == 4:
         return {"upgraded": False}
+    if raw["version"] == 3:
+        return _upgrade_v4(workspace, raw, data, dry_run)
     upgraded, mapping = boardmodel.upgrade_config(raw)
     upgraded["upgradedFrom"] = mapping
     boardmodel.parse_config(upgraded)

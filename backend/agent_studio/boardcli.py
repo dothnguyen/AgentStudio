@@ -398,8 +398,8 @@ def _board_upgrade(ns):
     data = _call("board.upgrade", {"workspace": _workspace(ns), "dryRun": ns.dry_run})
     def render(result):
         if not result["upgraded"]:
-            return "Board is already version 3."
-        return "\n".join(f"{old} -> {new}" for old, new in result["idMap"].items())
+            return "Board is already version 4."
+        return "\n".join([*(f"{old} -> {new}" for old, new in result.get("idMap", {}).items()), *result.get("files", [])])
     return data, render
 
 

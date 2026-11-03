@@ -395,6 +395,8 @@ rule or a status with a kind, a unique suffixed ID is generated. Run `agent-stud
 the mapping. The command backs up the original under `.agent-studio/backups/`; a dry run writes
 nothing. The persisted v3 `upgradedFrom` mapping remains available to later ticket migration. If a required renamed ID is already in use, the existing status receives a
 unique suffixed ID and references follow the mapping.
+For a v3 board, the same command converts each rule to a v2 board workflow file and writes a v4 board without rules. Shared workflow names receive a status suffix; merge workflows use `merge-<startsAt>`. Prompt files remain referenced in place. Existing workflow files and the board are backed up before replacement. A dry run lists the files to be written, and a v4 board is already upgraded. Version 4 keeps the v3 statuses and todo settings and routes through workflow files.
+
 The workflow transition helper records both the workflow status and its derived Kanban column, along
 with a `ticket.workflow_changed` event. Blocked tickets retain their current column; claimed `during`
 statuses use `in-progress`, and other working statuses retain `in-progress` or otherwise use `todo`.

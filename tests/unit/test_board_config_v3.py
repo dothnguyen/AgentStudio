@@ -47,6 +47,19 @@ class BoardConfigV3Tests(unittest.TestCase):
         raw["workflowStatuses"].pop()
         self.assertIsNone(boardmodel.parse_config(raw)["closedStatus"])
 
+    def test_v4_config_uses_workflow_statuses_without_rules(self):
+        raw = config()
+        raw["version"] = 4
+        raw.pop("rules")
+        parsed = boardmodel.parse_config(raw)
+        self.assertEqual(parsed["version"], 4)
+        self.assertEqual([s["id"] for s in parsed["workflowStatuses"]],
+                         [s["id"] for s in raw["workflowStatuses"]])
+        self.assertEqual(parsed["todoEntry"], raw["todoEntry"])
+        self.assertEqual(parsed["duringToRule"], {})
+        invalid = dict(raw, rules=[])
+        self.assert_path(invalid, "root")
+
     def test_status_validation_paths(self):
         cases = [
             (lambda c: c.pop("workflowStatuses"), "workflowStatuses"),
