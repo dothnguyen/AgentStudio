@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import type { BoardStatusInfo } from './boardLaneModel';
+import { WorkflowStatusFilter } from './WorkflowStatusFilter';
 import { filteredCountLabel, type BoardFilters } from './boardFilters';
 
 export interface BoardToolbarProps {
@@ -35,14 +36,7 @@ export function BoardToolbar(props: BoardToolbarProps): JSX.Element {
             onChange={(event) => { props.onChange({ ...filters, query: event.target.value }); }}
           />
         </label>
-        <label className="boards-workflow-filter">
-          Workflow status
-          <select multiple value={filters.workflowStatuses} onChange={(event) => {
-            props.onChange({ ...filters, workflowStatuses: Array.from(event.currentTarget.selectedOptions, (option) => option.value) });
-          }}>
-            {props.workflowStatuses.map((status) => <option key={status.id} value={status.id}>{status.name?.trim() || status.id}</option>)}
-          </select>
-        </label>
+        <WorkflowStatusFilter options={props.workflowStatuses} selected={filters.workflowStatuses} onChange={workflowStatuses => props.onChange({ ...filters, workflowStatuses })} />
         <button
           type="button"
           className="boards-filter-chip"

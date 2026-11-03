@@ -116,7 +116,7 @@ describe('Current Phase accessibility', () => {
     view.getByPlaceholderText('Search tickets').focus();
 
     await user.tab();
-    expect(document.activeElement).toBe(view.getByRole('listbox', { name: 'Workflow status' }));
+    expect(document.activeElement).toBe(view.getByRole('combobox', { name: 'Workflow status' }));
     await user.tab();
     expect(document.activeElement).toBe(view.getByRole('button', { name: 'Blocked only' }));
     await user.tab();

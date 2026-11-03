@@ -2491,8 +2491,19 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 @media (max-width: 1100px) { .boards-backlog-toolbar-row { flex-wrap: wrap; } .boards-backlog-toolbar .boards-search { flex-basis: 100%; max-width: none; } }
 @media (max-width: 799px) { .boards-backlog-row .boards-ticket-owner, .boards-backlog-time { display: none; } }
 
-.boards-workflow-filter { display: flex; align-items: center; gap: 6px; color: #a3a9b2; font-size: 12px; }
-.boards-workflow-filter select { color: inherit; background: #1e2228; border: 1px solid #454b55; border-radius: 5px; max-height: 70px; }
+.boards-workflow-filter { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; color: #a3a9b2; font-size: 12px; }
+.boards-workflow-control { position: relative; min-width: 0; max-width: 100%; }
+.boards-workflow-inputs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; width: 220px; max-width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid #454b55; border-radius: 5px; background: #1e2228; }
+.boards-workflow-inputs:focus-within { border-color: var(--focus); }
+.boards-workflow-inputs input { flex: 1 1 80px; min-width: 0; width: 80px; border: 0; background: transparent; color: var(--text); font: inherit; }
+.boards-workflow-tag { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 5px; border-radius: 4px; background: #30415a; color: var(--text); overflow-wrap: anywhere; }
+.boards-workflow-tag button { flex: none; padding: 0 2px; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.boards-workflow-popup { position: absolute; z-index: 10; top: 100%; left: 0; width: max(100%, 180px); max-width: min(300px, 80vw); max-height: 220px; overflow: auto; box-sizing: border-box; border: 1px solid #454b55; border-radius: 5px; background: #1e2228; box-shadow: 0 4px 12px #0008; }
+.boards-workflow-popup [role="option"], .boards-workflow-empty { padding: 7px 9px; overflow-wrap: anywhere; }
+.boards-workflow-popup [role="option"] { cursor: pointer; }
+.boards-workflow-popup [role="option"].is-active { background: #30415a; }
+.boards-workflow-popup [role="option"][aria-selected="true"] { font-weight: 700; }
+
 .boards-workflow-chip-blue { color: #9ec3ff; background: rgba(91, 156, 255, 0.12); }
 .boards-workflow-chip-amber { color: #f0b453; background: rgba(240, 180, 83, 0.12); }
 .boards-workflow-chip-red { color: #ff8b8b; background: rgba(240, 80, 80, 0.12); }
