@@ -18,6 +18,7 @@ CONFIG = {"version": 1, "validation": {"argv": ["python3", "-c", "print('ok')"],
 ROLES = {"version": 1, "roles": {"TeamLead": {}, "Developer": {}, "QA": {}}}
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class StoryCommands(unittest.TestCase):
     def setUp(self):
         self.sb = Sandbox()

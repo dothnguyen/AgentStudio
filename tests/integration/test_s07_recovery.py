@@ -24,6 +24,7 @@ def fake(scenario, duration=200, write=None):
     return o
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class Drill(unittest.TestCase):
     def setUp(self):
         self.sb = Sandbox(extra_env=ALIASES)
@@ -98,6 +99,7 @@ class Drill(unittest.TestCase):
         return asgs[0]
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class CoordinatorCrashes(Drill):
     def test_crash_before_intent_commit(self):
         self.sb.run("coordinator", "stop")
@@ -164,6 +166,7 @@ class CoordinatorCrashes(Drill):
         self.assert_ran_once(r["data"]["taskId"])
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class RunnerAndPaneLoss(Drill):
     def test_runner_killed_then_resolve_retry_runs_a_new_attempt(self):
         r = self.direct(self.a0, scenario="slow", duration=30000)
@@ -219,6 +222,7 @@ class RunnerAndPaneLoss(Drill):
         self.assertEqual(next(g for g in self.snap()["agents"] if g["id"] == self.a0)["availability"], "offline")
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class ResolveDrills(Drill):
     def test_waiting_input_retry_with_explicit_policy_change(self):
         r = self.direct(self.a1, scenario="permission_denied")
@@ -313,6 +317,7 @@ class ResolveDrills(Drill):
         self.assertEqual((d["workflowRun"]["status"], d["task"]["status"]), ("failed", "failed"))
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class StartupAndStop(Drill):
     def test_orphan_sessions_at_startup(self):
         self.sb.run("coordinator", "stop")

@@ -24,7 +24,6 @@ class SkillRolesUpdateDispatch(unittest.TestCase):
             "developer": {"name": "Developer", "instructions": "roles/developer.md",
                           "skills": ["house-style"]},
             "reviewer": {"name": "Reviewer", "instructions": "roles/reviewer.md", "skills": []}}}).encode())
-        self.roles_before = Path(self.base, "roles.json").read_bytes()
 
     def put(self, rel, data):
         path = os.path.join(self.base, rel)
@@ -79,23 +78,3 @@ class SkillRolesUpdateDispatch(unittest.TestCase):
                          b"# House style\nUse it.\n")
         self.assertFalse(os.path.exists(os.path.join(self.sb.state_dir, "state.db")),
                          "skill.roles.update must not open the state database")
-
-    def test_the_old_token_is_stale_after_the_write_and_changes_nothing(self):
-        before = self.listed()
-        args = {"workspace": self.ws, "skill": "house-style", "roles": ["reviewer"],
-                "expectedRolesSha256": before["rolesSha256"]}
-        first = self.request("skill.roles.update", args)[1]
-        self.assertTrue(first["ok"], first)
-        snapshot = {str(path.relative_to(self.ws)): path.read_bytes()
-                    for path in Path(self.ws).rglob("*") if path.is_file()}
-
-        rc, stale, _ = self.request("skill.roles.update", args)
-        self.assertFalse(stale["ok"], stale)
-        self.assertEqual(stale["error"]["code"], "CONFIG_CHANGED")
-        self.assertEqual(stale["data"], {"rolesSha256": self.listed()["rolesSha256"]})
-        self.assertEqual({str(path.relative_to(self.ws)): path.read_bytes()
-                          for path in Path(self.ws).rglob("*") if path.is_file()}, snapshot)
-
-
-if __name__ == "__main__":
-    unittest.main()

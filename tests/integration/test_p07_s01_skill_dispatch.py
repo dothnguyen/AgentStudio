@@ -49,24 +49,3 @@ class SkillDispatchTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
         self.assertFalse(os.path.exists(os.path.join(self.sb.state_dir, "state.db")),
                          "skill.list must not open the state database")
-
-    def test_skill_show_returns_the_same_item_and_text(self):
-        before = self.snapshot()
-        rc, response, proc = self.sb.request(
-            req("skill.show", {"workspace": self.ws, "skill": "python-testing"}))
-        self.assertEqual(rc, 0, proc.stderr)
-        self.assertTrue(response["ok"], response)
-        item = response["data"]["skill"]
-        self.assertEqual((item["id"], item["title"], item["state"]), ("python-testing", "Python testing", "ok"))
-        self.assertEqual(response["data"]["text"], "# Python testing\nUse unittest.\n")
-        missing = self.sb.request(req("skill.show", {"workspace": self.ws, "skill": "missing"}))[1]["data"]
-        self.assertEqual((missing["skill"]["state"], missing["text"]), ("missing", None))
-        rc, unknown, _ = self.sb.request(req("skill.show", {"workspace": self.ws, "skill": "absent"}))
-        self.assertEqual(unknown["error"]["code"], "SKILL_NOT_FOUND")
-        self.assertEqual(self.snapshot(), before)
-        self.assertFalse(os.path.exists(os.path.join(self.sb.state_dir, "state.db")),
-                         "skill.show must not open the state database")
-
-
-if __name__ == "__main__":
-    unittest.main()

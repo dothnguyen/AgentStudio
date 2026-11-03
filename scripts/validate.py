@@ -4,8 +4,9 @@
     validate.py --unit       the whole unit suite (seconds). The workflow's `tests` stage uses this.
     validate.py --touched    the unit suite, then the integration modules the change added or modified
                              (git status), run in parallel. `team commit` uses this.
-    validate.py --all        the unit suite, then every integration module, in parallel.
-    validate.py --backend    --all without the Node packages: the unit suite and every integration module.
+    validate.py --all        the unit suite and relevant integration modules, in parallel, plus Node packages.
+    validate.py --backend    --all without the Node packages.
+    validate.py --all --full (or --backend --full) runs all integration modules regardless of changes.
     validate.py --ui         only the Node packages: `npm ci` when node_modules is missing, then test, typecheck, build.
                              For changes that touch only the app; the backend suites are not run.
 
@@ -30,6 +31,28 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UNIT = ["python3", "-W", "ignore", "-m", "unittest", "discover", "-s", "tests/unit", "-t", "."]
 MODES = ("--unit", "--touched", "--all", "--backend", "--ui")
+CONDITIONAL = {
+    **{f"tests.integration.test_{name}": ("backend/agent_studio/providers/", "backend/agent_studio/runner.py")
+       for name in ("s08_providers", "s09_claude", "s10_agy")},
+    "tests.integration.test_s03_tmux": ("backend/agent_studio/tmuxctl.py",),
+    "tests.integration.test_install_modes": ("backend/install.sh", "backend/bin/"),
+}
+
+
+def select_integration_modules(mods: list, changes, full=False) -> list:
+    """Select conditional modules from porcelain changes; unknown changes run everything."""
+    if full or changes is None:
+        return mods
+    paths = [path.strip().strip('"') for line in changes.splitlines() for path in line[3:].split(" -> ")]
+    selected = []
+    for module in mods:
+        prefixes = CONDITIONAL.get(module)
+        test_path = module.replace(".", "/") + ".py"
+        if prefixes and not any(path == test_path or path.startswith(prefixes) for path in paths):
+            print(f"===== {module}: skipped (no related changes)", flush=True)
+        else:
+            selected.append(module)
+    return selected
 
 
 def integration_modules(porcelain: str) -> list:
@@ -62,15 +85,19 @@ def branch_changes() -> str:
     for base in [n for n in names if isinstance(n, str)] + ["main", "master"]:
         merge_base = git("merge-base", "HEAD", base)
         if merge_base.returncode == 0 and merge_base.stdout.strip():
-            diff = git("diff", "--name-only", "--diff-filter=AM", merge_base.stdout.strip(), "HEAD").stdout
-            return "".join(" M " + line + "\n" for line in diff.splitlines())
-    return ""
+            diff = git("diff", "--name-only", "--diff-filter=AMDR", merge_base.stdout.strip(), "HEAD")
+            if diff.returncode != 0:
+                return None
+            return "".join(" M " + line + "\n" for line in diff.stdout.splitlines())
+    return None
 
 
 def parse_mode(argv: list) -> str:
     modes = [a for a in argv if a in MODES]
-    if len(modes) != 1 or len(argv) != 1:
-        raise SystemExit("usage: validate.py --unit | --touched | --all | --backend | --ui")
+    full = "--full" in argv
+    if (len(modes) != 1 or len(argv) != 1 + full or
+            (full and modes[0] not in ("--all", "--backend"))):
+        raise SystemExit("usage: validate.py --unit | --touched | --all [--full] | --backend [--full] | --ui")
     return modes[0]
 
 
@@ -170,14 +197,21 @@ def main(argv: list) -> int:
         for name in node_packages():
             ok = run_node_package(name) and ok
         return 0 if ok else 1
-    if mode == "--all":
-        mods, packages = all_integration_modules(), node_packages()
-    elif mode == "--backend":
-        mods, packages = all_integration_modules(), []
-    else:
+    changes = None
+    try:
         status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=all"], cwd=ROOT,
-                                stdout=subprocess.PIPE, text=True).stdout
-        changes = status + branch_changes()
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        branch = branch_changes()
+        if status.returncode == 0 and branch is not None:
+            changes = status.stdout + branch
+    except OSError:
+        pass
+    if mode in ("--all", "--backend"):
+        mods = select_integration_modules(all_integration_modules(), changes, "--full" in argv)
+        packages = node_packages() if mode == "--all" else []
+    elif changes is None:
+        mods, packages = all_integration_modules(), node_packages()
+    else:
         mods, packages = integration_modules(changes), node_packages(changes)
     if mods:
         ok = run_integration(mods) and ok

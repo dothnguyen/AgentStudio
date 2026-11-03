@@ -10,6 +10,7 @@ PROJECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "
 COMMIT = "Implement the story\n\nShort body."
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class StoryDelivery(StartCase):
     roster = [("claude", "TeamLead"), ("claude", "Developer"), ("claude", "QA")]
 

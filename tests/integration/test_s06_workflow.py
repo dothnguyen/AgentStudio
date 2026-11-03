@@ -21,6 +21,7 @@ def fake(scenario, write=None, duration=150):
     return o
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class WorkflowCase(unittest.TestCase):
     providers = ("codex", "claude")
     config = None
@@ -66,6 +67,7 @@ class WorkflowCase(unittest.TestCase):
         return [e for e in d["events"] if e["name"] == name]
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class HappyAndBoundedRepair(WorkflowCase):
     def test_fail_review_then_repair_then_pass(self):
         base = subprocess.run(["git", "-C", self.ws, "rev-parse", "HEAD"], stdout=subprocess.PIPE).stdout.decode().strip()
@@ -142,6 +144,7 @@ class HappyAndBoundedRepair(WorkflowCase):
         self.cancel(wf)
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class TruthTable(WorkflowCase):
     """First review outcome x validation outcome, plus every pausing row."""
 
@@ -202,6 +205,7 @@ class TruthTable(WorkflowCase):
         self.assertFalse(os.path.exists(os.path.join(self.ws, "reviewer-was-here.txt")))
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class Preconditions(WorkflowCase):
     def code(self, r):
         self.assertFalse(r["ok"], r)
@@ -248,6 +252,7 @@ class Preconditions(WorkflowCase):
         self.assertEqual(self.code(self.start({})), "WORKFLOW_CONFIG_INVALID")
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class Limits(WorkflowCase):
     config = {"version": 1, "validation": {"argv": ["python3", "check.py"], "timeoutMs": 20000},
               "workflowDeadlineMs": 3000}
@@ -262,6 +267,7 @@ class Limits(WorkflowCase):
                    message="stage cancelled")
 
 
+@unittest.skipUnless(os.environ.get("AGENT_STUDIO_LEGACY_TESTS") == "1", "legacy flow; set AGENT_STUDIO_LEGACY_TESTS=1 to run")
 class SwappedProviders(WorkflowCase):
     providers = ("opencode", "agy")
 

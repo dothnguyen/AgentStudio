@@ -44,7 +44,10 @@ class Modes(unittest.TestCase):
         self.assertEqual(validate.parse_mode(["--touched"]), "--touched")
         self.assertEqual(validate.parse_mode(["--backend"]), "--backend")
         self.assertEqual(validate.parse_mode(["--ui"]), "--ui")
-        for bad in ([], ["--unit", "--all"], ["--fast"], ["--all", "x"], ["--ui", "--backend"]):
+        self.assertEqual(validate.parse_mode(["--all", "--full"]), "--all")
+        self.assertEqual(validate.parse_mode(["--full", "--backend"]), "--backend")
+        for bad in ([], ["--unit", "--all"], ["--fast"], ["--all", "x"], ["--ui", "--backend"],
+                    ["--unit", "--full"], ["--all", "--full", "--full"]):
             with self.assertRaises(SystemExit):
                 validate.parse_mode(bad)
 
@@ -102,7 +105,8 @@ class Modes(unittest.TestCase):
     def test_touched_mode_runs_modules_and_fails_when_one_fails(self):
         with mock.patch.object(validate, "run_step", return_value=(0, "ok")), \
                 mock.patch.object(validate.subprocess, "run", return_value=types.SimpleNamespace(
-                    stdout=" M tests/integration/test_s04_runner.py\n", returncode=1)), \
+                    stdout=" M tests/integration/test_s04_runner.py\n", returncode=0)), \
+                mock.patch.object(validate, "branch_changes", return_value=""), \
                 mock.patch.object(validate, "run_integration", return_value=False) as integ:
             self.assertEqual(validate.main(["--touched"]), 1)
         integ.assert_called_once_with(["tests.integration.test_s04_runner"])
@@ -202,7 +206,7 @@ class BranchChanges(unittest.TestCase):
         repo = tempfile.mkdtemp()
         subprocess.run(["git", "-C", repo, "init", "-q", "-b", "other"], check=True)
         with mock.patch.object(validate, "ROOT", repo):
-            self.assertEqual(validate.branch_changes(), "")
+            self.assertIsNone(validate.branch_changes())
 
 
 if __name__ == "__main__":
