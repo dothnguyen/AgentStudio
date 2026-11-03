@@ -24,6 +24,44 @@ def cmd(**kw):
     return dict({"description": "d", "argv": ["npm", "ci"], "roles": ["Developer"]}, **kw)
 
 
+class SelectChecks(unittest.TestCase):
+    def setUp(self):
+        self.check_set = {"run": [
+            {"command": "test-ui", "when": ["app/**", "scripts/**"]},
+            {"command": "test-backend", "when": ["backend/**", "tests/**", "scripts/**"]},
+        ], "otherwise": "test-unit"}
+
+    def test_changed_paths_select_matching_commands_or_fallback(self):
+        for paths, expected in [({"app/src/a.ts"}, ["test-ui"]),
+                                ({"backend/a.py"}, ["test-backend"]),
+                                ({"scripts/x"}, ["test-ui", "test-backend"]),
+                                ({"docs/readme.md"}, ["test-unit"]),
+                                (set(), ["test-unit"]),
+                                (None, ["test-ui", "test-backend"])]:
+            with self.subTest(paths=paths):
+                self.assertEqual(delegation.select_checks(self.check_set, paths), expected)
+        self.assertEqual(delegation.select_checks({"run": self.check_set["run"]}, []), [])
+
+    def test_rule_order_and_deduplication_with_repeated_commands(self):
+        rules = {"run": [{"command": "a", "when": ["no"]},
+                         {"command": "b", "when": ["*"]},
+                         {"command": "a", "when": ["*"]},
+                         {"command": "b", "when": ["*"]}]}
+        self.assertEqual(delegation.select_checks(rules, iter(["x"])), ["b", "a"])
+        self.assertEqual(delegation.select_checks(rules, None), ["a", "b"])
+
+    def test_globs_respect_segments_and_recursive_directories(self):
+        def matches(pattern, path):
+            return delegation.select_checks({"run": [{"command": "x", "when": [pattern]}]}, [path]) == ["x"]
+        for pattern, path, expected in [("app/*", "app/a/b", False), ("app/?", "app/a/b", False),
+                                        ("app/?", "app/ab", False), ("app/?", "app/a", True),
+                                        ("app/**", "app/a/b", True), ("**/*.py", "a.py", True),
+                                        ("**/*.py", "a/b.py", True), ("a/**/b", "a/b", True),
+                                        ("a/**/b", "a/x/y/b", True), ("a.py", "xa.py", False)]:
+            with self.subTest(pattern=pattern, path=path):
+                self.assertEqual(matches(pattern, path), expected)
+
+
 class Config(unittest.TestCase):
     def code_path(self, raw):
         with self.assertRaises(AsError) as e:

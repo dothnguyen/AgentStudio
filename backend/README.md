@@ -508,7 +508,10 @@ sections holding each result.
 - Optional `checkSets` maps ids matching `[a-z][a-z0-9-]{0,63}` to objects with a non-empty `run` list. Each rule
   names a catalog `command` and 1–20 relative `when` globs (using `*`, `**` and `?`, without `..`). Optional
   `otherwise` names a catalog command and `reuseIfTested` is a boolean defaulting to false. The catalog loader
-  validates and freezes these definitions; defining one does not itself run commands.
+  validates and freezes these definitions; defining one does not itself run commands. `select_checks` accepts the
+  result of `changed_paths(workspace)` and selects matching commands in rule order without duplicates, or
+  `otherwise` when none match. Unknown changes select every rule's command. `**` crosses directories (and `**/`
+  can match zero directories); `*` and `?` stay within a path segment.
 - `{param}` tokens fill whole argv elements only; each value must match its `pattern`, may not start with `-`, and
   every declared param is required. `cwd` must resolve inside the workspace.
 - `network: false` only withholds the proxy variables; the coordinator itself has no network sandbox.

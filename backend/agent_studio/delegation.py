@@ -212,6 +212,48 @@ def _check_sets(raw, commands: dict) -> dict:
     return result
 
 
+def _check_glob(pattern: str) -> re.Pattern:
+    """Translate a check-set glob, with **/ also matching zero directories."""
+    parts = []
+    i = 0
+    while i < len(pattern):
+        if pattern[i:i + 2] == "**":
+            if pattern[i + 2:i + 3] == "/":
+                parts.append("(?:.*/)?")
+                i += 3
+            else:
+                parts.append(".*")
+                i += 2
+        elif pattern[i] == "*":
+            parts.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            parts.append("[^/]")
+            i += 1
+        else:
+            parts.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("".join(parts), re.DOTALL)
+
+
+def select_checks(check_set: dict, changed_paths) -> list[str]:
+    """Select command IDs in rule order from the paths returned by changed_paths(workspace)."""
+    paths = None if changed_paths is None else tuple(changed_paths)
+    selected = []
+    seen = set()
+    for rule in check_set["run"]:
+        command = rule["command"]
+        if command in seen:
+            continue
+        if paths is None or any(_check_glob(glob).fullmatch(path)
+                                for glob in rule["when"] for path in paths):
+            selected.append(command)
+            seen.add(command)
+    if not selected and paths is not None and "otherwise" in check_set:
+        selected.append(check_set["otherwise"])
+    return selected
+
+
 def parse_config(raw) -> dict:
     """The catalog's frozen form from the file's parsed JSON. Raises DELEGATION_CONFIG_INVALID naming the field."""
     if not isinstance(raw, dict) or raw.get("version") != 1:
