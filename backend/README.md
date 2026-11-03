@@ -505,6 +505,10 @@ sections holding each result.
 
 - `roles` lists who may ask (none = nobody); a workflow stage may narrow it with `delegates: [ids]` (`[]` = off).
   A `read_only` stage only gets commands with `trackedChanges: "forbid"`.
+- Optional `checkSets` maps ids matching `[a-z][a-z0-9-]{0,63}` to objects with a non-empty `run` list. Each rule
+  names a catalog `command` and 1–20 relative `when` globs (using `*`, `**` and `?`, without `..`). Optional
+  `otherwise` names a catalog command and `reuseIfTested` is a boolean defaulting to false. The catalog loader
+  validates and freezes these definitions; defining one does not itself run commands.
 - `{param}` tokens fill whole argv elements only; each value must match its `pattern`, may not start with `-`, and
   every declared param is required. `cwd` must resolve inside the workspace.
 - `network: false` only withholds the proxy variables; the coordinator itself has no network sandbox.

@@ -31,6 +31,54 @@ class Config(unittest.TestCase):
         self.assertEqual(e.exception.code, delegation.DELEGATION_CONFIG_INVALID)
         return e.exception.data["path"]
 
+    def test_check_sets_parse_and_default_reuse(self):
+        raw = dict(cat(), checkSets={"code": {"run": [{"command": "deps", "when": ["app/**", "a?.py"]}],
+                                                     "otherwise": "deps"},
+                                      "other": {"run": [{"command": "deps", "when": ["*"]}],
+                                                "reuseIfTested": True}})
+        sets = delegation.parse_config(raw)["checkSets"]
+        self.assertEqual(sets["code"], {"run": [{"command": "deps", "when": ["app/**", "a?.py"]}],
+                                        "otherwise": "deps", "reuseIfTested": False})
+        self.assertTrue(sets["other"]["reuseIfTested"])
+        self.assertEqual(delegation.parse_config(cat())["checkSets"], {})
+
+    def test_check_set_id_and_glob_count_boundaries_are_valid(self):
+        sid = "a" + "b" * 63
+        patterns = ["*", "**", "file?.py"] + [f"dir{i}/**" for i in range(17)]
+        raw = dict(cat(), checkSets={sid: {"run": [{"command": "deps", "when": patterns}]}})
+        parsed = delegation.parse_config(raw)["checkSets"]
+        self.assertEqual(parsed[sid]["run"][0]["when"], patterns)
+
+    def test_check_set_errors_name_each_field(self):
+        good = {"run": [{"command": "deps", "when": ["app/**"]}]}
+        cases = [(None, "checkSets"), ({"Bad": good}, "checkSets.Bad"),
+                 ({"a" * 65: good}, "checkSets." + "a" * 65), ({"code": 1}, "checkSets.code"),
+                 ({"code": {"extra": 1}}, "checkSets.code.extra"),
+                 ({"code": {}}, "checkSets.code.run"), ({"code": {"run": []}}, "checkSets.code.run"),
+                 ({"code": {"run": [1]}}, "checkSets.code.run[0]"),
+                 ({"code": {"run": [{"extra": 1}]}}, "checkSets.code.run[0].extra"),
+                 ({"code": {"run": [{"when": ["*"]}]}}, "checkSets.code.run[0].command"),
+                 ({"code": {"run": [{"command": "deps"}]}}, "checkSets.code.run[0].when"),
+                 ({"code": {"run": [{"command": "missing", "when": ["*"]}]}}, "checkSets.code.run[0].command"),
+                 ({"code": {"run": [{"command": "deps", "when": []}]}}, "checkSets.code.run[0].when"),
+                 ({"code": {"run": [{"command": "deps", "when": ["*"] * 21}]}}, "checkSets.code.run[0].when"),
+                 ({"code": dict(good, otherwise="missing")}, "checkSets.code.otherwise"),
+                 ({"code": dict(good, reuseIfTested=1)}, "checkSets.code.reuseIfTested")]
+        for value, path in cases:
+            with self.subTest(value=value):
+                self.assertEqual(self.code_path(dict(cat(), checkSets=value)), path)
+        for pattern in ("", "/abs", "../x", "a/../b", "C:/x", "a\\b", "a[bc]", None, "a\x00b"):
+            with self.subTest(pattern=pattern):
+                raw = dict(cat(), checkSets={"code": {"run": [{"command": "deps", "when": [pattern]}]}})
+                self.assertEqual(self.code_path(raw), "checkSets.code.run[0].when[0]")
+
+    def test_repository_catalog_loads_check_set(self):
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+        code = delegation.load_config(root)["checkSets"]["code"]
+        self.assertEqual(code, {"run": [{"command": "test-ui", "when": ["app/**", "scripts/**"]},
+                                        {"command": "test-backend", "when": ["backend/**", "tests/**", "scripts/**"]}],
+                                "otherwise": "test-unit", "reuseIfTested": True})
+
     def test_defaults_fill_every_command(self):
         c = delegation.parse_config(cat())["commands"]["deps"]
         self.assertEqual({k: c[k] for k in delegation.DEFAULTS}, delegation.DEFAULTS)

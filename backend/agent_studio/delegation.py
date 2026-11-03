@@ -167,12 +167,57 @@ def _command(cid: str, raw, defaults: dict) -> dict:
                 env=dict(env), params=params, roles=list(dict.fromkeys(roles)))
 
 
+def _check_sets(raw, commands: dict) -> dict:
+    if not isinstance(raw, dict):
+        raise _bad("checkSets", "must be an object")
+    result = {}
+    for sid, spec in raw.items():
+        path = f"checkSets.{sid}"
+        if not isinstance(sid, str) or not ID_RE.fullmatch(sid):
+            raise _bad(path, "a check set id must match [a-z][a-z0-9-]{0,63}")
+        if not isinstance(spec, dict):
+            raise _bad(path, "must be an object")
+        for key in spec:
+            if key not in ("run", "otherwise", "reuseIfTested"):
+                raise _bad(f"{path}.{key}", "unknown key")
+        runs = spec.get("run")
+        if not isinstance(runs, list) or not runs:
+            raise _bad(f"{path}.run", "must be a non-empty list")
+        parsed = []
+        for i, rule in enumerate(runs):
+            rp = f"{path}.run[{i}]"
+            if not isinstance(rule, dict):
+                raise _bad(rp, "must be an object")
+            for key in rule:
+                if key not in ("command", "when"):
+                    raise _bad(f"{rp}.{key}", "unknown key")
+            command = rule.get("command")
+            if not isinstance(command, str) or command not in commands:
+                raise _bad(f"{rp}.command", "must name a catalog command")
+            patterns = rule.get("when")
+            if not isinstance(patterns, list) or not 1 <= len(patterns) <= 20:
+                raise _bad(f"{rp}.when", "must be a list of 1-20 globs")
+            for j, pattern in enumerate(patterns):
+                if (not isinstance(pattern, str) or not pattern or os.path.isabs(pattern)
+                        or ".." in pattern or "\\" in pattern or "\x00" in pattern
+                        or "[" in pattern or "]" in pattern or re.match(r"^[A-Za-z]:", pattern)):
+                    raise _bad(f"{rp}.when[{j}]", "must be a relative glob without '..'")
+            parsed.append({"command": command, "when": list(patterns)})
+        otherwise = spec.get("otherwise")
+        if "otherwise" in spec and (not isinstance(otherwise, str) or otherwise not in commands):
+            raise _bad(f"{path}.otherwise", "must name a catalog command")
+        result[sid] = {"run": parsed, "reuseIfTested": _bool(spec, "reuseIfTested", path, False)}
+        if "otherwise" in spec:
+            result[sid]["otherwise"] = otherwise
+    return result
+
+
 def parse_config(raw) -> dict:
     """The catalog's frozen form from the file's parsed JSON. Raises DELEGATION_CONFIG_INVALID naming the field."""
     if not isinstance(raw, dict) or raw.get("version") != 1:
         raise _bad("$", 'must be an object with "version": 1')
     for key in raw:
-        if key not in ("version", "defaults", "commands", "onDenialWithRequest", "resumeSession"):
+        if key not in ("version", "defaults", "commands", "onDenialWithRequest", "resumeSession", "checkSets"):
             raise _bad(key, "unknown key")
     draw = raw.get("defaults", {})
     if not isinstance(draw, dict) or set(draw) - set(DEFAULTS):
@@ -185,7 +230,7 @@ def parse_config(raw) -> dict:
     resume = raw.get("resumeSession", True)
     if not isinstance(resume, bool):
         raise _bad("resumeSession", "must be true or false")
-    return {"version": 1, "commands": commands, "resumeSession": resume,
+    return {"version": 1, "commands": commands, "checkSets": _check_sets(raw.get("checkSets", {}), commands), "resumeSession": resume,
             "onDenialWithRequest": _choice(raw, "onDenialWithRequest", "$", DENIAL_MODES, "delegate")}
 
 

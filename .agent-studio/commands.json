@@ -9,6 +9,16 @@
     "trackedChanges": "forbid"
   },
   "onDenialWithRequest": "delegate",
+  "checkSets": {
+    "code": {
+      "run": [
+        {"command": "test-ui", "when": ["app/**", "scripts/**"]},
+        {"command": "test-backend", "when": ["backend/**", "tests/**", "scripts/**"]}
+      ],
+      "otherwise": "test-unit",
+      "reuseIfTested": true
+    }
+  },
   "commands": {
     "app-deps-install": {
       "description": "Install the app's npm dependencies for this platform from package-lock.json (deletes and rebuilds app/node_modules).",
