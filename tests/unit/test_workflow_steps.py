@@ -35,6 +35,15 @@ class StepTests(unittest.TestCase):
                          "onFail": {"retry": "a", "max": 3, "then": "end-fail"}}])
         self.assertEqual((d.stages[0].max_visits, d.stages[0].permission, d.stages[1].next["fail"]),
                          (4, "read_only", "a"))
+        # the failing step is re-entered after each retry, so it needs the same room
+        self.assertEqual(d.stages[1].max_visits, 4)
+
+    def test_retry_visit_limit_covers_every_step_in_the_loop(self):
+        d = self.parse([{"id": "a", "agent": {"prompt": "work.md", "access": "read"}},
+                        {"id": "b", "check": {"checks": "code"}},
+                        {"id": "c", "check": {"checks": "code"},
+                         "onFail": {"retry": "a", "max": 2, "then": "end-fail"}}])
+        self.assertEqual([s.max_visits for s in d.stages], [3, 3, 3])
 
     def test_large_retry_limit_round_trips_but_frozen_stages_remain_bounded(self):
         d = self.parse([{"id": "a", "check": {"checks": "code"}},

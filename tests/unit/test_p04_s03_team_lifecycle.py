@@ -311,6 +311,21 @@ class StatusAndLookup(unittest.TestCase):
         self.assertEqual(result["team"]["id"], restarted)
         self.assertEqual([m["name"] for m in result["members"]], ["Ryan Renamed"])
 
+    def test_status_prefers_the_active_team_over_a_newer_stopped_row(self):
+        with self.store.transaction() as tx:
+            stopped = tx.create("team", {"name": "Alpha", "workspace": "/w", "def_id": "alpha"})
+            tx.create("agent", {"team_id": stopped, "ordinal": 0, "provider_id": "codex",
+                                "role": "developer", "display_name": "Old Stopped", "member_id": "ryan-m"})
+            tx.transition("team", stopped, "stopping")
+            tx.transition("team", stopped, "stopped")
+        # A stopped history row that sorts as newer must not hide the running team.
+        self.conn.execute("UPDATE teams SET created_at = ? WHERE id = ?", ("2031-01-01T00:00:00.000Z", stopped))
+        self.conn.execute("UPDATE teams SET created_at = ? WHERE id = ?", ("2030-01-01T00:00:00.000Z", self.team))
+        result = teamstatus.team_status(self.conn, None, "/w", "alpha")
+        self.assertEqual(result["team"]["id"], self.team)
+        self.assertEqual(result["team"]["status"], "running")
+        self.assertEqual([m["name"] for m in result["members"]], ["Ryan", "Sam"])
+
     def test_status_module_imports_no_board_module(self):
         with open(teamstatus.__file__, encoding="utf-8") as f:
             tree = ast.parse(f.read())

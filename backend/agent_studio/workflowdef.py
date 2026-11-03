@@ -539,11 +539,16 @@ def _compile_steps(c: _Collector, obj: dict, prompts: Mapping) -> list:
             elif not _is_int(count) or count < 1:
                 c.err(p + ".onFail.max", "max must be a positive integer")
             else:
-                retries.append((ids.index(ref), count + 1))
+                # The retry re-enters every step from its target through this one, so all of them need
+                # room for the initial visit plus `count` retries - not just the target.
+                retries.extend((index, count + 1) for index in range(ids.index(ref), i + 1))
             failed = ref
         st["next"] = {"pass": passed, "fail": target(failed)}
         result.append(st)
+    limits = {}
     for index, limit in retries:
+        limits[index] = max(limits.get(index, 1), limit)
+    for index, limit in limits.items():
         if "maxVisits" in result[index] and result[index]["maxVisits"] != limit:
             c.err("steps", "conflicting retry limits for a step")
         result[index]["maxVisits"] = limit

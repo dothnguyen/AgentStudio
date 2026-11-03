@@ -13,6 +13,7 @@ coordinator path as the real CLIs. Only debug coordinators (`--enable-debug`) ac
 | Output | JSON lines: `init`, `progress`, `file_written`, `tool_denied`, `input_required`, `result` |
 | Terminal event | `{"type":"result","status":"success"|"error",...}`, optional `verdict` |
 | Narrowing for tests | `AGENT_STUDIO_FAKE_POLICIES=read_only` makes `workspace_write` unsupported |
+| Default scenario for tests | `AGENT_STUDIO_FAKE_SCENARIO=<scenario>` is used when an assignment carries no `scenario` option (board-started workflows); explicit provider options win |
 
 Scenario → normalized outcome (asserted by `tests/fixtures/contract/*.json`):
 

@@ -41,8 +41,12 @@ def team_status(conn, team_id, workspace, def_id) -> dict:
         if row is None:
             raise AsError("NOT_FOUND", f"Team {team_id} does not exist.")
     else:
-        row = conn.execute("SELECT * FROM teams WHERE workspace = ? AND def_id = ? "
-                           "ORDER BY created_at DESC, rowid DESC", (workspace, def_id)).fetchone()
+        # Resolving a definition id means "the team that is running", so an active row always wins over a
+        # stopped history row, even if a restart produced timestamps the sort cannot tell apart.
+        row = conn.execute(
+            "SELECT * FROM teams WHERE workspace = ? AND def_id = ? "
+            "ORDER BY CASE WHEN status IN ('starting', 'running', 'stopping') THEN 0 ELSE 1 END, "
+            "created_at DESC, rowid DESC", (workspace, def_id)).fetchone()
     if row is None:
         return {"team": None, "members": []}
     team = dict(row)

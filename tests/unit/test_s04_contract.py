@@ -161,6 +161,14 @@ class PrepareSafety(unittest.TestCase):
             with self.assertRaises(AsError, msg=bad):
                 a.prepare(inp(options=bad), {})
 
+    def test_fake_default_scenario_from_environment_and_explicit_options_win(self):
+        a = providers.get("fake", allow_test_only=True)
+        with mock.patch.dict(os.environ, {"AGENT_STUDIO_FAKE_SCENARIO": "usage_limit"}):
+            self.assertIn("usage_limit", a.prepare(inp(), {}).argv)
+            explicit = a.prepare(inp(options={"scenario": "success"}), {}).argv
+        self.assertIn("success", explicit)
+        self.assertNotIn("usage_limit", explicit)
+
     def test_environment_allowlist(self):
         p = Prepared(argv=["/bin/true"], env_allowlist=("PATH", "HOME"), stdin_path=None, cwd="/")
         env = p.environment({"PATH": "/bin", "HOME": "/h", "OPENAI_API_KEY": "secret", "AGENT_STUDIO_X": "1"})

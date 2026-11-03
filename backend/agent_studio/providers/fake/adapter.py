@@ -48,7 +48,9 @@ class FakeAdapter(Adapter):
 
     def _prepare(self, inp: AssignmentInput, env: dict) -> Prepared:
         o = inp.options or {}
-        scenario = o.get("scenario", "success")
+        # Board-started workflows cannot carry debugStageOptions; a test that drives the board sets the
+        # default scenario for its sandbox instead, and explicit provider options still win.
+        scenario = o.get("scenario") or os.environ.get("AGENT_STUDIO_FAKE_SCENARIO") or "success"
         if scenario not in SCENARIOS:
             raise AsError("BAD_REQUEST", f"Unknown fake scenario {scenario!r}.")
         duration = o.get("durationMs", 1000)
