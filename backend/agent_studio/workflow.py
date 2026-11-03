@@ -178,6 +178,8 @@ def _start_definition(tx: Tx, args: dict, ctx: dict) -> dict:
         raise AsError(tasks.TEAM_NOT_RUNNING, f"Team {team['id']} is {team['status']}.")
     ws = tasks.run_workspace(tx, team, args.get("workspace"))
     definition = workflowdef.load(ws, args["definition"], BUILTIN_DIR)
+    if any(stage.kind in ("action", "approval") for stage in definition.stages):
+        raise AsError(workflowdef.WORKFLOW_DEFINITION_INVALID, "step kind not supported yet")
     first = definition.stages[0]
     bound = bind_roles(tx, team, definition, args.get("bindings") or {}, ctx)
     base = gitws.require_repo(ws)

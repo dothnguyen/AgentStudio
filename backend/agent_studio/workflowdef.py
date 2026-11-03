@@ -42,11 +42,11 @@ DIFF_PLACEHOLDER = "{{diff}}"
 
 _BOARD_KEYS = ("startsAt", "whileRunning", "role", "priority", "workspace", "syncBase",
                "waitForDependencies", "createdTickets", "end", "limits")
-_TOP_KEYS = ("version", "description", "maxSteps", "stages") + _BOARD_KEYS
-_FROZEN_TOP_KEYS = _TOP_KEYS + ("name", "sourceSha256", "warnings")
+_TOP_KEYS = ("version", "description", "maxSteps", "stages", "steps") + _BOARD_KEYS
+_FROZEN_TOP_KEYS = tuple(k for k in _TOP_KEYS if k != "steps") + ("name", "sourceSha256", "warnings", "compiledSteps")
 _STAGE_KEYS = ("id", "type", "role", "permission", "prompt", "promptFile", "maxVisits", "passRequires", "next",
                "delegates", "passRequiresCommands")
-_FROZEN_STAGE_KEYS = tuple(k for k in _STAGE_KEYS if k != "promptFile") + ("promptSource",)
+_FROZEN_STAGE_KEYS = tuple(k for k in _STAGE_KEYS if k != "promptFile") + ("promptSource", "stepKind", "stepValue", "checks")
 _AGENT_ONLY = ("role", "permission", "prompt", "promptFile", "promptSource", "passRequires", "delegates",
                "passRequiresCommands")
 DELEGATE_ID_RE = re.compile(r"[a-z][a-z0-9-]{0,63}\Z")
@@ -66,6 +66,8 @@ class Stage:
     kind: str                       # work | verdict | validation
     delegates: Optional[tuple] = None  # delegated command ids this stage may request; None = all its role may use
     pass_requires_commands: tuple = ()  # a pass counts only if one of these delegated commands passed on this code
+    step_value: Optional[str] = None
+    checks: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ class Definition:
     source_sha256: str
     warnings: tuple
     board: Optional[BoardSpec] = None
+    compiled_steps: bool = False
 
 
 class _Problem:
@@ -186,7 +189,7 @@ def _stage(c: _Collector, i: int, st: Any, ctx: dict) -> Optional[dict]:
     if not isinstance(st, dict):
         c.err(p, "a stage must be an object")
         return None
-    allowed = _FROZEN_STAGE_KEYS if ctx["frozen"] else _STAGE_KEYS
+    allowed = _FROZEN_STAGE_KEYS if ctx["frozen"] else _STAGE_KEYS + (("stepKind", "stepValue", "checks") if ctx.get("compiled") else ())
     typ = st.get("type", "agent")
     is_validation = typ == "validation"
     info = {"i": i, "id": None, "type": "validation" if is_validation else "agent", "role": None,
@@ -209,7 +212,7 @@ def _stage(c: _Collector, i: int, st: Any, ctx: dict) -> Optional[dict]:
             if val not in ("agent", "validation"):
                 c.err(kp, 'type must be "agent" or "validation"')
         elif key == "maxVisits":
-            if not _is_int(val) or not 1 <= val <= 10:
+            if not _is_int(val) or val < 1 or (ctx.get("max_visits_limit") is not None and val > ctx["max_visits_limit"]):
                 c.err(kp, "maxVisits must be an integer from 1 to 10")
             else:
                 info["max_visits"] = val
@@ -464,6 +467,87 @@ def _board(c: _Collector, obj: dict) -> Optional[BoardSpec]:
                      obj.get("createdTickets"), freeze(end), freeze(limits))
 
 
+def _step_prompt_path(path: str) -> str:
+    return "workflows/prompts/" + path if "/" not in path else path
+
+
+def _compile_steps(c: _Collector, obj: dict, prompts: Mapping) -> list:
+    steps = obj["steps"]
+    if not isinstance(steps, list):
+        c.err("steps", "steps must be a list")
+        return []
+    if not 1 <= len(steps) <= MAX_STAGES:
+        c.err("steps", "steps must contain 1-20 items")
+    ids = [s.get("id") if isinstance(s, dict) else None for s in steps]
+    result = []
+    retries = []
+    for i, step in enumerate(steps):
+        p = f"steps[{i}]"
+        if not isinstance(step, dict):
+            c.err(p, "a step must be an object")
+            result.append({})
+            continue
+        for key in step:
+            if key not in ("id", "agent", "check", "action", "approval", "onPass", "onFail"):
+                c.err(f"{p}.{key}", "unknown key")
+        kinds = [k for k in ("agent", "check", "action", "approval") if k in step]
+        if len(kinds) != 1:
+            c.err(p, "step needs exactly one kind")
+            result.append({"id": step.get("id"), "type": "validation"})
+            continue
+        kind = kinds[0]
+        value = step[kind]
+        st = {"id": step.get("id"), "type": "validation"}
+        if kind == "agent":
+            if not isinstance(value, dict):
+                c.err(p + ".agent", "agent must be an object")
+                value = {}
+            for key in value:
+                if key not in ("prompt", "access", "delegates"):
+                    c.err(p + ".agent." + key, "unknown key")
+            access = value.get("access")
+            if access not in ("read", "write"):
+                c.err(p + ".agent.access", "access must be read or write")
+            prompt = value.get("prompt")
+            st = {"id": step.get("id"), "role": obj.get("role"),
+                  "permission": {"read": "read_only", "write": "workspace_write"}.get(access) if isinstance(access, str) else None,
+                  "promptFile": _step_prompt_path(prompt) if isinstance(prompt, str) and prompt else prompt}
+            if "delegates" in value:
+                st["delegates"] = value["delegates"]
+        elif kind == "check":
+            if not isinstance(value, dict) or set(value) != {"checks"} or not isinstance(value.get("checks"), str) or not value["checks"].strip():
+                c.err(p + ".check", "check requires a non-empty checks value")
+            else:
+                st["checks"] = value["checks"]
+        else:
+            text = value if kind == "action" else value.get("ask") if isinstance(value, dict) and set(value) == {"ask"} else None
+            if not isinstance(text, str) or not text.strip():
+                c.err(p + "." + kind, "requires non-empty text")
+            st.update(stepKind=kind, stepValue=text)
+        def target(v):
+            return {"end-pass": SUCCEED, "end-fail": FAIL}.get(v, v) if isinstance(v, str) else v
+        passed = target(step.get("onPass", ids[i + 1] if i + 1 < len(ids) else "end-pass"))
+        failed = step.get("onFail", "end-fail")
+        if isinstance(failed, dict):
+            if set(failed) != {"retry", "max", "then"} or failed.get("then") != "end-fail":
+                c.err(p + ".onFail", "retry requires retry, max and then: end-fail")
+            ref, count = failed.get("retry"), failed.get("max")
+            if not isinstance(ref, str) or ref not in ids[:i]:
+                c.err(p + ".onFail.retry", "retry must name an earlier step")
+            elif not _is_int(count) or count < 1:
+                c.err(p + ".onFail.max", "max must be a positive integer")
+            else:
+                retries.append((ids.index(ref), count + 1))
+            failed = ref
+        st["next"] = {"pass": passed, "fail": target(failed)}
+        result.append(st)
+    for index, limit in retries:
+        if "maxVisits" in result[index] and result[index]["maxVisits"] != limit:
+            c.err("steps", "conflicting retry limits for a step")
+        result[index]["maxVisits"] = limit
+    return result
+
+
 def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha: str) -> Definition:
     c = _Collector(source)
     if not isinstance(obj, dict):
@@ -518,7 +602,13 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
             c.err("$", "source sha256 must be 64 lowercase hex digits")
     if "version" not in obj:
         c.err("version", "version is required and must be 1")
-    if "stages" not in obj and version != 2:
+    if not frozen and "steps" in obj and (version != 2 or "stages" in obj):
+        c.err("steps", "steps requires version 2 and cannot be combined with stages")
+    if frozen and "compiledSteps" in obj and (obj["compiledSteps"] is not True or version != 2):
+        c.err("compiledSteps", "compiledSteps must be true on a version 2 definition")
+    compiled_steps = (frozen and obj.get("compiledSteps") is True and version == 2) or (
+        not frozen and version == 2 and "steps" in obj and "stages" not in obj)
+    if "stages" not in obj and "steps" not in obj:
         c.err("stages", "stages is required")
     board = _board(c, obj) if version == 2 else None
     if frozen:
@@ -527,12 +617,13 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
                 c.err(key, f"{key} is required in the frozen form")
 
     infos: list = []
-    if "stages" in obj:
+    if not frozen and version == 2 and "steps" in obj and "stages" not in obj:
+        stages_val = _compile_steps(c, obj, prompts)
+    if "stages" in obj or (not frozen and version == 2 and "steps" in obj):
         if not isinstance(stages_val, list):
             c.err("stages", "stages must be a list")
         elif not stages_val:
-            if version != 2:
-                c.err("stages", "stages must not be empty")
+            c.err("stages", "stages must not be empty")
         else:
             if len(stages_val) > MAX_STAGES:
                 c.err("stages", f"a definition may have at most {MAX_STAGES} stages")
@@ -547,8 +638,15 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
             ctx = {"frozen": frozen, "prompts": prompts, "seen": set(), "ids": {x for x in ids if x},
                    "validation_ids": {ids[i] for i, s in enumerate(stages_val)
                                       if isinstance(s, dict) and s.get("type") == "validation" and ids[i]},
-                   "default_pass": default_pass}
+                   "compiled": compiled_steps and not frozen, "default_pass": default_pass,
+                   "max_visits_limit": None if compiled_steps else 10}
             infos = [_stage(c, i, s, ctx) for i, s in enumerate(stages_val)]
+            for info, raw in zip(infos, stages_val):
+                if info is not None and isinstance(raw, dict):
+                    info["step_value"] = raw.get("stepValue")
+                    info["checks"] = raw.get("checks")
+                    if raw.get("stepKind") in ("action", "approval"):
+                        info["kind"] = raw["stepKind"]
 
     if not c.errors and infos:
         _check_placeholders(c, infos, frozen)
@@ -561,10 +659,11 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
     stages = tuple(Stage(id=s["id"], type=s["type"], role=s["role"], permission=s["permission"],
                          prompt=s["prompt"], prompt_source=s["prompt_source"], max_visits=s["max_visits"],
                          pass_requires=s["pass_requires"], next=MappingProxyType(dict(s["next"])), kind=s["kind"],
-                         delegates=s["delegates"], pass_requires_commands=s["pass_requires_commands"])
+                         delegates=s["delegates"], pass_requires_commands=s["pass_requires_commands"],
+                         step_value=s.get("step_value"), checks=s.get("checks"))
                    for s in infos)
     return Definition(name=name, version=version, description=description, max_steps=max_steps, stages=stages,
-                      source_sha256=sha, warnings=warnings, board=board)
+                      source_sha256=sha, warnings=warnings, board=board, compiled_steps=compiled_steps)
 
 
 def _edges(infos: list) -> dict:
@@ -637,9 +736,15 @@ def to_json(d: Definition) -> str:
                 item["delegates"] = list(s.delegates)
             if s.pass_requires_commands:
                 item["passRequiresCommands"] = list(s.pass_requires_commands)
+        if s.kind in ("action", "approval"):
+            item.update(stepKind=s.kind, stepValue=s.step_value)
+        if s.checks is not None:
+            item["checks"] = s.checks
         stages.append(item)
     obj = {"name": d.name, "version": d.version, "description": d.description, "maxSteps": d.max_steps,
            "sourceSha256": d.source_sha256, "warnings": [dict(w) for w in d.warnings], "stages": stages}
+    if d.compiled_steps:
+        obj["compiledSteps"] = True
     if d.board is not None:
         b = d.board
         def thaw(value):
@@ -759,6 +864,15 @@ def _parse_file(path: str, label: str, name: str, prompt_base: str) -> Definitio
                     continue
                 if key not in prompts:
                     prompts[key] = _read_prompt(prompt_base, key)
+    steps = obj.get("steps") if isinstance(obj, dict) else None
+    if isinstance(steps, list):
+        for step in steps:
+            agent = step.get("agent") if isinstance(step, dict) else None
+            rel = agent.get("prompt") if isinstance(agent, dict) else None
+            if isinstance(rel, str) and rel:
+                rel = _step_prompt_path(rel)
+                if rel not in prompts:
+                    prompts[rel] = _read_prompt(prompt_base, rel)
     try:
         d = parse_obj(obj, label, prompts, name=name, source_sha256=hashlib.sha256(raw).hexdigest())
     except AsError as e:

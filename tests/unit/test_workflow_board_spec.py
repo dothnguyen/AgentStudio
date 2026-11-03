@@ -12,6 +12,7 @@ from agent_studio.protocol import AsError
 class BoardSpecTests(unittest.TestCase):
     def setUp(self):
         self.obj = {"version": 2, "startsAt": "dev-ready", "whileRunning": "deving",
+                    "stages": [{"id": "check", "type": "validation"}],
                     "role": "Developer", "priority": 10, "workspace": "worktree", "syncBase": True,
                     "waitForDependencies": False, "createdTickets": "none",
                     "end": {"pass": {"status": "merged", "releaseCreatedTickets": {"from": "none", "to": "ready"}},
@@ -20,6 +21,8 @@ class BoardSpecTests(unittest.TestCase):
                                "onFailPriority": 0}}
 
     def parse(self, obj):
+        obj = dict(obj)
+        obj.setdefault("stages", [{"id": "check", "type": "validation"}])
         return workflowdef.parse_obj(obj, "develop.yaml")
 
     def test_board_values_are_frozen_and_survive_round_trip(self):
@@ -95,9 +98,9 @@ class BoardSpecTests(unittest.TestCase):
                     self.parse(obj)
                 self.assertIn(path, [item["path"] for item in error.exception.data["errors"]])
 
-    def test_board_does_not_require_stages_or_end_when_not_board(self):
+    def test_non_board_definition_does_not_require_end(self):
         parsed = self.parse({"version": 2})
-        self.assertEqual(parsed.stages, ())
+        self.assertEqual(len(parsed.stages), 1)
         self.assertIsNone(parsed.board)
 
     def test_missing_end_reports_both_required_outcomes(self):
