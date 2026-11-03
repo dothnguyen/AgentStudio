@@ -49,6 +49,7 @@ TOKEN_RE = re.compile(r"\{([A-Za-z0-9_]+)\}")
 MARKER_RE = re.compile(r"^[ \t]*AGENT_STUDIO_DELEGATE[ \t]+(\{.*\})[ \t]*$", re.M)
 MAX_COMMANDS = 50
 MAX_OUTPUT = 64 * 1024
+MAX_FAILURE_BLOCKS = 12 * 1024
 OPEN = ("requested", "approved", "running")
 TERMINAL = ("succeeded", "failed", "rejected", "cancelled")
 PROXY_ENV = ("HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "ALL_PROXY",
@@ -623,8 +624,14 @@ def result_text(reqs: list) -> str:
             status = "TIMED OUT"
         else:
             status = "SUCCEEDED" if res.get("exitCode") == 0 else f"FAILED (exit {res.get('exitCode')})"
+        failure_blocks = res.get("failureBlocks") or ""
         tail = res.get("outputTail") or ""
-        parts.append(head + f"{status}, {res.get('durationMs', 0)} ms.\n" + (f"Output (last part):\n{tail}" if tail else
+        output = []
+        if failure_blocks:
+            output.append(f"Failure/error blocks:\n{failure_blocks}")
+        if tail and tail.strip() not in failure_blocks:
+            output.append(f"Output (last part):\n{tail}")
+        parts.append(head + f"{status}, {res.get('durationMs', 0)} ms.\n" + ("\n\n".join(output) if output else
                                                                                "(no output)"))
     return "\n\n".join(parts) or "(no delegated commands)"
 
@@ -846,6 +853,51 @@ def _tail(path: str, limit: int = 2000) -> str:
         return ""
 
 
+_FAILURE_LINE = re.compile(r"^(?:FAIL(?:ED)?(?:\s|:|\()|ERROR(?:\s|:|\()|Traceback \(most recent call last\):)",
+                           re.IGNORECASE)
+_BLOCK_BOUNDARY = re.compile(r"^[=_-]{5,}$")
+
+
+def _failure_blocks(path: str, tail: str = "", limit: int = MAX_FAILURE_BLOCKS) -> str:
+    """Return bounded failure/error regions even when later output pushes them out of the tail."""
+    try:
+        with open(path, "rb") as f:
+            text = f.read(MAX_OUTPUT).decode("utf-8", "replace")
+    except OSError:
+        text = ""
+    if tail and tail not in text:
+        text += "\n" + tail
+    lines = text.splitlines()
+    spans = []
+    for i, line in enumerate(lines):
+        if not _FAILURE_LINE.match(line.strip()):
+            continue
+        start = i - 1 if i and _BLOCK_BOUNDARY.match(lines[i - 1].strip()) else i
+        end = min(len(lines), i + 40)
+        for j in range(i + 1, end):
+            if j > i + 1 and _BLOCK_BOUNDARY.match(lines[j].strip()):
+                end = j + 1
+                break
+        if spans and start <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(spans[-1][1], end))
+        else:
+            spans.append((start, end))
+    chunks = []
+    used = 0
+    for start, end in spans:
+        chunk = "\n".join(lines[start:end]).strip()
+        if not chunk:
+            continue
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining].rstrip() + "\n[failure output truncated]"
+        chunks.append(chunk)
+        used += len(chunk) + 2
+    return "\n\n".join(chunks)
+
+
 def run_delegated(run_dir: str) -> int:
     """Entry point of `agent-studio delegate-run --dir DIR` (detached). Writes result.json last."""
     with open(os.path.join(run_dir, "request.json"), encoding="utf-8") as f:
@@ -914,6 +966,7 @@ def run_delegated(run_dir: str) -> int:
             res["trackedChanges"] = _changed(before, after)[:50] or ["(tracked files changed)"]
     res["durationMs"] = int((time.monotonic() - started) * 1000)
     res.setdefault("outputTail", _tail(out_path))
+    res["failureBlocks"] = _failure_blocks(out_path, res["outputTail"])
     res["passed"] = (res["error"] is None and not res["timedOut"] and res["exitCode"] == 0
                      and not res.get("trackedChanges"))
     tmp = os.path.join(run_dir, "result.json.tmp")

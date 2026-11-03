@@ -281,7 +281,9 @@ class Text(unittest.TestCase):
         rows = [{"ordinal": 1, "command_id": "a", "argv_json": '["npm","ci"]', "status": "succeeded",
                  "result_json": json.dumps({"exitCode": 0, "durationMs": 5, "outputTail": "added 3"})},
                 {"ordinal": 2, "command_id": "b", "argv_json": '["x"]', "status": "failed",
-                 "result_json": json.dumps({"exitCode": None, "timedOut": True, "durationMs": 9})},
+                 "result_json": json.dumps({"exitCode": None, "timedOut": True, "durationMs": 9,
+                                            "failureBlocks": "ERROR: test_b\nAssertionError: expected true",
+                                            "outputTail": "later passing output"})},
                 {"ordinal": 3, "command_id": "c", "argv_json": '["x"]', "status": "rejected",
                  "result_json": json.dumps({"rejectedReason": "no"})},
                 {"ordinal": 4, "command_id": "d", "argv_json": '["x"]', "status": "failed",
@@ -289,6 +291,8 @@ class Text(unittest.TestCase):
         text = delegation.result_text(rows)
         self.assertIn("[1] a (`npm ci`): SUCCEEDED, 5 ms.\nOutput (last part):\nadded 3", text)
         self.assertIn("[2] b (`x`): TIMED OUT", text)
+        self.assertIn("Failure/error blocks:\nERROR: test_b\nAssertionError: expected true", text)
+        self.assertIn("Output (last part):\nlater passing output", text)
         self.assertIn("[3] c (`x`): NOT RUN - rejected: no", text)
         self.assertIn("changed tracked files, which this command may not do: package.json", text)
 
@@ -359,6 +363,29 @@ class Runner(unittest.TestCase):
         self.assertEqual((bad["exitCode"], bad["passed"]), (3, False))
         missing = self.run_cmd(["definitely-not-a-command-xyz"])
         self.assertIn("command not found", missing["error"])
+
+    def test_failure_blocks_survive_later_passing_output(self):
+        script = ("import sys\n"
+                  "print('=' * 70)\n"
+                  "print('ERROR: test_early_failure (tests.Example)')\n"
+                  "print('-' * 70)\n"
+                  "print('Traceback (most recent call last):')\n"
+                  "print('  File \\\"test_example.py\\\", line 7, in test_early_failure')\n"
+                  "print('AssertionError: expected true')\n"
+                  "print('=' * 70)\n"
+                  "print('later passing output\\n' * 300)\n"
+                  "sys.exit(1)\n")
+        failed = self.run_cmd([PY, "-c", script])
+        self.assertFalse(failed["passed"])
+        self.assertNotIn("test_early_failure", failed["outputTail"])
+        self.assertIn("ERROR: test_early_failure", failed["failureBlocks"])
+        self.assertIn("AssertionError: expected true", failed["failureBlocks"])
+        row = {"ordinal": 1, "command_id": "x", "argv_json": '["python"]', "status": "failed",
+               "result_json": json.dumps(failed)}
+        resumed = delegation.result_text([row])
+        self.assertIn("Failure/error blocks:", resumed)
+        self.assertIn("AssertionError: expected true", resumed)
+        self.assertIn("Output (last part):", resumed)
 
     def test_timeout(self):
         r = self.run_cmd([PY, "-c", "import time; time.sleep(30)"], timeoutMs=1000)
