@@ -55,7 +55,7 @@ USAGE = """agent-studio <command>
   team workflows|check NAME [--bind ROLE=MEMBER ...]   workflow definitions / validate one against the team
   team retry [--workflow ID]               run the stuck stage of the team's running or paused workflow again
   team blocked                             members waiting for a decision, and how to free them
-  team resolve (--member M | --assignment ID) --action fail|retry|cancel   free a blocked member
+  team resolve (--member M | --assignment ID) --action fail|retry|cancel [--answer TEXT]   free a blocked member
   team run-workflow NAME --story PATH      deliver a story with a workflow; records what `team commit` needs
                 (all of the above take [--team ID|UUID] [--workspace PATH] [--json])
   team unpack BRIEF --out DIR [--member M]   product owner (else team lead) turns a feature brief into story files
@@ -72,7 +72,7 @@ USAGE = """agent-studio <command>
               [--deadline-ms N] [--wait]   give one idle agent a task; --wait follows it to the end
   task show --task ID                      a task, its assignments and its event history
   assignment cancel --assignment ID        cancel queued or running work (exactly one outcome wins)
-  assignment resolve --assignment ID --action retry|fail|cancel [--policy P]
+  assignment resolve --assignment ID --action retry|fail|cancel [--policy P] [--answer TEXT]
                                            settle waiting_input / reconciling work or a paused workflow stage
   workflow list --team ID                  workflow definitions available to the team's workspace
   workflow validate --team ID --definition NAME [--bind ROLE=AGENT ...]
@@ -468,6 +468,7 @@ def _human_request(argv) -> dict:
     asg_p.add_argument("action", choices=["cancel", "resolve"])
     asg_p.add_argument("--action", dest="resolve_action", choices=["retry", "fail", "cancel"])
     asg_p.add_argument("--policy")
+    asg_p.add_argument("--answer")
     asg_p.add_argument("--assignment", required=True)
     asg_p.add_argument("--key")
     asg_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
@@ -627,6 +628,8 @@ def _human_request(argv) -> dict:
             req.update(command="assignment.resolve", args={"assignmentId": ns.assignment, "action": ns.resolve_action})
             if ns.policy:
                 req["args"]["policy"] = ns.policy
+            if ns.answer is not None:
+                req["args"]["answer"] = ns.answer
         else:
             req.update(command="assignment.cancel", args={"assignmentId": ns.assignment})
         req.update(idempotencyKey=ns.key or str(uuid.uuid4()), timeoutMs=ns.timeout_ms)

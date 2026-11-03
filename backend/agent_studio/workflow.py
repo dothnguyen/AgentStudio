@@ -13,6 +13,8 @@ panes, and it has no role names, stage ids, or provider-specific branches. Outco
   any cancelled stage, or an operator cancel -> cancelled
   agent stage that requested delegated commands (P06) -> delegating: the coordinator runs the approved commands,
                          then re-dispatches the same stage (same visit) with their results; never routed meanwhile
+  agent stage waiting for input -> paused; assignment.resolve retry with an answer re-dispatches the same stage
+                         (same visit), resuming the provider session when it can
   a run with no frozen definition (started by P00 before the upgrade) -> paused LEGACY_WORKFLOW_RUN, cancel only
 """
 from __future__ import annotations
@@ -22,7 +24,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from . import crashpoints, delegation, gitws, procid, prompts, tasks, validation, workflowdef
+from . import crashpoints, delegation, gitws, needsinput, procid, prompts, tasks, validation, workflowdef
 from .protocol import AsError, BAD_REQUEST
 from .providers.base import valid_verdict
 from .state import utcnow
@@ -75,6 +77,15 @@ def _validation_text(val: dict) -> str:
 
 def _loads(text, default=None):
     return json.loads(text) if text else default
+
+
+def _loads_object(text) -> dict:
+    """Parse a JSON object, treating unparseable text and non-objects as {}."""
+    try:
+        value = json.loads(text) if text else {}
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _cancel_requested(tx: Tx, wf_id: str) -> bool:
@@ -683,6 +694,44 @@ def _resume_after_delegation(tx: Tx, wf: dict, sa: dict, reqs: list, ctx: dict) 
              "requests": [{"id": r["id"], "command": r["command_id"], "status": r["status"]} for r in reqs]})
     delegation.ticket_note(tx, wf["id"], "ticket.delegation_resumed", {"stage": sa["stage"], "assignmentId": new})
     return True
+
+
+def _answer_resume(tx: Tx, wf: dict, a: dict, st, ctx: dict) -> Optional[dict]:
+    """The provider session to resume after the operator answered a waiting stage, or None to start fresh.
+    Needs the session id recorded by the waiting attempt, the same provider on the bound agent, and an adapter
+    whose provider can resume. The delegation catalog flag does not apply here."""
+    result = _loads_object(a["result_json"])
+    sid = result.get("providerSessionId")
+    if not isinstance(sid, str) or not sid:
+        return None
+    agent = tx.get("agent", _loads(wf["bindings_json"], {})[st.role])
+    if agent["provider_id"] != a["provider_id"]:
+        return None
+    adapter, _alias = tasks.adapter_for(agent, ctx)
+    if not getattr(adapter, "supports_session_resume", False):
+        return None
+    return {"sessionId": sid}
+
+
+def answer_dispatch(tx: Tx, wf: dict, sa: dict, a: dict, answer: str, ctx: dict) -> tuple:
+    """Re-dispatch the stage that waited for input with the operator's answer; returns (new assignment id, resumed)."""
+    st = _stage_of(wf, sa["stage"])
+    question = needsinput.input_question(_loads_object(a["result_json"]))
+    request = _loads_object(a["request_json"])
+    original = _read(request.get("fallbackPromptFile") or sa["prompt_path"])
+    prompt = prompts.answer_prompt(original, question, answer)
+    if st.kind == "verdict":
+        prompt += "\n" + prompts.VERDICT_FOOTER
+    resume = _answer_resume(tx, wf, a, st, ctx)
+    if resume is not None:
+        resume["fullPrompt"] = prompt
+        prompt = prompts.answer_message(question, answer)
+        if st.kind == "verdict":
+            prompt += "\n" + prompts.VERDICT_FOOTER
+    new = _dispatch(tx, wf["id"], sa["stage"], prompt, ctx, from_assignment=a["id"], resume=resume)
+    delegation.ticket_note(tx, wf["id"], "ticket.input_answered",
+                           {"stage": sa["stage"], "assignmentId": new, "resumedSession": bool(resume)})
+    return new, bool(resume)
 
 
 # ---- routing ----------------------------------------------------------------------------------------

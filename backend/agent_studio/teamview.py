@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import roles, teamdefs, teamstatus, textsafe
+from . import needsinput, roles, teamdefs, teamstatus, textsafe
 from .protocol import AsError
 from .teams import ACTIVE
 
@@ -135,6 +135,7 @@ SELECT * FROM (
            ag.member_id AS member_id,
            (SELECT key FROM tickets WHERE active_run_id = w.id ORDER BY updated_at DESC, rowid DESC LIMIT 1) AS ticket_key,
            a.id AS assignment_id, a.status AS assignment_status, a.diagnostic_code AS diagnostic_code,
+           a.result_json AS result_json, a.updated_at AS assignment_updated_at,
            sa.phase AS phase,
            ROW_NUMBER() OVER (PARTITION BY w.team_id ORDER BY w.updated_at DESC, w.rowid DESC) AS rn
     FROM workflow_runs w
@@ -180,10 +181,15 @@ def _one_line_or_none(value, limit):
 
 
 def _attention_run(row):
+    needs = needsinput.needs_input(row["assignment_status"], row["result_json"], row["assignment_updated_at"])
+    if needs is not None:
+        # one_line may append " ..." after the limit; attention questions are strictly <= MAX_TEXT.
+        needs["question"] = textsafe.one_line(needs["question"], MAX_TEXT)[:MAX_TEXT]
     return {"workflowRunId": row["run_id"], "status": row["status"], "stage": _str(row["stage"]),
             "memberId": _str(row["member_id"]), "ticketKey": _str(row["ticket_key"]),
             "assignmentId": _str(row["assignment_id"]), "assignmentStatus": _str(row["assignment_status"]),
-            "diagnosticCode": _str(row["diagnostic_code"]), "delegating": row["phase"] == "delegating"}
+            "diagnosticCode": _str(row["diagnostic_code"]), "delegating": row["phase"] == "delegating",
+            "needsInput": needs}
 
 
 def _attention_command(row):

@@ -114,3 +114,22 @@ def resume_prompt(original: str, delegated: str, summary: Optional[str]) -> str:
     out += section("PREVIOUS_SUMMARY", summary or EMPTY["summary"], PROMPT_LIMITS["summary"])
     out += section("DELEGATED", delegated, PROMPT_LIMITS["delegated"])
     return out
+
+
+ANSWER_LIMIT = 16 * 1024
+
+
+def answer_message(question: str, answer: str) -> str:
+    """The whole message sent to a RESUMED provider session after the operator answered its question."""
+    return ("Agent Studio coordinator: the operator answered the question you asked. Continue from where you stopped "
+            "and do not repeat finished work.\n"
+            + section("QUESTION", question, ANSWER_LIMIT) + section("ANSWER", answer, ANSWER_LIMIT))
+
+
+def answer_prompt(original: str, question: str, answer: str) -> str:
+    """The prompt of a stage re-dispatched (fresh session) after the operator answered its question."""
+    out = original if original.endswith("\n") else original + "\n"
+    out += ("\nThis is a continuation. Your previous attempt at this stage stopped to ask a question, and the operator "
+            "has answered it. The workspace is as you left it. Continue the task from where you stopped; do not repeat "
+            "finished work.\n")
+    return out + section("QUESTION", question, ANSWER_LIMIT) + section("ANSWER", answer, ANSWER_LIMIT)

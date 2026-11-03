@@ -7,7 +7,8 @@ Allowed only for an assignment that is `waiting_input` or `reconciling`, or that
   cancel  -> assignment cancelled; direct task cancelled; paused workflow cancelled
   retry   -> the old attempt is closed (SUPERSEDED_BY_RETRY) and a NEW assignment (new ID, attempt + 1) is queued
              for the same agent; a different policy must be asked for explicitly and is recorded; a paused
-             workflow resumes from the same stage with the same prompt
+             workflow resumes from the same stage with the same prompt, or, given `answer` for a `waiting_input`
+             stage, with the question and answer (in the same provider session when it can resume)
 """
 from __future__ import annotations
 
@@ -111,6 +112,12 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
             (task["workspace"], task["id"]) + tasks.ACTIVE).fetchone()
         if holder:
             raise AsError(tasks.WORKSPACE_BUSY, f"The workspace has other active mutating work ({holder['id']}).")
+    answer = args.get("answer")
+    if answer is not None and not wf:
+        raise AsError(BAD_REQUEST, "answer is only for a workflow stage waiting for input.")
+    if answer is not None and a["status"] != "waiting_input":
+        raise AsError(RESOLVE_NOT_ALLOWED, f"Assignment {a['id']} is {a['status']}; answer applies only to an "
+                      "assignment waiting for input.")
     _close(tx, a, "failed", "SUPERSEDED_BY_RETRY", reason)
     policy_change = {"from": a["policy"], "to": policy} if policy != a["policy"] else None
 
@@ -120,6 +127,13 @@ def resolve(tx: Tx, args: dict, ctx: dict) -> dict:
         if wf_row["status"] == "paused":
             tx.transition("workflow_run", wf["id"], "running",
                           set_values={"transition_reason": f"resumed by the operator ({current['stage']} retried)"})
+        if answer is not None:
+            new, resumed = workflow.answer_dispatch(tx, tx.get("workflow_run", wf["id"]), current, a, answer, ctx)
+            tx.note("workflow_run", wf["id"], "workflow_run.answered",
+                    {"stage": current["stage"], "fromAssignmentId": a["id"], "toAssignmentId": new,
+                     "resumedSession": resumed})
+            return dict(out, status="answered", newAssignmentId=new, stage=current["stage"],
+                        resumedSession=resumed)
         with open(current["prompt_path"], encoding="utf-8") as f:
             prompt = f.read()
         new = workflow._dispatch(tx, wf_row["id"], current["stage"], prompt, ctx, from_assignment=a["id"],

@@ -14,7 +14,7 @@ import os
 import re
 from typing import Optional
 
-from . import roles as rolefiles, workflowdef
+from . import needsinput, roles as rolefiles, workflowdef
 from .protocol import AsError, BAD_REQUEST, BOARD_CONFIG_INVALID, BOARD_RULE_MISSING, BOARD_STATUS_UNKNOWN, FORBIDDEN, \
     PHASE_CLOSED, PHASE_EXISTS, PHASE_NOT_EMPTY, PHASE_NOT_FOUND, PHASE_PROTECTED, TICKET_BUSY, \
     TICKET_DEPENDENCY_CYCLE, TICKET_DUPLICATE, TICKET_NOT_FOUND, \
@@ -752,7 +752,21 @@ def _ticket_json(conn, row, config=None) -> dict:
     out["phase"] = phase["slug"] if phase else None
     out["phaseName"] = phase["name"] if phase else None
     out["activity"] = ticket_activity(conn, row, config)
+    out["needsInput"] = ticket_needs_input(conn, row)
     return out
+
+
+def ticket_needs_input(conn, row) -> dict | None:
+    """needsInput of a claimed ticket whose run's current assignment waits for input, else None."""
+    if not row["active_run_id"]:
+        return None
+    a = conn.execute(
+        "SELECT a.status, a.result_json, a.updated_at FROM stage_attempts s JOIN assignments a "
+        "ON a.id = s.assignment_id WHERE s.workflow_run_id = ? AND s.status = 'active' "
+        "ORDER BY s.rowid DESC LIMIT 1", (row["active_run_id"],)).fetchone()
+    if a is None:
+        return None
+    return needsinput.needs_input(a["status"], a["result_json"], a["updated_at"])
 
 
 def ticket_activity(conn, row, config=None) -> dict:
@@ -1580,6 +1594,7 @@ def board_show(conn, workspace: str) -> dict:
         columns = {column: 0 for column in KANBAN_COLUMNS}
         workflow = {status: 0 for status in config_status_ids(config)}
         column_workflow = {column: {} for column in KANBAN_COLUMNS}
+        needs_input = 0
         if row["id"]:
             for counts in conn.execute(
                 "SELECT status, COALESCE(workflow_status, status) AS workflow, COUNT(*) AS n "
@@ -1588,9 +1603,14 @@ def board_show(conn, workspace: str) -> dict:
                 columns[counts["status"]] = columns.get(counts["status"], 0) + counts["n"]
                 workflow[counts["workflow"]] = workflow.get(counts["workflow"], 0) + counts["n"]
                 column_workflow.setdefault(counts["status"], {})[counts["workflow"]] = counts["n"]
+            needs_input = conn.execute(
+                "SELECT COUNT(DISTINCT t.id) FROM tickets t JOIN stage_attempts s "
+                "ON s.workflow_run_id = t.active_run_id AND s.status = 'active' "
+                "JOIN assignments a ON a.id = s.assignment_id "
+                "WHERE t.phase_id = ? AND a.status = 'waiting_input'", (row["id"],)).fetchone()[0]
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
                            ticketCount=sum(columns.values()), columns=columns, workflow=workflow,
-                           columnWorkflow=column_workflow))
+                           columnWorkflow=column_workflow, needsInput=needs_input))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}
 
 

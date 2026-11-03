@@ -19,6 +19,7 @@ from .protocol import (AsError, BAD_REQUEST, INTERNAL, UNKNOWN_COMMAND, UNSUPPOR
 
 MAX_ECHO_BYTES = 256 * 1024
 DEFAULT_TIMEOUT_MS = 30000
+RESOLVE_ANSWER_MAX = 16000
 
 
 def _coordinator_start(args, req):
@@ -892,6 +893,11 @@ def _validate_resolve(args):
         out["policy"] = args["policy"]
     if args.get("debugProviderOptions") is not None:
         out["debugProviderOptions"] = _validate_fake_options(args["debugProviderOptions"])
+    if args.get("answer") is not None:
+        answer = args["answer"]
+        if action != "retry" or not isinstance(answer, str) or not answer.strip() or len(answer) > RESOLVE_ANSWER_MAX:
+            raise AsError(BAD_REQUEST, "answer is only for retry: a non-empty string of at most 16000 characters.")
+        out["answer"] = answer.strip()
     return out
 
 

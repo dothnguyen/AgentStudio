@@ -119,9 +119,9 @@ def _apply_finished(tx, workspace: str, ctx: dict) -> int:
         if tx.conn.execute("SELECT 1 FROM agents a JOIN stage_attempts s ON s.assignment_id = a.pending_assignment "
                            "WHERE a.pending_agent IS NOT NULL AND s.workflow_run_id = ?", (row["run"],)).fetchone():
             continue
-        if run["status"] not in boardmodel.FINISHED_RUN_STATES:
+        if _waiting_input(tx, row["run"]):
             continue
-        if run["status"] == "paused" and _waiting(tx, row["run"]):
+        if run["status"] not in boardmodel.FINISHED_RUN_STATES:
             continue
         ticket = boardmodel.get_ticket(tx.conn, workspace, row["key"])
         result = boardmodel.run_result(tx.conn, dict(run))
@@ -147,13 +147,12 @@ def _apply_finished(tx, workspace: str, ctx: dict) -> int:
     return applied
 
 
-def _waiting(tx, run_id: str) -> bool:
-    """True when the run's newest active stage attempt is waiting for operator input (T-204 resumes it)."""
-    row = tx.conn.execute(
-        "SELECT a.status FROM stage_attempts s JOIN assignments a ON a.id = s.assignment_id "
-        "WHERE s.workflow_run_id = ? AND s.status = 'active' ORDER BY s.rowid DESC LIMIT 1",
-        (run_id,)).fetchone()
-    return row is not None and row["status"] == "waiting_input"
+def _waiting_input(tx, run_id: str) -> bool:
+    """The run's current stage waits for an answer: the claim, status and rounds stay as they are."""
+    return tx.conn.execute(
+        "SELECT 1 FROM stage_attempts s JOIN assignments a ON a.id = s.assignment_id "
+        "WHERE s.workflow_run_id = ? AND s.status = 'active' AND a.status = 'waiting_input' LIMIT 1",
+        (run_id,)).fetchone() is not None
 
 
 def _end_paused_run(tx, run_id: str, result: str, ctx: dict) -> None:
@@ -251,7 +250,8 @@ def _recover(tx, workspace: str, ctx: dict) -> dict:
     A lease protects only the gap between claiming a ticket and successfully starting its workflow. Once
     ``active_run_id`` is recorded, assignment/process reconciliation owns crash detection and the workflow
     may legitimately run longer than ``leaseSeconds``. An expired pending claim is released exactly once
-    and returned to its rule's status. Worktrees the board created that no ticket references are removed.
+    and returned to its rule's status. A run waiting for input keeps its claim; it is never expired.
+    Worktrees the board created that no ticket references are removed.
     """
     out = {"released": 0, "worktrees": 0}
     now = utcnow()

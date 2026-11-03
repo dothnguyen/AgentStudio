@@ -243,7 +243,7 @@ agent-studio task direct --team <teamId> --agent <agentId> --policy read_only --
 #   fake agents: add --scenario slow --duration-ms 8000 to watch it run; --text-file PATH (or -) for long tasks
 agent-studio task show --task <taskId> --pretty
 agent-studio assignment cancel --assignment <assignmentId>
-agent-studio assignment resolve --assignment <assignmentId> --action retry|fail|cancel   # see RECOVERY.md
+agent-studio assignment resolve --assignment <assignmentId> --action retry|fail|cancel [--answer TEXT]   # see RECOVERY.md
 agent-studio snapshot --team <teamId> --pretty           # status comes from here, never from pane text
 agent-studio team stop --team <teamId>
 ```

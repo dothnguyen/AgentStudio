@@ -1,4 +1,5 @@
 """P07 attention read model: stuck runs, delegated commands and blocked tickets in `team.overview`."""
+import json
 import unittest
 from unittest.mock import patch
 
@@ -85,7 +86,7 @@ class AttentionReadModelTests(unittest.TestCase):
         self.assertEqual(attention["runs"], [{
             "workflowRunId": run, "status": "paused", "stage": "develop", "memberId": "dev",
             "ticketKey": "T-101", "assignmentId": assignment, "assignmentStatus": "failed",
-            "diagnosticCode": "PROCESS_EXITED", "delegating": False}])
+            "diagnosticCode": "PROCESS_EXITED", "delegating": False, "needsInput": None}])
 
     def test_delegating_run_links_member_even_when_current_agent_is_cleared(self):
         self.core()
@@ -249,7 +250,7 @@ class AttentionReadModelTests(unittest.TestCase):
         self.assertEqual(entry, {
             "workflowRunId": run, "status": "queued", "stage": None, "memberId": None,
             "ticketKey": None, "assignmentId": None, "assignmentStatus": None,
-            "diagnosticCode": None, "delegating": False})
+            "diagnosticCode": None, "delegating": False, "needsInput": None})
 
     def test_blocked_tickets_are_newest_first_and_workspace_scoped(self):
         self.core()
@@ -358,6 +359,38 @@ class AttentionReadModelTests(unittest.TestCase):
         self.assertEqual(self.team(out, "core")["attention"]["commandRequests"], [])
         self.assertEqual(len(self.team(out, "core")["attention"]["runs"]), 1)
         self.assertTrue(out["partial"])
+
+    def test_waiting_input_run_shows_needs_input(self):
+        self.core()
+        team, ids = self.seed_runtime("core", agents=(("dev", "busy"),))
+        run, assignment, _ = self.seed_run(team, ids["dev"], run_status="paused",
+                                           assignment_status="waiting_input",
+                                           diagnostic="INPUT_REQUIRED", phase="assignment")
+        self.conn.execute("UPDATE assignments SET result_json = ? WHERE id = ?",
+                          (json.dumps({"attention": {"kind": "input_required",
+                                                     "items": ["Which database?"]}}), assignment))
+        self.conn.commit()
+        since = self.conn.execute("SELECT updated_at FROM assignments WHERE id = ?", (assignment,)).fetchone()[0]
+        self.seed_ticket("T-101", "Build it", ids["dev"], run)
+        entry = self.team(self.ov(), "core")["attention"]["runs"][0]
+        self.assertEqual(entry["ticketKey"], "T-101")
+        self.assertEqual(entry["needsInput"], {"question": "Which database?", "since": since})
+
+    def test_waiting_input_attention_question_is_one_line_and_bounded(self):
+        self.core()
+        team, ids = self.seed_runtime("core", agents=(("dev", "busy"),))
+        run, assignment, _ = self.seed_run(team, ids["dev"], run_status="paused",
+                                           assignment_status="waiting_input",
+                                           diagnostic="INPUT_REQUIRED", phase="assignment")
+        self.conn.execute("UPDATE assignments SET result_json = ? WHERE id = ?",
+                          (json.dumps({"attention": {"kind": "input_required",
+                                                     "items": ["line one\n" + "x" * 300]}}), assignment))
+        self.conn.commit()
+        self.seed_ticket("T-102", "Build it", ids["dev"], run)
+        question = self.team(self.ov(), "core")["attention"]["runs"][0]["needsInput"]["question"]
+        self.assertNotIn("\n", question)
+        # needsInput attention questions have a strict 200 character contract.
+        self.assertLessEqual(len(question), 200)
 
     def test_attention_reads_write_no_events(self):
         self.core()

@@ -68,6 +68,7 @@ def _parser(action):
         p.add_argument("--member")
         p.add_argument("--assignment")
         p.add_argument("--action", dest="resolve_action")
+        p.add_argument("--answer")
     elif action in ("run-board", "stop-board"):
         pass  # --team / --workspace / --json only
     elif action == "switch-agent":
@@ -362,7 +363,8 @@ def _resolve(ns):
         snap_agent = next((a.get("agentId") for a in _snapshot(team).get("assignments", [])
                            if a["id"] == assignment), None)
         name = _name_of(members, snap_agent)
-    data = _write_call("assignment.resolve", {"assignmentId": assignment, "action": ns.resolve_action})
+    data = _write_call("assignment.resolve", {"assignmentId": assignment, "action": ns.resolve_action,
+                                               **({"answer": ns.answer} if ns.answer is not None else {})})
     return data, lambda d: f"{name}: assignment {assignment} resolved with {ns.resolve_action}"
 
 
