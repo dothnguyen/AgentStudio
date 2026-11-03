@@ -40,7 +40,9 @@ MAX_STAGES = 20
 DEFAULT_MAX_STEPS = 20
 DIFF_PLACEHOLDER = "{{diff}}"
 
-_TOP_KEYS = ("version", "description", "maxSteps", "stages")
+_BOARD_KEYS = ("startsAt", "whileRunning", "role", "priority", "workspace", "syncBase",
+               "waitForDependencies", "createdTickets", "end", "limits")
+_TOP_KEYS = ("version", "description", "maxSteps", "stages") + _BOARD_KEYS
 _FROZEN_TOP_KEYS = _TOP_KEYS + ("name", "sourceSha256", "warnings")
 _STAGE_KEYS = ("id", "type", "role", "permission", "prompt", "promptFile", "maxVisits", "passRequires", "next",
                "delegates", "passRequiresCommands")
@@ -67,6 +69,20 @@ class Stage:
 
 
 @dataclass(frozen=True)
+class BoardSpec:
+    starts_at: str
+    while_running: str
+    role: Optional[str]
+    priority: int
+    workspace: Optional[str]
+    sync_base: Optional[bool]
+    wait_for_dependencies: Optional[bool]
+    created_tickets: Optional[str]
+    end: Mapping
+    limits: Mapping
+
+
+@dataclass(frozen=True)
 class Definition:
     name: str
     version: int
@@ -75,6 +91,7 @@ class Definition:
     stages: tuple
     source_sha256: str
     warnings: tuple
+    board: Optional[BoardSpec] = None
 
 
 class _Problem:
@@ -359,21 +376,111 @@ def _pass_requires(c: _Collector, p: str, st: dict, info: dict, ctx: dict) -> No
 
 # ---- whole definition ------------------------------------------------------------------------------------------
 
+def _board(c: _Collector, obj: dict) -> Optional[BoardSpec]:
+    # Import here: boardmodel itself uses workflowdef.
+    from .boardmodel import WORKSPACE_MODES
+
+    def status(value, path):
+        if not isinstance(value, str) or not NAME_RE.fullmatch(value):
+            c.err(path, "must be a status slug")
+
+    def mapping(value, path, allowed, required=()):
+        if not isinstance(value, dict):
+            c.err(path, "must be an object")
+            return {}
+        for key in value:
+            if key not in allowed:
+                c.err(f"{path}.{key}", f'unknown key "{key}"')
+        for key in required:
+            if key not in value:
+                c.err(f"{path}.{key}", "is required")
+        return value
+
+    def number(value, path, minimum):
+        if not _is_int(value) or value < minimum:
+            c.err(path, f"must be an integer >= {minimum}")
+
+    for key in ("startsAt", "whileRunning", "createdTickets"):
+        if key in obj:
+            status(obj[key], key)
+    if "role" in obj and (not isinstance(obj["role"], str) or not obj["role"].strip()
+                          or _text_problem(obj["role"], "role")):
+        c.err("role", "must be non-empty text")
+    if "priority" in obj:
+        number(obj["priority"], "priority", 0)
+    if "workspace" in obj and obj["workspace"] not in WORKSPACE_MODES:
+        c.err("workspace", f"must be one of {list(WORKSPACE_MODES)}")
+    for key in ("syncBase", "waitForDependencies"):
+        if key in obj and not isinstance(obj[key], bool):
+            c.err(key, "must be a boolean")
+    is_board = "startsAt" in obj
+    if is_board and "whileRunning" not in obj:
+        c.err("whileRunning", "is required when startsAt is present")
+    end = mapping(obj["end"], "end", ("pass", "fail", "blocked"),
+                  ("pass", "fail") if is_board else ()) if "end" in obj else {}
+    if is_board and "end" not in obj:
+        c.err("end.pass", "is required when startsAt is present")
+        c.err("end.fail", "is required when startsAt is present")
+    for key in ("pass", "fail"):
+        if key not in end:
+            continue
+        value, path = end[key], f"end.{key}"
+        if isinstance(value, dict):
+            value = mapping(value, path, ("status", "releaseCreatedTickets"), ("status",))
+            if "status" in value:
+                status(value["status"], f"{path}.status")
+            if "releaseCreatedTickets" in value:
+                rp = f"{path}.releaseCreatedTickets"
+                release = mapping(value["releaseCreatedTickets"], rp, ("from", "to"), ("from", "to"))
+                for field in ("from", "to"):
+                    if field in release:
+                        status(release[field], f"{rp}.{field}")
+        else:
+            status(value, path)
+    if "blocked" in end:
+        blocked = mapping(end["blocked"], "end.blocked", ("status", "returnTo"), ("status",))
+        for field in ("status", "returnTo"):
+            if field in blocked:
+                status(blocked[field], f"end.blocked.{field}")
+    limits = mapping(obj["limits"], "limits", ("maxRuns", "failuresInARow", "onFailPriority")) if "limits" in obj else {}
+    for key, minimum in (("maxRuns", 1), ("onFailPriority", 0)):
+        if key in limits:
+            number(limits[key], f"limits.{key}", minimum)
+    if "failuresInARow" in limits:
+        path = "limits.failuresInARow"
+        failures = mapping(limits["failuresInARow"], path, ("count", "status"), ("count", "status"))
+        if "count" in failures:
+            number(failures["count"], f"{path}.count", 1)
+        if "status" in failures:
+            status(failures["status"], f"{path}.status")
+    def freeze(value):
+        return MappingProxyType({k: freeze(v) for k, v in value.items()}) if isinstance(value, dict) else value
+    if not is_board or c.errors:
+        return None
+    if "blocked" in end and "returnTo" not in end["blocked"]:
+        end = dict(end, blocked=dict(end["blocked"], returnTo=obj["startsAt"]))
+    return BoardSpec(obj["startsAt"], obj["whileRunning"], obj.get("role"), obj.get("priority", 100),
+                     obj.get("workspace"), obj.get("syncBase"), obj.get("waitForDependencies"),
+                     obj.get("createdTickets"), freeze(end), freeze(limits))
+
+
 def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha: str) -> Definition:
     c = _Collector(source)
     if not isinstance(obj, dict):
         c.err("$", "the top level must be an object")
         c.raise_if_errors()
     allowed = _FROZEN_TOP_KEYS if frozen else _TOP_KEYS
+    if obj.get("version") == 1:
+        allowed = tuple(k for k in allowed if k not in _BOARD_KEYS)
     version, description, max_steps, stages_val, warnings = None, "", DEFAULT_MAX_STEPS, None, ()
     for key, val in obj.items():
         if key not in allowed:
             c.err(key, f'unknown key "{key}"')
         elif key == "version":
-            if type(val) is not int or val != 1:
-                c.err(key, "version must be 1")
+            if type(val) is not int or val not in (1, 2):
+                c.err(key, "version must be 1 or 2")
             else:
-                version = 1
+                version = val
         elif key == "description":
             if not isinstance(val, str):
                 c.err(key, "description must be text")
@@ -411,8 +518,9 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
             c.err("$", "source sha256 must be 64 lowercase hex digits")
     if "version" not in obj:
         c.err("version", "version is required and must be 1")
-    if "stages" not in obj:
+    if "stages" not in obj and version != 2:
         c.err("stages", "stages is required")
+    board = _board(c, obj) if version == 2 else None
     if frozen:
         for key in ("name", "sourceSha256", "warnings"):
             if key not in obj:
@@ -423,7 +531,8 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
         if not isinstance(stages_val, list):
             c.err("stages", "stages must be a list")
         elif not stages_val:
-            c.err("stages", "stages must not be empty")
+            if version != 2:
+                c.err("stages", "stages must not be empty")
         else:
             if len(stages_val) > MAX_STAGES:
                 c.err("stages", f"a definition may have at most {MAX_STAGES} stages")
@@ -441,12 +550,12 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
                    "default_pass": default_pass}
             infos = [_stage(c, i, s, ctx) for i, s in enumerate(stages_val)]
 
-    if not c.errors:
+    if not c.errors and infos:
         _check_placeholders(c, infos, frozen)
         _graph_errors(c, infos)
     c.errors = _file_order(obj, c.errors)
     c.raise_if_errors()
-    if not frozen:
+    if not frozen and infos:
         warnings = _graph_warnings(c, infos)
 
     stages = tuple(Stage(id=s["id"], type=s["type"], role=s["role"], permission=s["permission"],
@@ -454,8 +563,8 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
                          pass_requires=s["pass_requires"], next=MappingProxyType(dict(s["next"])), kind=s["kind"],
                          delegates=s["delegates"], pass_requires_commands=s["pass_requires_commands"])
                    for s in infos)
-    return Definition(name=name, version=1, description=description, max_steps=max_steps, stages=stages,
-                      source_sha256=sha, warnings=warnings)
+    return Definition(name=name, version=version, description=description, max_steps=max_steps, stages=stages,
+                      source_sha256=sha, warnings=warnings, board=board)
 
 
 def _edges(infos: list) -> dict:
@@ -531,6 +640,16 @@ def to_json(d: Definition) -> str:
         stages.append(item)
     obj = {"name": d.name, "version": d.version, "description": d.description, "maxSteps": d.max_steps,
            "sourceSha256": d.source_sha256, "warnings": [dict(w) for w in d.warnings], "stages": stages}
+    if d.board is not None:
+        b = d.board
+        def thaw(value):
+            return {k: thaw(v) for k, v in value.items()} if isinstance(value, Mapping) else value
+        obj.update(startsAt=b.starts_at, whileRunning=b.while_running, priority=b.priority,
+                   end=thaw(b.end), limits=thaw(b.limits))
+        for key, value in (("role", b.role), ("workspace", b.workspace), ("syncBase", b.sync_base),
+                           ("waitForDependencies", b.wait_for_dependencies), ("createdTickets", b.created_tickets)):
+            if value is not None:
+                obj[key] = value
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 

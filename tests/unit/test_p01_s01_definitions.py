@@ -137,7 +137,7 @@ class Loading(Ws):
             d.stages[0].next["done"] = "x"
 
     def test_several_errors_are_all_returned_in_file_order(self):
-        errs = errors_of({"version": 2, "description": 3, "maxSteps": 0, "stages": [
+        errs = errors_of({"version": 3, "description": 3, "maxSteps": 0, "stages": [
             stage(id="Bad"), stage(id="b", permission="x"), stage(id="c", next={"done": "zzz"})]})
         self.assertEqual([e["path"] for e in errs], ["version", "description", "maxSteps", "stages[0].id",
                                                      "stages[1].permission", "stages[2].next.done"])
@@ -149,7 +149,7 @@ class Loading(Ws):
         errs = errors_of({"version": 1, "stages": [bad], "maxSteps": 0})
         self.assertEqual([e["path"] for e in errs], ["stages[0].zzz", "stages[0].id", "maxSteps"])
         late = {"next": {"done": "nope"}, "permission": "x", "id": "a", "role": "R", "prompt": "p"}
-        errs = errors_of({"stages": [late], "version": 2})
+        errs = errors_of({"stages": [late], "version": 3})
         self.assertEqual([e["path"] for e in errs],
                          ["stages[0].next.done", "stages[0].permission", "version"])
 
@@ -170,7 +170,7 @@ class TopLevelRules(unittest.TestCase):
         cases = [
             ([], "$"), ("x", "$"),
             ({"stages": [ok]}, "version"), ({"version": "1", "stages": [ok]}, "version"),
-            ({"version": True, "stages": [ok]}, "version"), ({"version": 2, "stages": [ok]}, "version"),
+            ({"version": True, "stages": [ok]}, "version"), ({"version": 3, "stages": [ok]}, "version"),
             (definition(ok, extra=1), "extra"),
             (definition(ok, description=5), "description"),
             (definition(ok, maxSteps="3"), "maxSteps"), (definition(ok, maxSteps=0), "maxSteps"),
