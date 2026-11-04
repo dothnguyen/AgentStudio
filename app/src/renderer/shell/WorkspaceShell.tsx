@@ -6,6 +6,7 @@ import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
 import { SkillsScreen } from '../skills/SkillsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
+import { StatusesScreen } from '../workflow/StatusesScreen';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { BacklogScreen } from '../boards/BacklogScreen';
 import { DEFAULT_BACKLOG_FILTERS, type BacklogFilters } from '../boards/backlogFilters';
@@ -226,7 +227,9 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       }}
       onOpenTeams={() => navigate('teams')}
     />
-  ) : sectionId === 'workflow/statuses' || sectionId === 'workflow/prompts' ? (
+  ) : sectionId === 'workflow/statuses' ? (
+    <StatusesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
+  ) : sectionId === 'workflow/prompts' ? (
     <section data-section={sectionId}><h1>{selectedItem?.label}</h1></section>
   ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
     <CurrentPhaseScreen

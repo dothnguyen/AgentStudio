@@ -764,7 +764,7 @@ describe('Routing screen navigation', () => {
     for (const [label, route] of [['Statuses', 'workflow/statuses'], ['Workflow prompts', 'workflow/prompts']] as const) {
       fireEvent.click(within(group).getByRole('button', { name: label }));
       expect(view.getByRole('heading', { level: 1, name: label })).toBeTruthy();
-      expect(view.container.querySelector(`[data-section="${route}"]`)?.children).toHaveLength(1);
+      expect(view.container.querySelector(`[data-section="${route}"]`)).toBeTruthy();
       expect(currentButtons(view.container)).toEqual([within(group).getByRole('button', { name: label })]);
     }
     fireEvent.click(view.getByRole('button', { name: 'Home' }));

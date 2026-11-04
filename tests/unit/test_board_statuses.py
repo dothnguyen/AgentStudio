@@ -47,6 +47,19 @@ class StatusTests(BoardCase):
         with open(os.path.join(self.ws, '.agent-studio', 'board.json'), 'rb') as f:
             self.assertEqual(listed['sha256'], hashlib.sha256(f.read()).hexdigest())
 
+    def test_name_presence_distinguishes_missing_name_from_name_equal_to_id(self):
+        self.edit('rename', id='spare', name='spare')
+        statuses = {s['id']: s for s in self.listed()['statuses']}
+        self.assertTrue(statuses['spare']['hasName'])
+        raw = config()
+        raw['version'] = 4
+        raw.pop('rules')
+        raw['workflowStatuses'].append({'id': 'spare'})
+        self.write_config(raw)
+        statuses = {s['id']: s for s in self.listed()['statuses']}
+        self.assertEqual(statuses['spare']['name'], 'spare')
+        self.assertFalse(statuses['spare']['hasName'])
+
     def test_all_workflow_reference_paths_are_reported_as_users(self):
         path = os.path.join(self.ws, '.agent-studio', 'workflows', 'develop.json')
         with open(path) as f:

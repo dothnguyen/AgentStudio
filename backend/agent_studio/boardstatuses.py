@@ -48,7 +48,7 @@ def list_statuses(workspace, conn):
         hows = {use['how'] for use in uses}
         kind_type = {'initial': 'start', 'done': 'done', 'closed': 'closed'}.get(kind)
         derived = kind_type or ('startsWorkflow' if 'startsAt' in hows else 'whileRunning' if 'whileRunning' in hows else 'unused')
-        statuses.append({'id': ident, 'name': status.get('name', ident), 'kind': kind, 'type': derived,
+        statuses.append({'id': ident, 'name': status.get('name', ident), 'hasName': bool(status.get('name')), 'kind': kind, 'type': derived,
                          'usedBy': uses, 'ticketCount': counts.get(ident, 0)})
     return {'statuses': statuses, 'sha256': boardsettings._sha(data)}
 

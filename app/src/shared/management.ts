@@ -371,7 +371,7 @@ export interface CheckSetList {
   commands: Array<{ id: string; description: string }>; problems: Array<{ path: string; message: string }>;
 }
 export interface BoardStatuses {
-  statuses: Array<{ id: string; name: string; kind: 'initial' | 'done' | 'closed' | null;
+  statuses: Array<{ id: string; name: string; hasName?: boolean; kind: 'initial' | 'done' | 'closed' | null;
     type: 'start' | 'done' | 'closed' | 'startsWorkflow' | 'whileRunning' | 'unused';
     usedBy: Array<{ workflow: string; title: string; how: string }>; ticketCount: number }>;
   sha256: string;
