@@ -2511,3 +2511,8 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 
 .boards-backlog-row-wrap { display: flex; align-items: center; }
 .boards-backlog-row-wrap .boards-backlog-row { flex: 1; }
+
+.workflow-nav-heading { padding: 8px 12px; color: #e7e9ec; font-weight: 500; }
+.workflow-nav-list { list-style: none; margin: 0; padding: 0; }
+.workspace-sidebar nav .workflow-nav button.workflow-nav-item { padding-left: 28px; }
+.workspace-sidebar nav .workflow-nav button.workflow-nav-item-selected { color: #e7e9ec; background: #181b20; }

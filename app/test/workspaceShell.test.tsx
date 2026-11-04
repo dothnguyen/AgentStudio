@@ -68,7 +68,7 @@ describe('WorkspaceShell', () => {
     const nav = result.getByRole('navigation', { name: 'Workspace' });
 
     expect(Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent)).toEqual([
-      'Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration',
+      'Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Configuration',
     ]);
     expect(currentButtons(result.container)).toEqual([within(nav).getByRole('button', { name: 'Home' })]);
     const agents = within(nav).getAllByRole('button', { name: 'Agents' });
@@ -327,19 +327,19 @@ describe('WorkspaceShell', () => {
     const items: NavItem[] = [...NAV_ITEMS, { id: 'reports', label: 'Reports' }];
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} items={items} />);
     const buttons = result.container.querySelectorAll('nav button.nav-item');
-    expect(buttons).toHaveLength(9);
+    expect(buttons).toHaveLength(8);
     buttons.forEach((button, index) => {
       expect(button.querySelector('svg.shell-icon')?.getAttribute('aria-hidden')).toBe('true');
-      expect(button.textContent).toBe(items[index].label);
+      expect(button.textContent).toBe(items.filter(item => item.id !== 'workflow')[index].label);
     });
   });
 
   it('sidebar controls are native buttons in visual order with no tabindex', () => {
     const result = render(<WorkspaceShell workspace={workspace} onSwitchWorkspace={vi.fn()} />);
     const buttons = [...result.container.querySelectorAll('aside button')] as HTMLButtonElement[];
-    expect(buttons).toHaveLength(13);
-    expect(buttons.slice(0, 12).map((button) => button.querySelector('.nav-label')?.textContent ?? button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Boards', 'Current Phase', 'Backlog', 'Phases', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration']);
-    expect(buttons[12].className).toContain('switch-workspace');
+    expect(buttons).toHaveLength(15);
+    expect(buttons.slice(0, 14).map((button) => button.querySelector('.nav-label')?.textContent ?? button.textContent)).toEqual(['Home', 'Teams', 'New team', 'Boards', 'Current Phase', 'Backlog', 'Phases', 'Statuses', 'Workflow prompts', 'Routing', 'Agents', 'Roles', 'Skills', 'Configuration']);
+    expect(buttons[14].className).toContain('switch-workspace');
     for (const button of buttons) {
       expect(button.tagName).toBe('BUTTON');
       expect(button.type).toBe('button');
@@ -741,15 +741,8 @@ describe('Routing screen navigation', () => {
     await settle();
     const nav = view.getByRole('navigation', { name: 'Workspace' });
     const labels = Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map((button) => button.textContent);
-    expect(labels).toEqual(['Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration']);
+    expect(labels).toEqual(['Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Configuration']);
     const routing = within(nav).getByRole('button', { name: 'Routing' });
-    const icon = routing.querySelector('svg')!;
-    expect(icon.getAttribute('data-icon')).toBe('routing');
-    expect(icon.getAttribute('width')).toBe('16');
-    expect(icon.getAttribute('height')).toBe('16');
-    expect(icon.getAttribute('stroke-width')).toBe('1.8');
-    expect(icon.querySelectorAll('circle')).toHaveLength(3);
-    expect(icon.querySelector('path')?.getAttribute('d')).toBe('M6 8.5v7M18 10.5c0 4-7 3-11 6.2');
     fireEvent.click(routing);
     await settle();
     expect(routing.getAttribute('aria-current')).toBe('page');
@@ -760,6 +753,25 @@ describe('Routing screen navigation', () => {
     expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenLastCalledWith(workspace.id);
     expect(fake.roles).toHaveBeenLastCalledWith(workspace.id);
+  });
+
+  it('workflow_children_show_placeholders_and_legacy_route_redirects', async () => {
+    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
+    const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} renderSection={(id, navigate) => id === 'home' ? <button onClick={() => navigate('routing')}>Legacy route</button> : undefined} />);
+    await settle();
+    const group = view.getByRole('group', { name: 'Workflow' });
+    expect(within(group).queryByRole('button', { name: 'Workflow' })).toBeNull();
+    for (const [label, route] of [['Statuses', 'workflow/statuses'], ['Workflow prompts', 'workflow/prompts']] as const) {
+      fireEvent.click(within(group).getByRole('button', { name: label }));
+      expect(view.getByRole('heading', { level: 1, name: label })).toBeTruthy();
+      expect(view.container.querySelector(`[data-section="${route}"]`)?.children).toHaveLength(1);
+      expect(currentButtons(view.container)).toEqual([within(group).getByRole('button', { name: label })]);
+    }
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    fireEvent.click(view.getByRole('button', { name: 'Legacy route' }));
+    await settle();
+    expect(within(group).getByRole('button', { name: 'Routing' }).getAttribute('aria-current')).toBe('page');
+    expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
   });
 
   it('routing_role_link_opens_roles_with_that_role', async () => {
@@ -831,8 +843,8 @@ describe('Routing screen navigation', () => {
 
   it('team_page_hides_open_routing_when_routing_is_missing_or_disabled', async () => {
     for (const items of [
-      NAV_ITEMS.filter((item) => item.id !== 'routing'),
-      NAV_ITEMS.map((item) => (item.id === 'routing' ? { ...item, disabled: true } : item)),
+      NAV_ITEMS.filter((item) => item.id !== 'workflow'),
+      NAV_ITEMS.map((item) => (item.id === 'workflow' ? { ...item, disabled: true } : item)),
     ] as Array<readonly NavItem[]>) {
       const fake = fakeManagement();
       const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} items={items} onSwitchWorkspace={vi.fn()} />);

@@ -139,6 +139,9 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     member?: { teamId: string; memberId: string };
   }): void {
     if (createTeamRequested && teamsWritePending && nextId !== 'teams') return;
+    if (nextId === 'routing') nextId = 'workflow/routing';
+    const workflow = items.find((candidate) => candidate.id === 'workflow');
+    if (nextId === 'workflow' || (nextId.startsWith('workflow/') && (workflow === undefined || workflow.disabled === true))) return;
     const item = findNavItemById(items, nextId) ?? findNavItem(items, nextId);
     const route = item === undefined ? nextId : navItemRoute(item);
     if (isBoardRoute(route) && !boardsEnabled) return;
@@ -176,7 +179,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       navigation={teamsNavigation}
       connection={props.connection}
       onViewRole={(roleId) => navigate('roles', { roleId })}
-      onOpenRouting={items.some((i) => i.id === 'routing' && i.disabled !== true) ? () => navigate('routing') : undefined}
+      onOpenRouting={items.some((i) => i.id === 'workflow' && i.disabled !== true && i.children?.some((child) => child.id === 'workflow/routing' && child.disabled !== true)) ? () => navigate('workflow/routing') : undefined}
       onOpenBoard={boardsEnabled ? () => navigate(BOARDS_DEFAULT_ROUTE) : undefined}
       onOpenAgents={items.some((i) => i.id === 'agents' && i.disabled !== true) ? () => navigate('agents') : undefined}
       onOpenTicket={boardsEnabled ? (key) => navigate(boardTicketRoute(key)) : undefined}
@@ -208,7 +211,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       focusListOnMount={focusSkillList}
       onViewRole={(roleId) => navigate('roles', { roleId })}
     />
-  ) : sectionId === 'routing' ? (
+  ) : sectionId === 'workflow/routing' ? (
     <RoutingScreen
       key={props.workspace.id}
       workspace={props.workspace}
@@ -223,6 +226,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       }}
       onOpenTeams={() => navigate('teams')}
     />
+  ) : sectionId === 'workflow/statuses' || sectionId === 'workflow/prompts' ? (
+    <section data-section={sectionId}><h1>{selectedItem?.label}</h1></section>
   ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
     <CurrentPhaseScreen
       key={props.workspace.id}
@@ -258,6 +263,14 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         </div>
         <nav aria-label="Workspace" className="workspace-nav">
           {items.map((item) => {
+            if (item.id === 'workflow') return (
+              <div className="workflow-nav" key={item.id} role="group" aria-label={item.label}>
+                <div className="workflow-nav-heading">{item.label}</div>
+                <ul className="workflow-nav-list">{item.children?.map((child) => (
+                  <li key={child.id}><button type="button" className={`workflow-nav-item${sectionId === navItemRoute(child) ? ' workflow-nav-item-selected' : ''}`} disabled={item.disabled === true || child.disabled === true} aria-current={sectionId === navItemRoute(child) ? 'page' : undefined} onClick={() => navigate(child.id)}>{child.label}</button></li>
+                ))}</ul>
+              </div>
+            );
             const isTeams = item.id === 'teams';
             const isBoards = item.id === 'boards';
             const boardsOpen = isBoards && isBoardRoute(sectionId);

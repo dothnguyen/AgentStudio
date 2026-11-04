@@ -386,7 +386,7 @@ describe('Skills navigation', () => {
     );
     const nav = view.getByRole('navigation', { name: 'Workspace' });
     const labels = Array.from(nav.querySelectorAll<HTMLButtonElement>('.nav-item')).map(button => button.textContent);
-    expect(labels).toEqual(['Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Routing', 'Configuration']);
+    expect(labels).toEqual(['Home', 'Teams', 'Boards', 'Agents', 'Roles', 'Skills', 'Configuration']);
     expect(labels.indexOf('Skills')).toBe(labels.indexOf('Roles') + 1);
     const button = within(nav).getByRole('button', { name: 'Skills' });
     const icon = button.querySelector('svg')!;

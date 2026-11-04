@@ -1,6 +1,11 @@
-export type SectionId = 'home' | 'teams' | 'agents' | 'roles' | 'skills' | 'boards' | 'routing' | 'configuration';
+export type SectionId = 'home' | 'teams' | 'agents' | 'roles' | 'skills' | 'boards' | 'workflow/statuses' | 'workflow/prompts' | 'workflow/routing' | 'configuration';
 
 export type NavIconName = 'home' | 'teams' | 'agents' | 'roles' | 'skills' | 'boards' | 'routing' | 'configuration';
+
+export interface WorkflowNavigationState {
+  returnTo: 'add-workflow' | 'edit-workflow';
+  draftKey: string;
+}
 
 export interface NavItem {
   id: string;
@@ -64,6 +69,12 @@ export function findNavItemById(items: readonly NavItem[], id: string): NavItem 
   return undefined;
 }
 
+export const WORKFLOW_NAV_ITEMS: readonly NavItem[] = [
+  { id: 'workflow/statuses', label: 'Statuses' },
+  { id: 'workflow/prompts', label: 'Workflow prompts' },
+  { id: 'workflow/routing', label: 'Routing' },
+];
+
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'teams', label: 'Teams', icon: 'teams' },
@@ -74,9 +85,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
     route: BOARDS_DEFAULT_ROUTE,
     children: BOARD_NAV_ITEMS,
   },
+  { id: 'workflow', label: 'Workflow', children: WORKFLOW_NAV_ITEMS },
   { id: 'agents', label: 'Agents', icon: 'agents' },
   { id: 'roles', label: 'Roles', icon: 'roles' },
   { id: 'skills', label: 'Skills', icon: 'skills' },
-  { id: 'routing', label: 'Routing', icon: 'routing' },
   { id: 'configuration', label: 'Configuration', icon: 'configuration' },
 ];

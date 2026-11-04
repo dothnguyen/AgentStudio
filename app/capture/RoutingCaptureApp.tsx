@@ -7,8 +7,8 @@ import { ROUTING_V1_WORKSPACE, createRoutingV1Apis } from './routingV1Fixture';
 
 /** Opens Routing from the real sidebar; false when the nav button is not there yet. */
 export function openRoutingSection(root: ParentNode): boolean {
-  const button = Array.from(root.querySelectorAll<HTMLButtonElement>('.workspace-nav .nav-item'))
-    .find(candidate => candidate.querySelector('.nav-label')?.textContent === 'Routing');
+  const button = Array.from(root.querySelectorAll<HTMLButtonElement>('.workspace-nav .workflow-nav-item'))
+    .find(candidate => candidate.textContent === 'Routing');
   if (button === undefined || button.disabled) return false;
   button.click();
   return true;

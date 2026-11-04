@@ -11,9 +11,23 @@ import {
 
 describe('NAV_ITEMS', () => {
   it('places_boards_after_teams_and_preserves_section_icons', () => {
-    expect(NAV_ITEMS.map((item) => item.id)).toEqual(['home', 'teams', 'boards', 'agents', 'roles', 'skills', 'routing', 'configuration']);
+    expect(NAV_ITEMS.map((item) => item.id)).toEqual(['home', 'teams', 'boards', 'workflow', 'agents', 'roles', 'skills', 'configuration']);
     expect(NAV_ITEMS.find((item) => item.id === 'skills')).toEqual({ id: 'skills', label: 'Skills', icon: 'skills' });
-    expect(NAV_ITEMS.find((item) => item.id === 'routing')).toEqual({ id: 'routing', label: 'Routing', icon: 'routing' });
+    expect(NAV_ITEMS.find((item) => item.id === 'workflow')?.children?.map(item => [item.id, item.label])).toEqual([['workflow/statuses', 'Statuses'], ['workflow/prompts', 'Workflow prompts'], ['workflow/routing', 'Routing']]);
+  });
+
+  it('workflow_group_has_no_route_and_each_child_route_resolves_to_its_active_item', () => {
+    const workflow = NAV_ITEMS.find((item) => item.id === 'workflow');
+    expect(workflow?.route).toBeUndefined();
+    expect(workflow?.children?.map((item) => item.id)).toEqual([
+      'workflow/statuses',
+      'workflow/prompts',
+      'workflow/routing',
+    ]);
+    expect(findNavItem(NAV_ITEMS, 'workflow')).toBe(workflow);
+    expect(findNavItem(NAV_ITEMS, 'workflow/statuses')?.label).toBe('Statuses');
+    expect(findNavItem(NAV_ITEMS, 'workflow/prompts')?.label).toBe('Workflow prompts');
+    expect(findNavItem(NAV_ITEMS, 'workflow/routing')?.label).toBe('Routing');
   });
 
   it('boards_is_an_expandable_group_with_current_phase_backlog_and_phases', () => {
@@ -28,7 +42,7 @@ describe('NAV_ITEMS', () => {
   });
 
   it('keeps_the_other_top_level_items_flat', () => {
-    for (const item of NAV_ITEMS.filter((entry) => entry.id !== 'boards')) {
+    for (const item of NAV_ITEMS.filter((entry) => entry.id !== 'boards' && entry.id !== 'workflow')) {
       expect(item.children).toBeUndefined();
       expect(item.route).toBeUndefined();
     }
