@@ -10,8 +10,14 @@ waitForDependencies: true
 end:
   pass: qa-ready
   fail: dev-ready
+  blocked:
+    status: need-escalate
+    returnTo: dev-ready
 limits:
   maxRuns: 6
+  failuresInARow:
+    count: 6
+    status: need-escalate
 steps:
   - id: implement
     agent:
