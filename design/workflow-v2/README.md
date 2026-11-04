@@ -25,3 +25,7 @@ Tokens: page `#111316`, card `#16191d`, card border `#262a30`, text `#e7e9ec`, m
 - Word counts on the prompts screen are illustrative.
 - No accessibility work is required beyond using real buttons, inputs and labels.
 - Static renders use fallback fonts if Inter / JetBrains Mono are not installed.
+
+The pure editor draft model lives in `app/src/renderer/workflow/workflowDraftModel.ts`. It converts the workflow detail projection into editable steps, prepares save requests, and supplies step operations, validation problems and selector options.
+
+The draft retains source step definitions, including individual YAML retry limits; it refuses to reconstruct compiled steps when source steps cannot be read safely.
