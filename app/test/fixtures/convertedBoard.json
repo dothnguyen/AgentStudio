@@ -1,0 +1,1502 @@
+{
+  "board": {
+    "workflows": [
+      {
+        "name": "board-develop",
+        "title": "Develop",
+        "startsAt": "dev-ready",
+        "whileRunning": "deving",
+        "role": "Developer",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 6
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "syncBase": true,
+        "waitForDependencies": true
+      },
+      {
+        "name": "board-qa",
+        "title": "Qa",
+        "startsAt": "qa-ready",
+        "whileRunning": "qa-ing",
+        "role": "QA",
+        "steps": [
+          {
+            "id": "qa_tests",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          },
+          {
+            "id": "qa",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "review-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      {
+        "name": "board-refine",
+        "title": "Refine",
+        "startsAt": "refine-ready",
+        "whileRunning": "refining",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "refine",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "dev-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      {
+        "name": "board-resolve-merge",
+        "title": "Resolve merge",
+        "startsAt": "merge-conflict",
+        "whileRunning": "fixing-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      {
+        "name": "board-resolve-merge-plan-merge-conflict",
+        "title": "Resolve merge plan merge conflict",
+        "startsAt": "plan-merge-conflict",
+        "whileRunning": "fixing-plan-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      {
+        "name": "board-review",
+        "title": "Review",
+        "startsAt": "review-ready",
+        "whileRunning": "reviewing",
+        "role": "Reviewer",
+        "steps": [
+          {
+            "id": "review",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      {
+        "name": "board-senior-develop",
+        "title": "Senior develop",
+        "startsAt": "need-escalate",
+        "whileRunning": "escalating",
+        "role": "SeniorDeveloper",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "need-escalate",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      {
+        "name": "board-unpack",
+        "title": "Unpack",
+        "startsAt": "unpack-ready",
+        "whileRunning": "unpacking",
+        "role": "ProductOwner",
+        "steps": [
+          {
+            "id": "unpack",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "createdTickets": "none"
+      },
+      {
+        "name": "merge-merge-ready",
+        "title": "Merge merge ready",
+        "startsAt": "merge-ready",
+        "whileRunning": "merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merged"
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      },
+      {
+        "name": "merge-plan-merge-ready",
+        "title": "Merge plan merge ready",
+        "startsAt": "plan-merge-ready",
+        "whileRunning": "plan-merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": {
+            "releaseCreatedTickets": {
+              "from": "none",
+              "to": "refine-ready"
+            },
+            "status": "merged"
+          }
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      }
+    ],
+    "byStart": {
+      "dev-ready": {
+        "name": "board-develop",
+        "title": "Develop",
+        "startsAt": "dev-ready",
+        "whileRunning": "deving",
+        "role": "Developer",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 6
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "syncBase": true,
+        "waitForDependencies": true
+      },
+      "qa-ready": {
+        "name": "board-qa",
+        "title": "Qa",
+        "startsAt": "qa-ready",
+        "whileRunning": "qa-ing",
+        "role": "QA",
+        "steps": [
+          {
+            "id": "qa_tests",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          },
+          {
+            "id": "qa",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "review-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "refine-ready": {
+        "name": "board-refine",
+        "title": "Refine",
+        "startsAt": "refine-ready",
+        "whileRunning": "refining",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "refine",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "dev-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "merge-conflict": {
+        "name": "board-resolve-merge",
+        "title": "Resolve merge",
+        "startsAt": "merge-conflict",
+        "whileRunning": "fixing-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "plan-merge-conflict": {
+        "name": "board-resolve-merge-plan-merge-conflict",
+        "title": "Resolve merge plan merge conflict",
+        "startsAt": "plan-merge-conflict",
+        "whileRunning": "fixing-plan-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "review-ready": {
+        "name": "board-review",
+        "title": "Review",
+        "startsAt": "review-ready",
+        "whileRunning": "reviewing",
+        "role": "Reviewer",
+        "steps": [
+          {
+            "id": "review",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "need-escalate": {
+        "name": "board-senior-develop",
+        "title": "Senior develop",
+        "startsAt": "need-escalate",
+        "whileRunning": "escalating",
+        "role": "SeniorDeveloper",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "need-escalate",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "unpack-ready": {
+        "name": "board-unpack",
+        "title": "Unpack",
+        "startsAt": "unpack-ready",
+        "whileRunning": "unpacking",
+        "role": "ProductOwner",
+        "steps": [
+          {
+            "id": "unpack",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "createdTickets": "none"
+      },
+      "merge-ready": {
+        "name": "merge-merge-ready",
+        "title": "Merge merge ready",
+        "startsAt": "merge-ready",
+        "whileRunning": "merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merged"
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      },
+      "plan-merge-ready": {
+        "name": "merge-plan-merge-ready",
+        "title": "Merge plan merge ready",
+        "startsAt": "plan-merge-ready",
+        "whileRunning": "plan-merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": {
+            "releaseCreatedTickets": {
+              "from": "none",
+              "to": "refine-ready"
+            },
+            "status": "merged"
+          }
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      }
+    },
+    "byRunning": {
+      "deving": {
+        "name": "board-develop",
+        "title": "Develop",
+        "startsAt": "dev-ready",
+        "whileRunning": "deving",
+        "role": "Developer",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 6
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "syncBase": true,
+        "waitForDependencies": true
+      },
+      "qa-ing": {
+        "name": "board-qa",
+        "title": "Qa",
+        "startsAt": "qa-ready",
+        "whileRunning": "qa-ing",
+        "role": "QA",
+        "steps": [
+          {
+            "id": "qa_tests",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          },
+          {
+            "id": "qa",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "review-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "refining": {
+        "name": "board-refine",
+        "title": "Refine",
+        "startsAt": "refine-ready",
+        "whileRunning": "refining",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "refine",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "dev-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "fixing-conflict": {
+        "name": "board-resolve-merge",
+        "title": "Resolve merge",
+        "startsAt": "merge-conflict",
+        "whileRunning": "fixing-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "fixing-plan-conflict": {
+        "name": "board-resolve-merge-plan-merge-conflict",
+        "title": "Resolve merge plan merge conflict",
+        "startsAt": "plan-merge-conflict",
+        "whileRunning": "fixing-plan-conflict",
+        "role": "TeamLead",
+        "steps": [
+          {
+            "id": "resolve",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "reviewing": {
+        "name": "board-review",
+        "title": "Review",
+        "startsAt": "review-ready",
+        "whileRunning": "reviewing",
+        "role": "Reviewer",
+        "steps": [
+          {
+            "id": "review",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "dev-ready",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "priority": 100,
+        "workspace": "worktree"
+      },
+      "escalating": {
+        "name": "board-senior-develop",
+        "title": "Senior develop",
+        "startsAt": "need-escalate",
+        "whileRunning": "escalating",
+        "role": "SeniorDeveloper",
+        "steps": [
+          {
+            "id": "implement",
+            "kind": "verdict"
+          },
+          {
+            "id": "tests",
+            "kind": "validation"
+          }
+        ],
+        "end": {
+          "fail": "need-escalate",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "priority": 0,
+        "workspace": "worktree",
+        "syncBase": true
+      },
+      "unpacking": {
+        "name": "board-unpack",
+        "title": "Unpack",
+        "startsAt": "unpack-ready",
+        "whileRunning": "unpacking",
+        "role": "ProductOwner",
+        "steps": [
+          {
+            "id": "unpack",
+            "kind": "verdict"
+          }
+        ],
+        "end": {
+          "fail": "none",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "priority": 100,
+        "workspace": "worktree",
+        "createdTickets": "none"
+      },
+      "merging": {
+        "name": "merge-merge-ready",
+        "title": "Merge merge ready",
+        "startsAt": "merge-ready",
+        "whileRunning": "merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merged"
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      },
+      "plan-merging": {
+        "name": "merge-plan-merge-ready",
+        "title": "Merge plan merge ready",
+        "startsAt": "plan-merge-ready",
+        "whileRunning": "plan-merging",
+        "role": null,
+        "steps": [
+          {
+            "id": "merge",
+            "kind": "action"
+          }
+        ],
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": {
+            "releaseCreatedTickets": {
+              "from": "none",
+              "to": "refine-ready"
+            },
+            "status": "merged"
+          }
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "priority": 100
+      }
+    },
+    "problems": []
+  },
+  "statuses": {
+    "sha256": "",
+    "statuses": [
+      {
+        "id": "none",
+        "name": "Backlog",
+        "kind": "initial",
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "unpack-ready",
+        "name": "Unpack ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "unpacking",
+        "name": "unpacking",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "refine-ready",
+        "name": "Refine ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "refining",
+        "name": "refining",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "dev-ready",
+        "name": "Dev ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "deving",
+        "name": "deving",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "qa-ready",
+        "name": "QA ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "qa-ing",
+        "name": "qa-ing",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "need-escalate",
+        "name": "Needs escalation",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "escalating",
+        "name": "escalating",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "review-ready",
+        "name": "Review ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "reviewing",
+        "name": "reviewing",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "plan-merge-ready",
+        "name": "Plan merge ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "plan-merging",
+        "name": "plan-merging",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "plan-merge-conflict",
+        "name": "Plan merge conflict",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "fixing-plan-conflict",
+        "name": "fixing-plan-conflict",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "merge-ready",
+        "name": "Merge ready",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "merging",
+        "name": "merging",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "merge-conflict",
+        "name": "Merge conflict",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "fixing-conflict",
+        "name": "fixing-conflict",
+        "kind": null,
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "merged",
+        "name": "Done",
+        "kind": "done",
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      },
+      {
+        "id": "closed",
+        "name": "Close",
+        "kind": "closed",
+        "type": "unused",
+        "usedBy": [],
+        "ticketCount": 0
+      }
+    ]
+  },
+  "starts": {
+    "todoEntry": [
+      "dev-ready",
+      "refine-ready",
+      "unpack-ready"
+    ],
+    "todoDefault": "dev-ready"
+  },
+  "details": [
+    {
+      "name": "board-develop",
+      "definition": {
+        "compiledSteps": true,
+        "description": "Board stage dev-ready. The Developer implements the ticket in its worktree; the coordinator then runs the check set for the change and sends a failure back to the Developer up to three times.",
+        "end": {
+          "fail": "dev-ready",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 6
+        },
+        "maxSteps": 10,
+        "name": "board-develop",
+        "priority": 100,
+        "role": "Developer",
+        "sourceSha256": "b966d15e918c11ec1cf97422c6f63d9c014166c5773a377bf3ec5c320eee1ece",
+        "stages": [
+          {
+            "id": "implement",
+            "maxVisits": 4,
+            "next": {
+              "fail": "$fail",
+              "pass": "tests"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-develop.md",
+            "role": "Developer",
+            "type": "agent"
+          },
+          {
+            "checks": "code",
+            "id": "tests",
+            "maxVisits": 4,
+            "next": {
+              "fail": "implement",
+              "pass": "$succeed"
+            },
+            "type": "validation"
+          }
+        ],
+        "startsAt": "dev-ready",
+        "syncBase": true,
+        "title": "Develop",
+        "version": 2,
+        "waitForDependencies": true,
+        "warnings": [],
+        "whileRunning": "deving",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "b966d15e918c11ec1cf97422c6f63d9c014166c5773a377bf3ec5c320eee1ece",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": true
+      }
+    },
+    {
+      "name": "board-qa",
+      "definition": {
+        "compiledSteps": true,
+        "description": "Board stage qa-ready. QA adds tests for the ticket's acceptance criteria, the coordinator runs the check set for the change, and QA gives the verdict only after seeing that result.",
+        "end": {
+          "fail": "dev-ready",
+          "pass": "review-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "maxSteps": 4,
+        "name": "board-qa",
+        "priority": 100,
+        "role": "QA",
+        "sourceSha256": "b5aaaa868891e1f31bccd98e9286587912c62f41f0e43723b8c56e083ca7927b",
+        "stages": [
+          {
+            "id": "qa_tests",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "tests"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-qa-tests.md",
+            "role": "QA",
+            "type": "agent"
+          },
+          {
+            "checks": "code",
+            "id": "tests",
+            "maxVisits": 1,
+            "next": {
+              "fail": "qa",
+              "pass": "qa"
+            },
+            "type": "validation"
+          },
+          {
+            "id": "qa",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [
+              "tests"
+            ],
+            "permission": "read_only",
+            "promptSource": "workflows/prompts/board-qa.md",
+            "role": "QA",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "qa-ready",
+        "title": "Qa",
+        "version": 2,
+        "warnings": [
+          {
+            "file": ".agent-studio/workflows/board-qa.yaml",
+            "line": 1,
+            "message": "read_only stage \"qa\" follows a workspace_write stage but its prompt has no {{diff}}",
+            "path": "stages[2]"
+          }
+        ],
+        "whileRunning": "qa-ing",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "b5aaaa868891e1f31bccd98e9286587912c62f41f0e43723b8c56e083ca7927b",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-refine",
+      "definition": {
+        "description": "Board stage refine-ready. The TeamLead writes a detailed implementation plan into the ticket so a weaker model can implement it.",
+        "end": {
+          "fail": "none",
+          "pass": "dev-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "maxSteps": 4,
+        "name": "board-refine",
+        "priority": 100,
+        "role": "TeamLead",
+        "sourceSha256": "99bc2649bf22a56608fca824dc62b813b5c9f142bcf26a1787de25ce6a129db0",
+        "stages": [
+          {
+            "id": "refine",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [],
+            "permission": "read_only",
+            "promptSource": "workflows/prompts/board-refine.md",
+            "role": "TeamLead",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "refine-ready",
+        "title": "Refine",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "refining",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "99bc2649bf22a56608fca824dc62b813b5c9f142bcf26a1787de25ce6a129db0",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-resolve-merge",
+      "definition": {
+        "description": "Resolve a failed merge in the preserved ticket worktree, then return it to its merge action.",
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "maxSteps": 4,
+        "name": "board-resolve-merge",
+        "priority": 0,
+        "role": "TeamLead",
+        "sourceSha256": "492679f1c2ec63143b35490b905f1624ffc09b9432be68fab5b47a7a5059ac9e",
+        "stages": [
+          {
+            "id": "resolve",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-resolve-merge.md",
+            "role": "TeamLead",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "merge-conflict",
+        "syncBase": true,
+        "title": "Resolve merge",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "fixing-conflict",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "492679f1c2ec63143b35490b905f1624ffc09b9432be68fab5b47a7a5059ac9e",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-resolve-merge-plan-merge-conflict",
+      "definition": {
+        "compiledSteps": true,
+        "description": "Resolve a failed plan merge in the preserved ticket worktree, then return it to its merge action.",
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "maxSteps": 4,
+        "name": "board-resolve-merge-plan-merge-conflict",
+        "priority": 0,
+        "role": "TeamLead",
+        "sourceSha256": "bcf2137ee3c5c4607a69cbe24712acf8746d718b7a6e6e570ef71922169f9556",
+        "stages": [
+          {
+            "id": "resolve",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-resolve-merge.md",
+            "role": "TeamLead",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "plan-merge-conflict",
+        "syncBase": true,
+        "title": "Resolve merge plan merge conflict",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "fixing-plan-conflict",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "bcf2137ee3c5c4607a69cbe24712acf8746d718b7a6e6e570ef71922169f9556",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-review",
+      "definition": {
+        "description": "Board stage review-ready. The Reviewer reviews the code of the ticket branch (code only; tests are not run).",
+        "end": {
+          "fail": "dev-ready",
+          "pass": "merge-ready"
+        },
+        "limits": {
+          "failuresInARow": {
+            "count": 3,
+            "status": "need-escalate"
+          },
+          "onFailPriority": 0
+        },
+        "maxSteps": 4,
+        "name": "board-review",
+        "priority": 100,
+        "role": "Reviewer",
+        "sourceSha256": "c71225db6f643d48c7e86e73c57db422e0f9509b90a5ad2a137b33caffaca2ce",
+        "stages": [
+          {
+            "id": "review",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [],
+            "permission": "read_only",
+            "promptSource": "workflows/prompts/board-review.md",
+            "role": "Reviewer",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "review-ready",
+        "title": "Review",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "reviewing",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "c71225db6f643d48c7e86e73c57db422e0f9509b90a5ad2a137b33caffaca2ce",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-senior-develop",
+      "definition": {
+        "compiledSteps": true,
+        "description": "Resolve escalated tickets in an isolated worktree; the coordinator runs the check set for the change and sends a failure back to the developer up to three times.",
+        "end": {
+          "fail": "need-escalate",
+          "pass": "qa-ready"
+        },
+        "limits": {
+          "maxRuns": 3
+        },
+        "maxSteps": 10,
+        "name": "board-senior-develop",
+        "priority": 0,
+        "role": "SeniorDeveloper",
+        "sourceSha256": "4504bacb6dc59bfa8823eeb32863c4b4c3b8841506b901971eca61a29cd500f0",
+        "stages": [
+          {
+            "id": "implement",
+            "maxVisits": 4,
+            "next": {
+              "fail": "$fail",
+              "pass": "tests"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-develop.md",
+            "role": "SeniorDeveloper",
+            "type": "agent"
+          },
+          {
+            "checks": "code",
+            "id": "tests",
+            "maxVisits": 4,
+            "next": {
+              "fail": "implement",
+              "pass": "$succeed"
+            },
+            "type": "validation"
+          }
+        ],
+        "startsAt": "need-escalate",
+        "syncBase": true,
+        "title": "Senior develop",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "escalating",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "4504bacb6dc59bfa8823eeb32863c4b4c3b8841506b901971eca61a29cd500f0",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "board-unpack",
+      "definition": {
+        "createdTickets": "none",
+        "description": "Board stage unpack-ready. The ProductOwner turns a feature ticket into story files under phases/phase-NN/stories and one board ticket per story (via the board MCP tools).",
+        "end": {
+          "fail": "none",
+          "pass": "plan-merge-ready"
+        },
+        "limits": {
+          "maxRuns": 2
+        },
+        "maxSteps": 4,
+        "name": "board-unpack",
+        "priority": 100,
+        "role": "ProductOwner",
+        "sourceSha256": "8e311ca2d393449f7dc46b99547d998d9d20698dbb998959cf9c04695a2a4da7",
+        "stages": [
+          {
+            "id": "unpack",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "passRequires": [],
+            "permission": "workspace_write",
+            "promptSource": "workflows/prompts/board-unpack.md",
+            "role": "ProductOwner",
+            "type": "agent"
+          }
+        ],
+        "startsAt": "unpack-ready",
+        "title": "Unpack",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "unpacking",
+        "workspace": "worktree"
+      },
+      "text": "",
+      "sha256": "8e311ca2d393449f7dc46b99547d998d9d20698dbb998959cf9c04695a2a4da7",
+      "problems": [],
+      "start": {
+        "allowed": true,
+        "default": false
+      }
+    },
+    {
+      "name": "merge-merge-ready",
+      "definition": {
+        "compiledSteps": true,
+        "description": "",
+        "end": {
+          "fail": "merge-conflict",
+          "pass": "merged"
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "maxSteps": 20,
+        "name": "merge-merge-ready",
+        "priority": 100,
+        "sourceSha256": "0be2b675a71f5a8c035beae277ddf72cb48bcc5b6831f4fa66000321a2723573",
+        "stages": [
+          {
+            "id": "merge",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "stepKind": "action",
+            "stepValue": "merge",
+            "type": "validation"
+          }
+        ],
+        "startsAt": "merge-ready",
+        "title": "Merge merge ready",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "merging"
+      },
+      "text": "",
+      "sha256": "0be2b675a71f5a8c035beae277ddf72cb48bcc5b6831f4fa66000321a2723573",
+      "problems": [],
+      "start": {
+        "allowed": false,
+        "default": false
+      }
+    },
+    {
+      "name": "merge-plan-merge-ready",
+      "definition": {
+        "compiledSteps": true,
+        "description": "",
+        "end": {
+          "fail": "plan-merge-conflict",
+          "pass": {
+            "releaseCreatedTickets": {
+              "from": "none",
+              "to": "refine-ready"
+            },
+            "status": "merged"
+          }
+        },
+        "limits": {
+          "onFailPriority": 0
+        },
+        "maxSteps": 20,
+        "name": "merge-plan-merge-ready",
+        "priority": 100,
+        "sourceSha256": "78edf4b3c6e857ef86e1abb9109773a0a860dca209807e6c723850989f7bd6e6",
+        "stages": [
+          {
+            "id": "merge",
+            "maxVisits": 1,
+            "next": {
+              "fail": "$fail",
+              "pass": "$succeed"
+            },
+            "stepKind": "action",
+            "stepValue": "merge",
+            "type": "validation"
+          }
+        ],
+        "startsAt": "plan-merge-ready",
+        "title": "Merge plan merge ready",
+        "version": 2,
+        "warnings": [],
+        "whileRunning": "plan-merging"
+      },
+      "text": "",
+      "sha256": "78edf4b3c6e857ef86e1abb9109773a0a860dca209807e6c723850989f7bd6e6",
+      "problems": [],
+      "start": {
+        "allowed": false,
+        "default": false
+      }
+    }
+  ]
+}

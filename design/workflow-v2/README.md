@@ -26,6 +26,8 @@ Tokens: page `#111316`, card `#16191d`, card border `#262a30`, text `#e7e9ec`, m
 - No accessibility work is required beyond using real buttons, inputs and labels.
 - Static renders use fallback fonts if Inter / JetBrains Mono are not installed.
 
+The pure routing cards model is in `app/src/renderer/workflow/routingCardsModel.ts`. It accepts workflow and status catalog reads, start settings, and optional workflow details to enrich step summaries with prompts and transitions. Catalog-only steps retain their available IDs and kinds. Filtering includes status names in limits and created-ticket routing. Unreachable workflows with incoming routes report that their start status cannot be reached from a start, including when those routes form a disconnected cycle.
+
 The pure editor draft model lives in `app/src/renderer/workflow/workflowDraftModel.ts`. It converts the workflow detail projection into editable steps, prepares save requests, and supplies step operations, validation problems and selector options.
 
 The draft retains source step definitions, including individual YAML retry limits; it refuses to reconstruct compiled steps when source steps cannot be read safely.

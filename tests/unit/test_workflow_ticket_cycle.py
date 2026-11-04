@@ -124,6 +124,14 @@ class TicketCycle(SchedCase):
         self.pair(key, 'backlog', 'none')
 
     def test_round_limit_blocks_and_unblock_restores_queue(self):
+        # Exercise the round limit independently of the repository workflow's
+        # consecutive-failure escalation policy, which otherwise wins at six.
+        path = os.path.join(self.ws, '.agent-studio', 'workflows', 'board-develop.yaml')
+        with open(path, encoding='utf-8') as f:
+            workflow = f.read()
+        self.assertIn('  failuresInARow:\n    count: 6\n    status: need-escalate\n', workflow)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(workflow.replace('  failuresInARow:\n    count: 6\n    status: need-escalate\n', ''))
         key = self.new_ticket()
         self.move_to(key, 'todo')
         for attempt in range(6):
@@ -134,3 +142,13 @@ class TicketCycle(SchedCase):
         with self.store.transaction() as tx:
             boardmodel.ticket_unblock(tx, self.ws, {'key': key})
         self.pair(key, 'in-progress', 'dev-ready')
+
+    def test_developer_failure_limit_escalates_at_six_runs(self):
+        key = self.new_ticket()
+        self.move_to(key, 'todo')
+        for attempt in range(6):
+            self.claim(key, 'deving')
+            self.complete(key, 'failed', 'need-escalate' if attempt == 5 else 'dev-ready')
+        row = self.ticket(key)
+        self.assertEqual((row['return_status'], row['blocked_reason']),
+                         ('dev-ready', 'FAILURE_LIMIT:board-develop'))
