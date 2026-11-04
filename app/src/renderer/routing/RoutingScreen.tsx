@@ -3,7 +3,7 @@ import type { BoardSettings, BoardStatuses, BoardWorkflows, BoardWorkflowDetail,
 import { useDashboardSection } from '../dashboard/useDashboardSection';
 import { SectionError } from '../teams/SectionError';
 import { RoutingWorktreesDialog } from '../teams/RoutingWorktreesDialog';
-import { boardSettingsChanges, createRoutingDraft, errorProblems, validateRoutingDraft, type RoutingDraft } from '../teams/routingSettingsModel';
+import { createWorktreesDraft, errorProblems, validateWorktreesDraft, worktreesChanges, type WorktreesDraft } from '../teams/routingWorktreesModel';
 import type { TeamsNavigationController } from '../teams/useTeamsNavigationController';
 import { buildRoutingCards, filterRoutingCards, type RoutingCard, type RoutingGroup } from '../workflow/routingCardsModel';
 import './routingCards.css';
@@ -33,7 +33,7 @@ export function RoutingScreen({ workspace, management, connection, onStatuses, o
     setCollapsed(value);
     try { sessionStorage.setItem(`routing-collapsed:${workspace.id}`, JSON.stringify([...value])); } catch { /* Storage may be unavailable. */ }
   }
-  const [draft, setDraft] = useState<RoutingDraft | null>(null);
+  const [draft, setDraft] = useState<WorktreesDraft | null>(null);
   const [snapshot, setSnapshot] = useState<BoardSettings | null>(null);
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -56,7 +56,7 @@ export function RoutingScreen({ workspace, management, connection, onStatuses, o
   const cards = model ? filterRoutingCards(model.cards, query) : [];
   const connected = connection === undefined || connection.state === 'connected';
   const editable = connected && !!snapshot?.board.sha256 && snapshot.board.state === 'ok';
-  const problems = snapshot && draft ? [...validateRoutingDraft(draft, snapshot), ...(error?.code === 'BOARD_CONFIG_INVALID' ? errorProblems(error) : [])] : [];
+  const problems = snapshot && draft ? [...validateWorktreesDraft(draft), ...(error?.code === 'BOARD_CONFIG_INVALID' ? errorProblems(error) : [])] : [];
   async function reload(): Promise<void> {
     const result = await board.reloadFresh?.();
     if (result && !result.ok) { setReloadError(result.error); return; }
@@ -65,7 +65,7 @@ export function RoutingScreen({ workspace, management, connection, onStatuses, o
   }
   async function save(): Promise<void> {
     if (!snapshot || !draft || !editable || pending || problems.length) return;
-    const changes = boardSettingsChanges(draft, snapshot);
+    const changes = worktreesChanges(draft, snapshot);
     if (!changes) return;
     setPending(true); setError(null);
     try {
@@ -78,7 +78,7 @@ export function RoutingScreen({ workspace, management, connection, onStatuses, o
   const groups: Array<[RoutingGroup, string]> = [['main', 'Main path'], ['detour', 'Detours'], ['unreachable', 'Not reachable']];
   return <div className="routing-cards-screen" data-section="routing" role="region" aria-label="Workspace board routing">
     <header className="routing-cards-header"><div><h1>Routing</h1><p>Each workflow starts when a ticket reaches its status. A free member with the workflow's role picks the ticket up, works through the steps, and the result sets the ticket's next status, where the next workflow takes over.</p></div><div className="routing-actions">
-      {workflows.data?.workflows.some(w => w.workspace === 'worktree') && <button ref={worktreesButton} type="button" onClick={() => { if (settings) { setNotice(''); setSnapshot(settings); setDraft(createRoutingDraft(settings)); } }} disabled={!settings || !connected}>Worktrees: {settings?.worktree.baseBranch ?? 'main'}</button>}
+      {workflows.data?.workflows.some(w => w.workspace === 'worktree') && <button ref={worktreesButton} type="button" onClick={() => { if (settings) { setNotice(''); setSnapshot(settings); setDraft(createWorktreesDraft(settings)); } }} disabled={!settings || !connected}>Worktrees: {settings?.worktree.baseBranch ?? 'main'}</button>}
       <button type="button" className="routing-primary" onClick={onAdd} disabled={!onAdd}>+ Add workflow</button></div></header>
     <div role="status">{notice}</div><SectionError section={board} label="Board settings" /><SectionError section={workflows} label="Workflows" /><SectionError section={statuses} label="Statuses" />
     {(board.loading || workflows.loading || statuses.loading) && <p role="status">Loading routing…</p>}

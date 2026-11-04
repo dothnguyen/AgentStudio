@@ -1,10 +1,13 @@
-# Routing screen v1 (its own menu item)
+# Routing screen v1 (superseded by the Workflow group)
 
 Design for a new top-level **Routing** screen, built on the Design canvas "Agent Studio Teams Redesign", artboard
 "Routing - board to team". Routing is not a property of one team: it is the workflow that connects the workspace board to
 the running team so work can proceed on its own. A team can work without a board and a board can be worked by hand, so the
 screen has its own sidebar item (after Boards); the team page links to this screen instead of embedding routing. It follows
 the look of the Teams, Member details v7 and Roles v2 designs (`design/teams-member-detail-v7/`, `design/roles-catalog-v2/`).
+
+This design was superseded by `design/workflow-v2/`: the single Routing item became the Workflow group (Statuses, Workflow
+prompts and Routing), the rules table became one card per workflow, and the old rule-based routing UI was removed.
 
 | File | What it is |
 | --- | --- |
@@ -22,33 +25,11 @@ sizes and spacing. Tokens: page `#111316`, card `#16191d`, card border `#262a30`
 grey, ready statuses blue, needs escalation amber, conflicts red, done green. Fonts: Inter, JetBrains Mono. The sidebar is
 the existing app sidebar plus the new Routing item.
 
-Notes for the implementation:
-
-- The rules, the validation (one rule per status, roles and workflows must exist, a path to done), the protected routes and the
-  save with a concurrency check already exist (`RoutingSettingsPanel`, `routingSettingsModel`, `updateBoardSettings`). The
-  design changes how they are shown and edited, and adds Add rule and Remove rule. Keep the existing rules and messages.
-- Sample data (roles, members, team name, workflows, rule 10's statuses) are placeholders; use the real data.
-- Not designed here: the problems list that the old panel shows for an invalid board configuration. Keep showing it, above the Rules table, in the same amber note style used for warnings in the other designs.
-
 ## Captures
 
-`npm --prefix app run capture:routing` builds the app and renders the real Routing screen and its dialogs with the fixture
-in `app/capture/routingV1Fixture.ts`, writing `captures/overview.png`, `captures/edit-rule.png`,
-`captures/edit-action-rule.png`, `captures/new-rule.png`, `captures/remove-rule.png`, `captures/worktrees.png` and
-`captures/manifest.json` (1440 × 1447, the design size). The command is operator-only because Electron needs the desktop
-system libraries.
+The `captures/` PNGs and `manifest.json` are the original operator captures of this design, kept as design history. The
+old capture command and its fixture were removed with the rule-based Routing UI; the current screens are captured from
+the Workflow group design in `design/workflow-v2/`.
 
-Deliberate differences from the static design files:
-
-- The app sidebar and workspace breadcrumb replace the design's sidebar sample, and the app header shows the live
-  connection state.
-- The design has no Refresh action; the app keeps one in the page header so routing reads and the role catalog can be
-  reloaded together.
-- The app shows real loading, missing, invalid, disconnected and stale states above the cards; the design only shows the
-  loaded overview.
-- The Workflows card is kept below the rules table so operators can see workflow availability; the design does not draw it.
-- The app renders the same ten rules slightly taller than the design, so the 1440 × 1447 capture shows the first nine rows
-  fully and row ten at the fold; the page scrolls to the rest, including the Workflows card.
-- Sample names, counts, statuses and rule rows come from the fixture (the real backend shape), not from hard-coded design
-  values. The design table has no rule from Backlog, so the fixture starts validation at Merge ready (whose merge action
-  reaches Done) while keeping Backlog as the first free status for Add rule.
+The rules table, rule dialogs, status editor and worktree dialog in this design were replaced by the Workflow group. The
+worktree base-branch dialog survives as part of the Routing screen; everything else here is historical.
