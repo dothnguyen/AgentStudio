@@ -775,6 +775,31 @@ describe('Routing screen navigation', () => {
     expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
   });
 
+  it('prompts_before_leaving_with_an_unsaved_prompt_draft', async () => {
+    const promptDetail = { name: 'review', text: 'Original', words: 1, sha256: 'a'.repeat(64), users: [] };
+    const fake = fakeManagement({ calls: {
+      prompts: async () => ({ ok: true, data: { prompts: [promptDetail] } }),
+      prompt: async () => ({ ok: true, data: promptDetail }),
+    } });
+    const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} />);
+    await act(async () => {});
+    const group = view.getByRole('group', { name: 'Workflow' });
+    fireEvent.click(within(group).getByRole('button', { name: 'Workflow prompts' }));
+    await act(async () => {});
+    fireEvent.change(view.getByLabelText('Prompt text'), { target: { value: 'Draft' } });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    expect(confirm).toHaveBeenCalledWith('Discard unsaved prompt changes?');
+    expect(view.getByLabelText('Prompt text')).toBeTruthy();
+    expect((view.getByLabelText('Prompt text') as HTMLTextAreaElement).value).toBe('Draft');
+    expect(view.getByRole('region', { name: 'Prompt editor' })).toBeTruthy();
+    confirm.mockReturnValue(true);
+    fireEvent.click(view.getByRole('button', { name: 'Home' }));
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(view.queryByRole('region', { name: 'Prompt editor' })).toBeNull();
+    expect(view.queryByLabelText('Prompt text')).toBeNull();
+  });
+
   it('routing_role_link_opens_roles_with_that_role', async () => {
     const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
     const view = render(shell(fake));

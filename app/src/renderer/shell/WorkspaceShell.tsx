@@ -47,6 +47,10 @@ export interface WorkspaceShellProps {
 export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const items = props.items ?? NAV_ITEMS;
   const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
+  const promptDirty = useRef(false);
+  function canLeavePrompt(): boolean {
+    return !promptDirty.current || window.confirm('Discard unsaved prompt changes?');
+  }
 
   const [requestedRoleId, setRequestedRoleId] = useState<string | null>(null);
   const [requestedSkillId, setRequestedSkillId] = useState<string | null>(null);
@@ -148,6 +152,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
     const route = item === undefined ? nextId : navItemRoute(item);
     if (isBoardRoute(route) && !boardsEnabled) return;
     if (item === undefined ? !isBoardRoute(route) : item.disabled === true) return;
+    if (sectionId === 'workflow/prompts' && route !== sectionId && !canLeavePrompt()) return;
     const roleId = nextId === 'roles' && options?.roleId ? options.roleId : null;
     const skillId = nextId === 'skills' && options?.skillId ? options.skillId : null;
     if (route === 'boards/backlog' && !options?.preserveBacklog) {
@@ -231,7 +236,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   ) : sectionId === 'workflow/statuses' ? (
     <StatusesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
   ) : sectionId === 'workflow/prompts' ? (
-    <PromptsScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
+    <PromptsScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onDirtyChange={dirty => { promptDirty.current = dirty; }} />
   ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
     <CurrentPhaseScreen
       key={props.workspace.id}
@@ -376,7 +381,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
           })}
         </nav>
         <div className="sidebar-footer">
-          <button type="button" className="switch-workspace" onClick={props.onSwitchWorkspace}>
+          <button type="button" className="switch-workspace" onClick={() => { if (canLeavePrompt()) props.onSwitchWorkspace(); }}>
             <ShellIcon name="switch" />
             <span>Switch workspace</span>
           </button>
