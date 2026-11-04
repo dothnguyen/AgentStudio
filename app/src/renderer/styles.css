@@ -2589,6 +2589,18 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .statuses-actions button:disabled { color: #59616d; }
 .statuses-footer, .statuses-empty { color: #89929f; padding: 12px 22px; margin: 0; border-top: 1px solid #252a31; font-size: 12px; }
 @media (max-width: 800px) { .statuses-screen { padding: 24px; } .statuses-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .statuses-toolbar { align-items: flex-start; flex-direction: column; } }
+
+.boards-attention-panel { border: 1px solid #514127; border-radius: 10px; background: #15191e; overflow: hidden; }
+.boards-attention-panel.input { border-color: #263c59; }
+.boards-attention-panel header { padding: 16px; border-bottom: 1px solid #252a31; }
+.boards-attention-panel header div, .boards-attention-hint { color: #929ba9; font-size: 12px; margin-top: 4px; }
+.boards-attention-body { padding: 14px 16px; }
+.boards-attention-body p { margin: 0 0 12px; white-space: pre-wrap; }
+.boards-attention-question { background: #101318; border: 1px solid #252a31; border-radius: 7px; padding: 12px; }
+.boards-attention-body label { display: block; color: #c1c9d4; }
+.boards-attention-body textarea { display: block; width: 100%; min-height: 66px; margin-top: 6px; padding: 10px; color: inherit; background: #101318; border: 1px solid #303640; border-radius: 6px; resize: vertical; }
+.boards-attention-buttons { display: flex; justify-content: flex-end; gap: 8px; margin: 12px 0; }
+.boards-attention-primary { background: #5996fa; color: #101318; }
 .boards-ticket-attention[data-attention="approval"] { border-color: #4a3d1e; }
 .boards-ticket-attention[data-attention="question"] { border-color: #263c5c; }
 .boards-ticket-attention-open { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }

@@ -959,6 +959,7 @@ def approve(tx: Tx, args: dict, ctx: dict) -> dict:
     if sa["stage"] != args["stage"]:
         raise AsError("WORKFLOW_WRONG_STAGE", "Workflow is waiting on a different stage.")
     outcome = "pass" if args["approve"] else "fail"
+    delegation.ticket_note(tx, wf["id"], "ticket.approval_decided", {"stage": sa["stage"], "outcome": outcome, "note": args.get("note")})
     findings = [args["note"]] if args.get("note") else []
     tx.update("stage_attempt", sa["id"], {"phase": "done", "outcome": "verdict_" + outcome,
               "verdict_json": {"verdict": outcome, "findings": findings}}, "stage_attempt.verdict",

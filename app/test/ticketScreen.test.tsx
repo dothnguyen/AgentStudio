@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BoardSettings, BoardTicketDetail, Result } from '../src/renderer/api';
 import { TicketScreen } from '../src/renderer/boards/TicketScreen';
@@ -286,6 +286,27 @@ describe('TicketScreen timeline', () => {
     await settle();
     expect(view.queryByText(/Showing the latest/)).toBeNull();
   });
+
+  it('renders paused, cancelled, and approval decision events with their details', async () => {
+    const detail = timelineDetail();
+    detail.events = [
+      { id: 6, at, actor: 'coordinator', name: 'ticket.run_paused', from: null, to: null, payload: { reason: 'Waiting for approval' } },
+      { id: 7, at, actor: 'operator', name: 'ticket.run_cancelled', from: null, to: null, payload: { reason: 'User stopped the run' } },
+      { id: 8, at, actor: 'operator', name: 'ticket.approval_decided', from: null, to: null, payload: { outcome: 'pass', note: 'Looks good' } },
+      { id: 9, at, actor: 'operator', name: 'ticket.approval_decided', from: null, to: null, payload: { outcome: 'fail', note: 'Please revise' } },
+    ];
+    detail.eventsTruncated = false;
+    const { view } = setupTicket({ detail });
+    await settle();
+
+    const rows = Array.from(view.getByRole('region', { name: 'Timeline' }).querySelectorAll('.boards-event-row'));
+    expect(rows.map((row) => row.querySelector('.boards-event-title')?.textContent)).toEqual([
+      'Run paused', 'Run cancelled', 'Approved', 'Rejected',
+    ]);
+    expect(rows.map((row) => row.querySelector('.boards-event-detail')?.textContent)).toEqual([
+      'Waiting for approval', 'User stopped the run', 'Looks good', 'Please revise',
+    ]);
+  });
 });
 
 describe('TicketScreen work card', () => {
@@ -441,5 +462,84 @@ describe('TicketScreen states', () => {
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe(detail.ticket.title);
     expect(view.container.querySelector('.boards-ticket-activity-chip')?.textContent).toBe('Working');
     expect(view.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('ticket attention panels', () => {
+  const context = { workflow: 'Publish', stage: 'approve', assignmentId: 'assignment-1', member: 'editor', agent: 'Agent', routes: { pass: 'publish', fail: '$fail' }, end: { fail: 'To edit' } };
+  it.each([true, false])('sends approval decision %s with the note and refreshes', async (approve) => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.waitingApproval = { workflowRunId: 'run-1', stage: 'approve', ask: 'Publish?', since: '2026-01-01T00:00:00Z' };
+    detail.attentionContext = context;
+    const decide = vi.fn(async () => okR({ workflowRunId: 'run-1', stage: 'approve', outcome: 'pass' }));
+    const boardTicket = vi.fn(async () => okR(detail));
+    const fake = fakeManagement({ boardSettings: [okR(ticketSettings())], calls: { boardTicket, approveWorkflow: decide } });
+    render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+    expect(screen.getByText('Waiting for your approval')).toBeTruthy();
+    expect(screen.getByText('Publish?')).toBeTruthy();
+    expect(screen.getByText(/Workflow Publish · step approve · since/)).toBeTruthy();
+    expect(screen.getByText(/Approve → step publish\. Reject → workflow fails: To edit\./)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Please revise' } });
+    fireEvent.click(screen.getByRole('button', { name: approve ? 'Approve' : 'Reject' }));
+    await waitFor(() => expect(decide).toHaveBeenCalledWith(workspaceA.id, { workflowRunId: 'run-1', stage: 'approve', approve, note: 'Please revise' }));
+    await waitFor(() => expect(screen.getByText('Sent')).toBeTruthy());
+    expect(boardTicket).toHaveBeenCalledTimes(2);
+  });
+  it('shows approval errors inline and keeps the panel available for retry', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.waitingApproval = { workflowRunId: 'run-1', stage: 'approve', ask: 'Publish?', since: '2026-01-01T00:00:00Z' };
+    detail.attentionContext = context;
+    const decide = vi.fn()
+      .mockResolvedValueOnce({ ok: false, error: { code: 'NO', message: 'Approval unavailable', retryable: false } })
+      .mockResolvedValueOnce(okR({ workflowRunId: 'run-1', stage: 'approve', outcome: 'pass' }));
+    const fake = fakeManagement({ boardSettings: [okR(ticketSettings())], calls: { boardTicket: async () => okR(detail), approveWorkflow: decide } });
+    render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+
+    fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Please revise' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Approval unavailable'));
+    expect(screen.queryByText('Sent')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    await waitFor(() => expect(screen.getByText('Sent')).toBeTruthy());
+    expect(decide).toHaveBeenNthCalledWith(1, workspaceA.id, { workflowRunId: 'run-1', stage: 'approve', approve: true, note: 'Please revise' });
+    expect(decide).toHaveBeenNthCalledWith(2, workspaceA.id, { workflowRunId: 'run-1', stage: 'approve', approve: false, note: 'Please revise' });
+  });
+  it('sends an answer and shows errors inline', async () => {
+    const detail = boardTicketDetailFixture('T-114');
+    detail.ticket.needsInput = { question: 'Which database?', since: '2026-01-01T00:00:00Z' };
+    detail.attentionContext = context;
+    const answer = vi.fn().mockResolvedValueOnce({ ok: false, error: { code: 'NO', message: 'Try again', retryable: false } }).mockResolvedValueOnce(okR({}));
+    const fake = fakeManagement({ boardSettings: [okR(ticketSettings())], calls: { boardTicket: async () => okR(detail), answerAssignment: answer } });
+    render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+    expect(screen.getByText('The agent asked a question')).toBeTruthy();
+    expect(screen.getByText('Which database?')).toBeTruthy();
+    expect(screen.getByText(/Workflow Publish · step approve · editor \(Agent\) · since/)).toBeTruthy();
+    expect(screen.getByText('The same session continues with your answer')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Postgres' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Try again'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
+    await waitFor(() => expect(screen.getByText('Sent')).toBeTruthy());
+    expect(answer).toHaveBeenCalledWith(workspaceA.id, { assignmentId: 'assignment-1', answer: 'Postgres' });
+  });
+  it('shows a new question after an answer refreshes the ticket', async () => {
+    const first = boardTicketDetailFixture('T-114');
+    first.ticket.needsInput = { question: 'First?', since: '2026-01-01T00:00:00Z' };
+    first.attentionContext = context;
+    const next = boardTicketDetailFixture('T-114');
+    next.ticket.needsInput = { question: 'Second?', since: '2026-01-01T00:01:00Z' };
+    next.attentionContext = context;
+    const boardTicket = vi.fn().mockResolvedValueOnce(okR(first)).mockResolvedValue(okR(next));
+    const fake = fakeManagement({ boardSettings: [okR(ticketSettings())], calls: { boardTicket, answerAssignment: async () => okR({}) } });
+    render(<TicketScreen workspace={workspaceA} management={fake.api} ticketKey="T-114" />);
+    await settle();
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Answer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
+    await waitFor(() => expect(screen.getByText('Second?')).toBeTruthy());
+    expect(screen.queryByText('Sent')).toBeNull();
   });
 });

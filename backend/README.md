@@ -634,3 +634,7 @@ If PowerShell refuses to run the scripts, use `powershell -ExecutionPolicy Bypas
 ```bash
 python3 -m unittest discover -s tests -t .
 ```
+
+Ticket detail includes `attentionContext` for an active workflow step, with the frozen workflow's
+name and routes and the current assignment, member and agent. Approval decisions on board runs
+are recorded as `ticket.approval_decided` events with the outcome and optional note.

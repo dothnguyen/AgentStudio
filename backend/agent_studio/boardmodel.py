@@ -1563,7 +1563,19 @@ def ticket_detail(conn, workspace: str, key: str) -> dict:
                           "ORDER BY id", (ticket["id"], EVENTS_SHOWN)).fetchall()
     event_count = conn.execute("SELECT COUNT(*) FROM ticket_events WHERE ticket_id = ?",
                                (ticket["id"],)).fetchone()[0]
-    return {"workspace": workspace, "ticket": _ticket_json(conn, conn.execute(
+    attention = None
+    if ticket["active_run_id"]:
+        run = conn.execute("SELECT * FROM workflow_runs WHERE id = ?", (ticket["active_run_id"],)).fetchone()
+        attempt = conn.execute("SELECT * FROM stage_attempts WHERE workflow_run_id = ? AND status = 'active' ORDER BY rowid DESC LIMIT 1", (ticket["active_run_id"],)).fetchone()
+        if run and attempt:
+            definition = json.loads(run["definition_json"] or "{}")
+            stage = next((s for s in definition.get("stages", []) if s.get("id") == attempt["stage"]), {})
+            agent = conn.execute("SELECT display_name, member_id FROM agents WHERE id = ?", (attempt["agent_id"],)).fetchone()
+            attention = {"workflow": definition.get("title") or run["workflow"], "stage": attempt["stage"],
+                         "assignmentId": attempt["assignment_id"], "member": agent["member_id"] if agent else None,
+                         "agent": agent["display_name"] if agent else None, "routes": stage.get("next", {}),
+                         "end": definition.get("end", {})}
+    return {"workspace": workspace, "attentionContext": attention, "ticket": _ticket_json(conn, conn.execute(
         "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)).fetchone(), config),
         "dependsOn": deps, "dependents": dependents, "links": _ticket_links(conn, ticket["id"]),
         "events": [{"id": e["id"], "at": e["at"], "actor": e["actor"], "name": e["name"],

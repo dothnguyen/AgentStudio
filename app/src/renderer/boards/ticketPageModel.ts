@@ -154,6 +154,12 @@ export function ticketEventRows(events: readonly BoardTicketEvent[]): TicketEven
     const base = { id: event.id, time: formatLocalTime(event.at) };
 
     switch (name) {
+      case 'run_paused':
+        return { ...base, title: 'Run paused', detail: text(payload.reason), tone: 'amber' };
+      case 'run_cancelled':
+        return { ...base, title: 'Run cancelled', detail: text(payload.reason), tone: 'grey' };
+      case 'approval_decided':
+        return { ...base, title: payload.outcome === 'pass' ? 'Approved' : 'Rejected', detail: text(payload.note), tone: payload.outcome === 'pass' ? 'green' : 'amber' };
       case 'created':
         return { ...base, title: 'Created', detail: null, tone: 'grey' };
       case 'depends': {
@@ -236,6 +242,16 @@ export function ticketEventRows(events: readonly BoardTicketEvent[]): TicketEven
         };
     }
   });
+}
+
+export function approvalRoute(context: BoardTicketDetail['attentionContext'], outcome: 'pass' | 'fail'): string {
+  const target = context?.routes[outcome];
+  if (!target) return 'route unavailable';
+  if (target === '$succeed' || target === '$fail') {
+    const end = context?.end[outcome];
+    return `workflow ${target === '$succeed' ? 'succeeds' : 'fails'}${typeof end === 'string' ? `: ${end}` : ''}`;
+  }
+  return `step ${target}`;
 }
 
 export const NOBODY_WORKING = 'Nobody is working on this ticket';

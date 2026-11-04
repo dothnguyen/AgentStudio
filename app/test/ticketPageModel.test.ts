@@ -3,6 +3,7 @@ import type { BoardTicketEvent } from '../src/renderer/api';
 import { boardTicketDetailFixture } from './boardFixtures';
 import {
   blockedReturnLabel,
+  approvalRoute,
   formatLocalTime,
   openDependencyKeys,
   shortenRunId,
@@ -169,5 +170,27 @@ describe('ticket dependencies and work empty states', () => {
     expect(work).toEqual({
       owner: 'Nobody is working on this ticket', round: '—', branch: 'No branch yet', run: '—', runId: null,
     });
+  });
+});
+
+describe('attention timeline events', () => {
+  it('renders paused, cancelled and approval decisions with details', () => {
+    const events = ['ticket.run_paused', 'ticket.run_cancelled', 'ticket.approval_decided', 'ticket.approval_decided'].map((name, id) => ({ id, name, at: '2026-01-01T00:00:00Z', actor: 'coordinator', from: null, to: null, payload: id < 2 ? { reason: 'limit' } : { outcome: id === 2 ? 'pass' : 'fail', note: 'note' } }));
+    const rows = ticketEventRows(events);
+    expect(rows.map(row => row.title)).toEqual(['Run paused', 'Run cancelled', 'Approved', 'Rejected']);
+    expect(rows.map(row => row.detail)).toEqual(['limit', 'limit', 'note', 'note']);
+  });
+});
+
+describe('approval routing labels', () => {
+  it('explains workflow terminal routes and missing route data', () => {
+    const context = {
+      workflow: 'Publish', stage: 'review', assignmentId: null, member: null, agent: null,
+      routes: { pass: '$succeed', fail: '$fail' },
+      end: { pass: 'Published', fail: 'Needs changes' },
+    };
+    expect(approvalRoute(context, 'pass')).toBe('workflow succeeds: Published');
+    expect(approvalRoute(context, 'fail')).toBe('workflow fails: Needs changes');
+    expect(approvalRoute(null, 'pass')).toBe('route unavailable');
   });
 });

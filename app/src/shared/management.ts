@@ -485,6 +485,7 @@ export interface BoardTicketEvent {
   payload: unknown;
 }
 export interface BoardTicketDetail {
+  attentionContext?: { workflow: string; stage: string; assignmentId: string | null; member: string | null; agent: string | null; routes: Record<string, string>; end: Record<string, unknown> } | null;
   workspace: string;
   ticket: BoardTicket;
   dependsOn: string[];

@@ -21,6 +21,8 @@ import {
   ticketActivitySummary,
   ticketDetails,
   ticketEventRows,
+  formatLocalTime,
+  approvalRoute,
   ticketStatusChip,
   ticketWork,
   waitsForRows,
@@ -250,6 +252,39 @@ function TicketActions(props: { detail: BoardTicketDetail; settings: BoardSettin
   </div>;
 }
 
+function AttentionPanel(props: { detail: BoardTicketDetail; management: ManagementApi; workspaceId: string; onSent(): void }): JSX.Element | null {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ticket = props.detail.ticket;
+  const approval = ticket.waitingApproval;
+  const input = ticket.needsInput;
+  const context = props.detail.attentionContext;
+  if (!approval && !input) return null;
+  async function send(approve?: boolean): Promise<void> {
+    setBusy(true); setError(null);
+    try {
+      const result = approval
+        ? await props.management.approveWorkflow(props.workspaceId, { workflowRunId: approval.workflowRunId, stage: approval.stage, approve: approve === true, note: value })
+        : await props.management.answerAssignment(props.workspaceId, { assignmentId: context!.assignmentId!, answer: value });
+      if (result.ok) props.onSent(); else setError(result.error.message);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(false); }
+  }
+  return <section className={`boards-attention-panel ${approval ? 'approval' : 'input'}`}>
+    <header><strong>{approval ? 'Waiting for your approval' : 'The agent asked a question'}</strong>
+      <div>Workflow {context?.workflow ?? ticket.activity.workflow ?? '—'} · step {approval?.stage ?? context?.stage ?? '—'}{!approval && <> · {context?.member ?? '—'} ({context?.agent ?? ticket.activity.agent ?? '—'})</>} · since {formatLocalTime(approval?.since ?? input?.since)}</div>
+    </header>
+    <div className="boards-attention-body">
+      <p className={approval ? undefined : 'boards-attention-question'}>{approval?.ask ?? input?.question}</p>
+      <label>{approval ? 'Note (optional)' : 'Your answer'}<textarea value={value} onChange={event => setValue(event.target.value)} /></label>
+      {error && <p role="alert">{error}</p>}
+      <div className="boards-attention-buttons">{approval ? <><button type="button" disabled={busy} onClick={() => { void send(false); }}>Reject</button><button type="button" className="boards-attention-primary" disabled={busy} onClick={() => { void send(true); }}>Approve</button></> : <button type="button" className="boards-attention-primary" disabled={busy || !value.trim() || !context?.assignmentId} onClick={() => { void send(); }}>Send answer</button>}</div>
+      <p className="boards-attention-hint">{approval ? `Approve → ${approvalRoute(context, 'pass')}. Reject → ${approvalRoute(context, 'fail')}.` : 'The same session continues with your answer'}</p>
+    </div>
+  </section>;
+}
+
 function DescriptionCard(props: { body: string | null }): JSX.Element {
   const body = props.body ?? '';
   return (
@@ -426,6 +461,7 @@ function LoadingState(): JSX.Element {
 
 export function TicketScreen(props: TicketScreenProps): JSX.Element {
   const ticket = useBoardTicket(props.management, props.workspace.id, props.ticketKey);
+  const [sent, setSent] = useState<string | null>(null);
   const boardLabel = props.boardLabel ?? 'Current Phase';
   const breadcrumb = <Breadcrumb ticketKey={props.ticketKey} boardLabel={boardLabel} onOpenBoard={props.onOpenBoard} />;
 
@@ -478,6 +514,9 @@ export function TicketScreen(props: TicketScreenProps): JSX.Element {
     <div className="boards-ticket-screen" data-section="boards/ticket">
       {breadcrumb}
       <TicketHeader detail={ticket.detail} statuses={ticket.settings?.workflowStatuses.length ? ticket.settings.workflowStatuses : ticket.statuses} rules={ticket.rules} />
+      {sent === `${props.workspace.id}:${props.ticketKey}:${ticket.detail.ticket.waitingApproval?.since ?? ticket.detail.ticket.needsInput?.since ?? ''}` || (sent?.startsWith(`${props.workspace.id}:${props.ticketKey}:`) && !ticket.detail.ticket.waitingApproval && !ticket.detail.ticket.needsInput)
+        ? <section className="boards-attention-panel"><div className="boards-attention-body" role="status">Sent</div></section>
+        : <AttentionPanel key={`attention-${ticket.detail.ticket.key}-${ticket.detail.ticket.waitingApproval?.since ?? ticket.detail.ticket.needsInput?.since ?? ''}`} detail={ticket.detail} management={props.management} workspaceId={props.workspace.id} onSent={() => { setSent(`${props.workspace.id}:${props.ticketKey}:${ticket.detail!.ticket.waitingApproval?.since ?? ticket.detail!.ticket.needsInput?.since ?? ''}`); void ticket.reload(); }} />}
       <TicketActions key={ticket.detail.ticket.key} detail={ticket.detail} settings={ticket.settings} management={props.management} workspaceId={props.workspace.id} reload={ticket.reload} />
       <div className="boards-ticket-layout">
         <div className="boards-ticket-main">

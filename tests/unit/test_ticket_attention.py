@@ -47,6 +47,18 @@ class TicketAttentionTests(WaitingInputCase):
         phase = next(p for p in boardmodel.board_show(self.conn, self.ws)["phases"] if p["ticketCount"])
         self.assertEqual((phase["waitingApproval"], phase["needsInput"], phase["paused"], phase["blocked"]), (0, 0, 0, 1))
 
+    def test_attention_context_exposes_active_assignment_and_frozen_routes(self):
+        run, assignment = self.wait()
+        detail = boardmodel.ticket_detail(self.conn, self.ws, "T-001")
+        context = detail["attentionContext"]
+        attempt = self.conn.execute("SELECT stage FROM stage_attempts WHERE workflow_run_id = ? AND status = 'active'", (run,)).fetchone()
+        definition = json.loads(self.conn.execute("SELECT definition_json FROM workflow_runs WHERE id = ?", (run,)).fetchone()[0])
+        stage = next(s for s in definition["stages"] if s["id"] == attempt["stage"])
+        self.assertEqual(context["assignmentId"], assignment)
+        self.assertEqual(context["stage"], attempt["stage"])
+        self.assertEqual(context["routes"], stage["next"])
+        self.assertTrue(context["workflow"])
+
     def test_approval_requires_running_active_run(self):
         run, _ = self.wait()
         self.conn.execute("UPDATE stage_attempts SET phase = 'waiting_approval', artifacts_json = ? WHERE workflow_run_id = ?",
