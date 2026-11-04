@@ -181,6 +181,8 @@ The Home board panel and the Team page's member current work show ticket keys as
 
 The Routing screen groups workflow cards into the main path, detours and workflows that cannot be reached. Cards show their pickup status, steps, outcomes and limits; the filter and expand controls help navigate the board. The worktree base branch is edited in its dialog, and Manage statuses opens the status screen.
 
+Edit workflow opens a dialog with the workflow name and statuses, who runs it and where, a read-only step list, where it ends (including created-ticket release), limits, and the Todo start flags. Saving sends the workflow and board SHA tokens together; backend validation problems appear beside the field named by their path. Delete is disabled while tickets are in the workflow's running status. The step editor and Add workflow arrive in the following stories.
+
 The typed management API accepts ordered catalog agent IDs when adding or updating a member.
 Named switch and resume calls resolve the workspace in the main process and submit coordinator
 commands with fresh idempotency keys. Switching an active assignment requires its exact ID and

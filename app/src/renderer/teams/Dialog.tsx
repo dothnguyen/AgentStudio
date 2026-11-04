@@ -14,6 +14,8 @@ export interface DialogAction {
   icon?: IconName;
   /** Optional explanation associated with the action (for example a blocked reason). */
   descriptionId?: string;
+  /** Optional native tooltip, for example why a disabled action cannot run. */
+  title?: string;
   /** Optional handle so the owner can focus this action when the dialog opens. */
   buttonRef?: RefObject<HTMLButtonElement | null>;
   /** Optional extra class, for example a link-style footer action. */
@@ -142,6 +144,7 @@ export function Dialog(props: DialogProps): JSX.Element {
       className={['dialog-action', action.variant === 'primary' ? 'dialog-action-primary' : action.variant === 'danger' ? 'dialog-action-danger' : 'dialog-action-secondary', action.className].filter(Boolean).join(' ')}
       aria-busy={action.busy ? true : undefined}
       aria-describedby={action.descriptionId}
+      title={action.title}
       disabled={action.disabled || busy}
       onClick={action.onClick}
     >

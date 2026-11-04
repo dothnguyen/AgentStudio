@@ -20,10 +20,10 @@ it.each(['add', 'edit'] as const)('returns to the same %s workflow draft and ref
   fireEvent.click(within(view.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Routing' }));
   await waitFor(() => expect(view.getByRole('button', { name: 'Edit Develop' })).toBeTruthy());
   fireEvent.click(view.getByRole('button', { name: mode === 'add' ? '+ Add workflow' : 'Edit Develop' }));
-  await waitFor(() => expect(view.getByRole('heading', { name: mode === 'add' ? 'Add workflow' : 'Edit workflow' })).toBeTruthy());
+  await waitFor(() => expect(view.getByRole('heading', { name: mode === 'add' ? 'Add workflow' : 'Edit workflow: Develop' })).toBeTruthy());
   fireEvent.change(view.getByLabelText('Name'), { target: { value: 'Unsaved title' } });
   if (mode === 'add') fireEvent.change(view.getByLabelText('Workflow ID'), { target: { value: 'draft-id' } });
-  fireEvent.click(view.getByRole('button', { name: 'Manage statuses' }));
+  fireEvent.click(view.getByRole('button', { name: mode === 'add' ? 'Manage statuses' : 'Manage statuses →' }));
   expect(view.getByText(/You came here from/).textContent).toContain(mode === 'add' ? 'Add workflow' : 'Edit workflow');
   await waitFor(() => expect(view.getByRole('button', { name: '+ Add status' }).hasAttribute('disabled')).toBe(false));
   fireEvent.click(view.getByRole('button', { name: '+ Add status' }));
@@ -34,8 +34,8 @@ it.each(['add', 'edit'] as const)('returns to the same %s workflow draft and ref
   await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
   fireEvent.click(view.getByRole('button', { name: /Back to .* workflow/ }));
   expect((view.getByLabelText('Name') as HTMLInputElement).value).toBe('Unsaved title');
-  expect((view.getByLabelText('Workflow ID') as HTMLInputElement).value).toBe(mode === 'add' ? 'draft-id' : 'dev');
-  await waitFor(() => expect(within(view.getByLabelText('Starts at')).getByRole('option', { name: 'New status' })).toBeTruthy());
+  if (mode === 'add') expect((view.getByLabelText('Workflow ID') as HTMLInputElement).value).toBe('draft-id');
+  await waitFor(() => expect(within(view.getByLabelText(mode === 'add' ? 'Starts at' : 'Starts when a ticket is in')).getByRole('option', { name: 'New status' })).toBeTruthy());
   fireEvent.click(within(view.getByRole('navigation', { name: 'Workspace' })).getByRole('button', { name: 'Statuses' }));
   expect(view.queryByText(/You came here from/)).toBeNull();
 });
