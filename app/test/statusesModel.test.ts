@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { filterStatuses, statusCounts, statusPresentation, type Status } from '../src/renderer/workflow/statusesModel';
+import { filterStatuses, statusCounts, statusPresentation, statusIdFromName, validStatusId, statusErrorMessage, type Status } from '../src/renderer/workflow/statusesModel';
 
 const make = (type: Status['type'], overrides: Partial<Status> = {}): Status => ({ id: type, name: type, type, kind: type === 'start' ? 'initial' : type === 'done' ? 'done' : type === 'closed' ? 'closed' : null, usedBy: [], ticketCount: 0, ...overrides });
 
@@ -20,4 +20,19 @@ it('filters name or id case insensitively and combines filters', () => {
   expect(filterStatuses(statuses, ' WAIT ', false)).toEqual(statuses);
   expect(filterStatuses(statuses, 'ABC', true)).toEqual([statuses[0]]);
   expect(filterStatuses(statuses, 'missing', false)).toEqual([]);
+});
+
+
+it('derives IDs and maps status errors', () => {
+  expect(statusIdFromName('  Fact   Checking  ')).toBe('fact-checking');
+  expect(statusIdFromName('Already-kebab\tCase')).toBe('already-kebab-case');
+  expect(statusIdFromName('   ')).toBe('');
+  expect(validStatusId('a')).toBe(true);
+  expect(validStatusId(`a${'b'.repeat(63)}`)).toBe(true);
+  expect(validStatusId(`a${'b'.repeat(64)}`)).toBe(false);
+  expect(validStatusId('blocked')).toBe(false);
+  expect(validStatusId('Upper-case')).toBe(false);
+  expect(statusErrorMessage({ code: 'CONFIG_CHANGED', message: '' })).toBe('Statuses changed elsewhere - reload');
+  expect(statusErrorMessage({ code: 'STATUS_IN_USE', message: '', data: { usedBy: [{ title: 'Develop' }], ticketCount: 2 } })).toContain('Develop; 2 ticket(s)');
+  expect(statusErrorMessage({ code: 'OTHER', message: 'Failed' })).toBe('Failed');
 });

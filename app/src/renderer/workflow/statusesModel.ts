@@ -24,3 +24,21 @@ export function filterStatuses(statuses: readonly Status[], query: string, unuse
   return statuses.filter(s => (!unusedOnly || (s.usedBy.length === 0 && s.kind === null)) &&
     (s.name.toLocaleLowerCase().includes(needle) || s.id.toLocaleLowerCase().includes(needle)));
 }
+
+export function statusIdFromName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+export function validStatusId(id: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(id) && id !== 'blocked';
+}
+
+export function statusErrorMessage(error: { code: string; message: string; data?: unknown }): string {
+  if (error.code === 'CONFIG_CHANGED') return 'Statuses changed elsewhere - reload';
+  if (error.code === 'STATUS_IN_USE' && error.data && typeof error.data === 'object') {
+    const data = error.data as { usedBy?: Array<{ title?: string; workflow?: string }>; ticketCount?: number };
+    const users = Array.isArray(data.usedBy) ? data.usedBy.map(use => use.title || use.workflow).filter(Boolean) : [];
+    return `Status is in use${users.length ? ` by ${users.join(', ')}` : ''}${data.ticketCount ? `; ${data.ticketCount} ticket(s)` : ''}.`;
+  }
+  return error.message;
+}

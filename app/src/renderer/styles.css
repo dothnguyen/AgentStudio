@@ -2589,3 +2589,13 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .statuses-actions button:disabled { color: #59616d; }
 .statuses-footer, .statuses-empty { color: #89929f; padding: 12px 22px; margin: 0; border-top: 1px solid #252a31; font-size: 12px; }
 @media (max-width: 800px) { .statuses-screen { padding: 24px; } .statuses-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .statuses-toolbar { align-items: flex-start; flex-direction: column; } }
+.statuses-return { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; margin-bottom: 22px; background: #161d28; border: 1px solid #263b5a; border-radius: 7px; color: #b6c3d5; }
+.statuses-drag { cursor: grab; color: #727d8b; background: transparent; border: 0; font-size: 18px; }
+.status-dialog-fields { display: grid; gap: 12px; }
+.status-dialog-fields > label { display: grid; gap: 6px; }
+.status-dialog-fields input:not([type=radio]) { width: 100%; padding: 9px 12px; background: #101216; border: 1px solid #30353e; border-radius: 6px; color: #e0e3e8; }
+.status-dialog-fields small { display: block; color: #89929f; }
+.status-dialog-fields fieldset { border: 0; padding: 0; margin: 0; }
+.status-dialog-fields legend { margin-bottom: 6px; }
+.status-type { display: flex; gap: 10px; border: 1px solid #292e36; border-radius: 7px; padding: 10px 14px; margin-bottom: 8px; }
+.status-type.selected { border-color: #5996f5; background: #192332; }
