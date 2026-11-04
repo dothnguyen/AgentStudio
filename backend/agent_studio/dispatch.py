@@ -1175,6 +1175,24 @@ def _command_catalog(args, req):
             "commands": [delegation.describe(c) for c in (cfg or {"commands": {}})["commands"].values()]}
 
 
+def _checkset_list(args, req):
+    _only("checkset.list", args, {"workspace"})
+    ws = _workspace_arg(args)
+    try:
+        cfg = delegation.load_config(ws)
+    except AsError as e:
+        if e.code != delegation.DELEGATION_CONFIG_INVALID:
+            raise
+        return {"checkSets": [], "commands": [], "problems": [
+            {"path": (e.data or {}).get("path", delegation.CONFIG_REL), "message": e.message}]}
+    cfg = cfg or {"checkSets": {}, "commands": {}}
+    return {"checkSets": [{"id": sid, "run": spec["run"], "otherwise": spec.get("otherwise"),
+                           "reuseIfTested": spec["reuseIfTested"]}
+                          for sid, spec in cfg["checkSets"].items()],
+            "commands": [{"id": c["id"], "description": c["description"]}
+                         for c in cfg["commands"].values()], "problems": []}
+
+
 COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
@@ -1267,6 +1285,7 @@ COMMANDS = {
     "command.request": _inbox("command.request", _validate_command_request),
     "command.requests": _command_requests,
     "command.catalog": _command_catalog,
+    "checkset.list": _checkset_list,
     "command.approve": _inbox("command.approve", _validate_command_ref),
     "command.reject": _inbox("command.reject", _validate_command_ref),
     "command.cancel": _inbox("command.cancel", _validate_command_ref),

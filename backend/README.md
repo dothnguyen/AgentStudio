@@ -520,7 +520,7 @@ command tool: every call is one of these fixed tools and goes through the same v
 `--workspace PATH` pins the workspace (default: `AGENT_STUDIO_WORKSPACE`, else the workspace at or above the
 directory the client starts the server in; each tool also takes a `workspace` argument).
 Read tools: `workspace_list`, `board_show`, `phase_list`, `ticket_list`, `ticket_show`, `team_overview`,
-`workflow_show`, `command_requests`, `command_catalog`.
+`workflow_show`, `command_requests`, `command_catalog`, `checkset_list`.
 
 `agent-studio mcp --print-config` prints the setup lines for each client (with the `wsl.exe -d <distro> -e ...`
 form for clients running on Windows).
@@ -590,9 +590,14 @@ sections holding each result.
 
 ```bash
 agent-studio command catalog --workspace PATH           # the catalog the next run will freeze
+agent-studio checkset list --workspace PATH              # check rules and command descriptions
 agent-studio command requests --workflow RUN_ID          # what a run asked for, and the results
 agent-studio command approve --request ID                # or: reject --request ID --reason TEXT, cancel --request ID
 ```
+
+The read command `checkset.list` (also MCP `checkset_list`) returns `checkSets` with their `id`, `run`,
+`otherwise` (null when absent), and `reuseIfTested`, plus command IDs and descriptions and a `problems` list.
+An absent catalog gives empty lists; an invalid catalog gives empty data and its validation problem.
 
 
 **Session resume.** When a stage that delegated commands is re-dispatched, a provider that can resume (opencode:

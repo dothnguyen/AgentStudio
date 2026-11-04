@@ -111,6 +111,7 @@ USAGE = """agent-studio <command>
                                            one phase / rename it / close it / reopen it / make it current
   board phase remove (--workspace PATH | cwd) ID [--move-to ID]   remove a phase (empty, or move its tickets)
   command catalog (--workspace PATH | cwd)   the delegated command catalog (.agent-studio/commands.json)
+  checkset list (--workspace PATH | cwd)     check sets and available commands
   command requests (--workflow ID | --team UUID)   delegated command requests of a run / a team's open ones
   command approve --request ID             run a delegated command that waits for human approval
   command reject --request ID [--reason TEXT]   turn it down; the agent resumes with the reason
@@ -464,6 +465,9 @@ def _human_request(argv) -> dict:
     cmd_p.add_argument("--reason")
     cmd_p.add_argument("--key")
     cmd_p.add_argument("--timeout-ms", type=int, default=dispatch.DEFAULT_TIMEOUT_MS)
+    checkset_p = sub.add_parser("checkset", add_help=False)
+    checkset_p.add_argument("action", choices=["list"])
+    checkset_p.add_argument("--workspace")
     asg_p = sub.add_parser("assignment", add_help=False)
     asg_p.add_argument("action", choices=["cancel", "resolve"])
     asg_p.add_argument("--action", dest="resolve_action", choices=["retry", "fail", "cancel"])
@@ -605,6 +609,8 @@ def _human_request(argv) -> dict:
             args["member"] = ns.member
         req.update(command="board.resume", args=args, idempotencyKey=ns.key or str(uuid.uuid4()),
                    timeoutMs=ns.timeout_ms)
+    elif ns.cmd == "checkset":
+        req.update(command="checkset.list", args={"workspace": os.path.realpath(ns.workspace or os.getcwd())})
     elif ns.cmd == "command":
         if ns.action == "catalog":
             req.update(command="command.catalog", args={"workspace": os.path.realpath(ns.workspace or os.getcwd())})

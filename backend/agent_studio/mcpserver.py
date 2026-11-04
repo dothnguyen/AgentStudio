@@ -78,7 +78,8 @@ TOOLS = [
 
 
 for _name, _description in (("board_workflows", "List board workflows and their problems."),
-                             ("prompt_list", "List workflow prompts and their users.")):
+                             ("prompt_list", "List workflow prompts and their users."),
+                             ("checkset_list", "List check sets and available commands.")):
     TOOLS.append({"name": _name, "description": _description,
                   "inputSchema": {"type": "object", "properties": {}}})
 
@@ -130,8 +131,8 @@ def _ids(request_id, assignment: str, agent: str, args: dict) -> str:
 
 
 def _tool_call(name: str, args: dict, assignment: str, agent: str, workspace: str, request_id) -> dict:
-    if name in ("board_workflows", "prompt_list"):
-        data = _call("board.workflows" if name == "board_workflows" else "prompt.list",
+    if name in ("board_workflows", "prompt_list", "checkset_list"):
+        data = _call({"board_workflows": "board.workflows", "prompt_list": "prompt.list", "checkset_list": "checkset.list"}[name],
                      {"workspace": workspace}, write=False, assignment=assignment, agent=agent)
         return {"content": [{"type": "text", "text": json.dumps(data)}], **data}
     if name == "ticket_add":
@@ -255,6 +256,7 @@ OPERATOR_READ_TOOLS = [
 OPERATOR_READ_TOOLS.extend([
     {"name": "board_workflows", "description": "List board workflows.", "inputSchema": _op_schema()},
     {"name": "prompt_list", "description": "List workflow prompts.", "inputSchema": _op_schema()},
+    {"name": "checkset_list", "description": "List check sets and available commands.", "inputSchema": _op_schema()},
 ])
 OPERATOR_WRITE_TOOLS = [
     {"name": "workflow_approve", "description": "Approve or reject a waiting workflow stage.",
@@ -339,8 +341,8 @@ def _operator_tool_call(name: str, args: dict, operator: dict, request_id) -> di
     def text(body: str, **data) -> dict:
         return {"content": [{"type": "text", "text": _clip(body)}], **data}
 
-    if name in ("board_workflows", "prompt_list"):
-        data = call("board.workflows" if name == "board_workflows" else "prompt.list", {})
+    if name in ("board_workflows", "prompt_list", "checkset_list"):
+        data = call({"board_workflows": "board.workflows", "prompt_list": "prompt.list", "checkset_list": "checkset.list"}[name], {})
         return text(_json_text(data), **data)
     if name == "workspace_list":
         data = call("workspace.list", {}, ws=False)
