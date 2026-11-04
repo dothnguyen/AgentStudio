@@ -34,6 +34,23 @@ function edit(d: WorkflowDraft, fn: (steps: DraftStep[]) => void): WorkflowDraft
 export function addStep(d: WorkflowDraft, kind: StepKind): WorkflowDraft { return edit(d, steps => { let id: string = kind; let n = 2; while (steps.some(s => s.id === id)) id = `${kind}_${n++}`; const s: DraftStep = { id }; if (kind === 'agent') s.agent = { prompt: '', access: 'write' }; if (kind === 'check') s.check = { checks: '' }; if (kind === 'merge') s.action = 'merge'; if (kind === 'approval') s.approval = { ask: '' }; steps.push(s); }); }
 export function removeStep(d: WorkflowDraft, index: number): WorkflowDraft { return edit(d, steps => { if (index < 0 || index >= steps.length) return; if (index > 0 && steps[index - 1].onPass === undefined) steps[index - 1].onPass = 'end-fail'; const [removed] = steps.splice(index, 1); for (const s of steps) { if (s.onPass === removed.id) s.onPass = 'end-fail'; if (s.onFail === removed.id || (typeof s.onFail === 'object' && s.onFail.retry === removed.id)) s.onFail = 'end-fail'; if (s.passRequires) s.passRequires = s.passRequires.filter(id => id !== removed.id); } }); }
 export function moveStep(d: WorkflowDraft, index: number, direction: 'up' | 'down'): WorkflowDraft { return edit(d, steps => { const to = index + (direction === 'up' ? -1 : 1); if (index >= 0 && index < steps.length && to >= 0 && to < steps.length) [steps[index], steps[to]] = [steps[to], steps[index]]; }); }
+export function reorderStep(d: WorkflowDraft, from: number, to: number): WorkflowDraft { return edit(d, steps => { if (from < 0 || from >= steps.length || to < 0 || to >= steps.length || from === to) return; const [moved] = steps.splice(from, 1); steps.splice(to, 0, moved); }); }
+export function updateStep(d: WorkflowDraft, index: number, change: (step: DraftStep) => void): WorkflowDraft { return edit(d, steps => { if (steps[index]) change(steps[index]); }); }
+/** The file name (without extension) an Add workflow dialog uses for its title. */
+export function workflowNameFromTitle(title: string): string { return title.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64); }
+const statusOf = (value: unknown): string => typeof value === 'string' ? value : value && typeof value === 'object' && !Array.isArray(value) && typeof (value as Record<string, unknown>).status === 'string' ? String((value as Record<string, unknown>).status) : '';
+/**
+ * The Add workflow warning when nothing routes to its start status and tickets
+ * cannot start there. Returns the status id, or null when the start is reachable.
+ */
+export function unreachableStart(d: WorkflowDraft, workflows: readonly BoardWorkflowSummary[]): string | null {
+  const startsAt = typeof d.definition.startsAt === 'string' ? d.definition.startsAt : '';
+  if (!startsAt || d.start.allowed) return null;
+  const end = obj(d.definition.end);
+  if (statusOf(end.pass) === startsAt || statusOf(end.fail) === startsAt) return null;
+  const reached = workflows.some(w => w.name !== d.name && (statusOf(w.end.pass) === startsAt || statusOf(w.end.fail) === startsAt));
+  return reached ? null : startsAt;
+}
 export function renameStep(d: WorkflowDraft, index: number, id: string): WorkflowDraft { return edit(d, steps => { if (!steps[index]) return; const old = steps[index].id; steps[index].id = id; for (const s of steps) { if (s.onPass === old) s.onPass = id; if (s.onFail === old) s.onFail = id; else if (typeof s.onFail === 'object' && s.onFail.retry === old) s.onFail.retry = id; if (s.passRequires) s.passRequires = s.passRequires.map(x => x === old ? id : x); } }); }
 export function setTarget(d: WorkflowDraft, index: number, outcome: 'pass' | 'fail', target: string | undefined): WorkflowDraft { return edit(d, steps => { if (steps[index]) { const key = outcome === 'pass' ? 'onPass' : 'onFail'; if (target === undefined) delete steps[index][key]; else steps[index][key] = target; } }); }
 export function setRetry(d: WorkflowDraft, index: number, target: string, max: number): WorkflowDraft { return edit(d, steps => { if (steps[index]) steps[index].onFail = { retry: target, max, then: 'end-fail' }; }); }

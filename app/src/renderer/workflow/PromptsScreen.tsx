@@ -3,7 +3,7 @@ import type { ManagementApi, PromptDetail, Workspace } from '../api';
 import { detectPlaceholders, groupPrompts, insertPlaceholder, PLACEHOLDERS, tokenCount, usedBy, wordCount } from './promptsModel';
 import { Dialog } from '../teams/Dialog';
 
-export function PromptsScreen({ workspace, management, onDirtyChange }: { workspace: Workspace; management: ManagementApi; onDirtyChange?: (dirty: boolean) => void }): JSX.Element {
+export function PromptsScreen({ workspace, management, initialPrompt, onDirtyChange }: { workspace: Workspace; management: ManagementApi; initialPrompt?: string | null; onDirtyChange?: (dirty: boolean) => void }): JSX.Element {
   const [prompts, setPrompts] = useState<PromptDetail[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -36,13 +36,13 @@ export function PromptsScreen({ workspace, management, onDirtyChange }: { worksp
       if (cancelled) return;
       if (!result.ok) { setError('Could not load prompts.'); return; }
       setPrompts(result.data.prompts);
-      setSelected(result.data.prompts[0]?.name ?? null);
+      setSelected(result.data.prompts.find(prompt => prompt.name === initialPrompt)?.name ?? result.data.prompts[0]?.name ?? null);
     }).catch(() => { if (!cancelled) setError('Could not load prompts.'); }).finally(() => { if (!cancelled) setLoading(false); });
     void management.boardWorkflows(workspace.id).then(result => {
       if (!cancelled && result.ok) setTitles(Object.fromEntries(result.data.workflows.map(w => [w.name, w.title])));
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [management, workspace.id]);
+  }, [initialPrompt, management, workspace.id]);
   useEffect(() => {
     if (selected === null) return;
     let cancelled = false;

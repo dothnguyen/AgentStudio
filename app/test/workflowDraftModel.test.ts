@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { addStep, draftFromWorkflow, draftToSave, emptyDraft, moveStep, promptOptions, removeStep, renameStep, setRetry, setTarget, statusOptions, targetStatusOptions, validateDraft } from '../src/renderer/workflow/workflowDraftModel';
+import { addStep, draftFromWorkflow, draftToSave, emptyDraft, moveStep, promptOptions, removeStep, renameStep, reorderStep, setRetry, setTarget, statusOptions, targetStatusOptions, unreachableStart, updateStep, validateDraft, workflowNameFromTitle } from '../src/renderer/workflow/workflowDraftModel';
 import type { BoardWorkflowDetail, BoardWorkflowSummary, BoardStatuses } from '../src/renderer/api';
 
 const status = (id: string): BoardStatuses['statuses'][number] => ({ id, name: id, kind: null, type: 'unused', usedBy: [], ticketCount: 0 });
@@ -224,4 +224,29 @@ it('reports invalid step kinds and retry shapes at backend paths', () => {
   for (const path of ['steps[1]', 'steps[2]']) expect(issues).toContainEqual({ path, message: 'step needs exactly one kind' });
   for (const path of ['steps[1].onFail', 'steps[2].onFail', 'steps[3].onFail']) expect(issues).toContainEqual({ path, message: 'retry requires retry, max and then: end-fail' });
   expect(issues.some(p => p.path === 'steps[4]' || p.path === 'steps[4].onFail')).toBe(false);
+});
+
+
+it('reorders, updates and names new workflows', () => {
+  let d = addStep(addStep(addStep(emptyDraft(), 'agent'), 'check'), 'approval');
+  d = reorderStep(d, 2, 0);
+  expect(d.definition.steps.map(step => step.id)).toEqual(['approval', 'agent', 'check']);
+  d = updateStep(d, 0, step => { if (step.approval) step.approval.ask = 'Publish?'; });
+  expect(d.definition.steps[0].approval?.ask).toBe('Publish?');
+  expect(reorderStep(d, 9, 0)).toEqual(d);
+  expect(workflowNameFromTitle('  Publish Post!  ')).toBe('publish-post');
+  expect(workflowNameFromTitle('//')).toBe('');
+});
+
+it('reports an unreachable start status until one is set or tickets may start there', () => {
+  const d = emptyDraft();
+  d.definition.startsAt = 'to-publish';
+  expect(unreachableStart(d, [workflow])).toBe('to-publish');
+  d.start.allowed = true;
+  expect(unreachableStart(d, [workflow])).toBeNull();
+  d.start.allowed = false;
+  d.definition.end = { pass: 'to-publish', fail: 'ready' };
+  expect(unreachableStart(d, [workflow])).toBeNull();
+  d.definition.end = { pass: 'qa', fail: 'ready' };
+  expect(unreachableStart(d, [{ ...workflow, end: { pass: 'to-publish', fail: 'ready' } }])).toBeNull();
 });

@@ -8,9 +8,8 @@ import { SkillsScreen } from '../skills/SkillsScreen';
 import { PromptsScreen } from '../workflow/PromptsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { StatusesScreen } from '../workflow/StatusesScreen';
-import { WorkflowEditor, type WorkflowDraft } from '../workflow/WorkflowEditor';
 import { WorkflowDialog } from '../workflow/WorkflowDialog';
-import { draftFromWorkflow, type WorkflowDraft as EditorWorkflowDraft } from '../workflow/workflowDraftModel';
+import { draftFromWorkflow, emptyDraft, type WorkflowDraft as EditorWorkflowDraft } from '../workflow/workflowDraftModel';
 import type { WorkflowNavigationState } from './navModel';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { BacklogScreen } from '../boards/BacklogScreen';
@@ -51,8 +50,8 @@ export interface WorkspaceShellProps {
 export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   const items = props.items ?? NAV_ITEMS;
   const [sectionId, setSectionId] = useState<string>(DEFAULT_SECTION);
-  const [workflowDraft, setWorkflowDraft] = useState<WorkflowDraft | null>(null);
   const [workflowDialog, setWorkflowDialog] = useState<{ key: string; draft: EditorWorkflowDraft } | null>(null);
+  const [requestedPrompt, setRequestedPrompt] = useState<string | null>(null);
   const [routingVersion, setRoutingVersion] = useState(0);
   const [workflowReturn, setWorkflowReturn] = useState<WorkflowNavigationState | null>(null);
   const [workflowError, setWorkflowError] = useState('');
@@ -85,8 +84,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
 
   useEffect(() => {
     setSectionId(DEFAULT_SECTION);
-    setWorkflowDraft(null);
     setWorkflowDialog(null);
+    setRequestedPrompt(null);
     setRoutingVersion(0);
     setWorkflowReturn(null);
     setWorkflowError('');
@@ -186,8 +185,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
 
   function addWorkflow() {
     const key = String(++workflowSequence.current);
-    setWorkflowDraft({ key, mode: 'add-workflow', name: '', definition: { version: 2, stages: [{ id: 'check', type: 'validation' }] }, sha256: null });
-    setSectionId('workflow/editor');
+    setWorkflowDialog({ key, draft: emptyDraft() });
+    setSectionId('workflow/routing');
   }
   async function editWorkflow(name: string) {
     setWorkflowError('');
@@ -269,12 +268,10 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       }}
       onOpenTeams={() => navigate('teams')}
     />{workflowError && <p role="alert">{workflowError}</p>}</>
-  ) : sectionId === 'workflow/editor' && workflowDraft ? (
-    <WorkflowEditor key={workflowDraft.key} workspace={props.workspace} management={props.management} draft={workflowDraft} onChange={setWorkflowDraft} onClose={() => { setWorkflowDraft(null); setSectionId('workflow/routing'); }} onStatuses={() => { setWorkflowReturn({ returnTo: workflowDraft.mode, draftKey: workflowDraft.key }); setSectionId('workflow/statuses'); }} />
   ) : sectionId === 'workflow/statuses' ? (
-    <StatusesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} routeState={workflowReturn} onReturn={state => { if (workflowDraft?.key === state.draftKey && workflowDraft.mode === state.returnTo) { setWorkflowReturn(null); setSectionId('workflow/editor'); } else if (workflowDialog?.key === state.draftKey && state.returnTo === 'edit-workflow') { setWorkflowReturn(null); setSectionId('workflow/routing'); } }} />
+    <StatusesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} routeState={workflowReturn} onReturn={state => { if (workflowDialog?.key === state.draftKey) { setWorkflowReturn(null); setSectionId('workflow/routing'); } }} />
   ) : sectionId === 'workflow/prompts' ? (
-    <PromptsScreen key={props.workspace.id} workspace={props.workspace} management={props.management} onDirtyChange={dirty => { promptDirty.current = dirty; }} />
+    <PromptsScreen key={props.workspace.id} workspace={props.workspace} management={props.management} initialPrompt={requestedPrompt} onDirtyChange={dirty => { promptDirty.current = dirty; }} />
   ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
     <CurrentPhaseScreen
       key={props.workspace.id}
@@ -437,7 +434,8 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         onDraftChange={next => setWorkflowDialog(current => current ? { ...current, draft: next } : current)}
         onSaved={() => { setWorkflowDialog(null); setRoutingVersion(value => value + 1); }}
         onDeleted={() => { setWorkflowDialog(null); setRoutingVersion(value => value + 1); }}
-        onManageStatuses={() => { setWorkflowReturn({ returnTo: 'edit-workflow', draftKey: workflowDialog.key }); setSectionId('workflow/statuses'); }}
+        onManageStatuses={() => { setWorkflowReturn({ returnTo: workflowDialog.draft.expectedSha256 === null ? 'add-workflow' : 'edit-workflow', draftKey: workflowDialog.key }); setSectionId('workflow/statuses'); }}
+        onOpenPrompt={name => { setRequestedPrompt(name); navigate('workflow/prompts'); }}
       />}
     </div>
   );
