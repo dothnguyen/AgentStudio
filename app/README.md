@@ -274,4 +274,6 @@ The Routing editor also manages workflow status IDs, names, kinds and ordering, 
 
 The management preload exposes read calls for board workflows, workflow details, prompts, check sets, and board statuses. Ticket reads include approval, input, and pause state; board phase counts include those states and blocked tickets.
 
+The management API also exposes workflow and prompt save/delete, workflow status add/rename/remove/reorder, workflow approval, and answers to waiting assignments. Catalog and status writes pass their expected SHA tokens to the backend; workflow approval and assignment answers use coordinator idempotency keys. Answers use `assignment.resolve` with `action: retry` and the answer text, as in the T-204 backend contract. Workflow saves can include start settings and the expected board SHA.
+
 The Workflow Statuses screen reads the board's statuses and shows their workflow usage, ticket columns, and summary counts. Its filters search names and IDs or show statuses unused by workflows. Status actions are placeholders on this read-only screen.

@@ -7,6 +7,16 @@ export const MANAGEMENT_CHANNELS = {
   managementTeam: 'management:team',
   managementValidateTeam: 'management:validateTeam',
   managementBoardSettings: 'management:boardSettings',
+  managementSaveBoardWorkflow: 'management:saveBoardWorkflow',
+  managementDeleteBoardWorkflow: 'management:deleteBoardWorkflow',
+  managementSavePrompt: 'management:savePrompt',
+  managementDeletePrompt: 'management:deletePrompt',
+  managementAddStatus: 'management:addStatus',
+  managementRenameStatus: 'management:renameStatus',
+  managementRemoveStatus: 'management:removeStatus',
+  managementReorderStatuses: 'management:reorderStatuses',
+  managementApproveWorkflow: 'management:approveWorkflow',
+  managementAnswerAssignment: 'management:answerAssignment',
   managementBoardWorkflows: 'management:boardWorkflows',
   managementBoardWorkflow: 'management:boardWorkflow',
   managementPrompts: 'management:prompts',
@@ -80,7 +90,7 @@ const MAX_INSTRUCTION_BYTES = 16384;
 const MAX_SKILL_BYTES = 32768;
 const MAX_SKILL_ROLES = 100;
 
-type Kind = 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
+type Kind = 'statusKind' | 'statusIds' | 'answer' | 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
   | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull'
   | 'skillId' | 'skillText' | 'roleIds'
   | 'ticketKey' | 'reason' | 'boardColumn' | 'workflowStatus';
@@ -98,6 +108,12 @@ type FieldSpec = Field | ObjectField;
 
 function checkValue(kind: Kind, value: unknown, field: string, label: string): string | null {
   switch (kind) {
+    case 'statusKind':
+      return value === 'none' || value === 'done' ? null : `${label}: ${field} must be none or done.`;
+    case 'statusIds':
+      return Array.isArray(value) && value.every((v) => typeof v === 'string' && v.length > 0) && new Set(value).size === value.length ? null : `${label}: ${field} must be an array of distinct status ids.`;
+    case 'answer':
+      return typeof value === 'string' && value.trim().length > 0 && value.length <= 16000 ? null : `${label}: ${field} must be a non-empty string of at most 16000 characters.`;
     case 'slug':
       return typeof value === 'string' && SLUG.test(value)
         ? null
@@ -263,6 +279,22 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementTeam, 'team', 'teamdef.show', { teamDefId }),
   spec(C.managementValidateTeam, 'validateTeam', 'teamdef.validate', { teamDefId }),
   spec(C.managementBoardSettings, 'boardSettings', 'board.settings', {}),
+  spec(C.managementSaveBoardWorkflow, 'saveBoardWorkflow', 'boardworkflow.save', {
+    name: { kind: 'slug', required: true }, definition: { kind: 'any', required: true },
+    expectedSha256: { kind: 'shaOrNull', required: true },
+    start: { object: { allowed: { kind: 'bool', required: true }, default: { kind: 'bool', required: true } } },
+    expectedBoardSha256: { kind: 'sha' },
+  }),
+  spec(C.managementDeleteBoardWorkflow, 'deleteBoardWorkflow', 'boardworkflow.delete', { name: { kind: 'slug', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementSavePrompt, 'savePrompt', 'prompt.save', { name: { kind: 'slug', required: true }, text: { kind: 'string', required: true }, expectedSha256: { kind: 'shaOrNull', required: true } }),
+  spec(C.managementDeletePrompt, 'deletePrompt', 'prompt.delete', { name: { kind: 'slug', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementAddStatus, 'addStatus', 'status.add', { id: { kind: 'nonEmpty', required: true }, name: { kind: 'nonEmpty', required: true }, kind: { kind: 'statusKind', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementRenameStatus, 'renameStatus', 'status.rename', { id: { kind: 'nonEmpty', required: true }, name: { kind: 'nonEmpty', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementRemoveStatus, 'removeStatus', 'status.remove', { id: { kind: 'nonEmpty', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementReorderStatuses, 'reorderStatuses', 'status.reorder', { ids: { kind: 'statusIds', required: true }, expectedSha256: { kind: 'sha', required: true } }),
+  spec(C.managementApproveWorkflow, 'approveWorkflow', 'workflow.approve', { workflowRunId: { kind: 'uuid', required: true }, stage: { kind: 'nonEmpty', required: true }, approve: { kind: 'bool', required: true }, note: { kind: 'string' } }, { mutating: true }),
+  // T-204 answers waiting assignments through resolve retry (see test_board_waiting_input.py).
+  spec(C.managementAnswerAssignment, 'answerAssignment', 'assignment.resolve', { assignmentId: { kind: 'uuid', required: true }, answer: { kind: 'answer', required: true } }, { mutating: true, map: ({ assignmentId, answer }) => ({ assignmentId, action: 'retry', answer }) }),
   spec(C.managementBoardWorkflows, 'boardWorkflows', 'board.workflows', {}),
   spec(C.managementBoardWorkflow, 'boardWorkflow', 'boardworkflow.show', { name: { kind: 'slug', required: true } }),
   spec(C.managementPrompts, 'prompts', 'prompt.list', {}),

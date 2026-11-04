@@ -702,6 +702,16 @@ export interface ManagementApi {
   team(workspaceId: string, teamDefId: string): R<TeamDefinitionDetail>;
   validateTeam(workspaceId: string, teamDefId: string): R<TeamValidation>;
   boardSettings(workspaceId: string): R<BoardSettings>;
+  saveBoardWorkflow(workspaceId: string, input: { name: string; definition: Record<string, unknown>; expectedSha256: string | null; start?: { allowed: boolean; default: boolean }; expectedBoardSha256?: string }): R<BoardWorkflowDetail>;
+  deleteBoardWorkflow(workspaceId: string, input: { name: string; expectedSha256: string }): R<{ name: string }>;
+  savePrompt(workspaceId: string, input: { name: string; text: string; expectedSha256: string | null }): R<PromptDetail>;
+  deletePrompt(workspaceId: string, input: { name: string; expectedSha256: string }): R<{ name: string }>;
+  addStatus(workspaceId: string, input: { id: string; name: string; kind: 'none' | 'done'; expectedSha256: string }): R<ConfigWriteResult>;
+  renameStatus(workspaceId: string, input: { id: string; name: string; expectedSha256: string }): R<ConfigWriteResult>;
+  removeStatus(workspaceId: string, input: { id: string; expectedSha256: string }): R<ConfigWriteResult>;
+  reorderStatuses(workspaceId: string, input: { ids: string[]; expectedSha256: string }): R<ConfigWriteResult>;
+  approveWorkflow(workspaceId: string, input: { workflowRunId: string; stage: string; approve: boolean; note?: string }): R<{ workflowRunId: string; stage: string; outcome: string }>;
+  answerAssignment(workspaceId: string, input: { assignmentId: string; answer: string }): R<{ assignmentId: string; action: 'retry'; previousStatus: string; status: 'answered'; newAssignmentId: string; stage: string; resumedSession: boolean }>;
   boardWorkflows(workspaceId: string): R<BoardWorkflows>;
   boardWorkflow(workspaceId: string, name: string): R<BoardWorkflowDetail>;
   prompts(workspaceId: string): R<PromptList>;

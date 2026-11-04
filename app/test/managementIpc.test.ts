@@ -58,6 +58,16 @@ const LABELS: Record<string, string> = {
   [C.managementTeam]: 'team',
   [C.managementValidateTeam]: 'validateTeam',
   [C.managementBoardSettings]: 'boardSettings',
+  [C.managementSaveBoardWorkflow]: 'saveBoardWorkflow',
+  [C.managementDeleteBoardWorkflow]: 'deleteBoardWorkflow',
+  [C.managementSavePrompt]: 'savePrompt',
+  [C.managementDeletePrompt]: 'deletePrompt',
+  [C.managementAddStatus]: 'addStatus',
+  [C.managementRenameStatus]: 'renameStatus',
+  [C.managementRemoveStatus]: 'removeStatus',
+  [C.managementReorderStatuses]: 'reorderStatuses',
+  [C.managementApproveWorkflow]: 'approveWorkflow',
+  [C.managementAnswerAssignment]: 'answerAssignment',
   [C.managementBoardWorkflows]: 'boardWorkflows',
   [C.managementBoardWorkflow]: 'boardWorkflow',
   [C.managementPrompts]: 'prompts',
@@ -175,6 +185,27 @@ describe('management IPC', () => {
     const r = await call(channel, 'workspace-a', request);
     expect(calls).toEqual([['workspace.list', {}], [command, { workspace: '/work/a', ...expected }]]);
     expect(r).toEqual({ ok: true, data: { payload: command } });
+  });
+
+  it('passes workflow write arguments and generates keys only for coordinator commands', async () => {
+    const rows: Array<[string, string, Record<string, unknown>, Record<string, unknown>, boolean]> = [
+      [C.managementSaveBoardWorkflow, 'boardworkflow.save', { name: 'dev', definition: {}, expectedSha256: null, start: { allowed: true, default: false }, expectedBoardSha256: SHA }, { name: 'dev', definition: {}, expectedSha256: null, start: { allowed: true, default: false }, expectedBoardSha256: SHA }, false],
+      [C.managementDeleteBoardWorkflow, 'boardworkflow.delete', { name: 'dev', expectedSha256: SHA }, { name: 'dev', expectedSha256: SHA }, false],
+      [C.managementSavePrompt, 'prompt.save', { name: 'dev', text: '', expectedSha256: null }, { name: 'dev', text: '', expectedSha256: null }, false],
+      [C.managementDeletePrompt, 'prompt.delete', { name: 'dev', expectedSha256: SHA }, { name: 'dev', expectedSha256: SHA }, false],
+      [C.managementAddStatus, 'status.add', { id: 'ready', name: 'Ready', kind: 'done', expectedSha256: SHA }, { id: 'ready', name: 'Ready', kind: 'done', expectedSha256: SHA }, false],
+      [C.managementRenameStatus, 'status.rename', { id: 'ready', name: 'Ready', expectedSha256: SHA }, { id: 'ready', name: 'Ready', expectedSha256: SHA }, false],
+      [C.managementRemoveStatus, 'status.remove', { id: 'ready', expectedSha256: SHA }, { id: 'ready', expectedSha256: SHA }, false],
+      [C.managementReorderStatuses, 'status.reorder', { ids: ['ready'], expectedSha256: SHA }, { ids: ['ready'], expectedSha256: SHA }, false],
+      [C.managementApproveWorkflow, 'workflow.approve', { workflowRunId: UUID, stage: 'review', approve: true }, { workflowRunId: UUID, stage: 'review', approve: true }, true],
+      [C.managementAnswerAssignment, 'assignment.resolve', { assignmentId: UUID, answer: 'yes' }, { assignmentId: UUID, action: 'retry', answer: 'yes' }, true],
+    ];
+    for (const [channel, command, input, expected, mutating] of rows) {
+      const { call, calls, optsSeen } = setup({ newIdempotencyKey: () => 'key-12345678' });
+      await call(channel, 'workspace-a', input);
+      expect(calls).toEqual([['workspace.list', {}], [command, { workspace: '/work/a', ...expected }]]);
+      expect(optsSeen[1]?.idempotencyKey).toBe(mutating ? 'key-12345678' : undefined);
+    }
   });
 
   it('forwards agent editor options unchanged', async () => {

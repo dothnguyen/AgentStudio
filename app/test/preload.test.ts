@@ -20,6 +20,7 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 
 const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket',
+  'saveBoardWorkflow', 'deleteBoardWorkflow', 'savePrompt', 'deletePrompt', 'addStatus', 'renameStatus', 'removeStatus', 'reorderStatuses', 'approveWorkflow', 'answerAssignment',
   'boardWorkflows', 'boardWorkflow', 'prompts', 'prompt', 'checkSets', 'boardStatuses',
   'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
@@ -40,6 +41,17 @@ describe('preload', () => {
     expect(Object.keys(api.management).sort()).toEqual([...METHODS].sort());
     expect(Object.keys(api.connection)).toEqual(['onChange']);
     for (const k of ['invoke', 'send', 'on', 'ipcRenderer']) expect(k in api).toBe(false);
+  });
+
+  it('forwards workflow write inputs to their fixed channels', () => {
+    const f = fakeIpc();
+    const m = buildApi(f.ipc).management as unknown as Record<string, (...args: unknown[]) => unknown>;
+    const names = ['saveBoardWorkflow', 'deleteBoardWorkflow', 'savePrompt', 'deletePrompt', 'addStatus', 'renameStatus', 'removeStatus', 'reorderStatuses', 'approveWorkflow', 'answerAssignment'];
+    for (const name of names) {
+      const input = { marker: name };
+      m[name]('ws', input, 'ignored');
+      expect(f.invoke).toHaveBeenLastCalledWith(`management:${name}`, 'ws', input);
+    }
   });
 
   it('dashboard calls forward one workspace id on their fixed channels', () => {
