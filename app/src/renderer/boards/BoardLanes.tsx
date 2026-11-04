@@ -19,6 +19,7 @@ export interface BoardLanesProps {
   matches?(ticket: BoardTicketSummary): boolean;
   /** Opens the ticket page; omitted until the ticket-page story wires it in. */
   onOpenTicket?(key: string): void;
+  onApprove?: import('./TicketCard').TicketCardProps['onApprove'];
 }
 
 function BoardColumnView(props: {
@@ -26,6 +27,7 @@ function BoardColumnView(props: {
   workflowStatuses?: readonly BoardStatusInfo[];
   rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
+  onApprove?: import('./TicketCard').TicketCardProps['onApprove'];
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const { column } = props;
@@ -41,7 +43,7 @@ function BoardColumnView(props: {
       <ul className="boards-column-cards">
         {shown.map((ticket) => (
           <li key={ticket.id}>
-            <TicketCard ticket={ticket} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} />
+            <TicketCard ticket={ticket} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} onApprove={props.onApprove} />
           </li>
         ))}
       </ul>
@@ -70,7 +72,7 @@ export function BoardLanes(props: BoardLanesProps): JSX.Element {
     <div className="boards-board" role="region" aria-label="Board columns (scrollable)" tabIndex={0}>
       <div className="boards-board-lanes">
         {columns.map((column) => (
-          <BoardColumnView key={column.id} column={column} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} />
+          <BoardColumnView key={column.id} column={column} rules={props.rules} workflowStatuses={props.workflowStatuses} onOpenTicket={props.onOpenTicket} onApprove={props.onApprove} />
         ))}
       </div>
     </div>

@@ -1,7 +1,8 @@
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { BoardRuleView, BoardTicketSummary } from '../api';
 import type { BoardStatusInfo } from './boardLaneModel';
 import {
+  ticketAttention, elapsedAttention,
   workflowStatusChip,
   agentInitials,
   blockedReasonLine,
@@ -16,17 +17,44 @@ export interface TicketCardProps {
   workflowStatuses?: readonly BoardStatusInfo[];
   /** Opens the ticket page at boards/ticket/:key. */
   onOpenTicket?(key: string): void;
+  onApprove?(input: { workflowRunId: string; stage: string; approve: boolean; note?: string }): Promise<void>;
 }
 
 /** One kanban card: key, title, optional priority and blocked reason, activity and owner. */
 export function TicketCard(props: TicketCardProps): JSX.Element {
   const { ticket, rules = [], onOpenTicket } = props;
+  const [rejecting, setRejecting] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const attention = ticketAttention(ticket);
+  const decide = async (approve: boolean): Promise<void> => {
+    if (!ticket.waitingApproval || !props.onApprove || busy) return;
+    setBusy(true); setError('');
+    try {
+      await props.onApprove({ workflowRunId: ticket.waitingApproval.workflowRunId, stage: ticket.waitingApproval.stage, approve, ...(!approve && note.trim() ? { note } : {}) });
+      setRejecting(false);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not submit decision.'); }
+    finally { setBusy(false); }
+  };
   const chip = ticketActivityChip(ticket, rules);
   const tone = chip.tone;
   const workflow = workflowStatusChip(ticket.workflowStatus, props.workflowStatuses ?? [], rules);
   const agent = ticket.activity.agent?.trim() ?? '';
   const reason = tone === 'blocked' ? blockedReasonLine(ticket.blockedReason) : null;
   const open = (): void => { onOpenTicket?.(ticket.key); };
+
+  if (attention) return (
+    <article className="boards-ticket-card boards-ticket-attention" data-attention={attention.kind}>
+      <button type="button" className="boards-ticket-attention-open" onClick={open} aria-label={`Open ${ticket.key}: ${ticket.title}`}><span className="boards-ticket-key">{ticket.key}</span><span className="boards-ticket-title">{ticket.title}</span></button>
+      <span><span className={`boards-attention-chip boards-attention-chip-${attention.kind}`}>{attention.label}</span> <span className="boards-attention-time">{elapsedAttention(attention.since)}</span></span>
+      <span className="boards-ticket-attention-text">{attention.text}</span>
+      {attention.kind === 'approval' && <span className="boards-ticket-actions"><button type="button" disabled={busy || !props.onApprove} onClick={() => { void decide(true); }}>Approve</button><button type="button" disabled={busy || !props.onApprove} onClick={() => setRejecting(true)}>Reject…</button></span>}
+      {attention.kind === 'question' && <span><button type="button" onClick={open}>Answer…</button></span>}
+      {rejecting && <div role="dialog" aria-label="Reject approval" className="boards-reject-dialog"><label>Note (optional)<textarea value={note} onChange={event => setNote(event.target.value)} /></label><button type="button" disabled={busy} onClick={() => setRejecting(false)}>Cancel</button><button type="button" disabled={busy} onClick={() => { void decide(false); }}>Reject</button></div>}
+      {error && <span role="alert">{error}</span>}
+    </article>
+  );
 
   return (
     <button

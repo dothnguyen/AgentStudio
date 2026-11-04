@@ -2589,6 +2589,19 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 .statuses-actions button:disabled { color: #59616d; }
 .statuses-footer, .statuses-empty { color: #89929f; padding: 12px 22px; margin: 0; border-top: 1px solid #252a31; font-size: 12px; }
 @media (max-width: 800px) { .statuses-screen { padding: 24px; } .statuses-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .statuses-toolbar { align-items: flex-start; flex-direction: column; } }
+.boards-ticket-attention[data-attention="approval"] { border-color: #4a3d1e; }
+.boards-ticket-attention[data-attention="question"] { border-color: #263c5c; }
+.boards-ticket-attention-open { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.boards-attention-chip { padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+.boards-attention-chip-approval { background: #3c3324; color: #f2c674; }
+.boards-attention-chip-question { background: #22334d; color: #a9caff; }
+.boards-attention-chip-paused { background: #262b32; color: #c4cad2; }
+.boards-attention-time { color: #929ba8; font-size: 12px; }
+.boards-ticket-attention-text { color: #c4cad2; font-size: 13px; }
+.boards-ticket-actions { display: flex; gap: 8px; }
+.boards-reject-dialog { display: flex; flex-wrap: wrap; gap: 8px; }
+.boards-reject-dialog label, .boards-reject-dialog textarea { width: 100%; }
+.boards-attention-counts { display: flex; flex-wrap: wrap; gap: 18px; padding: 12px 18px; font-size: 13px; }
 .statuses-return { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; margin-bottom: 22px; background: #161d28; border: 1px solid #263b5a; border-radius: 7px; color: #b6c3d5; }
 .statuses-drag { cursor: grab; color: #727d8b; background: transparent; border: 0; font-size: 18px; }
 .status-dialog-fields { display: grid; gap: 12px; }

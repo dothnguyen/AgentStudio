@@ -3,6 +3,7 @@ import { ATTENTION_ROW_LIMIT, type AttentionRow } from './attentionModel';
 
 export interface NeedsAttentionCardProps {
   rows: readonly AttentionRow[];
+  counts?: { approval: number; question: number; blocked: number; paused: number };
   /** Opens the ticket page at boards/ticket/:key. */
   onOpenTicket?(key: string): void;
 }
@@ -20,7 +21,7 @@ function WarningIcon(): JSX.Element {
 export function NeedsAttentionCard(props: NeedsAttentionCardProps): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const { rows } = props;
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && (!props.counts || !Object.values(props.counts).some(Boolean))) return null;
 
   const shown = expanded ? rows : rows.slice(0, ATTENTION_ROW_LIMIT);
   const remaining = rows.length - shown.length;
@@ -33,6 +34,7 @@ export function NeedsAttentionCard(props: NeedsAttentionCardProps): JSX.Element 
           Needs attention · {rows.length}
         </h2>
       </div>
+      {props.counts && <div className="boards-attention-counts"><span>{props.counts.approval} waiting for approval</span><span>{props.counts.question} needs an answer</span><span>{props.counts.blocked} blocked</span><span className="boards-attention-time">{props.counts.paused} paused, will be picked up again</span></div>}
       <ul className="boards-attention-list">
         {shown.map((row) => (
           <li className="boards-attention-row" key={row.id} data-source={row.source}>

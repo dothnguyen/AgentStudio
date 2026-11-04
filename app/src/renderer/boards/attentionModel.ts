@@ -163,3 +163,7 @@ export function buildAttentionRows(
     ...runRows(overview),
   ];
 }
+
+export function attentionCounts(tickets: readonly BoardTicketSummary[]): { approval: number; question: number; blocked: number; paused: number } {
+  return { approval: tickets.filter(t => !!t.waitingApproval).length, question: tickets.filter(t => !!t.needsInput).length, blocked: tickets.filter(t => t.workflowStatus === 'blocked' || t.activity.state === 'blocked').length, paused: tickets.filter(t => !!t.paused).length };
+}

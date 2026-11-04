@@ -23,6 +23,15 @@ describe('NeedsAttentionCard', () => {
     expect(view.container.innerHTML).toBe('');
   });
 
+  it('renders workflow attention counts even without detail rows', () => {
+    const view = render(<NeedsAttentionCard rows={[]} counts={{ approval: 2, question: 1, blocked: 3, paused: 4 }} />);
+
+    expect(view.getByText('2 waiting for approval')).toBeTruthy();
+    expect(view.getByText('1 needs an answer')).toBeTruthy();
+    expect(view.getByText('3 blocked')).toBeTruthy();
+    expect(view.getByText('4 paused, will be picked up again')).toBeTruthy();
+  });
+
   it('shows the count and each row with an Open button', () => {
     const onOpenTicket = vi.fn();
     const view = render(

@@ -9,7 +9,7 @@ import type {
   TeamOverview,
   Workspace,
 } from '../api';
-import { buildAttentionRows } from './attentionModel';
+import { attentionCounts, buildAttentionRows } from './attentionModel';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
 import { BoardLanes } from './BoardLanes';
 import { BoardToolbar } from './BoardToolbar';
@@ -322,7 +322,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
         </div>
       </header>
       <Notice />
-      <NeedsAttentionCard rows={attentionRows} onOpenTicket={props.onOpenTicket} />
+      <NeedsAttentionCard counts={attentionCounts(tickets)} rows={attentionRows} onOpenTicket={props.onOpenTicket} />
       {tickets.length > 0 && (
         <>
           <BoardToolbar workflowStatuses={workflowStatuses} filters={filters} resultCount={filteredTickets.length} onChange={setFilters} />
@@ -335,6 +335,11 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
               hideEmpty={filters.hideEmpty}
               matches={matches}
               onOpenTicket={props.onOpenTicket}
+              onApprove={async (input) => {
+                const result = await props.management.approveWorkflow(props.workspace.id, input);
+                if (!result.ok) throw new Error(result.error.message);
+                await board.reload();
+              }}
             />
           )}
           {filteredTickets.length === 0 && (

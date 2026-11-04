@@ -313,3 +313,14 @@ describe('buildAttentionRows', () => {
     expect(rows[0]?.reason).toContain('ERROR');
   });
 });
+
+it('counts workflow attention states independently', async () => {
+  const { attentionCounts } = await import('../src/renderer/boards/attentionModel');
+  const { boardTicketSummary } = await import('./boardFixtures');
+  expect(attentionCounts([
+    boardTicketSummary({ waitingApproval: { workflowRunId: 'r', stage: 's', ask: 'Ask', since: '2026-01-01' } }),
+    boardTicketSummary({ needsInput: { question: 'Question', since: '2026-01-01' } }),
+    boardTicketSummary({ workflowStatus: 'blocked' }),
+    boardTicketSummary({ paused: { reason: null, at: '2026-01-01' } }),
+  ])).toEqual({ approval: 1, question: 1, blocked: 1, paused: 1 });
+});

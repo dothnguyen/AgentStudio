@@ -185,3 +185,54 @@ describe('workflow status chip', () => {
     }
   });
 });
+
+describe('workflow attention cards', () => {
+  const approval = { workflowRunId: 'run-1', stage: 'review', ask: 'Publish this?', since: '2026-01-01T00:00:00Z' };
+  it('shows approval and submits approve or rejection with a note', async () => {
+    const onApprove = vi.fn().mockResolvedValue(undefined);
+    const view = render(<TicketCard ticket={boardTicketSummary({ waitingApproval: approval })} onApprove={onApprove} />);
+    expect(view.getByText('Waiting for approval')).toBeTruthy();
+    expect(view.getByText('Publish this?')).toBeTruthy();
+    fireEvent.click(view.getByText('Approve'));
+    expect(onApprove).toHaveBeenCalledWith({ workflowRunId: 'run-1', stage: 'review', approve: true });
+    await vi.waitFor(() => expect(view.getByText('Reject…').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(view.getByText('Reject…'));
+    fireEvent.change(view.getByLabelText('Note (optional)'), { target: { value: 'Revise it' } });
+    fireEvent.click(view.getByText('Reject'));
+    expect(onApprove).toHaveBeenLastCalledWith({ workflowRunId: 'run-1', stage: 'review', approve: false, note: 'Revise it' });
+  });
+  it('shows the question and opens the ticket, and renders a paused reason', () => {
+    const open = vi.fn();
+    const view = render(<TicketCard ticket={boardTicketSummary({ key: 'T-201', needsInput: { question: 'Which one?', since: '2026-01-01T00:00:00Z' } })} onOpenTicket={open} />);
+    expect(view.getByText('Needs your answer')).toBeTruthy();
+    expect(view.getByText('Which one?')).toBeTruthy();
+    fireEvent.click(view.getByText('Answer…'));
+    expect(open).toHaveBeenCalledWith('T-201');
+    view.rerender(<TicketCard ticket={boardTicketSummary({ paused: { reason: 'usage limit', at: '2026-01-01T00:00:00Z' } })} />);
+    expect(view.getByText('Paused · usage limit')).toBeTruthy();
+  });
+  it('reports a failed decision and permits retry', async () => {
+    const view = render(<TicketCard ticket={boardTicketSummary({ waitingApproval: approval })} onApprove={vi.fn().mockRejectedValue(new Error('Failed'))} />);
+    fireEvent.click(view.getByText('Approve'));
+    expect((await view.findByRole('alert')).textContent).toBe('Failed');
+  });
+  it('selects approval before question or paused state and shows elapsed time', async () => {
+    const { ticketAttention, elapsedAttention } = await import('../src/renderer/boards/ticketCardModel');
+    const ticket = boardTicketSummary({
+      waitingApproval: approval,
+      needsInput: { question: 'Question', since: '2026-01-01T00:00:00Z' },
+      paused: { reason: 'later', at: '2026-01-01T00:00:00Z' },
+    });
+    expect(ticketAttention(ticket)).toMatchObject({ kind: 'approval', label: 'Waiting for approval', text: 'Publish this?' });
+    expect(elapsedAttention('2026-01-01T00:00:00Z', Date.parse('2026-01-01T01:05:00Z'))).toBe('1 hr');
+    expect(elapsedAttention('invalid', Date.now())).toBe('');
+  });
+  it('shows the paused label and elapsed time for a paused-only ticket', async () => {
+    const { ticketAttention, elapsedAttention } = await import('../src/renderer/boards/ticketCardModel');
+    const paused = boardTicketSummary({ paused: { reason: 'usage limit', at: '2026-01-01T00:00:00Z' } });
+    expect(ticketAttention(paused)).toMatchObject({ kind: 'paused', label: 'Paused · usage limit' });
+    const view = render(<TicketCard ticket={paused} />);
+    expect(view.container.querySelector('[data-attention="paused"]')).toBeTruthy();
+    expect(elapsedAttention('2026-01-01T00:00:00Z', Date.parse('2026-01-01T00:42:00Z'))).toBe('42 min');
+  });
+});

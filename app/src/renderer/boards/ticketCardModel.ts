@@ -107,3 +107,18 @@ export function agentInitials(agent: string): string {
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return `${words[0]!.charAt(0)}${words[1]!.charAt(0)}`.toUpperCase();
 }
+
+export function ticketAttention(ticket: BoardTicketSummary): { kind: 'approval' | 'question' | 'paused'; label: string; since: string; text: string } | null {
+  if (ticket.waitingApproval) return { kind: 'approval', label: 'Waiting for approval', since: ticket.waitingApproval.since, text: ticket.waitingApproval.ask };
+  if (ticket.needsInput) return { kind: 'question', label: 'Needs your answer', since: ticket.needsInput.since, text: ticket.needsInput.question };
+  if (ticket.paused) return { kind: 'paused', label: `Paused · ${ticket.paused.reason?.trim() || 'unknown reason'}`, since: ticket.paused.at, text: 'Back in the queue; the next available agent picks it up.' };
+  return null;
+}
+export function elapsedAttention(since: string, now = Date.now()): string {
+  const time = Date.parse(since);
+  if (!Number.isFinite(time)) return '';
+  const minutes = Math.max(0, Math.floor((now - time) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours} hr` : `${Math.floor(hours / 24)} d`;
+}
