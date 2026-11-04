@@ -2,6 +2,7 @@ import os
 import sqlite3
 import unittest
 import json
+import hashlib
 from unittest import mock
 
 import tests.unit.test_board_workflows as fixtures
@@ -12,6 +13,115 @@ from agent_studio.protocol import AsError
 class WorkflowCatalogTests(unittest.TestCase):
     setUp = fixtures.BoardWorkflowTests.setUp
     write = fixtures.BoardWorkflowTests.write
+    def board_sha(self):
+        with open(os.path.join(self.base, 'board.json'), 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+
+    def test_start_save_show_default_move_and_disallow(self):
+        from agent_studio import dispatch
+        board = fixtures.config()
+        board.update(version=4, todoEntry=['merge-ready'], todoDefault='merge-ready')
+        board.pop('rules')
+        self.write('board.json', board)
+        args = {'workspace': self.ws, 'name': 'develop', 'definition': self.obj,
+                'expectedSha256': None, 'expectedBoardSha256': self.board_sha(),
+                'start': {'allowed': True, 'default': True}}
+        saved = dispatch.COMMANDS['boardworkflow.save'](args, {})
+        self.assertEqual(saved['start'], {'allowed': True, 'default': True})
+        with open(os.path.join(self.base, 'board.json')) as f:
+            board = json.load(f)
+        self.assertEqual(board['todoEntry'], ['merge-ready', 'ready'])
+        self.assertEqual(board['todoDefault'], 'ready')
+        args.update(expectedSha256=saved['sha256'], expectedBoardSha256=self.board_sha(),
+                    start={'allowed': False, 'default': False})
+        saved = dispatch.COMMANDS['boardworkflow.save'](args, {})
+        self.assertEqual(saved['start'], {'allowed': False, 'default': False})
+        with open(os.path.join(self.base, 'board.json')) as f:
+            board = json.load(f)
+        self.assertEqual(board['todoEntry'], ['merge-ready'])
+        self.assertIsNone(board['todoDefault'])
+
+    def test_allow_nondefault_start_preserves_existing_default(self):
+        board = fixtures.config()
+        board.pop('rules')
+        board.update(version=4, todoEntry=['merge-ready'], todoDefault='merge-ready')
+        self.write('board.json', board)
+        saved = workflowcatalog.save(self.ws, 'develop', self.obj, None,
+                                     {'allowed': True, 'default': False}, self.board_sha())
+        with open(os.path.join(self.base, 'board.json')) as f:
+            board = json.load(f)
+        self.assertEqual(board['todoEntry'], ['merge-ready', 'ready'])
+        self.assertEqual(board['todoDefault'], 'merge-ready')
+        self.assertEqual(saved['start'], {'allowed': True, 'default': False})
+
+    def test_changing_shared_start_preserves_other_workflow_entry_and_default(self):
+        board = fixtures.config()
+        board.pop('rules')
+        board.update(version=4, todoEntry=['ready'], todoDefault='ready')
+        self.write('board.json', board)
+        self.write('workflows/develop.json', self.obj)
+        self.write('workflows/other.json', dict(self.obj, whileRunning='merging'))
+        original = workflowcatalog.show(self.ws, 'develop')
+        saved = workflowcatalog.save(self.ws, 'develop', dict(self.obj, startsAt='merge-ready'),
+                                     original['sha256'], {'allowed': True, 'default': False}, self.board_sha())
+        with open(os.path.join(self.base, 'board.json')) as f:
+            board = json.load(f)
+        self.assertEqual(board['todoEntry'], ['ready', 'merge-ready'])
+        self.assertEqual(board['todoDefault'], 'ready')
+        self.assertEqual(saved['start'], {'allowed': True, 'default': False})
+        self.assertEqual(workflowcatalog.show(self.ws, 'other')['start'],
+                         {'allowed': True, 'default': True})
+
+    def test_start_stale_board_and_second_write_failure_preserve_files(self):
+        board = fixtures.config()
+        board.pop('rules')
+        board.update(version=4, todoEntry=[], todoDefault=None)
+        self.write('board.json', board)
+        saved = workflowcatalog.save(self.ws, 'develop', self.obj, None)
+        wf_path = os.path.join(self.base, 'workflows', 'develop.json')
+        board_path = os.path.join(self.base, 'board.json')
+        with open(wf_path, 'rb') as f:
+            before_wf = f.read()
+        with open(board_path, 'rb') as f:
+            before_board = f.read()
+        start = {'allowed': True, 'default': True}
+        with self.assertRaises(AsError) as error:
+            workflowcatalog.save(self.ws, 'develop', self.obj, saved['sha256'], start, '0' * 64)
+        self.assertEqual(error.exception.code, 'CONFIG_CHANGED')
+        write = workflowcatalog._write
+        def fail_board(path, raw):
+            if path == board_path:
+                raise OSError('write failed')
+            return write(path, raw)
+        with mock.patch.object(workflowcatalog, '_write', side_effect=fail_board):
+            with self.assertRaises(OSError):
+                workflowcatalog.save(self.ws, 'develop', dict(self.obj, title='Changed'), saved['sha256'], start, self.board_sha())
+        with open(wf_path, 'rb') as f:
+            self.assertEqual(f.read(), before_wf)
+        with open(board_path, 'rb') as f:
+            self.assertEqual(f.read(), before_board)
+
+    def test_delete_removes_only_start_even_with_todo_ticket(self):
+        board = fixtures.config()
+        board.pop('rules')
+        board.update(version=4, todoEntry=['ready'], todoDefault='ready')
+        self.write('board.json', board)
+        saved = workflowcatalog.save(self.ws, 'develop', self.obj, None)
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        conn.execute('CREATE TABLE tickets (key TEXT, workspace TEXT, workflow_status TEXT, active_run_id TEXT)')
+        conn.execute('CREATE TABLE workflow_runs (id TEXT, definition_name TEXT)')
+        conn.execute('INSERT INTO tickets VALUES (?, ?, ?, ?)', ('T-1', self.ws, 'ready', None))
+        workflowcatalog.delete(self.ws, 'develop', saved['sha256'], conn)
+        with open(os.path.join(self.base, 'board.json')) as f:
+            board = json.load(f)
+        self.assertEqual((board['todoEntry'], board['todoDefault']), ([], None))
+
+    def test_invalid_start_is_rejected(self):
+        for start in ({'allowed': False, 'default': True}, {'allowed': 1, 'default': False}, {}):
+            with self.subTest(start=start), self.assertRaises(AsError) as error:
+                workflowcatalog.save(self.ws, 'develop', self.obj, None, start)
+            self.assertEqual(error.exception.code, 'BAD_REQUEST')
     def test_title_save_show_and_board_workflows(self):
         from agent_studio import dispatch
         obj = dict(self.obj, title='  Custom workflow  ')

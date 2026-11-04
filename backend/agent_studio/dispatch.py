@@ -160,6 +160,12 @@ def _workflow_catalog(args, req, command):
             raise AsError(BAD_REQUEST, 'expectedSha256 is required.')
     if action == 'save':
         allowed.add('definition' if kind == 'boardworkflow' else 'text')
+        if kind == 'boardworkflow':
+            allowed.update(('start', 'expectedBoardSha256'))
+            if 'start' in args and args['start'] is None:
+                raise AsError(BAD_REQUEST, 'start must be an object.')
+            if 'expectedBoardSha256' in args:
+                _sha_arg({'expectedSha256': args['expectedBoardSha256']})
     ws = _catalog_workspace(args, allowed, command)
     if action == 'list':
         return _board_workflows(args, req) if kind == 'boardworkflow' else workflowcatalog.prompt_list(ws)
@@ -168,7 +174,7 @@ def _workflow_catalog(args, req, command):
         return workflowcatalog.show(ws, name) if kind == 'boardworkflow' else workflowcatalog.prompt_show(ws, name)
     sha = _sha_arg(args)
     if action == 'save':
-        return (workflowcatalog.save(ws, name, args.get('definition'), sha) if kind == 'boardworkflow'
+        return (workflowcatalog.save(ws, name, args.get('definition'), sha, args.get('start'), args.get('expectedBoardSha256')) if kind == 'boardworkflow'
                 else workflowcatalog.prompt_save(ws, name, args.get('text'), sha))
     if kind == 'prompt':
         return workflowcatalog.prompt_delete(ws, name, sha)

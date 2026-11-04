@@ -371,14 +371,14 @@ def parse_config(raw) -> dict:
         todo_entry = raw.get("todoEntry")
         agent_whens = [r["when"].get("status") for r in rules
                        if isinstance(r, dict) and "action" not in r and isinstance(r.get("when"), dict)]
-        if not isinstance(todo_entry, list) or (agent_whens and not todo_entry):
-            problems.append(("todoEntry", "must be a non-empty list when agent rules exist"))
+        if not isinstance(todo_entry, list):
+            problems.append(("todoEntry", "must be a list"))
             todo_entry = []
         for i, value in enumerate(todo_entry):
             if not isinstance(value, str) or value not in known or (version == 3 and value not in agent_whens):
                 problems.append((f"todoEntry[{i}]", "must be the when status of an agent rule"))
         todo_default = raw.get("todoDefault")
-        if not (not agent_whens and not todo_entry and todo_default is None) and (not isinstance(todo_default, str) or todo_default not in todo_entry):
+        if "todoDefault" not in raw or (todo_default is not None and (not isinstance(todo_default, str) or todo_default not in todo_entry)):
             problems.append(("todoDefault", "must be in todoEntry"))
     if v3 and "upgradedFrom" in raw:
         mapping = raw["upgradedFrom"]

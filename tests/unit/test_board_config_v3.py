@@ -86,7 +86,7 @@ class BoardConfigV3Tests(unittest.TestCase):
                 raw = config()
                 raw.pop(key)
                 self.assert_path(raw, key)
-        for value in (None, [], "ready"):
+        for value in (None, "ready"):
             with self.subTest(value=value):
                 raw = config()
                 raw["todoEntry"] = value
@@ -96,7 +96,7 @@ class BoardConfigV3Tests(unittest.TestCase):
                 raw = config()
                 raw["todoEntry"] = [value]
                 self.assert_path(raw, "todoEntry[0]")
-        for value in (None, "done", []):
+        for value in ("done", []):
             with self.subTest(value=value):
                 raw = config()
                 raw["todoDefault"] = value
@@ -110,6 +110,9 @@ class BoardConfigV3Tests(unittest.TestCase):
         raw = config()
         raw["todoEntry"] = ["working"]
         self.assert_path(raw, "todoEntry[0]")
+        raw = config()
+        raw.update(todoEntry=[], todoDefault=None)
+        boardmodel.parse_config(raw)
 
     def test_during_validation_paths(self):
         cases = [

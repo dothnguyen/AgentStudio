@@ -58,19 +58,33 @@ def show(ws, name):
     path = _wf_path(ws, name)
     raw = _read(path)
     definition, problems = None, []
+    cfg = {}
     try:
         definition = json.loads(workflowdef.to_json(workflowdef.load(ws, name)))
-        problems = [p for p in boardworkflows.load(ws, boardmodel.load_config(ws))['problems'] if p['workflow'] == name]
+        cfg = boardmodel.load_config(ws)
+        problems = [p for p in boardworkflows.load(ws, cfg)['problems'] if p['workflow'] == name]
     except AsError as e:
         problems = (e.data or {}).get('errors', [{'path': '$', 'message': e.message}])
-    return {'name': name, 'definition': definition, 'text': raw.decode('utf-8'), 'sha256': _sha(raw), 'problems': problems}
+    starts_at = definition.get('startsAt') if definition else None
+    start = {'allowed': starts_at is not None and starts_at in cfg.get('todoEntry', []),
+             'default': starts_at is not None and starts_at == cfg.get('todoDefault')}
+    return {'name': name, 'definition': definition, 'text': raw.decode('utf-8'), 'sha256': _sha(raw), 'problems': problems, 'start': start}
 
 
-def save(ws, name, definition, expected):
+def save(ws, name, definition, expected, start=None, expected_board=None):
     path = _wf_path(ws, name, True)
-    _check(_read(path), expected)
+    original = _read(path)
+    _check(original, expected)
     if not isinstance(definition, dict):
         raise AsError(BAD_REQUEST, 'definition must be an object.')
+    if start is not None and (not isinstance(start, dict) or set(start) != {'allowed', 'default'} or
+                              any(type(start[k]) is not bool for k in ('allowed', 'default')) or
+                              (start['default'] and not start['allowed'])):
+        raise AsError(BAD_REQUEST, 'start must contain allowed and default booleans; default requires allowed.')
+    board_path = os.path.join(ws, boardmodel.CONFIG_DIR, 'board.json')
+    board_raw = _read(board_path)
+    if expected_board is not None:
+        _check(board_raw, expected_board)
     raw = ((('\n'.join(json.dumps(k) + ': ' + json.dumps(v, ensure_ascii=True) for k, v in definition.items())) if path.endswith(('.yaml', '.yml')) else json.dumps(definition, indent=2, ensure_ascii=False)) + '\n').encode('utf-8')
     if len(raw) > workflowdef.MAX_DEFINITION_BYTES:
         raise AsError('BOARD_WORKFLOW_INVALID', 'Definition is too large.', data={'problems': [{'path': '$', 'message': 'Definition is too large.'}]})
@@ -81,15 +95,47 @@ def save(ws, name, definition, expected):
         _write(candidate, raw)
         try:
             parsed = workflowdef.load(temp, name)
-            problems = [p for p in boardworkflows.load(temp, boardmodel.load_config(temp))['problems'] if p['workflow'] == name or (p['path'] in ('startsAt', 'whileRunning') and ('already used' in p['message'] or 'also a workflow start' in p['message']))]
+            catalog = boardworkflows.load(temp, boardmodel.load_config(temp))
+            problems = [p for p in catalog['problems'] if p['workflow'] == name or (p['path'] in ('startsAt', 'whileRunning') and ('already used' in p['message'] or 'also a workflow start' in p['message']))]
             if parsed.board is None:
                 problems.append({'path': 'startsAt', 'message': 'A board workflow requires startsAt.'})
         except AsError as e:
             problems = (e.data or {}).get('errors', [{'path': '$', 'message': e.message}])
         if problems:
             raise AsError('BOARD_WORKFLOW_INVALID', 'Invalid board workflow.', data={'problems': problems})
+        board = None
+        if start is not None:
+            board = json.loads(board_raw)
+            old_board = workflowdef.load(ws, name).board if original is not None else None
+            old_start = old_board.starts_at if old_board else None
+            new_start = parsed.board.starts_at
+            if (old_start and old_start != new_start and
+                    not any(wf['name'] != name and wf['startsAt'] == old_start
+                            for wf in catalog['workflows'])):
+                board['todoEntry'] = [s for s in board['todoEntry'] if s != old_start]
+                if board['todoDefault'] == old_start:
+                    board['todoDefault'] = None
+            board['todoEntry'] = [s for s in board['todoEntry'] if s != new_start]
+            if start['allowed']:
+                board['todoEntry'].append(new_start)
+            if start['default']:
+                board['todoDefault'] = new_start
+            elif board['todoDefault'] == new_start:
+                board['todoDefault'] = None
+            boardmodel.parse_config(board)
     _check(_read(path), expected)
+    if start is not None or expected_board is not None:
+        _check(_read(board_path), _sha(board_raw))
     _write(path, raw)
+    if board is not None:
+        try:
+            _write(board_path, (json.dumps(board, indent=2, ensure_ascii=False) + '\n').encode('utf-8'))
+        except BaseException:
+            if original is None:
+                os.unlink(path)
+            else:
+                _write(path, original)
+            raise
     return show(ws, name)
 
 
@@ -101,7 +147,23 @@ def delete(ws, name, expected, conn):
     rows = conn.execute('SELECT t.key FROM tickets t LEFT JOIN workflow_runs r ON r.id = t.active_run_id WHERE t.workspace = ? AND (t.workflow_status = ? OR r.definition_name = ?)', (ws, status, name)).fetchall()
     if rows:
         raise AsError('BOARD_WORKFLOW_IN_USE', 'Workflow is in use by tickets.', data={'tickets': [r[0] for r in rows]})
-    os.unlink(path)
+    board_path = os.path.join(ws, boardmodel.CONFIG_DIR, 'board.json')
+    board_raw = _read(board_path)
+    board = json.loads(board_raw)
+    starts_at = definition.board.starts_at if definition.board else None
+    if starts_at in board.get('todoEntry', []):
+        board['todoEntry'] = [s for s in board['todoEntry'] if s != starts_at]
+        if board.get('todoDefault') == starts_at:
+            board['todoDefault'] = None
+        boardmodel.parse_config(board)
+        _write(board_path, (json.dumps(board, indent=2, ensure_ascii=False) + '\n').encode('utf-8'))
+        try:
+            os.unlink(path)
+        except BaseException:
+            _write(board_path, board_raw)
+            raise
+    else:
+        os.unlink(path)
     return {'name': name}
 
 

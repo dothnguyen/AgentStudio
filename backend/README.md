@@ -384,9 +384,17 @@ The generic board is configured per workspace in `.agent-studio/board.json` (wor
 `rules`: every route lives in a workflow file under `.agent-studio/workflows/`. Tickets live in the
 state DB and always belong to a phase; the default phase is worked when no other is current.
 
+`boardworkflow.show` reports `start.allowed` and `start.default` from `board.json`.
+`boardworkflow.save` optionally accepts `start` (both boolean fields) and
+`expectedBoardSha256`; it validates both files and rolls back the workflow if the board
+write fails. Setting a default moves it to that workflow; disallowing a start clears its
+default. Changing a start preserves the old entry when another workflow uses it.
+Deleting a workflow removes its start entry and clears its default. An empty
+entry list and a null default are permitted, including when tickets remain in Todo.
+
 Version 3 uses `workflowStatuses` in place of `statuses`, with exactly one
-`initial`, at least one `done`, and at most one `closed` kind. `todoEntry` is a non-empty list of
-agent rule `when` statuses and `todoDefault` is one of those entries. Agent rules require `during`;
+`initial`, at least one `done`, and at most one `closed` kind. `todoEntry` lists
+agent rule `when` statuses; `todoDefault` is an entry or null. Agent rules require `during`;
 action rules may provide it. Each `during` must be a distinct kindless workflow status that no rule
 uses as `when`. The parser exposes the fixed Kanban columns and workflow routing metadata; board
 execution uses this schema. Loading a version 2 file upgrades it in memory:
