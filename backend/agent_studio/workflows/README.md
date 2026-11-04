@@ -4,6 +4,8 @@ This folder holds the definitions that ship with Agent Studio (P01-S06 fills it)
 
 Operators write their own definitions in `<workspace>/.agent-studio/workflows/` as `.json`, `.yaml` or `.yml`. Both formats give the same model.
 
+Version 2 definitions may include a `title`, trimmed to 1–60 characters. If omitted, the title comes from the filename: remove a leading `board-`, replace hyphens with spaces, and uppercase the first letter. Board workflow lists and show/save responses expose the resulting title. Upgrading this repository's legacy board writes descriptive titles for its converted workflows.
+
 ## YAML subset
 
 YAML is read by `backend/agent_studio/yamlsubset.py`, a small stdlib parser. It accepts a documented subset that covers every definition shape and refuses everything else with the line number, rather than guessing what a full YAML parser would do.

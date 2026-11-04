@@ -10,7 +10,7 @@ def from_rules(workspace, config):
     workflows = []
     for rule in config.get('rules', []):
         start = rule['when']['status']
-        wf = {'name': start, 'startsAt': start, 'whileRunning': rule.get('during'),
+        wf = {'name': start, 'title': workflowdef.default_title(start), 'startsAt': start, 'whileRunning': rule.get('during'),
               'role': rule.get('role'), 'end': {'pass': rule['onPass'], 'fail': rule['onFail']},
               'limits': {}}
         if rule.get('action') == 'merge':
@@ -61,7 +61,7 @@ def load(workspace, config):
         if board is None:
             continue
         frozen = json.loads(workflowdef.to_json(definition))
-        wf = {'name': name, 'startsAt': board.starts_at, 'whileRunning': board.while_running,
+        wf = {'name': name, 'title': definition.title, 'startsAt': board.starts_at, 'whileRunning': board.while_running,
               'role': board.role, 'steps': [{'id': s.id, 'kind': s.kind} for s in definition.stages],
               'end': frozen['end'], 'limits': frozen['limits']}
         for key in ('priority', 'workspace', 'syncBase', 'waitForDependencies', 'createdTickets'):

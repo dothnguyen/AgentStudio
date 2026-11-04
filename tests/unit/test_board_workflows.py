@@ -48,6 +48,7 @@ class BoardWorkflowTests(unittest.TestCase):
         self.assertEqual(result['byRunning'], {'working': wf})
         self.assertEqual((wf['name'], wf['startsAt'], wf['whileRunning'], wf['role']),
                          ('develop', 'ready', 'working', 'Developer'))
+        self.assertEqual(wf['title'], 'Develop')
         self.assertEqual(wf['steps'], [{'id': 'work', 'kind': 'work'}])
         self.assertEqual(wf['end'], self.obj['end'])
         self.assertEqual(wf['limits'], self.obj['limits'])
@@ -121,7 +122,7 @@ class BoardWorkflowTests(unittest.TestCase):
         wf, action = result['workflows']
         from agent_studio import workflowdef
         stages = json.loads(workflowdef.to_json(workflowdef.load(self.ws, 'develop')))['stages']
-        self.assertEqual(wf, {'name': 'ready', 'startsAt': 'ready', 'whileRunning': 'working',
+        self.assertEqual(wf, {'name': 'ready', 'title': 'Ready', 'startsAt': 'ready', 'whileRunning': 'working',
             'role': 'Developer', 'workflow': 'develop', 'steps': stages, 'workspace': 'worktree',
             'syncBase': False, 'waitForDependencies': False, 'priority': 0, 'createdTickets': 'backlog',
             'end': {'pass': 'done', 'fail': 'ready', 'blocked': {'status': 'closed'}},

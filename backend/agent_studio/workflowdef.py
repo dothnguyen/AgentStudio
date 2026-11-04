@@ -42,7 +42,7 @@ DIFF_PLACEHOLDER = "{{diff}}"
 
 _BOARD_KEYS = ("startsAt", "whileRunning", "role", "priority", "workspace", "syncBase",
                "waitForDependencies", "createdTickets", "end", "limits")
-_TOP_KEYS = ("version", "description", "maxSteps", "stages", "steps") + _BOARD_KEYS
+_TOP_KEYS = ("version", "title", "description", "maxSteps", "stages", "steps") + _BOARD_KEYS
 _FROZEN_TOP_KEYS = tuple(k for k in _TOP_KEYS if k != "steps") + ("name", "sourceSha256", "warnings", "compiledSteps")
 _STAGE_KEYS = ("id", "type", "role", "permission", "prompt", "promptFile", "maxVisits", "passRequires", "next",
                "delegates", "passRequiresCommands")
@@ -95,6 +95,12 @@ class Definition:
     warnings: tuple
     board: Optional[BoardSpec] = None
     compiled_steps: bool = False
+    title: Optional[str] = None
+
+
+def default_title(name: str) -> str:
+    text = name.removeprefix("board-").replace("-", " ")
+    return text[:1].upper() + text[1:]
 
 
 class _Problem:
@@ -567,8 +573,9 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
         c.raise_if_errors()
     allowed = _FROZEN_TOP_KEYS if frozen else _TOP_KEYS
     if obj.get("version") == 1:
-        allowed = tuple(k for k in allowed if k not in _BOARD_KEYS)
+        allowed = tuple(k for k in allowed if k not in _BOARD_KEYS and k != "title")
     version, description, max_steps, stages_val, warnings = None, "", DEFAULT_MAX_STEPS, None, ()
+    title = None
     for key, val in obj.items():
         if key not in allowed:
             c.err(key, f'unknown key "{key}"')
@@ -584,6 +591,12 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
                 c.err(key, _text_problem(val, "description"))
             else:
                 description = val
+        elif key == "title":
+            derived = frozen and isinstance(obj.get('name'), str) and val == default_title(obj['name'])
+            if not isinstance(val, str) or (not 1 <= len(val.strip()) <= 60 and not derived):
+                c.err(key, "title must be text of 1 to 60 characters after trimming")
+            else:
+                title = val.strip()
         elif key == "maxSteps":
             if not _is_int(val) or not 1 <= val <= 100:
                 c.err(key, "maxSteps must be an integer from 1 to 100")
@@ -675,7 +688,8 @@ def _build(obj: Any, source: str, frozen: bool, prompts: Mapping, name: str, sha
                          step_value=s.get("step_value"), checks=s.get("checks"))
                    for s in infos)
     return Definition(name=name, version=version, description=description, max_steps=max_steps, stages=stages,
-                      source_sha256=sha, warnings=warnings, board=board, compiled_steps=compiled_steps)
+                      source_sha256=sha, warnings=warnings, board=board, compiled_steps=compiled_steps,
+                      title=(title if title is not None else default_title(name)) if version == 2 else None)
 
 
 def _edges(infos: list) -> dict:
@@ -755,6 +769,8 @@ def to_json(d: Definition) -> str:
         stages.append(item)
     obj = {"name": d.name, "version": d.version, "description": d.description, "maxSteps": d.max_steps,
            "sourceSha256": d.source_sha256, "warnings": [dict(w) for w in d.warnings], "stages": stages}
+    if d.version == 2:
+        obj["title"] = d.title
     if d.compiled_steps:
         obj["compiledSteps"] = True
     if d.board is not None:

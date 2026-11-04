@@ -246,6 +246,15 @@ def _upgrade_v4(workspace, raw, data, dry_run):
     if any("action" in rule and rule["action"] != "merge" for rule in raw.get("rules", [])):
         raise AsError(BAD_REQUEST, "Only merge actions can be converted to board workflows.")
     converted = boardworkflows.from_rules(workspace, raw)
+    titles = {
+        ('merge-ready', 'merge'): 'Merge', ('plan-merge-ready', 'merge'): 'Plan merge',
+        ('merge-conflict', 'board-resolve-merge'): 'Fix merge conflict',
+        ('plan-merge-conflict', 'board-resolve-merge'): 'Fix plan conflict',
+        ('review-ready', 'board-review'): 'Review', ('qa-ready', 'board-qa'): 'QA',
+        ('need-escalate', 'board-senior-develop'): 'Escalation',
+        ('dev-ready', 'board-develop'): 'Develop', ('refine-ready', 'board-refine'): 'Refine',
+        ('unpack-ready', 'board-unpack'): 'Unpack',
+    }
     definitions = []
     used = set()
     for rule, wf in zip(raw.get("rules", []), converted):
@@ -265,6 +274,9 @@ def _upgrade_v4(workspace, raw, data, dry_run):
                 text = f.read()
             definition = yamlsubset.loads(text) if source.endswith((".yaml", ".yml")) else json.loads(text)
             definition["version"] = 2
+        title = titles.get((start, rule.get('workflow', rule.get('action'))))
+        if title is not None:
+            definition['title'] = title
         for key in ("startsAt", "whileRunning", "role", "workspace", "syncBase", "waitForDependencies", "priority", "createdTickets", "end", "limits"):
             if wf.get(key) is not None:
                 definition[key] = wf[key]

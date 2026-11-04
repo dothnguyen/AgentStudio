@@ -25,6 +25,31 @@ class BoardSpecTests(unittest.TestCase):
         obj.setdefault("stages", [{"id": "check", "type": "validation"}])
         return workflowdef.parse_obj(obj, "develop.yaml")
 
+    def test_title_trim_default_and_frozen_compatibility(self):
+        obj = {"version": 2, "stages": [{"id": "check", "type": "validation"}]}
+        for title in ('x', 'x' * 60):
+            self.assertEqual(self.parse(dict(obj, title='  ' + title + '  ')).title, title)
+        for source, expected in [('board-fix-plan.yaml', 'Fix plan'), ('qa-work.json', 'Qa work')]:
+            d = workflowdef.parse_obj(obj, source)
+            self.assertEqual(d.title, expected)
+            frozen = json.loads(workflowdef.to_json(d))
+            self.assertEqual(workflowdef.from_json(frozen), d)
+            del frozen['title']
+            self.assertEqual(workflowdef.from_json(frozen), d)
+        d = workflowdef.parse_obj(obj, 'a' * 64 + '.json')
+        self.assertEqual(workflowdef.from_json(json.loads(workflowdef.to_json(d))), d)
+        d = workflowdef.parse_obj(obj, 'board-.json')
+        self.assertEqual(workflowdef.from_json(json.loads(workflowdef.to_json(d))), d)
+
+    def test_title_rejects_invalid_values_and_version_one(self):
+        obj = {"version": 2, "stages": [{"id": "check", "type": "validation"}]}
+        for value in ('', '   ', 'x' * 61, None, 42):
+            with self.subTest(value=value), self.assertRaises(AsError) as error:
+                self.parse(dict(obj, title=value))
+            self.assertIn('title', [item['path'] for item in error.exception.data['errors']])
+        with self.assertRaises(AsError):
+            self.parse(dict(obj, version=1, title='Title'))
+
     def test_board_values_are_frozen_and_survive_round_trip(self):
         definition = self.parse(self.obj)
         board = definition.board

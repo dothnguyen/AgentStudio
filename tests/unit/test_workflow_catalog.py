@@ -12,6 +12,21 @@ from agent_studio.protocol import AsError
 class WorkflowCatalogTests(unittest.TestCase):
     setUp = fixtures.BoardWorkflowTests.setUp
     write = fixtures.BoardWorkflowTests.write
+    def test_title_save_show_and_board_workflows(self):
+        from agent_studio import dispatch
+        obj = dict(self.obj, title='  Custom workflow  ')
+        args = {'workspace': self.ws, 'name': 'develop', 'definition': obj, 'expectedSha256': None}
+        saved = dispatch.COMMANDS['boardworkflow.save'](args, {})
+        shown = dispatch.COMMANDS['boardworkflow.show']({'workspace': self.ws, 'name': 'develop'}, {})
+        self.assertEqual(saved['definition']['title'], 'Custom workflow')
+        self.assertEqual(shown['definition']['title'], 'Custom workflow')
+        self.assertEqual(dispatch.COMMANDS['board.workflows']({'workspace': self.ws}, {})['workflows'][0]['title'], 'Custom workflow')
+        args.update(definition=dict(self.obj, title=' '), expectedSha256=saved['sha256'])
+        with self.assertRaises(AsError) as error:
+            dispatch.COMMANDS['boardworkflow.save'](args, {})
+        self.assertEqual(error.exception.code, 'BOARD_WORKFLOW_INVALID')
+        self.assertEqual(workflowcatalog.show(self.ws, 'develop')['definition']['title'], 'Custom workflow')
+
     def test_roundtrip_stale_and_invalid(self):
         saved = workflowcatalog.save(self.ws, 'develop', self.obj, None)
         shown = workflowcatalog.show(self.ws, 'develop')

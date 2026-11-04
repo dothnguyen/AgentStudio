@@ -118,6 +118,17 @@ class BoardUpgradeCommandTests(unittest.TestCase):
         develop = (Path(self.folder) / 'workflows' / 'board-develop.yaml').read_text()
         self.assertIn('board-develop.md', develop)
         self.assertNotIn('You are the developer', develop)
+        from backend.agent_studio import workflowdef
+        expected_titles = {
+            'merge-merge-ready': 'Merge', 'merge-plan-merge-ready': 'Plan merge',
+            'board-resolve-merge': 'Fix merge conflict',
+            'board-resolve-merge-plan-merge-conflict': 'Fix plan conflict',
+            'board-review': 'Review', 'board-qa': 'QA', 'board-senior-develop': 'Escalation',
+            'board-develop': 'Develop', 'board-refine': 'Refine', 'board-unpack': 'Unpack',
+        }
+        for name, title in expected_titles.items():
+            self.assertEqual(workflowdef.load(self.workspace, name).title, title)
+            self.assertIn('"title": ' + json.dumps(title), (Path(self.folder) / 'workflows' / (name + '.yaml')).read_text())
         board = json.loads(Path(self.path).read_text())
         self.assertEqual(board['version'], 4)
         self.assertNotIn('rules', board)
