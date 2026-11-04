@@ -753,7 +753,34 @@ def _ticket_json(conn, row, config=None) -> dict:
     out["phaseName"] = phase["name"] if phase else None
     out["activity"] = ticket_activity(conn, row, config)
     out["needsInput"] = ticket_needs_input(conn, row)
+    out["waitingApproval"] = ticket_waiting_approval(conn, row)
+    out["paused"] = ticket_paused(conn, row)
     return out
+
+
+def ticket_waiting_approval(conn, row) -> dict | None:
+    if not row["active_run_id"]:
+        return None
+    waiting = conn.execute(
+        "SELECT s.stage, s.artifacts_json, s.created_at FROM stage_attempts s "
+        "JOIN workflow_runs w ON w.id = s.workflow_run_id "
+        "WHERE w.id = ? AND w.status = 'running' AND s.status = 'active' "
+        "AND s.phase = 'waiting_approval' ORDER BY s.rowid LIMIT 1",
+        (row["active_run_id"],)).fetchone()
+    if waiting is None:
+        return None
+    return {"workflowRunId": row["active_run_id"], "stage": waiting["stage"],
+            "ask": json.loads(waiting["artifacts_json"])["ask"], "since": waiting["created_at"]}
+
+
+def ticket_paused(conn, row) -> dict | None:
+    event = conn.execute(
+        "SELECT name, at, payload_json FROM ticket_events WHERE ticket_id = ? "
+        "AND name IN ('ticket.run_paused', 'ticket.claimed') ORDER BY id DESC LIMIT 1",
+        (row["id"],)).fetchone()
+    if event is None or event["name"] != "ticket.run_paused":
+        return None
+    return {"reason": json.loads(event["payload_json"]).get("reason"), "at": event["at"]}
 
 
 def ticket_needs_input(conn, row) -> dict | None:
@@ -1601,7 +1628,7 @@ def board_show(conn, workspace: str) -> dict:
         columns = {column: 0 for column in KANBAN_COLUMNS}
         workflow = {status: 0 for status in config_status_ids(config)}
         column_workflow = {column: {} for column in KANBAN_COLUMNS}
-        needs_input = 0
+        needs_input = waiting_approval = paused = 0
         if row["id"]:
             for counts in conn.execute(
                 "SELECT status, COALESCE(workflow_status, status) AS workflow, COUNT(*) AS n "
@@ -1615,9 +1642,14 @@ def board_show(conn, workspace: str) -> dict:
                 "ON s.workflow_run_id = t.active_run_id AND s.status = 'active' "
                 "JOIN assignments a ON a.id = s.assignment_id "
                 "WHERE t.phase_id = ? AND a.status = 'waiting_input'", (row["id"],)).fetchone()[0]
+            for ticket in conn.execute("SELECT * FROM tickets WHERE phase_id = ?", (row["id"],)):
+                waiting_approval += ticket_waiting_approval(conn, ticket) is not None
+                paused += ticket_paused(conn, ticket) is not None
         phases.append(dict(_phase_row_json(row), current=row["id"] == current["id"],
                            ticketCount=sum(columns.values()), columns=columns, workflow=workflow,
-                           columnWorkflow=column_workflow, needsInput=needs_input))
+                           columnWorkflow=column_workflow, needsInput=needs_input,
+                           waitingApproval=waiting_approval, paused=paused,
+                           blocked=workflow.get(BLOCKED_STATUS, 0)))
     return {"workspace": workspace, "currentPhase": current, "phases": phases}
 
 

@@ -470,7 +470,7 @@ output is unchanged. `status` filters by column; `workflowStatus` (CLI `--workfl
 Both filters combine with `phase` and `summary`. `unassigned: true` returns only tickets with no phase (it cannot be
 combined with `phase`). Tickets expose the column as `status` and the workflow state as
 `workflowStatus`. `phase.list` and `phase.show` count columns; `board.show` returns per-phase `columns` and
-`workflow` count maps and a `columnWorkflow` breakdown without ticket lists. `ticket workflow KEY ID [--reason TEXT]` changes the workflow status; operator MCP clients can use `ticket_workflow`. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
+`workflow` count maps, a `columnWorkflow` breakdown, and `waitingApproval`, `needsInput`, `blocked`, and `paused` ticket counts without ticket lists. Ticket reads include `waitingApproval` (`workflowRunId`, `stage`, `ask`, `since`) for an active approval, `needsInput` for a pending question, and `paused` (`reason`, `at`) after a run pause until the next claim; each is null when absent. `ticket workflow KEY ID [--reason TEXT]` changes the workflow status; operator MCP clients can use `ticket_workflow`. `board.settings` exposes `workflowStatuses`, `todoEntry`, `todoDefault`,
 and each rule’s `during` value.
 
 `ticket.show` still returns the ticket with `dependsOn` and `dependents` key lists, and adds `links`
