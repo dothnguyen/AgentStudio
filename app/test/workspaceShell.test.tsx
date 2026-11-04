@@ -749,10 +749,11 @@ describe('Routing screen navigation', () => {
     expect(view.container.querySelector('[data-section="routing"]')).toBeTruthy();
     expect(view.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Routing');
-    expect(view.getByText(/Routing belongs to the workspace board, not to one team/)).toBeTruthy();
+    expect(view.getByText(/Each workflow starts when a ticket reaches its status/)).toBeTruthy();
     expect(view.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenLastCalledWith(workspace.id);
-    expect(fake.roles).toHaveBeenLastCalledWith(workspace.id);
+    expect(fake.api.boardWorkflows).toHaveBeenLastCalledWith(workspace.id);
+    expect(fake.api.boardStatuses).toHaveBeenLastCalledWith(workspace.id);
   });
 
   it('workflow_children_open_their_screens_and_legacy_route_redirects', async () => {
@@ -798,18 +799,6 @@ describe('Routing screen navigation', () => {
     expect(confirm).toHaveBeenCalledTimes(2);
     expect(view.queryByRole('region', { name: 'Prompt editor' })).toBeNull();
     expect(view.queryByLabelText('Prompt text')).toBeNull();
-  });
-
-  it('routing_role_link_opens_roles_with_that_role', async () => {
-    const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
-    const view = render(shell(fake));
-    await settle();
-    fireEvent.click(view.getByRole('button', { name: 'Routing' }));
-    await settle();
-    fireEvent.click(view.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
-    await settle();
-    expect(view.container.querySelector('[data-section="roles"]')).toBeTruthy();
-    expect(view.getByRole('heading', { level: 1, name: 'Developer' })).toBeTruthy();
   });
 
   it('workspace_switch_resets_the_routing_screen', async () => {

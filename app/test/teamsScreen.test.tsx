@@ -28,18 +28,6 @@ it('disconnected_with_pending_board_load_announces_only_one_status', async () =>
   await act(async () => { boardGate.resolve(okR(boardSettingsFixture())); });
 });
 
-it('routing_refresh_announces_only_one_status', async () => {
-  const boardGate = deferred<ReturnType<typeof okR<ReturnType<typeof boardSettingsFixture>>>>();
-  const fake = fakeManagement({ boardSettings: [okR(boardSettingsFixture()), boardGate.promise] });
-  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
-  await act(async () => {});
-  fireEvent.click(view.getByRole('button', { name: 'Refresh' }));
-  await act(async () => {});
-  expect(view.getByText(/Refreshing routing settings… Showing previously loaded data/)).toBeTruthy();
-  expect(view.getAllByRole('status')).toHaveLength(1);
-  await act(async () => { boardGate.resolve(okR(boardSettingsFixture())); });
-});
-
 it('retained_refresh_success_does_not_duplicate_pending_or_connection_status', async () => {
   const overviewGate = deferred<ReturnType<typeof okR<ReturnType<typeof twoTeams>>>>();
   const fake = fakeManagement({ overview: [okR(twoTeams()), okR(twoTeams()), overviewGate.promise] });
@@ -196,14 +184,16 @@ describe('compact team overview', () => {
     expect(onOpenRouting).toHaveBeenCalledTimes(2);
   });
 
-  it('routing_screen_reads_board_and_roles_once', async () => {
+  it('routing_screen_reads_board_workflows_and_statuses_once', async () => {
     const fake = fakeManagement();
     const result = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
     await act(async () => {});
     expect(result.getByRole('heading', { level: 1, name: 'Routing' })).toBeTruthy();
     expect(result.getByRole('region', { name: 'Workspace board routing' })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenCalledTimes(1);
-    expect(fake.roles).toHaveBeenCalledTimes(1);
+    expect(fake.api.boardWorkflows).toHaveBeenCalledTimes(1);
+    expect(fake.api.boardStatuses).toHaveBeenCalledTimes(1);
+    expect(fake.roles).not.toHaveBeenCalled();
   });
 });
 
@@ -1147,18 +1137,6 @@ describe('roster evidence and team removal', () => {
   });
 });
 
-it('routing screen shows workspace routing with role links without extra reads', async () => {
-  const { routingSettingsFixture } = await import('./teamsFixtures');
-  const onViewRole = vi.fn();
-  const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
-  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} onViewRole={onViewRole} />);
-  await act(async () => {});
-  const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
-  expect(view.getByText(/Changes apply to every team/)).toBeTruthy();
-  fireEvent.click(panel.getByRole('button', { name: 'View Developer in Roles (rule 1)' }));
-  expect(onViewRole).toHaveBeenCalledOnce(); expect(onViewRole).toHaveBeenCalledWith('Developer');
-  expect(fake.boardSettings).toHaveBeenCalledTimes(1); expect(fake.roles).toHaveBeenCalledTimes(1);
-});
 
 describe('member detail focus and settings', () => {
   it('focuses the heading, shows the v7 sections and restores the roster row on return', async () => {

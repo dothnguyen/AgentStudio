@@ -8,7 +8,7 @@ import { SkillsScreen } from '../skills/SkillsScreen';
 import { PromptsScreen } from '../workflow/PromptsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { StatusesScreen } from '../workflow/StatusesScreen';
-import { WorkflowEditor, WorkflowList, type WorkflowDraft } from '../workflow/WorkflowEditor';
+import { WorkflowEditor, type WorkflowDraft } from '../workflow/WorkflowEditor';
 import type { WorkflowNavigationState } from './navModel';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
 import { BacklogScreen } from '../boards/BacklogScreen';
@@ -252,6 +252,9 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
       management={props.management}
       connection={props.connection}
       navigation={teamsNavigation}
+      onStatuses={() => navigate('workflow/statuses')}
+      onAdd={addWorkflow}
+      onEdit={name => void editWorkflow(name)}
       onViewRole={(roleId) => navigate('roles', { roleId })}
       onOpenTeam={(teamId) => {
         const item = teamId === null ? undefined : teamsNavigation.items.find(candidate => candidate.team.id === teamId);
@@ -259,9 +262,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
         navigate('teams');
       }}
       onOpenTeams={() => navigate('teams')}
-    />
-    {workflowError && <p role="alert">{workflowError}</p>}
-    <WorkflowList workspace={props.workspace} management={props.management} onAdd={addWorkflow} onEdit={name => void editWorkflow(name)} /></>
+    />{workflowError && <p role="alert">{workflowError}</p>}</>
   ) : sectionId === 'workflow/editor' && workflowDraft ? (
     <WorkflowEditor key={workflowDraft.key} workspace={props.workspace} management={props.management} draft={workflowDraft} onChange={setWorkflowDraft} onClose={() => { setWorkflowDraft(null); setSectionId('workflow/routing'); }} onStatuses={() => { setWorkflowReturn({ returnTo: workflowDraft.mode, draftKey: workflowDraft.key }); setSectionId('workflow/statuses'); }} />
   ) : sectionId === 'workflow/statuses' ? (

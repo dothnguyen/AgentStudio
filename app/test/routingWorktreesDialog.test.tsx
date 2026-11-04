@@ -4,20 +4,22 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { RoutingScreen } from '../src/renderer/routing/RoutingScreen';
 import type { BoardSettings } from '../src/renderer/api';
 import { workspaceA } from './dashboardFixtures';
+import fixture from './fixtures/convertedBoard.json';
 import { fakeManagement, routingSettingsFixture } from './teamsFixtures';
 
 afterEach(cleanup);
 
 async function setup(calls: Parameters<typeof fakeManagement>[0]['calls'] = {}, boards: BoardSettings[] = [routingSettingsFixture()]) {
   const fake = fakeManagement({ calls, boardSettings: boards.map(data => ({ ok: true as const, data })) });
-  const view = render(<RoutingScreen workspace={workspaceA} management={fake.api} />);
+  const management = { ...fake.api, boardWorkflows: vi.fn().mockResolvedValue({ ok: true, data: fixture.board }) };
+  const view = render(<RoutingScreen workspace={workspaceA} management={management} />);
   await act(async () => {});
   const panel = within(view.getByRole('region', { name: 'Workspace board routing' }));
   return { fake, view, panel };
 }
 
 async function openWorktrees(panel: ReturnType<typeof within>): Promise<HTMLElement> {
-  fireEvent.click(panel.getByRole('button', { name: 'Edit worktrees' }));
+  fireEvent.click(panel.getByRole('button', { name: /Worktrees:/ }));
   await act(async () => {});
   return screen.getByRole('dialog');
 }
@@ -47,7 +49,7 @@ it('saves the base branch with the sha, announces it and returns focus', async (
   expect(update).toHaveBeenCalledExactlyOnceWith('ws-a', { baseBranch: 'release-2' }, base.board.sha256);
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByText('Saved base branch.')).toBeTruthy();
-  expect(document.activeElement).toBe(panel.getByRole('button', { name: 'Edit worktrees' }));
+  expect(document.activeElement).toBe(panel.getByRole('button', { name: /Worktrees:/ }));
 });
 
 it('marks an invalid base branch, describes it and blocks saving', async () => {
@@ -87,7 +89,7 @@ it('discards the draft on Cancel and Escape', async () => {
   fireEvent.change(within(first).getByLabelText('Base branch'), { target: { value: 'discarded' } });
   fireEvent.click(within(first).getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(document.activeElement).toBe(panel.getByRole('button', { name: 'Edit worktrees' }));
+  expect(document.activeElement).toBe(panel.getByRole('button', { name: /Worktrees:/ }));
   const second = await openWorktrees(panel);
   expect((within(second).getByLabelText('Base branch') as HTMLInputElement).value).toBe('main');
   fireEvent.change(within(second).getByLabelText('Base branch'), { target: { value: 'discarded' } });
@@ -124,5 +126,5 @@ it('keeps the dialog open on CONFIG_CHANGED and focuses Reload latest', async ()
   await act(async () => { fireEvent.click(reload); });
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.queryByText('Saved base branch.')).toBeNull();
-  expect(document.activeElement).toBe(panel.getByRole('button', { name: 'Edit worktrees' }));
+  expect(document.activeElement).toBe(panel.getByRole('button', { name: /Worktrees:/ }));
 });

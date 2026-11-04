@@ -5,10 +5,9 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { TeamsHarness } from './teamsHarness';
-import { RoutingScreen } from '../src/renderer/routing/RoutingScreen';
 import { workspaceA } from './dashboardFixtures';
 import {
-  LONG_UNBROKEN, fakeManagement, longContentOverview, longRoutingSettings, managementError, member, memberRow, memberOpen, openMember, overviewFixture, team, twoTeams,
+  LONG_UNBROKEN, fakeManagement, longContentOverview, managementError, member, memberRow, memberOpen, openMember, overviewFixture, team, twoTeams,
 } from './teamsFixtures';
 
 afterEach(cleanup);
@@ -25,11 +24,9 @@ function teamsRules(): Array<{ selector: string; body: string }> {
   return rules;
 }
 
-async function mount(opts: Parameters<typeof fakeManagement>[0] = {}, section: 'Overview' | 'Routing' | null = null) {
+async function mount(opts: Parameters<typeof fakeManagement>[0] = {}) {
   const fake = fakeManagement(opts);
-  const view = section === 'Routing'
-    ? render(<main><RoutingScreen workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>)
-    : render(<main><TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
+  const view = render(<main><TeamsHarness workspace={workspaceA} management={fake.api} onViewRole={vi.fn()} /></main>);
   await act(async () => {});
   return { fake, view };
 }
@@ -85,13 +82,6 @@ it('teams_dialog_and_disclosures_are_keyboard_complete', async () => {
   expect(dialog.contains(document.activeElement)).toBe(true);
   await userEvent.keyboard('{Escape}');
   expect(view.queryByRole('dialog')).toBeNull(); expect(document.activeElement).toBe(opener);
-  cleanup();
-  const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
-  const scroll = routing.view.getByRole('region', { name: 'Routing transitions (scrollable)' });
-  scroll.focus();
-  expect(document.activeElement).toBe(scroll);
-  expect(scroll.tabIndex).toBe(0);
-  expect(routing.view.queryByRole('button', { name: 'Action rules' })).toBeNull();
 });
 
 it('teams_long_content_remains_present', async () => {
@@ -99,9 +89,6 @@ it('teams_long_content_remains_present', async () => {
   expect(view.container.textContent!.split(LONG_UNBROKEN).length - 1).toBeGreaterThan(3);
   expect(within(memberRow(`Ünï ${LONG_UNBROKEN}`)).getByText(new RegExp(`Goal ${LONG_UNBROKEN}`))).toBeTruthy();
   expect(view.getAllByRole('alert')[0]!.textContent).toContain(`${LONG_UNBROKEN} remediation`);
-  cleanup();
-  const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
-  expect(routing.view.getByRole('list', { name: 'Routing transitions' }).textContent).toContain(LONG_UNBROKEN);
 });
 
 it('teams_css_reflows_without_hiding_columns_or_clipping_dialogs', () => {
@@ -249,11 +236,6 @@ it('v4_v6_controls_expose_named_selected_expanded_modal_and_live_region_semantic
   await act(async () => {});
   expect(second.view.getAllByRole('alert').filter(a => a.textContent?.includes('duplicate-xyz'))).toHaveLength(1);
   expect(second.view.queryAllByRole('status').filter(s => s.textContent?.includes('duplicate-xyz'))).toHaveLength(0);
-  // disclosure semantics
-  cleanup();
-  const routing = await mount({ boardSettings: [{ ok: true, data: longRoutingSettings() }] }, 'Routing');
-  expect(routing.view.queryByRole('button', { name: 'Action rules' })).toBeNull();
-  expect(routing.view.getByRole('region', { name: 'Routing transitions (scrollable)' }).tabIndex).toBe(0);
 });
 
 it('v4_v6_long_content_and_breakpoints_have_no_page_level_horizontal_overflow_contract', async () => {

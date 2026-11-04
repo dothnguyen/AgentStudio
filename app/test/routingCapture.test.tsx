@@ -3,8 +3,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
-import { RoutingCaptureApp, isRoutingScreenReady, openRoutingSection } from '../capture/RoutingCaptureApp';
+import { cleanup } from '@testing-library/react';
+import { openRoutingSection } from '../capture/RoutingCaptureApp';
 import { routingV1Overview, routingV1Roles, routingV1Settings } from '../capture/routingV1Fixture';
 
 const appDir = path.join(__dirname, '..');
@@ -45,17 +45,6 @@ describe('routing v1 capture fixture', () => {
     expect(routingV1Roles().items.map(role => role.id)).toEqual(['Developer', 'TeamLead', 'Reviewer', 'QA', 'SeniorDeveloper', 'ProductOwner']);
     expect(routingV1Overview().teams[0]!.members.map(member => member.role)).toEqual(['TeamLead', 'Developer', 'Developer', 'Reviewer', 'QA', 'SeniorDeveloper']);
     expect(routingV1Overview().teams[0]!.runtime.state).toBe('running');
-  });
-
-  it('opens Routing in the real shell and marks the rules table ready', async () => {
-    render(<RoutingCaptureApp />);
-    await waitFor(() => expect(document.documentElement.dataset.captureReady).toBe('true'), { timeout: 3000 });
-    expect(isRoutingScreenReady(document)).toBe(true);
-    expect(document.querySelector('[data-section="routing"]')).not.toBeNull();
-    expect(document.querySelectorAll('.routing-rule-row')).toHaveLength(10);
-    expect(document.body.textContent).toContain('5 of 6 roles have a member');
-    expect(document.body.textContent).toContain('Agent Studio Dev Team');
-    expect(document.body.textContent).toContain('ProductOwner has no member in the running team');
   });
 
   it('opens Routing only from an enabled sidebar item', () => {
