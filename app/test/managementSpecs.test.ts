@@ -6,7 +6,7 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(46);
+    expect(MANAGEMENT_SPECS).toHaveLength(52);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.approveCommand', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
@@ -23,6 +23,25 @@ describe('managementSpecs', () => {
     expect(parse('ticketWorkflow', { key: 'T-100', to: 'qa-ready', reason: 'next' })).toEqual({ key: 'T-100', to: 'qa-ready', reason: 'next' });
     for (const request of [{ key: 'T-100', to: 'wrong' }, { key: 'T-100', to: 'todo', force: 'yes' }, { key: 'T-100', to: 'todo', workflowStatus: '' }, { key: 'T-100', to: 'todo', reason: 'x'.repeat(501) }, { key: 'T-100', to: 'todo', extra: true }]) expect(typeof parse('ticketMove', request)).toBe('string');
     for (const request of [{ key: 'T-100', to: '' }, { key: 'T-100', to: 'x'.repeat(65) }, { key: 'T-100', to: 'qa', force: true }, { key: 'bad', to: 'qa' }]) expect(typeof parse('ticketWorkflow', request)).toBe('string');
+  });
+
+  it.each<[string, string, Record<string, unknown>]>([
+    ['boardWorkflows', 'board.workflows', {}],
+    ['boardWorkflow', 'boardworkflow.show', { name: 'develop' }],
+    ['prompts', 'prompt.list', {}],
+    ['prompt', 'prompt.show', { name: 'develop' }],
+    ['checkSets', 'checkset.list', {}],
+    ['boardStatuses', 'board.statuses', {}],
+  ])('parses %s with the exact backend arguments', (method, command, request) => {
+    expect(byLabel(method).command).toBe(command);
+    expect(byLabel(method).mutating).toBe(false);
+    expect(parse(method, request)).toEqual(request);
+    expect(parse(method, { ...request, workspace: '/other' })).toContain('unknown field');
+  });
+
+  it.each(['boardWorkflow', 'prompt'])('rejects invalid names for %s', (method) => {
+    for (const name of [undefined, '', '../bad', 'UPPER', 'a'.repeat(65)])
+      expect(typeof parse(method, { name })).toBe('string');
   });
 
   it('isPlainObject accepts plain and null-prototype objects only', () => {

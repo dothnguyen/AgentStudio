@@ -271,3 +271,5 @@ The Current Phase attention list includes blocked tickets, unclaimed tickets in 
 Backlog tickets can be moved to Todo using a configured entry status. Ticket pages show the column and workflow status, and offer workflow changes, column moves, or reopening according to the ticket's column and claim state. Action errors are shown inline and successful actions refresh the ticket.
 
 The Routing editor also manages workflow status IDs, names, kinds and ordering, Todo entry choices and their default. Rules select an in-progress status, with an option to create one. The backend rejects removal of statuses still used by tickets.
+
+The management preload exposes read calls for board workflows, workflow details, prompts, check sets, and board statuses. Ticket reads include approval, input, and pause state; board phase counts include those states and blocked tickets.

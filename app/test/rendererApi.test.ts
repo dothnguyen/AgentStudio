@@ -135,6 +135,7 @@ describe('getDashboardApi', () => {
 describe('getManagementApi', () => {
   const METHODS = [
     'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket',
+    'boardWorkflows', 'boardWorkflow', 'prompts', 'prompt', 'checkSets', 'boardStatuses',
     'createAgent', 'updateAgent', 'deleteAgent',
     'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
     'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
@@ -217,6 +218,7 @@ describe('getManagementApi', () => {
         columns: { backlog: 0, todo: 1, 'in-progress': 0, done: 0, closed: 0 },
         workflow: { 'dev-ready': 1 },
         columnWorkflow: { backlog: {}, todo: { 'dev-ready': 1 }, 'in-progress': {}, done: {}, closed: {} },
+        waitingApproval: 0, needsInput: 0, blocked: 0, paused: 0,
       }],
     };
     expect(board.phases[0]?.columns.todo).toBe(1);

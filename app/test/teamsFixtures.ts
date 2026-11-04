@@ -199,6 +199,12 @@ export function fakeManagement(opts: {
   const unused = () => vi.fn(() => Promise.reject(new Error('not used')));
   const api = new Proxy({
     overview, agents, boardSettings, boardPhases, boardTickets, roles,
+    boardWorkflows: vi.fn(async () => ({ ok: true, data: { workflows: [], problems: [] } })),
+    boardWorkflow: vi.fn(async () => ({ ok: false, error: { code: "NOT_FOUND", message: "Not found", retryable: false } })),
+    prompts: vi.fn(async () => ({ ok: true, data: { prompts: [] } })),
+    prompt: vi.fn(async () => ({ ok: false, error: { code: "NOT_FOUND", message: "Not found", retryable: false } })),
+    checkSets: vi.fn(async () => ({ ok: true, data: { checkSets: [], commands: [], problems: [] } })),
+    boardStatuses: vi.fn(async () => ({ ok: true, data: { statuses: [], sha256: "a".repeat(64) } })),
     skills: skillFake.skills,
     skill: skillFake.skill,
     createSkill: skillFake.createSkill,

@@ -351,6 +351,32 @@ export type BoardSettingsKey =
   | 'baseBranch'
   | 'agentTicketStatus';
 
+// Workflow catalog reads
+export interface WorkflowProblem { path: string; message: string; workflow?: string }
+export interface BoardWorkflowSummary {
+  name: string; title: string; startsAt: string; whileRunning: string; role: string | null;
+  steps: Array<{ id: string; kind: string }>;
+  end: Record<string, unknown>; limits: Record<string, unknown>;
+  priority?: number; workspace?: string; syncBase?: boolean; waitForDependencies?: boolean; createdTickets?: string;
+}
+export interface BoardWorkflows { workflows: BoardWorkflowSummary[]; problems: WorkflowProblem[] }
+export interface BoardWorkflowDetail {
+  name: string; definition: Record<string, unknown> | null; text: string; sha256: string;
+  problems: WorkflowProblem[]; start: { allowed: boolean; default: boolean };
+}
+export interface PromptDetail { name: string; text: string; words: number; sha256: string; users: Array<{ workflow: string; step: string }> }
+export interface PromptList { prompts: PromptDetail[] }
+export interface CheckSetList {
+  checkSets: Array<{ id: string; run: Array<{ command: string; when: string[] }>; otherwise: string | null; reuseIfTested: boolean }>;
+  commands: Array<{ id: string; description: string }>; problems: Array<{ path: string; message: string }>;
+}
+export interface BoardStatuses {
+  statuses: Array<{ id: string; name: string; kind: 'initial' | 'done' | 'closed' | null;
+    type: 'start' | 'done' | 'closed' | 'startsWorkflow' | 'whileRunning' | 'unused';
+    usedBy: Array<{ workflow: string; title: string; how: string }>; ticketCount: number }>;
+  sha256: string;
+}
+
 // board reads (phase.list, board.show, ticket.list summary mode, ticket.show)
 export type BoardColumn = 'backlog' | 'todo' | 'in-progress' | 'done' | 'closed';
 export type BoardColumnCounts = Record<BoardColumn, number>;
@@ -360,6 +386,7 @@ export interface BoardShowPhase extends BoardPhaseRef {
   columns: BoardColumnCounts;
   workflow: Record<string, number>;
   columnWorkflow: Record<BoardColumn, Record<string, number>>;
+  waitingApproval: number; needsInput: number; blocked: number; paused: number;
 }
 export interface BoardShow {
   workspace: string;
@@ -421,6 +448,9 @@ export interface BoardTicket {
   rounds: Record<string, number> | null;
   returnStatus: string | null;
   blockedReason: string | null;
+  waitingApproval: { workflowRunId: string; stage: string; ask: string; since: string } | null;
+  needsInput: { question: string; since: string } | null;
+  paused: { reason: string | null; at: string } | null;
   activity: BoardTicketActivity;
 }
 export interface BoardTicketSummary extends Omit<BoardTicket, 'body'> {
@@ -672,6 +702,12 @@ export interface ManagementApi {
   team(workspaceId: string, teamDefId: string): R<TeamDefinitionDetail>;
   validateTeam(workspaceId: string, teamDefId: string): R<TeamValidation>;
   boardSettings(workspaceId: string): R<BoardSettings>;
+  boardWorkflows(workspaceId: string): R<BoardWorkflows>;
+  boardWorkflow(workspaceId: string, name: string): R<BoardWorkflowDetail>;
+  prompts(workspaceId: string): R<PromptList>;
+  prompt(workspaceId: string, name: string): R<PromptDetail>;
+  checkSets(workspaceId: string): R<CheckSetList>;
+  boardStatuses(workspaceId: string): R<BoardStatuses>;
   boardPhases(workspaceId: string): R<BoardPhases>;
   boardTickets(workspaceId: string, input: { phase?: string; unassigned?: boolean }): R<BoardTicketList>;
   boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;

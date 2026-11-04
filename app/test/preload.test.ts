@@ -20,6 +20,7 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 
 const METHODS = [
   'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket',
+  'boardWorkflows', 'boardWorkflow', 'prompts', 'prompt', 'checkSets', 'boardStatuses',
   'createAgent', 'updateAgent', 'deleteAgent',
   'createTeam', 'renameTeam', 'deleteTeam', 'addMember', 'updateMember', 'removeMember', 'updateBoardSettings',
   'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
@@ -65,6 +66,12 @@ describe('preload', () => {
     m.team('ws', 'core', x);
     m.validateTeam('ws', 'core', x);
     m.boardSettings('ws', x);
+    m.boardWorkflows('ws', x);
+    m.boardWorkflow('ws', 'develop', x);
+    m.prompts('ws', x);
+    m.prompt('ws', 'develop', x);
+    m.checkSets('ws', x);
+    m.boardStatuses('ws', x);
     m.boardPhases('ws', x);
     m.boardTickets('ws', {}, x);
     m.boardTickets('ws', { phase: 'phase-05' }, x);
@@ -123,6 +130,12 @@ describe('preload', () => {
       [P.managementTeam, 'ws', { teamDefId: 'core' }],
       [P.managementValidateTeam, 'ws', { teamDefId: 'core' }],
       [P.managementBoardSettings, 'ws', {}],
+      [P.managementBoardWorkflows, 'ws', {}],
+      [P.managementBoardWorkflow, 'ws', { name: 'develop' }],
+      [P.managementPrompts, 'ws', {}],
+      [P.managementPrompt, 'ws', { name: 'develop' }],
+      [P.managementCheckSets, 'ws', {}],
+      [P.managementBoardStatuses, 'ws', {}],
       [P.managementBoardPhases, 'ws', {}],
       [P.managementBoardTickets, 'ws', {}],
       [P.managementBoardTickets, 'ws', { phase: 'phase-05' }],
