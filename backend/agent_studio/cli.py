@@ -347,6 +347,9 @@ def _local_command(cmd, argv, pretty):
         return storycli.run(argv, pretty)
     if cmd == "team" and argv[1:2] and argv[1] in _TEAM_LOCAL:
         return _team_command(argv, pretty)
+    if cmd == "board" and argv[1:2] == ["status"]:
+        from . import statuscli
+        return statuscli.run(argv, pretty)
     if cmd == "prompt" or (cmd == "board" and argv[1:2] == ["workflow"]):
         from . import workflowcli
         return workflowcli.run(argv, pretty)

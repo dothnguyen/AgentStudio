@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, workflowcatalog, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import boardstatuses, agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, workflowcatalog, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -149,6 +149,20 @@ def _board_workflows(args, req):
     ws = _catalog_workspace(args, {"workspace"}, "board.workflows")
     result = boardworkflows.load(ws, boardmodel.load_config(ws))
     return {"workflows": result["workflows"], "problems": result["problems"]}
+
+
+def _statuses(args, req, action):
+    fields = {'list': set(), 'add': {'id', 'name', 'kind'}, 'rename': {'id', 'name'},
+              'remove': {'id'}, 'reorder': {'ids'}}[action]
+    ws = _catalog_workspace(args, {'workspace'} | fields | ({'expectedSha256'} if action != 'list' else set()), 'status.' + action)
+    if action != 'list' and ('expectedSha256' not in args or args['expectedSha256'] is None):
+        raise AsError(BAD_REQUEST, 'expectedSha256 is required.')
+    sha = _sha_arg(args) if action != 'list' else None
+    conn = _reader()
+    try:
+        return boardstatuses.list_statuses(ws, conn) if action == 'list' else boardstatuses.change(ws, conn, action, args, sha)
+    finally:
+        conn.close()
 
 
 def _workflow_catalog(args, req, command):
@@ -1264,6 +1278,9 @@ COMMANDS = {
     **{f"{kind}.{action}": (lambda args, req, command=f"{kind}.{action}": _workflow_catalog(args, req, command))
        for kind in ("boardworkflow", "prompt") for action in ("list", "show", "save", "delete")},
     "board.workflows": _board_workflows,
+    "board.statuses": lambda args, req: _statuses(args, req, "list"),
+    **{f"status.{action}": (lambda args, req, action=action: _statuses(args, req, action))
+       for action in ("add", "rename", "remove", "reorder")},
     "board.settings.update": _board_settings_update,
     "role.create": _role_create,
     "role.update": _role_update,

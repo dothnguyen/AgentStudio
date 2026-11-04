@@ -55,7 +55,7 @@ class NoBoardCode(unittest.TestCase):
         self.assertNotIn("debug.ticket_worktree", dispatch.COMMANDS)
         board_commands = sorted(n for n in dispatch.COMMANDS if n.startswith("board."))
         self.assertEqual(board_commands, ["board.resume", "board.run", "board.settings",
-                                          "board.settings.update", "board.show", "board.stop",
+                                          "board.settings.update", "board.show", "board.statuses", "board.stop",
                                           "board.summary", "board.upgrade", "board.workflows"])
         self.assertEqual(sorted(n for n in dispatch.COMMANDS if n.startswith("ticket.")),
                          ["ticket.add", "ticket.apply", "ticket.depend", "ticket.edit", "ticket.list", "ticket.move",
