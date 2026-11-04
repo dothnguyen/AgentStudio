@@ -5,6 +5,7 @@ import { getSectionContent, SectionPlaceholder } from '../sections/SectionPlaceh
 import { AgentsScreen } from '../agents/AgentsScreen';
 import { RolesScreen } from '../roles/RolesScreen';
 import { SkillsScreen } from '../skills/SkillsScreen';
+import { PromptsScreen } from '../workflow/PromptsScreen';
 import { RoutingScreen } from '../routing/RoutingScreen';
 import { StatusesScreen } from '../workflow/StatusesScreen';
 import { CurrentPhaseScreen } from '../boards/CurrentPhaseScreen';
@@ -230,7 +231,7 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
   ) : sectionId === 'workflow/statuses' ? (
     <StatusesScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
   ) : sectionId === 'workflow/prompts' ? (
-    <section data-section={sectionId}><h1>{selectedItem?.label}</h1></section>
+    <PromptsScreen key={props.workspace.id} workspace={props.workspace} management={props.management} />
   ) : sectionId === BOARDS_DEFAULT_ROUTE ? (
     <CurrentPhaseScreen
       key={props.workspace.id}

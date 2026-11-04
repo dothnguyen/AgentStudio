@@ -755,7 +755,7 @@ describe('Routing screen navigation', () => {
     expect(fake.roles).toHaveBeenLastCalledWith(workspace.id);
   });
 
-  it('workflow_children_show_placeholders_and_legacy_route_redirects', async () => {
+  it('workflow_children_open_their_screens_and_legacy_route_redirects', async () => {
     const fake = fakeManagement({ boardSettings: [{ ok: true, data: routingSettingsFixture() }] });
     const view = render(<WorkspaceShellComponent workspace={workspace} dashboard={dashboard} management={fake.api} connection={connection} onSwitchWorkspace={vi.fn()} renderSection={(id, navigate) => id === 'home' ? <button onClick={() => navigate('routing')}>Legacy route</button> : undefined} />);
     await settle();
@@ -765,6 +765,7 @@ describe('Routing screen navigation', () => {
       fireEvent.click(within(group).getByRole('button', { name: label }));
       expect(view.getByRole('heading', { level: 1, name: label })).toBeTruthy();
       expect(view.container.querySelector(`[data-section="${route}"]`)).toBeTruthy();
+      if (route === 'workflow/prompts') expect(view.getByRole('region', { name: 'Prompt editor' })).toBeTruthy();
       expect(currentButtons(view.container)).toEqual([within(group).getByRole('button', { name: label })]);
     }
     fireEvent.click(view.getByRole('button', { name: 'Home' }));

@@ -277,3 +277,5 @@ The management preload exposes read calls for board workflows, workflow details,
 The management API also exposes workflow and prompt save/delete, workflow status add/rename/remove/reorder, workflow approval, and answers to waiting assignments. Catalog and status writes pass their expected SHA tokens to the backend; workflow approval and assignment answers use coordinator idempotency keys. Answers use `assignment.resolve` with `action: retry` and the answer text, as in the T-204 backend contract. Workflow saves can include start settings and the expected board SHA.
 
 The Workflow Statuses screen reads the board's statuses and shows their workflow usage, ticket columns, and summary counts. Its filters search names and IDs or show statuses unused by workflows. Status actions are placeholders on this read-only screen.
+
+Workflow prompts lists board and other prompt files, their usage and word counts. Select a prompt to edit a local draft, insert placeholders at the cursor, and see word and estimated token counts and unknown placeholders. Drafts are not saved by this screen; save and revert actions are planned separately.
