@@ -2545,11 +2545,10 @@ button.boards-ticket-card[data-activity="blocked"]:hover:not(:disabled) { border
 
 .boards-backlog-row-wrap { display: flex; align-items: center; }
 .boards-backlog-row-wrap .boards-backlog-row { flex: 1; min-width: 0; }
-.boards-backlog-actions { position: relative; flex: none; }
-.boards-backlog-actions > button { padding: 6px 10px; color: inherit; background: transparent; border: 1px solid #485160; border-radius: 5px; cursor: pointer; }
-.boards-backlog-actions [role="group"] { position: absolute; z-index: 5; right: 0; min-width: 220px; padding: 4px; background: #252b34; border: 1px solid #485160; border-radius: 5px; box-shadow: 0 6px 18px #0008; }
-.boards-backlog-actions [role="group"] button { display: block; width: 100%; padding: 8px; color: #e7e9ec; background: transparent; border: 0; text-align: left; cursor: pointer; }
-.boards-backlog-actions [role="group"] button:hover, .boards-backlog-actions [role="group"] button:focus-visible { background: #394454; }
+.boards-backlog-actions { display: flex; align-items: center; flex: none; }
+.boards-backlog-actions-trigger { padding: 6px 10px; color: inherit; background: transparent; border: 1px solid #485160; border-radius: 5px; cursor: pointer; }
+.boards-backlog-actions-trigger:hover:not(:disabled) { background: #1e2228; }
+.boards-backlog-actions-trigger:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .workflow-nav-heading { padding: 8px 12px; color: #e7e9ec; font-weight: 500; }
 .workflow-nav-list { list-style: none; margin: 0; padding: 0; }

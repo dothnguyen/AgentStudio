@@ -22,8 +22,8 @@ describe('BacklogScreen', () => {
     const menu = view.getByRole('button', { name: 'Actions for T-21' });
     menu.focus();
     await userEvent.keyboard('{Enter}');
-    expect(view.getByRole('group', { name: 'T-21 actions' })).toBeTruthy();
-    await userEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    expect(view.getByRole('menu', { name: 'T-21 actions' })).toBeTruthy();
+    await userEvent.click(view.getByRole('menuitem', { name: 'Change phase' }));
     expect(view.getByRole('dialog', { name: /Change phase for T-21/ })).toBeTruthy();
     fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
     fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
@@ -38,7 +38,7 @@ describe('BacklogScreen', () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Actions for T-22' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    fireEvent.click(view.getByRole('menuitem', { name: 'Change phase' }));
     fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
     fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
     expect(ticketPhase).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe('BacklogScreen', () => {
     const gate = deferred<ReturnType<typeof ok<ReturnType<typeof boardPhasesFixture>>>>();
     fake.boardPhases.mockImplementation(() => gate.promise);
     fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    fireEvent.click(view.getByRole('menuitem', { name: 'Change phase' }));
     fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
     fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
     await settle();
@@ -74,7 +74,7 @@ describe('BacklogScreen', () => {
     await settle();
     fake.boardPhases.mockImplementation(() => gate.promise);
     fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    fireEvent.click(view.getByRole('menuitem', { name: 'Change column or workflow status' }));
     fireEvent.change(view.getByLabelText('Workflow status'), { target: { value: 'review' } });
     fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
     await settle();
@@ -92,7 +92,7 @@ describe('BacklogScreen', () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    fireEvent.click(view.getByRole('menuitem', { name: 'Change column or workflow status' }));
     fireEvent.change(view.getByLabelText('Column'), { target: { value: 'todo' } });
     fireEvent.change(view.getByLabelText('Workflow status'), { target: { value: 'review' } });
     const submit = view.getByRole('button', { name: 'Move ticket' });
@@ -113,7 +113,7 @@ describe('BacklogScreen', () => {
     const trigger = view.getByRole('button', { name: 'Actions for T-21' });
     trigger.focus();
     await userEvent.keyboard('{Enter}');
-    await userEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    await userEvent.click(view.getByRole('menuitem', { name: 'Change phase' }));
     await userEvent.keyboard('{Escape}');
     expect(document.activeElement).toBe(trigger);
   });
@@ -337,7 +337,7 @@ describe('BacklogScreen', () => {
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
     await settle();
     fireEvent.click(view.getByRole('button', { name: 'Actions for T-7' }));
-    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    fireEvent.click(view.getByRole('menuitem', { name: 'Change column or workflow status' }));
     expect(view.getByRole('dialog', { name: 'Move T-7' })).toBeTruthy();
     expect((view.getByLabelText('Workflow status') as HTMLSelectElement).value).toBe('dev-ready');
   });

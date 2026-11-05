@@ -351,16 +351,14 @@ describe('ActionMenu pointer and lifecycle', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('closes on window resize, window blur and an outside scroll', async () => {
+  it('repositions on window resize and an outside scroll, and closes on window blur', async () => {
     render(<ActionMenu label="Team actions" items={makeItems()} />);
     fireEvent.click(trigger()); await flush();
     fireEvent(window, new Event('resize')); await flush();
-    expect(screen.queryByRole('menu')).toBeNull();
-    fireEvent.click(trigger()); await flush();
-    fireEvent(window, new Event('blur')); await flush();
-    expect(screen.queryByRole('menu')).toBeNull();
-    fireEvent.click(trigger()); await flush();
+    expect(screen.getByRole('menu')).toBeTruthy();
     fireEvent.scroll(document.body); await flush();
+    expect(screen.getByRole('menu')).toBeTruthy();
+    fireEvent(window, new Event('blur')); await flush();
     expect(screen.queryByRole('menu')).toBeNull();
   });
 

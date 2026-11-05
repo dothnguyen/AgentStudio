@@ -6,6 +6,8 @@ import { agentInitials, ticketActivityChip, TICKET_CHIP_TONE_CLASS } from './tic
 import type { BoardPhase, BoardSettings, ManagementApi } from '../api';
 import { MoveTicketDialog } from './MoveTicketDialog';
 import { Dialog } from '../teams/Dialog';
+import { ActionMenu } from '../ui/ActionMenu';
+import type { MenuItem } from '../ui/actionMenuModel';
 
 interface Props {
   ticket: BoardTicketSummary;
@@ -32,7 +34,6 @@ function relativeTime(value: string): string {
 
 function Row({ ticket, status, workflowStatus, rules, onOpenTicket, phases, settings, management, workspaceId, onChanged }: Props): JSX.Element {
   const trigger = useRef<HTMLButtonElement>(null);
-  const [menu, setMenu] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [phaseOpen, setPhaseOpen] = useState(false);
   const [phase, setPhase] = useState(ticket.phase ?? phases.find(item => item.current)?.slug ?? phases[0]?.slug ?? '');
@@ -53,6 +54,18 @@ function Row({ ticket, status, workflowStatus, rules, onOpenTicket, phases, sett
   const agent = ticket.activity.agent?.trim() ?? '';
   const date = new Date(ticket.updatedAt);
   const open = (): void => { onOpenTicket?.(ticket.key); };
+  const menuItems: MenuItem[] = [
+    {
+      kind: 'action', id: 'change-phase', label: 'Change phase', onSelect: () => {
+        setError('');
+        setPhase(phases.some(item => item.slug === ticket.phase && item.status === 'open') ? ticket.phase! : '');
+        setPhaseOpen(true);
+      },
+    },
+    {
+      kind: 'action', id: 'change-status', label: 'Change column or workflow status', onSelect: () => { setMoveOpen(true); },
+    },
+  ];
   return <div className="boards-backlog-row-wrap"><button type="button" className="boards-backlog-row" aria-label={`Open ${ticket.key}: ${ticket.title}`} onClick={open}>
     <span className="boards-ticket-key boards-backlog-key">{ticket.key}</span>
     <span className="boards-backlog-title" title={ticket.title}>{ticket.title}</span>
@@ -61,12 +74,14 @@ function Row({ ticket, status, workflowStatus, rules, onOpenTicket, phases, sett
     {ticket.priority !== 100 && <span className="boards-ticket-priority">Priority {ticket.priority}</span>}
     {agent && <span className="boards-ticket-owner"><span className="boards-ticket-avatar" aria-hidden="true">{agentInitials(agent)}</span><span className="boards-ticket-owner-name">{agent}</span></span>}
     <time className="boards-backlog-time" dateTime={ticket.updatedAt} title={Number.isNaN(date.getTime()) ? '' : date.toLocaleString()}>{relativeTime(ticket.updatedAt)}</time>
-  </button><div className="boards-backlog-actions" onKeyDown={event => { if (event.key === 'Escape' && menu) { setMenu(false); trigger.current?.focus(); } }}>
-    <button ref={trigger} type="button" aria-expanded={menu} aria-label={`Actions for ${ticket.key}`} onClick={() => setMenu(!menu)}>Actions</button>
-    {menu && <div role="group" aria-label={`${ticket.key} actions`}>
-      <button type="button" onClick={() => { setMenu(false); setError(''); setPhase(phases.some(item => item.slug === ticket.phase && item.status === 'open') ? ticket.phase! : ''); setPhaseOpen(true); }}>Change phase</button>
-      <button type="button" onClick={() => { setMenu(false); setMoveOpen(true); }}>Change column or workflow status</button>
-    </div>}
+  </button><div className="boards-backlog-actions">
+    <ActionMenu
+      label={`${ticket.key} actions`}
+      trigger={{ label: 'Actions', ariaLabel: `Actions for ${ticket.key}` }}
+      triggerClassName="boards-backlog-actions-trigger"
+      triggerRef={trigger}
+      items={menuItems}
+    />
   </div>
   {moveOpen && <MoveTicketDialog ticket={ticket} settings={settings} management={management} workspaceId={workspaceId} onClose={() => { setMoveOpen(false); trigger.current?.focus(); }} onMoved={(target) => { setMoveOpen(false); onChanged(ticket, { status: target.column, workflowStatus: target.workflowStatus }); }} />}
   {phaseOpen && <Dialog title={`Change phase for ${ticket.key}`} subtitle={ticket.title} onClose={() => { if (!busy) { setPhaseOpen(false); trigger.current?.focus(); } }} busy={busy} actions={[{label:'Cancel',onClick:()=>{ setPhaseOpen(false); trigger.current?.focus(); }},{label:'Move ticket',variant:'primary',disabled:!phase || phase === ticket.phase || busy,onClick:()=>{ void changePhase(); }}]}>

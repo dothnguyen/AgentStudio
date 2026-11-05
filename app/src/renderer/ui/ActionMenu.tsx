@@ -114,6 +114,7 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
   const [placed, setPlaced] = useState<MenuPlacement | null>(null);
   const [submenuPlacements, setSubmenuPlacements] = useState<Record<number, MenuPlacement>>({});
   const [focusTick, setFocusTick] = useState(0);
+  const [positionTick, setPositionTick] = useState(0);
 
   const triggerElement = useRef<HTMLButtonElement | null>(null);
   const portalRoot = useRef<HTMLDivElement | null>(null);
@@ -237,9 +238,9 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
       next[depth + 1] = placeMenu(rectOf(parent), measureSize(childElement, childItems, viewport.height), viewport, 'start');
     }
     setSubmenuPlacements(next);
-    // openPathKey and focusTick are the intentional triggers; items are read through the closure.
+    // openPathKey, focusTick and positionTick are the intentional triggers; items are read through the closure.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, openPathKey, align, focusTick, props.anchorPoint?.x, props.anchorPoint?.y]);
+  }, [open, openPathKey, align, focusTick, positionTick, props.anchorPoint?.x, props.anchorPoint?.y]);
 
   // Focus is requested explicitly so opening a submenu can move focus into it.
   // A level is only focused once it has a placement: the first commit renders
@@ -272,22 +273,27 @@ export function ActionMenu(props: ActionMenuProps): JSX.Element {
     return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open, close]);
 
-  // Resize, window blur and any scrolling container outside the menu close it.
+  // Scrolling the trigger's container or resizing the window moves the anchor:
+  // re-place the menu instead of detaching it. Window blur closes the menu, and
+  // scrolling inside the menu itself only scrolls its item list.
   useEffect(() => {
     if (!open) return;
-    const onResize = (): void => close(false);
+    const reposition = (): void => setPositionTick((tick) => tick + 1);
+    const onResize = (): void => reposition();
     const onBlur = (): void => close(false);
     const onScroll = (event: Event): void => {
       const target = event.target;
       if (target instanceof Node && portalRoot.current?.contains(target) === true) return;
-      close(false);
+      reposition();
     };
     window.addEventListener('resize', onResize);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('scroll', onScroll, true);
     document.addEventListener('scroll', onScroll, true);
     return () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('scroll', onScroll, true);
       document.removeEventListener('scroll', onScroll, true);
     };
   }, [open, close]);
