@@ -1,11 +1,11 @@
 import { useId, useState } from 'react';
 import type { JSX } from 'react';
-import type { ApiError, BoardSettings } from '../api';
+import type { ApiError, BoardPhase, BoardSettings, BoardTicketSummary, ManagementApi } from '../api';
 import type { BacklogGroup } from './backlogModel';
 import { BoardErrorCard } from './CurrentPhaseScreen';
 import { BacklogRow } from './BacklogRow';
 
-export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onMoveToTodo, phaseState, error, loaded, onExpand, onRetry, initiallyExpanded }: { initiallyExpanded: boolean; phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; loaded?: boolean; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
+export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, phaseState, error, loaded, onExpand, onRetry, initiallyExpanded, phases, management, workspaceId, onChanged }: { initiallyExpanded: boolean; phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; loaded?: boolean; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; phases: BoardPhase[]; management: ManagementApi; workspaceId: string; onChanged(ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>): void; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
   const bodyId = useId();
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [showAll, setShowAll] = useState(false);
@@ -22,7 +22,7 @@ export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenP
       {expanded && <>
       {!hasRows && (phaseState === 'loading' || !phaseState) ? <p role="status">Loading tickets…</p> : !hasRows && phaseState === 'error' ? <BoardErrorCard title="Could not load phase tickets" error={error ?? null} onRetry={onRetry} /> : <>
         {phaseState === 'error' && <div className="boards-refresh-error" role="alert"><span>Could not refresh these tickets. The last loaded tickets are still shown. {error && <><code className="entity-id">{error.code}</code>: {error.message}</>}</span><button type="button" onClick={onRetry}>Retry</button></div>}
-        {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} workflowStatus={settings.workflowStatuses.find((status) => status.id === ticket.workflowStatus) ?? { id: ticket.workflowStatus }} rules={settings.rules} onOpenTicket={onOpenTicket} onMoveToTodo={onMoveToTodo} />)}
+        {visible.length === 0 ? <p className="boards-backlog-empty">No tickets in this phase.</p> : visible.map((ticket) => <BacklogRow key={ticket.key} ticket={ticket} status={settings.statuses.find((status) => status.id === ticket.status) ?? { id: ticket.status }} workflowStatus={settings.workflowStatuses.find((status) => status.id === ticket.workflowStatus) ?? { id: ticket.workflowStatus }} rules={settings.rules} onOpenTicket={onOpenTicket} phases={phases} settings={settings} management={management} workspaceId={workspaceId} onChanged={onChanged} />)}
         {!showAll && group.tickets.length > 50 && <button type="button" className="boards-backlog-more" onClick={() => setShowAll(true)}>Show {group.tickets.length - 50} more</button>}
       </>}
       </>}

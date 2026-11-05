@@ -37,7 +37,8 @@ export function MoveTicketDialog(props: MoveTicketDialogProps): JSX.Element {
   const destination = destinations.find((candidate) => candidate.column === column) ?? null;
   const canMove = destination !== null
     && !destination.disabled
-    && destination.statuses.some((option) => option.id === status);
+    && destination.statuses.some((option) => option.id === status)
+    && (destination.column !== props.ticket.status || status !== props.ticket.workflowStatus);
 
   function chooseColumn(value: string): void {
     const next = destinations.find((candidate) => candidate.column === value) ?? null;
@@ -52,10 +53,9 @@ export function MoveTicketDialog(props: MoveTicketDialogProps): JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      const result = await props.management.ticketMove(
-        props.workspaceId,
-        moveRequestFor(props.ticket, destination, status),
-      );
+      const result = destination.column === props.ticket.status
+        ? await props.management.ticketWorkflow(props.workspaceId, { key: props.ticket.key, to: status })
+        : await props.management.ticketMove(props.workspaceId, moveRequestFor(props.ticket, destination, status));
       if (result.ok) {
         props.onMoved({ column: destination.column, workflowStatus: status });
       } else {

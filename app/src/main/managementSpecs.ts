@@ -55,6 +55,7 @@ export const MANAGEMENT_CHANNELS = {
   managementRetryRun: 'management:retryRun',
   managementCancelRun: 'management:cancelRun',
   managementTicketMove: 'management:ticketMove',
+  managementTicketPhase: 'management:ticketPhase',
   managementTicketWorkflow: 'management:ticketWorkflow',
   managementRetryTicket: 'management:retryTicket',
   managementUnblockTicket: 'management:unblockTicket',
@@ -523,6 +524,9 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementTicketMove, 'ticketMove', 'ticket.move', {
     key: { kind: 'ticketKey', required: true }, to: { kind: 'boardColumn', required: true },
     workflowStatus: { kind: 'workflowStatus' }, reason: { kind: 'reason' }, force: { kind: 'bool' },
+  }, { mutating: true }),
+  spec(C.managementTicketPhase, 'ticketPhase', 'ticket.phase', {
+    key: { kind: 'ticketKey', required: true }, phase: { kind: 'slug', required: true },
   }, { mutating: true }),
   spec(C.managementTicketWorkflow, 'ticketWorkflow', 'ticket.workflow', {
     key: { kind: 'ticketKey', required: true }, to: { kind: 'workflowStatus', required: true }, reason: { kind: 'reason' },

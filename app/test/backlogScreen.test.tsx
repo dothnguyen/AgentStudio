@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_BACKLOG_FILTERS } from '../src/renderer/boards/backlogFilters';
 import { BacklogScreen } from '../src/renderer/boards/BacklogScreen';
 import { boardPhasesFixture, boardTicketListFixture, boardTicketSummary } from './boardFixtures';
 import { workspaceA } from './dashboardFixtures';
@@ -13,6 +14,110 @@ const list = (count: number) => boardTicketListFixture({ tickets: Array.from({ l
 const settle = () => act(async () => {});
 
 describe('BacklogScreen', () => {
+  it('exposes a keyboard reachable action menu and submits a confirmed phase change', async () => {
+    const ticketPhase = vi.fn(async () => ok({ ticket: { key: 'T-21', status: 'todo' } }));
+    const fake = fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-21', phase: 'phase-05' })] }))], calls: { ticketPhase } });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const menu = view.getByRole('button', { name: 'Actions for T-21' });
+    menu.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(view.getByRole('group', { name: 'T-21 actions' })).toBeTruthy();
+    await userEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    expect(view.getByRole('dialog', { name: /Change phase for T-21/ })).toBeTruthy();
+    fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
+    fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
+    await settle();
+    expect(ticketPhase).toHaveBeenCalledWith(workspaceA.id, { key: 'T-21', phase: 'phase-06' });
+    expect(view.queryByRole('dialog')).toBeNull();
+  });
+
+  it('cancels a phase change without calling the backend', async () => {
+    const ticketPhase = vi.fn();
+    const fake = fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-22', phase: 'phase-05' })] }))], calls: { ticketPhase } });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Actions for T-22' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
+    fireEvent.click(view.getByRole('button', { name: 'Cancel' }));
+    expect(ticketPhase).not.toHaveBeenCalled();
+    expect(view.queryByRole('dialog')).toBeNull();
+  });
+
+  it('moves a ticket into an already loaded phase without clearing its neighbours', async () => {
+    const move = vi.fn(async () => ok({ ticket: { key: 'T-21', status: 'todo' } }));
+    const fake = fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-21', phase: 'phase-05' })] })), ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-22', phase: 'phase-06' })] }))], calls: { ticketPhase: move } });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: /Phase 06 .*tickets/ }));
+    await settle();
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof boardPhasesFixture>>>>();
+    fake.boardPhases.mockImplementation(() => gate.promise);
+    fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    fireEvent.change(view.getByLabelText('Phase'), { target: { value: 'phase-06' } });
+    fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
+    await settle();
+    const row = view.getByRole('button', { name: /Open T-21/ });
+    expect(row.closest('section')?.textContent).toContain('Phase 06');
+    expect(row.closest('section')?.textContent).toContain('T-22');
+  });
+
+  it('updates a column and workflow together, respects filters, and preserves other rows', async () => {
+    const statuses = [{ id: 'new', name: 'New', kind: 'initial' as const }, { id: 'ready', name: 'Ready', kind: null }, { id: 'review', name: 'Review', kind: null }];
+    const settings = { ...boardSettingsFixture(), statuses, workflowStatuses: statuses, todoEntry: ['ready', 'review'], todoDefault: 'ready' };
+    const gate = deferred<ReturnType<typeof ok<ReturnType<typeof boardPhasesFixture>>>>();
+    const move = vi.fn(async () => ok({ ticket: { key: 'T-21', status: 'todo' } }));
+    const fake = fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-21', phase: 'phase-05', status: 'backlog', workflowStatus: 'new' }), boardTicketSummary({ key: 'T-22', phase: 'phase-05', status: 'backlog', workflowStatus: 'new' })] }))], calls: { ticketMove: move } });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} filters={{ ...DEFAULT_BACKLOG_FILTERS, columns: ['backlog'] }} />);
+    await settle();
+    fake.boardPhases.mockImplementation(() => gate.promise);
+    fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    fireEvent.change(view.getByLabelText('Workflow status'), { target: { value: 'review' } });
+    fireEvent.click(view.getByRole('button', { name: 'Move ticket' }));
+    await settle();
+    expect(move).toHaveBeenCalledWith(workspaceA.id, { key: 'T-21', to: 'todo', workflowStatus: 'review' });
+    expect(view.queryByRole('button', { name: /Open T-21/ })).toBeNull();
+    expect(view.getByRole('button', { name: /Open T-22/ })).toBeTruthy();
+  });
+
+  it('retries a failed workflow-only change without duplicate submissions', async () => {
+    const statuses = [{ id: 'ready', name: 'Ready', kind: null }, { id: 'review', name: 'Review', kind: null }];
+    const settings = { ...boardSettingsFixture(), statuses, workflowStatuses: statuses, todoEntry: ['ready'], todoDefault: 'ready' };
+    const gate = deferred<any>();
+    const workflow = vi.fn().mockResolvedValueOnce(managementError('FAILED', 'Try again')).mockReturnValueOnce(gate.promise);
+    const fake = fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-21', phase: 'phase-05', status: 'todo', workflowStatus: 'ready' })] }))], calls: { ticketWorkflow: workflow } });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: 'Actions for T-21' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    fireEvent.change(view.getByLabelText('Column'), { target: { value: 'todo' } });
+    fireEvent.change(view.getByLabelText('Workflow status'), { target: { value: 'review' } });
+    const submit = view.getByRole('button', { name: 'Move ticket' });
+    fireEvent.click(submit);
+    await settle();
+    expect(view.getByRole('alert').textContent).toContain('Try again');
+    expect(view.getByRole('button', { name: /Open T-21/ }).textContent).toContain('Ready');
+    fireEvent.click(submit); fireEvent.click(submit);
+    expect(workflow).toHaveBeenCalledTimes(2);
+    expect(workflow).toHaveBeenLastCalledWith(workspaceA.id, { key: 'T-21', to: 'review' });
+    await act(async () => { gate.resolve(ok({ ticket: { key: 'T-21', status: 'todo' } })); await gate.promise; });
+  });
+
+  it('returns focus to the action trigger when a dialog is cancelled with Escape', async () => {
+    const fake = fakeManagement({ boardTickets: [ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-21', phase: 'phase-05' })] }))] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const trigger = view.getByRole('button', { name: 'Actions for T-21' });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    await userEvent.click(view.getByRole('button', { name: 'Change phase' }));
+    await userEvent.keyboard('{Escape}');
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('shows and loads only selected phases, reuses their cache and restores default expansion', async () => {
     const phaseTicket = (key: string, phase: string) => ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key, phase })] }));
     const fake = fakeManagement({ boardTickets: [phaseTicket('T-1', 'phase-05'), phaseTicket('T-2', 'phase-06')] });
@@ -223,7 +328,7 @@ describe('BacklogScreen', () => {
     await user.click(row);
     expect(open.mock.calls).toEqual([['T-1'], ['T-1']]);
   });
-  it.each([null, 'agent'])('opens the Move to Todo picker from a backlog row with assignee %s', async (assignee) => {
+  it.each([null, 'agent'])('opens the status picker from a backlog row with assignee %s', async (assignee) => {
     const settings = boardSettingsFixture();
     settings.todoEntry = ['dev-ready'];
     settings.todoDefault = 'dev-ready';
@@ -231,8 +336,9 @@ describe('BacklogScreen', () => {
     const tickets = [boardTicketSummary({ key: 'T-7', status: 'backlog', assignee })];
     const view = render(<BacklogScreen workspace={workspaceA} management={fakeManagement({ boardSettings: [ok(settings)], boardTickets: [ok(boardTicketListFixture({ tickets }))] }).api} />);
     await settle();
-    fireEvent.click(view.getByRole('button', { name: 'Move to Todo' }));
-    expect(view.getByRole('dialog', { name: 'Move to Todo' })).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Actions for T-7' }));
+    fireEvent.click(view.getByRole('button', { name: 'Change column or workflow status' }));
+    expect(view.getByRole('dialog', { name: 'Move T-7' })).toBeTruthy();
     expect((view.getByLabelText('Workflow status') as HTMLSelectElement).value).toBe('dev-ready');
   });
   it('reveals remaining tickets after the first 50', async () => {

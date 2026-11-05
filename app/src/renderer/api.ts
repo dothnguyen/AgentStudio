@@ -302,6 +302,7 @@ export function getManagementApi(): ManagementApi {
     retryRun: (...args) => real.retryRun(...args),
     cancelRun: (...args) => real.cancelRun(...args),
     ticketMove: (...args) => real.ticketMove(...args),
+    ticketPhase: (...args) => real.ticketPhase(...args),
     ticketWorkflow: (...args) => real.ticketWorkflow(...args),
     retryTicket: (...args) => real.retryTicket(...args),
     unblockTicket: (...args) => real.unblockTicket(...args),

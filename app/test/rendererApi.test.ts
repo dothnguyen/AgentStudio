@@ -142,7 +142,7 @@ describe('getManagementApi', () => {
     'roles', 'createRole', 'updateRole', 'updateRoleInstructions', 'deleteRole',
     'skills', 'skill', 'createSkill', 'updateSkill', 'deleteSkill', 'updateSkillRoles',
     'runBoard', 'stopBoard', 'switchMemberAgent', 'resumeMemberAgent',
-    'resetUsage', 'retryRun', 'cancelRun', 'ticketMove', 'ticketWorkflow', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
+    'resetUsage', 'retryRun', 'cancelRun', 'ticketMove', 'ticketPhase', 'ticketWorkflow', 'retryTicket', 'unblockTicket', 'approveCommand', 'rejectCommand', 'cancelCommand', 'attachInfo',
     'startTeam', 'stopTeam',
   ];
   const fakes = () => {

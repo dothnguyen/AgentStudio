@@ -1,8 +1,11 @@
-import { memo } from 'react';
+import { memo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { BoardRuleView, BoardTicketSummary } from '../api';
 import { statusLabel, statusTone, type BoardStatusInfo } from './boardLaneModel';
 import { agentInitials, ticketActivityChip, TICKET_CHIP_TONE_CLASS } from './ticketCardModel';
+import type { BoardPhase, BoardSettings, ManagementApi } from '../api';
+import { MoveTicketDialog } from './MoveTicketDialog';
+import { Dialog } from '../teams/Dialog';
 
 interface Props {
   ticket: BoardTicketSummary;
@@ -10,7 +13,11 @@ interface Props {
   workflowStatus: BoardStatusInfo;
   rules: readonly BoardRuleView[];
   onOpenTicket?: (key: string) => void;
-  onMoveToTodo?: (key: string) => void;
+  phases: BoardPhase[];
+  settings: BoardSettings;
+  management: ManagementApi;
+  workspaceId: string;
+  onChanged(ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>): void;
 }
 
 function relativeTime(value: string): string {
@@ -23,7 +30,25 @@ function relativeTime(value: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-function Row({ ticket, status, workflowStatus, rules, onOpenTicket, onMoveToTodo }: Props): JSX.Element {
+function Row({ ticket, status, workflowStatus, rules, onOpenTicket, phases, settings, management, workspaceId, onChanged }: Props): JSX.Element {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [phaseOpen, setPhaseOpen] = useState(false);
+  const [phase, setPhase] = useState(ticket.phase ?? phases.find(item => item.current)?.slug ?? phases[0]?.slug ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const phaseInFlight = useRef(false);
+  async function changePhase(): Promise<void> {
+    if (phaseInFlight.current || !phase || phase === ticket.phase) return;
+    phaseInFlight.current = true; setBusy(true); setError('');
+    try {
+      const result = await management.ticketPhase(workspaceId, { key: ticket.key, phase });
+      if (result.ok) { setPhaseOpen(false); onChanged(ticket, { phase }); }
+      else setError(`${result.error.message}${result.error.remediation ? ` ${result.error.remediation}` : ''}`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { phaseInFlight.current = false; setBusy(false); }
+  }
   const chip = ticketActivityChip(ticket, rules);
   const agent = ticket.activity.agent?.trim() ?? '';
   const date = new Date(ticket.updatedAt);
@@ -36,10 +61,22 @@ function Row({ ticket, status, workflowStatus, rules, onOpenTicket, onMoveToTodo
     {ticket.priority !== 100 && <span className="boards-ticket-priority">Priority {ticket.priority}</span>}
     {agent && <span className="boards-ticket-owner"><span className="boards-ticket-avatar" aria-hidden="true">{agentInitials(agent)}</span><span className="boards-ticket-owner-name">{agent}</span></span>}
     <time className="boards-backlog-time" dateTime={ticket.updatedAt} title={Number.isNaN(date.getTime()) ? '' : date.toLocaleString()}>{relativeTime(ticket.updatedAt)}</time>
-  </button>{ticket.status === 'backlog' && <button type="button" onClick={() => onMoveToTodo?.(ticket.key)}>Move to Todo</button>}</div>;
+  </button><div className="boards-backlog-actions" onKeyDown={event => { if (event.key === 'Escape' && menu) { setMenu(false); trigger.current?.focus(); } }}>
+    <button ref={trigger} type="button" aria-expanded={menu} aria-label={`Actions for ${ticket.key}`} onClick={() => setMenu(!menu)}>Actions</button>
+    {menu && <div role="group" aria-label={`${ticket.key} actions`}>
+      <button type="button" onClick={() => { setMenu(false); setError(''); setPhase(phases.some(item => item.slug === ticket.phase && item.status === 'open') ? ticket.phase! : ''); setPhaseOpen(true); }}>Change phase</button>
+      <button type="button" onClick={() => { setMenu(false); setMoveOpen(true); }}>Change column or workflow status</button>
+    </div>}
+  </div>
+  {moveOpen && <MoveTicketDialog ticket={ticket} settings={settings} management={management} workspaceId={workspaceId} onClose={() => { setMoveOpen(false); trigger.current?.focus(); }} onMoved={(target) => { setMoveOpen(false); onChanged(ticket, { status: target.column, workflowStatus: target.workflowStatus }); }} />}
+  {phaseOpen && <Dialog title={`Change phase for ${ticket.key}`} subtitle={ticket.title} onClose={() => { if (!busy) { setPhaseOpen(false); trigger.current?.focus(); } }} busy={busy} actions={[{label:'Cancel',onClick:()=>{ setPhaseOpen(false); trigger.current?.focus(); }},{label:'Move ticket',variant:'primary',disabled:!phase || phase === ticket.phase || busy,onClick:()=>{ void changePhase(); }}]}>
+    <label>Phase<select aria-label="Phase" value={phase} disabled={busy} onChange={e=>setPhase(e.target.value)}><option value="" disabled>Select a phase</option>{phases.filter(item=>item.status==='open').map(item=><option key={item.slug} value={item.slug}>{item.name}</option>)}</select></label>
+    {error && <div role="alert">{error} <button type="button" disabled={busy} onClick={()=>{ void changePhase(); }}>Retry</button></div>}
+  </Dialog>}
+  </div>;
 }
 
 // Polling creates new objects; compare their contents so unchanged rows can be reused.
-export const BacklogRow = memo(Row, (a, b) => a.onOpenTicket === b.onOpenTicket && a.onMoveToTodo === b.onMoveToTodo
-  && a.ticket.key === b.ticket.key && a.ticket.updatedAt === b.ticket.updatedAt
+export const BacklogRow = memo(Row, (a, b) => a.onOpenTicket === b.onOpenTicket
+  && a.ticket.key === b.ticket.key && a.ticket.updatedAt === b.ticket.updatedAt && a.phases === b.phases && a.settings === b.settings && a.management === b.management && a.workspaceId === b.workspaceId && a.onChanged === b.onChanged
   && JSON.stringify([a.ticket, a.status, a.workflowStatus, a.rules]) === JSON.stringify([b.ticket, b.status, b.workflowStatus, b.rules]));

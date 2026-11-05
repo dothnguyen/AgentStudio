@@ -105,6 +105,15 @@ export function buildMoveDestinations(ticket: TicketForMove, settings: BoardSett
   return visible.map((definition) => {
     const statuses = statusOptions(definition.ids, catalog);
     const label = COLUMN_LABELS[definition.column];
+    if (definition.column === ticket.status) {
+      const alternatives = (definition.column === 'todo' || definition.column === 'in-progress')
+        ? statusOptions(catalog.filter(status => status.kind == null && !during.has(status.id)).map(status => status.id), catalog)
+        : statuses;
+      const available = (definition.column === 'todo' || definition.column === 'in-progress') && alternatives.some(option => option.id !== ticket.workflowStatus);
+      return { column: definition.column, label, statuses: alternatives,
+        defaultStatus: alternatives.some(option => option.id === ticket.workflowStatus) ? ticket.workflowStatus : alternatives[0]?.id ?? null,
+        disabled: !available, reason: available ? null : `This ticket is already in ${label}.`, force: false };
+    }
     if (statuses.length === 0) {
       return {
         column: definition.column,
@@ -113,17 +122,6 @@ export function buildMoveDestinations(ticket: TicketForMove, settings: BoardSett
         defaultStatus: null,
         disabled: true,
         reason: emptyReason(definition.column),
-        force: finished,
-      };
-    }
-    if (definition.column === ticket.status) {
-      return {
-        column: definition.column,
-        label,
-        statuses,
-        defaultStatus: definition.defaultStatus,
-        disabled: true,
-        reason: `This ticket is already in ${label}.`,
         force: finished,
       };
     }

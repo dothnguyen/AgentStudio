@@ -65,6 +65,7 @@ export const PRELOAD_CHANNELS = {
   managementRetryRun: 'management:retryRun',
   managementCancelRun: 'management:cancelRun',
   managementTicketMove: 'management:ticketMove',
+  managementTicketPhase: 'management:ticketPhase',
   managementTicketWorkflow: 'management:ticketWorkflow',
   managementRetryTicket: 'management:retryTicket',
   managementUnblockTicket: 'management:unblockTicket',
@@ -166,6 +167,7 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       retryRun: (w, workflowRunId) => ipc.invoke(PRELOAD_CHANNELS.managementRetryRun, w, { workflowRunId }),
       cancelRun: (w, workflowRunId) => ipc.invoke(PRELOAD_CHANNELS.managementCancelRun, w, { workflowRunId }),
       ticketMove: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementTicketMove, w, input),
+      ticketPhase: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementTicketPhase, w, input),
       ticketWorkflow: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementTicketWorkflow, w, input),
       retryTicket: (w, key) => ipc.invoke(PRELOAD_CHANNELS.managementRetryTicket, w, { key }),
       unblockTicket: (w, key, to) =>

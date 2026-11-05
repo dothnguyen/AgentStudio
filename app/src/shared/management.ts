@@ -751,6 +751,7 @@ export interface ManagementApi {
   retryRun(workspaceId: string, workflowRunId: string): R<RunRetryResult>;
   cancelRun(workspaceId: string, workflowRunId: string): R<RunCancelResult>;
   ticketMove(workspaceId: string, input: { key: string; to: BoardColumn; workflowStatus?: string; reason?: string; force?: boolean }): R<TicketActionResult>;
+  ticketPhase(workspaceId: string, input: { key: string; phase: string }): R<TicketActionResult>;
   ticketWorkflow(workspaceId: string, input: { key: string; to: string; reason?: string }): R<TicketActionResult>;
   retryTicket(workspaceId: string, key: string): R<TicketActionResult>;
   unblockTicket(workspaceId: string, key: string, to?: string): R<TicketActionResult>;

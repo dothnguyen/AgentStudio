@@ -373,6 +373,7 @@ export function createTeamsOverviewV4Apis(): { management: ManagementApi; dashbo
     retryRun: () => readOnly(),
     cancelRun: () => readOnly(),
     ticketMove: () => readOnly(),
+    ticketPhase: () => readOnly(),
     ticketWorkflow: () => readOnly(),
     retryTicket: () => readOnly(),
     unblockTicket: () => readOnly(),

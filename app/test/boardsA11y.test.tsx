@@ -200,7 +200,8 @@ describe('Backlog and Phases accessibility', () => {
     const controlledPanel = document.getElementById(groupButton.getAttribute('aria-controls')!)!;
     expect(controlledPanel.id).toBe(groupButton.getAttribute('aria-controls'));
     expect(controlledPanel.querySelector('.boards-backlog-row')).toBeTruthy();
-    expect(controlledPanel.querySelectorAll('button, a, input, select, [tabindex]')).toHaveLength(1);
+    expect(controlledPanel.querySelectorAll('button, a, input, select, [tabindex]')).toHaveLength(2);
+    expect(controlledPanel.querySelector('[aria-label^="Actions for "]')).toBeTruthy();
     backlog.unmount();
 
     const phases = render(

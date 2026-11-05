@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ApiError, BoardPhases, BoardSettings, BoardTicketList, ManagementApi, Result } from '../api';
+import type { ApiError, BoardPhases, BoardSettings, BoardTicketList, BoardTicketSummary, ManagementApi, Result } from '../api';
 import { BOARD_CHANGED_EVENT, CURRENT_PHASE_REFRESH_MS } from './CurrentPhaseScreen';
 
 type PhaseData = { state: 'loading' | 'ready' | 'error'; tickets: BoardTicketList | null; error: ApiError | null; refreshing?: boolean };
@@ -12,7 +12,7 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
   }
 }
 
-export function useBacklogData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { phaseData: Record<string, PhaseData>; loadPhase(slug: string, force?: boolean): Promise<void>; reload(): Promise<void> } {
+export function useBacklogData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { phaseData: Record<string, PhaseData>; loadPhase(slug: string, force?: boolean): Promise<void>; reload(): Promise<void>; reconcile(ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>): void } {
   const [value, setValue] = useState<Value>({ state: 'loading', data: null, error: null, refreshError: null });
   const [phaseData, setPhaseData] = useState<Record<string, PhaseData>>({});
   const cache = useRef<Record<string, PhaseData>>({});
@@ -81,5 +81,21 @@ export function useBacklogData(management: ManagementApi, workspaceId: string, r
     window.addEventListener(BOARD_CHANGED_EVENT, onChange);
     return () => { sequence.current += 1; for (const slug of Object.keys(phaseSequence.current)) phaseSequence.current[slug]! += 1; if (timer !== null) clearInterval(timer); window.removeEventListener(BOARD_CHANGED_EVENT, onChange); };
   }, [load, refreshMs]);
-  return { ...value, phaseData, loadPhase: (slug, force) => fetchPhase(slug, force), reload: () => load(true) };
+  const reconcile = useCallback((ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>) => {
+    const updated = { ...ticket, ...changes };
+    const oldSlug = ticket.phase ?? '';
+    const newSlug = updated.phase ?? '';
+    const next = { ...cache.current };
+    for (const slug of new Set([oldSlug, newSlug])) {
+      const entry = next[slug];
+      if (!entry?.tickets) continue;
+      const remaining = entry.tickets.tickets.filter(item => item.key !== ticket.key);
+      next[slug] = { ...entry, tickets: { ...entry.tickets, tickets: slug === newSlug ? [...remaining, updated] : remaining } };
+      phaseSequence.current[slug] = (phaseSequence.current[slug] ?? 0) + 1;
+    }
+    cache.current = next;
+    setPhaseData(next);
+    if (oldSlug !== newSlug) setValue(current => current.data ? { ...current, data: { ...current.data, phases: { ...current.data.phases, phases: current.data.phases.phases.map(phase => ({ ...phase, ticketCount: phase.ticketCount + (phase.slug === newSlug ? 1 : 0) - (phase.slug === oldSlug ? 1 : 0) })), unassignedTicketCount: (current.data.phases.unassignedTicketCount ?? 0) + (newSlug === '' ? 1 : 0) - (oldSlug === '' ? 1 : 0) } } } : current);
+  }, []);
+  return { ...value, phaseData, reconcile, loadPhase: (slug, force) => fetchPhase(slug, force), reload: () => load(true) };
 }
