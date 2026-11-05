@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BacklogScreen } from '../src/renderer/boards/BacklogScreen';
 import { boardPhasesFixture, boardTicketListFixture, boardTicketSummary } from './boardFixtures';
 import { workspaceA } from './dashboardFixtures';
-import { boardSettingsFixture, fakeManagement, managementError } from './teamsFixtures';
+import { boardSettingsFixture, deferred, fakeManagement, managementError } from './teamsFixtures';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const ok = <T,>(data: T) => ({ ok: true as const, data });
@@ -278,6 +278,150 @@ describe('BacklogScreen', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(view.getByRole('button', { name: /Open T-2/ })).toBeTruthy();
     expect(fake.boardSettings).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps an expanded phase and its unchanged rows visible while a background refresh is pending', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' }), boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const refreshed = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' }), boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const pending = deferred<{ ok: true; data: ReturnType<typeof boardTicketListFixture> }>();
+    const fake = fakeManagement({ boardPhases: [ok(boardPhasesFixture())], boardSettings: [ok(boardSettingsFixture())], boardTickets: [ok(initial), pending.promise] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const first = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    const second = view.getByRole('button', { name: 'Open T-2: Beta' });
+    const header = view.getByRole('button', { name: /Phase 05 Current/ });
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    expect(view.queryByText('Loading tickets…')).toBeNull();
+    expect(view.queryByText('Loading the backlog…')).toBeNull();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(first);
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(second);
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+
+    await act(async () => { pending.resolve(ok(refreshed)); });
+    await settle();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(first);
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(second);
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('updates one changed ticket in place', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' }), boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const refreshed = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha edited', priority: 20 }), boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const fake = fakeManagement({ boardTickets: [ok(initial), ok(refreshed)] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    const updated = view.getByRole('button', { name: 'Open T-1: Alpha edited' });
+    expect(updated).toBe(row);
+    expect(updated.textContent).toContain('Priority 20');
+  });
+
+  it('inserts a new ticket and keeps the existing rows', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' })] });
+    const refreshed = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' }), boardTicketSummary({ key: 'T-2', title: 'Beta', priority: 50 })] });
+    const fake = fakeManagement({ boardTickets: [ok(initial), ok(refreshed)] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(row);
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBeTruthy();
+  });
+
+  it('removes a vanished ticket and keeps the remaining row', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' }), boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const refreshed = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', title: 'Beta' })] });
+    const fake = fakeManagement({ boardTickets: [ok(initial), ok(refreshed)] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-2: Beta' });
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(view.queryByRole('button', { name: 'Open T-1: Alpha' })).toBeNull();
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(row);
+  });
+
+  it('reorders tickets without recreating their rows', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha', priority: 10 }), boardTicketSummary({ key: 'T-2', title: 'Beta', priority: 20 })] });
+    const refreshed = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha', priority: 30 }), boardTicketSummary({ key: 'T-2', title: 'Beta', priority: 10 })] });
+    const fake = fakeManagement({ boardTickets: [ok(initial), ok(refreshed)] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const keys = () => Array.from(view.getByTestId('backlog-body').querySelectorAll('.boards-backlog-row')).map(row => row.getAttribute('aria-label')?.match(/^Open (T-\d+)/)?.[1]);
+    const first = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    const second = view.getByRole('button', { name: 'Open T-2: Beta' });
+    expect(keys()).toEqual(['T-1', 'T-2']);
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(keys()).toEqual(['T-2', 'T-1']);
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(first);
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(second);
+  });
+
+  it('preserves collapsed and expanded phases across a successful refresh', async () => {
+    const phase05 = (key: string, title: string) => ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key, title, phase: 'phase-05' })] }));
+    const phase06 = (key: string, title: string) => ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key, title, phase: 'phase-06' })] }));
+    const fake = fakeManagement({ boardTickets: [phase05('T-1', 'Alpha'), phase06('T-2', 'Beta'), phase05('T-1', 'Alpha'), phase06('T-2', 'Beta')] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-2: Beta' });
+    fireEvent.click(view.getByRole('button', { name: /Phase 05 Current/ }));
+    expect(view.getByRole('button', { name: /Phase 05 Current/ }).getAttribute('aria-expanded')).toBe('false');
+
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(view.getByRole('button', { name: /Phase 05 Current/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(view.getByRole('button', { name: /Phase 06/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(row);
+  });
+
+  it('keeps the loaded rows and shows a retry when a background phase refresh fails', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' })] });
+    const recovered = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha after retry' })] });
+    const fake = fakeManagement({ boardTickets: [ok(initial), managementError('DOWN', 'Unavailable'), ok(recovered)] });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(row);
+    const alert = view.getByRole('alert');
+    expect(alert.textContent).toContain('DOWN');
+    expect(alert.textContent).toContain('last loaded tickets are still shown');
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    await settle();
+    expect(view.queryByRole('alert')).toBeNull();
+    const retried = view.getByRole('button', { name: 'Open T-1: Alpha after retry' });
+    expect(retried).toBe(row);
+  });
+
+  it('keeps the loaded phase and tickets when a background phase/settings refresh fails', async () => {
+    const initial = boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-1', title: 'Alpha' })] });
+    const fake = fakeManagement({
+      boardPhases: [ok(boardPhasesFixture()), managementError('DOWN', 'Unavailable'), ok(boardPhasesFixture())],
+      boardTickets: [ok(initial)],
+    });
+    const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const row = view.getByRole('button', { name: 'Open T-1: Alpha' });
+    await act(async () => { window.dispatchEvent(new Event('board-changed')); });
+    await settle();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(row);
+    const alert = view.getByRole('alert');
+    expect(alert.textContent).toContain('Could not refresh the backlog');
+    expect(alert.textContent).toContain('DOWN');
+    expect(view.queryByText('Loading the backlog…')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    await settle();
+    expect(view.queryByRole('alert')).toBeNull();
+    expect(view.getByRole('button', { name: 'Open T-1: Alpha' })).toBe(row);
   });
 });
 
