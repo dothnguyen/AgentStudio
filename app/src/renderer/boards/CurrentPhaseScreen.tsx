@@ -15,6 +15,7 @@ import { attentionCounts, buildAttentionRows } from './attentionModel';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
 import { BoardLanes } from './BoardLanes';
 import { BoardToolbar } from './BoardToolbar';
+import { CreateTicketDialog } from './CreateTicketDialog';
 import { MoveTicketDialog } from './MoveTicketDialog';
 import { NeedsAttentionCard } from './NeedsAttentionCard';
 import {
@@ -45,6 +46,8 @@ export interface CurrentPhaseBoardController {
   reload(): Promise<void>;
   /** Applies a confirmed move in place, before the next poll. */
   applyTicketMove(key: string, column: BoardColumn, workflowStatus: string): void;
+  /** Reconciles a created ticket into the current phase without reloading the board. */
+  applyTicketCreated(ticket: BoardTicketSummary): void;
 }
 
 interface CurrentPhaseOptions {
@@ -183,7 +186,35 @@ export function useCurrentPhaseBoard(
     });
   }, []);
 
-  return { ...value, reload, applyTicketMove };
+  const applyTicketCreated = useCallback((ticket: BoardTicketSummary): void => {
+    setValue((current) => {
+      if (current.data === null) return current;
+      const phase = currentPhaseOf(current.data.phases);
+      if (phase === null || ticket.phase !== phase.slug) return current;
+      const list = current.data.tickets ?? emptyTicketList(current.data.phases.workspace);
+      const exists = list.tickets.some((item) => item.key === ticket.key);
+      const nextTickets = exists
+        ? list.tickets.map((item) => (item.key === ticket.key ? ticket : item))
+        : [...list.tickets, ticket];
+      return {
+        ...current,
+        data: {
+          ...current.data,
+          tickets: { ...list, tickets: nextTickets },
+          phases: exists ? current.data.phases : {
+            ...current.data.phases,
+            phases: current.data.phases.phases.map((item) => (item.slug === phase.slug ? {
+              ...item,
+              ticketCount: item.ticketCount + 1,
+              counts: { ...item.counts, [ticket.status]: (item.counts[ticket.status] ?? 0) + 1 },
+            } : item)),
+          },
+        },
+      };
+    });
+  }, []);
+
+  return { ...value, reload, applyTicketMove, applyTicketCreated };
 }
 
 export interface CurrentPhaseScreenProps {
@@ -262,6 +293,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
     hideEmpty: props.hideEmpty ?? DEFAULT_BOARD_FILTERS.hideEmpty,
   }));
   const [moving, setMoving] = useState<BoardTicketSummary | null>(null);
+  const [creating, setCreating] = useState(false);
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
   const overview = board.data?.overview ?? null;
@@ -324,6 +356,9 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
           <div className="boards-phase-title">
             <h1>{phase.name}</h1>
             {phase.current && <span className="boards-phase-pill">Current</span>}
+            <button type="button" className="boards-new-ticket" onClick={() => { setCreating(true); }}>
+              New ticket
+            </button>
           </div>
           {phase.description !== null && phase.description !== '' && (
             <p className="boards-phase-description">{phase.description}</p>
@@ -384,6 +419,20 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
           <h2 id="boards-empty-title">No tickets in this phase yet</h2>
           <p>Tickets moved into {phase.name} will appear here.</p>
         </section>
+      )}
+      {creating && board.data !== null && (
+        <CreateTicketDialog
+          workspaceId={props.workspace.id}
+          management={props.management}
+          settings={board.data.settings}
+          phases={board.data.phases.phases}
+          defaultPhase={phase.slug}
+          onClose={() => { setCreating(false); }}
+          onCreated={(ticket) => {
+            board.applyTicketCreated(ticket);
+            setCreating(false);
+          }}
+        />
       )}
       {moving !== null && board.data !== null && (
         <MoveTicketDialog

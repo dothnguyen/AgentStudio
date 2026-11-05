@@ -495,6 +495,18 @@ export interface BoardTicketDetail {
   eventsTruncated: boolean;
   statuses: string[];
 }
+export interface BoardTicketCreateInput {
+  title: string;
+  body?: string;
+  priority: number;
+  phase: string;
+  status: BoardColumn;
+  workflowStatus: string;
+}
+export interface BoardTicketCreateResult {
+  ticket: BoardTicket;
+  phase: BoardPhaseRef;
+}
 export type BoardSettingsChanges = Partial<Record<BoardSettingsKey, unknown>>;
 export interface ConfigWriteResult {
   workspace: string;
@@ -722,6 +734,7 @@ export interface ManagementApi {
   boardPhases(workspaceId: string): R<BoardPhases>;
   boardTickets(workspaceId: string, input: { phase?: string; unassigned?: boolean }): R<BoardTicketList>;
   boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;
+  createTicket(workspaceId: string, input: BoardTicketCreateInput): R<BoardTicketCreateResult>;
   createAgent(workspaceId: string, agent: AgentDefInput): R<AgentDefResult>;
   updateAgent(workspaceId: string, agentDefId: string, changes: AgentDefChanges): R<AgentDefResult>;
   deleteAgent(workspaceId: string, agentDefId: string): R<AgentDefDeleted>;

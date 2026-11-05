@@ -867,6 +867,35 @@ def _target_phase(tx, workspace: str, slug):
     return phase
 
 
+def _creation_column(config: dict, column, workflow_status) -> str:
+    """Check that a new ticket may start in this column and workflow status.
+
+    The operator creation flow picks a column and workflow status from board.settings; accept only the same
+    combinations ticket_move accepts so an invalid pair cannot create a misleading card.
+    """
+    if column not in KANBAN_COLUMNS:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Column {column!r} is not on this board.",
+                      data={"status": column, "statuses": list(KANBAN_COLUMNS)})
+    if workflow_status == BLOCKED_STATUS or workflow_status not in config["byId"]:
+        raise AsError(BOARD_STATUS_UNKNOWN, f"Status {workflow_status!r} is not on this board.",
+                      data={"status": workflow_status, "statuses": config_status_ids(config)})
+    if column == "backlog":
+        valid = workflow_status == config["initial"]
+    elif column == "todo":
+        valid = workflow_status in config["todoEntry"]
+    elif column == "in-progress":
+        valid = workflow_status in config["rulesByStatus"] and workflow_status not in config["duringToRule"]
+    elif column == "done":
+        valid = workflow_status in config["doneStatuses"]
+    else:  # closed
+        valid = workflow_status == config.get("closedStatus")
+    if not valid:
+        raise AsError(TICKET_TRANSITION_INVALID,
+                      f"Workflow status {workflow_status!r} is not valid for column {column!r}.",
+                      data={"status": column, "workflowStatus": workflow_status})
+    return column
+
+
 def mcp_ticket_add(tx, workspace: str, args: dict) -> dict:
     """A ticket added by an agent through the MCP server (design contract §G).
 
@@ -943,8 +972,10 @@ def ticket_add(tx, workspace: str, args: dict) -> dict:
         phase = _target_phase(tx, workspace, args["phase"])
     else:
         phase = _phase_row(tx, workspace, DEFAULT_PHASE_SLUG)
-    ident, key, workflow_status = new_id(), next_key(tx.conn, workspace), args.get("_workflow_status") or config["initial"]
-    status = column_for(config, "backlog", workflow_status, False)
+    ident, key = new_id(), next_key(tx.conn, workspace)
+    workflow_status = args.get("_workflow_status") or args.get("workflowStatus") or config["initial"]
+    status = (_creation_column(config, args["status"], workflow_status) if args.get("status")
+              else column_for(config, "backlog", workflow_status, False))
     now = utcnow()
     tx.conn.execute("INSERT INTO tickets (id, workspace, key, title, body, phase_id, parent_ticket_id, status, "
                     "workflow_status, priority, assignee, lease_until, created_by_member, created_by_assignment, "

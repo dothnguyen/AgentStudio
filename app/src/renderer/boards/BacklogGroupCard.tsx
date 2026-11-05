@@ -5,7 +5,7 @@ import type { BacklogGroup } from './backlogModel';
 import { BoardErrorCard } from './CurrentPhaseScreen';
 import { BacklogRow } from './BacklogRow';
 
-export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, phaseState, error, loaded, onExpand, onRetry, initiallyExpanded, phases, management, workspaceId, onChanged }: { initiallyExpanded: boolean; phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; loaded?: boolean; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; phases: BoardPhase[]; management: ManagementApi; workspaceId: string; onChanged(ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>): void; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
+export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenPhases, onNewTicket, phaseState, error, loaded, onExpand, onRetry, initiallyExpanded, phases, management, workspaceId, onChanged }: { initiallyExpanded: boolean; phaseState?: 'loading' | 'ready' | 'error'; error?: ApiError | null; loaded?: boolean; onExpand(): void; onRetry(): void; group: BacklogGroup; total?: number; settings: BoardSettings; phases: BoardPhase[]; management: ManagementApi; workspaceId: string; onChanged(ticket: BoardTicketSummary, changes: Partial<BoardTicketSummary>): void; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; onNewTicket?: (phase: string) => void; onMoveToTodo?: (key: string) => void }): JSX.Element {
   const bodyId = useId();
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [showAll, setShowAll] = useState(false);
@@ -17,7 +17,7 @@ export function BacklogGroupCard({ group, total, settings, onOpenTicket, onOpenP
       {group.current && <span className="boards-phase-pill">Current</span>}
       {group.closed && <span className="boards-phase-pill boards-backlog-closed">Closed</span>}
       <span className="boards-backlog-counts">{total !== undefined && total !== group.counts.total ? `${group.counts.total} of ${total}` : group.counts.total} tickets · {group.counts.done} done{group.counts.blocked > 0 && <span className="boards-backlog-blocked"> · {group.counts.blocked} blocked</span>}</span>
-    </button>{onOpenPhases && <button type="button" className="boards-backlog-progress-link" onClick={onOpenPhases}>Phase progress</button>}</div>
+    </button>{group.slug !== null && onNewTicket && <button type="button" className="boards-new-ticket boards-backlog-new" aria-label={`New ticket in ${group.name}`} onClick={() => onNewTicket(group.slug!)}>New ticket</button>}{onOpenPhases && <button type="button" className="boards-backlog-progress-link" onClick={onOpenPhases}>Phase progress</button>}</div>
     <div id={bodyId} className="boards-backlog-group-body" hidden={!expanded}>
       {expanded && <>
       {!hasRows && (phaseState === 'loading' || !phaseState) ? <p role="status">Loading tickets…</p> : !hasRows && phaseState === 'error' ? <BoardErrorCard title="Could not load phase tickets" error={error ?? null} onRetry={onRetry} /> : <>

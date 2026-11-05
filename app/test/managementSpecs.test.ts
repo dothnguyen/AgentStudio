@@ -6,10 +6,10 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel; only board control and member switch/resume are mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(63);
+    expect(MANAGEMENT_SPECS).toHaveLength(64);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
-      'management.answerAssignment', 'management.approveCommand', 'management.approveWorkflow', 'management.cancelCommand', 'management.cancelRun', 'management.rejectCommand',
+      'management.answerAssignment', 'management.approveCommand', 'management.approveWorkflow', 'management.cancelCommand', 'management.cancelRun', 'management.createTicket', 'management.rejectCommand',
       'management.resetUsage', 'management.resumeMemberAgent', 'management.retryRun', 'management.retryTicket',
       'management.runBoard', 'management.startTeam', 'management.stopBoard', 'management.stopTeam',
       'management.switchMemberAgent', 'management.ticketMove', 'management.ticketPhase', 'management.ticketWorkflow', 'management.unblockTicket',
@@ -104,6 +104,26 @@ describe('managementSpecs', () => {
       expect(byLabel(method).mutating).toBe(false);
       expect(parse(method, request)).toEqual(args);
     }
+  });
+
+  it('maps ticket creation to ticket.add with configured column fields', () => {
+    expect(byLabel('createTicket').command).toBe('ticket.add');
+    expect(byLabel('createTicket').mutating).toBe(true);
+    expect(parse('createTicket', {
+      title: 'Write it', body: 'Details', priority: 10, phase: 'phase-05', status: 'todo', workflowStatus: 'ready',
+    })).toEqual({
+      title: 'Write it', body: 'Details', priority: 10, phase: 'phase-05', status: 'todo', workflowStatus: 'ready',
+    });
+    expect(parse('createTicket', { title: 'Write it', priority: 100, phase: 'phase-05', status: 'todo', workflowStatus: 'ready' }))
+      .toEqual({ title: 'Write it', priority: 100, phase: 'phase-05', status: 'todo', workflowStatus: 'ready' });
+    for (const request of [
+      { title: ' ', priority: 100, phase: 'phase-05', status: 'todo', workflowStatus: 'ready' },
+      { title: 'Write it', priority: -1, phase: 'phase-05', status: 'todo', workflowStatus: 'ready' },
+      { title: 'Write it', priority: 100, phase: 'Bad Phase', status: 'todo', workflowStatus: 'ready' },
+      { title: 'Write it', priority: 100, phase: 'phase-05', status: 'nowhere', workflowStatus: 'ready' },
+      { title: 'Write it', priority: 100, phase: 'phase-05', status: 'todo', workflowStatus: '' },
+      { title: 'Write it', priority: 100, phase: 'phase-05', status: 'todo', workflowStatus: 'ready', extra: true },
+    ]) expect(typeof parse('createTicket', request)).toBe('string');
   });
 
   it('rejects malformed board arguments, including a bad ticket key', () => {

@@ -26,6 +26,7 @@ export const MANAGEMENT_CHANNELS = {
   managementBoardPhases: 'management:boardPhases',
   managementBoardTickets: 'management:boardTickets',
   managementBoardTicket: 'management:boardTicket',
+  managementCreateTicket: 'management:createTicket',
   managementCreateAgent: 'management:createAgent',
   managementUpdateAgent: 'management:updateAgent',
   managementDeleteAgent: 'management:deleteAgent',
@@ -94,7 +95,7 @@ const MAX_SKILL_ROLES = 100;
 type Kind = 'statusKind' | 'statusIds' | 'answer' | 'slug' | 'uuid' | 'sha' | 'nonEmpty' | 'string' | 'stringOrNull' | 'bool' | 'boolOrNull' | 'any' | 'stringArrayOfSlugs' | 'true'
   | 'roleId' | 'roleName' | 'roleDescription' | 'roleDescriptionOrNull' | 'instructionText' | 'skillIds' | 'shaOrNull'
   | 'skillId' | 'skillText' | 'roleIds'
-  | 'ticketKey' | 'reason' | 'boardColumn' | 'workflowStatus';
+  | 'ticketKey' | 'reason' | 'boardColumn' | 'workflowStatus' | 'priority';
 
 interface Field {
   kind: Kind;
@@ -125,6 +126,8 @@ function checkValue(kind: Kind, value: unknown, field: string, label: string): s
       return typeof value === 'string' && ['backlog', 'todo', 'in-progress', 'done', 'closed'].includes(value) ? null : `${label}: ${field} must be a board column.`;
     case 'workflowStatus':
       return typeof value === 'string' && value.length > 0 && value.length <= 64 && !LONE_SURROGATE.test(value) ? null : `${label}: ${field} must be a non-empty string of at most 64 characters.`;
+    case 'priority':
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1000 ? null : `${label}: ${field} must be an integer from 0 to 1000.`;
     case 'ticketKey':
       return typeof value === 'string' && /^T-\d{3,}$/.test(value)
         ? null
@@ -312,6 +315,14 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
   spec(C.managementBoardTicket, 'boardTicket', 'ticket.show', {
     key: { kind: 'ticketKey', required: true },
   }),
+  spec(C.managementCreateTicket, 'createTicket', 'ticket.add', {
+    title: { kind: 'nonEmpty', required: true },
+    body: { kind: 'string' },
+    priority: { kind: 'priority', required: true },
+    phase: { kind: 'slug', required: true },
+    status: { kind: 'boardColumn', required: true },
+    workflowStatus: { kind: 'workflowStatus', required: true },
+  }, { mutating: true }),
   spec(C.managementCreateAgent, 'createAgent', 'agentdef.create', {
     agent: {
       required: true,

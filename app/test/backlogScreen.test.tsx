@@ -238,7 +238,7 @@ describe('BacklogScreen', () => {
     await settle();
 
     expect(fake.boardTickets.mock.calls).toEqual([]);
-    expect(view.getByRole('button', { name: /Phase 05/ }).getAttribute('aria-expanded')).toBe('false');
+    expect(view.getByRole('button', { name: /^Phase 05 / }).getAttribute('aria-expanded')).toBe('false');
     const later = view.getByRole('button', { name: /Phase 06 51 tickets/ });
     expect(later.getAttribute('aria-expanded')).toBe('false');
     const body = view.container.querySelector(`#${later.getAttribute('aria-controls')}`)!;
@@ -258,17 +258,17 @@ describe('BacklogScreen', () => {
     const fake = fakeManagement({ boardTickets: [ok(list(1)), pending, ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-3', phase: 'phase-05' })] })), ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-4', phase: 'phase-06' })] }))] });
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
     await settle();
-    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    fireEvent.click(view.getByRole('button', { name: /^Phase 06 / }));
     expect(view.getByRole('status').textContent).toContain('Loading tickets');
     expect(view.getByRole('button', { name: /Open T-0/ })).toBeTruthy();
     await act(async () => { resolveTickets(ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', phase: 'phase-06' })] }))); });
-    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    fireEvent.click(view.getByRole('button', { name: /^Phase 06 / }));
     await act(async () => { window.dispatchEvent(new Event('board-changed')); });
     await settle();
     expect(fake.boardTickets.mock.calls.slice(-2)).toEqual([[workspaceA.id, { phase: 'phase-05' }], [workspaceA.id, { phase: 'phase-06' }]]);
     expect(view.queryByRole('button', { name: /Open T-0/ })).toBeNull();
     expect(view.getByRole('button', { name: /Open T-3/ })).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    fireEvent.click(view.getByRole('button', { name: /^Phase 06 / }));
     expect(view.getByRole('button', { name: /Open T-4/ })).toBeTruthy();
   });
   it('retries a failed phase request when that phase is expanded', async () => {
@@ -276,7 +276,7 @@ describe('BacklogScreen', () => {
     const fake = fakeManagement({ boardTickets: [ok(list(1)), failure, ok(boardTicketListFixture({ tickets: [boardTicketSummary({ key: 'T-2', phase: 'phase-06' })] }))] });
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
     await settle();
-    const phase = view.getByRole('button', { name: /Phase 06/ });
+    const phase = view.getByRole('button', { name: /^Phase 06 / });
     fireEvent.click(phase);
     await settle();
     expect(view.getByRole('alert').textContent).toContain('DOWN');
@@ -475,7 +475,7 @@ describe('BacklogScreen', () => {
     const fake = fakeManagement({ boardTickets: [phase05('T-1', 'Alpha'), phase06('T-2', 'Beta'), phase05('T-1', 'Alpha'), phase06('T-2', 'Beta')] });
     const view = render(<BacklogScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
     await settle();
-    fireEvent.click(view.getByRole('button', { name: /Phase 06/ }));
+    fireEvent.click(view.getByRole('button', { name: /^Phase 06 / }));
     await settle();
     const row = view.getByRole('button', { name: 'Open T-2: Beta' });
     fireEvent.click(view.getByRole('button', { name: /Phase 05 Current/ }));
@@ -484,7 +484,7 @@ describe('BacklogScreen', () => {
     await act(async () => { window.dispatchEvent(new Event('board-changed')); });
     await settle();
     expect(view.getByRole('button', { name: /Phase 05 Current/ }).getAttribute('aria-expanded')).toBe('false');
-    expect(view.getByRole('button', { name: /Phase 06/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(view.getByRole('button', { name: /^Phase 06 / }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByRole('button', { name: 'Open T-2: Beta' })).toBe(row);
   });
 
@@ -553,7 +553,7 @@ describe('backlog toolbar', () => {
     expect(view.getByRole('button', { name: 'Workflow status · 1' }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByText('1 of 3 tickets')).toBeTruthy();
     expect(view.getByRole('button', { name: /Phase 05 Current/ })).toBeTruthy();
-    expect(view.getByRole('button', { name: /Phase 06/ })).toBeTruthy();
+    expect(view.getByRole('button', { name: /^Phase 06 / })).toBeTruthy();
     await user.click(view.getByRole('checkbox', { name: 'Dev ready' }));
     expect(view.queryByText('1 of 3 tickets')).toBeNull();
     expect(view.getByRole('button', { name: 'Workflow status' })).toBeTruthy();

@@ -558,6 +558,14 @@ def _validate_ticket_add(args):
     phase = req_text(args, "phase", 64, required=False, allow_empty=False)
     if phase is not None:
         out["phase"] = _slug_arg(phase, "phase")
+    status = req_text(args, "status", 16, required=False, allow_empty=False)
+    if status is not None:
+        if status not in boardmodel.KANBAN_COLUMNS:
+            raise AsError(BAD_REQUEST, f"Argument 'status' must be one of {list(boardmodel.KANBAN_COLUMNS)}.")
+        out["status"] = status
+    workflow_status = req_text(args, "workflowStatus", 64, required=False, allow_empty=False)
+    if workflow_status is not None:
+        out["workflowStatus"] = workflow_status
     # the MCP server path (P04-S12): the caller presents an active assignment and is subject to its rules
     assignment = req_text(args, "assignment", 64, required=False)
     if assignment is not None:

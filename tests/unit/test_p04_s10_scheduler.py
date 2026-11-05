@@ -65,9 +65,9 @@ class SchedCase(unittest.TestCase):
 
     def add_ticket(self, title="a", **extra):
         with self.store.transaction() as tx:
+            requested = extra.pop("status", None)
             ticket = boardmodel.ticket_add(tx, self.ws, {"title": title, "priority": 100, **extra})["ticket"]
             config = boardmodel.load_config(self.ws)
-            requested = extra.get("status")
             if requested is None:
                 requested = config["rules"][0]["when"]["status"]
             target = config.get("upgradedFrom", {}).get(requested, requested)

@@ -3,6 +3,7 @@ import type { JSX } from 'react';
 import type { BoardTicketList, ManagementApi, Workspace } from '../api';
 import { BoardErrorCard, LoadingSkeleton } from './CurrentPhaseScreen';
 import { BacklogToolbar } from './BacklogToolbar';
+import { CreateTicketDialog } from './CreateTicketDialog';
 import { activeFilterCount, DEFAULT_BACKLOG_FILTERS, filterBacklogTickets, type BacklogFilters } from './backlogFilters';
 import { BacklogGroupCard } from './BacklogGroupCard';
 import { buildBacklogGroups } from './backlogModel';
@@ -11,6 +12,7 @@ import { useBacklogData } from './useBacklogData';
 export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, onOpenPhases, filters: controlledFilters, onFiltersChange, onTicketCount }: { workspace: Workspace; management: ManagementApi; refreshMs?: number; onOpenTicket?: (key: string) => void; onOpenPhases?: () => void; filters?: BacklogFilters; onFiltersChange?: (filters: BacklogFilters) => void; onTicketCount?: (count: number) => void }): JSX.Element {
   const board = useBacklogData(management, workspace.id, refreshMs);
   const notifyChanged = useCallback(() => { window.dispatchEvent(new Event('board-changed')); }, []);
+  const [creatingPhase, setCreatingPhase] = useState<string | null>(null);
   const [localFilters, setLocalFilters] = useState(DEFAULT_BACKLOG_FILTERS);
   const filters = controlledFilters ?? localFilters;
   const setFilters = onFiltersChange ?? setLocalFilters;
@@ -59,13 +61,37 @@ export function BacklogScreen({ workspace, management, refreshMs, onOpenTicket, 
                 <div className="boards-phase-title"><h1>Backlog</h1></div>
                 <p className="boards-phase-description">Every ticket on the board, grouped by phase.</p>
               </div>
-              <span className="boards-backlog-count">{total} tickets</span>
+              <div className="boards-header-actions">
+                <span className="boards-backlog-count">{total} tickets</span>
+                <button
+                  type="button"
+                  className="boards-new-ticket"
+                  disabled={data === null || data.phases.currentPhase.slug === ''}
+                  onClick={() => { if (data !== null) setCreatingPhase(data.phases.currentPhase.slug); }}
+                >
+                  New ticket
+                </button>
+              </div>
             </header>
             {board.refreshError && <div className="boards-refresh-error" role="alert"><span>Could not refresh the backlog. The last loaded view is still shown. <code className="entity-id">{board.refreshError.code}</code>: {board.refreshError.message}</span><button type="button" onClick={() => { void board.reload(); }}>Retry</button></div>}
             {data && <BacklogToolbar filters={filters} onChange={setFilters} settings={data.settings} phases={data.phases} tickets={loaded} resultCount={filtered.length} />}
             {active && filtered.length === 0 && Object.values(board.phaseData).every(phase => phase.state !== 'loading') && (!phaseFiltered || visibleGroups.every(group => board.phaseData[group.slug!]?.state === 'ready')) && <div className="boards-no-match"><p>No tickets match these filters</p><button type="button" onClick={() => setFilters({ ...DEFAULT_BACKLOG_FILTERS, sort: filters.sort })}>Clear filters</button></div>}
             {!active && total === 0 && <section className="boards-state-card"><h2>No tickets yet</h2></section>}
-            <div className="boards-backlog-groups" data-testid="backlog-body">{data && visibleGroups.map((group) => <BacklogGroupCard key={`${phaseFiltered ? 'filtered' : 'default'}-${group.slug ?? 'no-phase'}`} group={group} initiallyExpanded={phaseFiltered || group.current} total={active ? group.slug === null ? unassignedTotal : data.phases.phases.find(phase => phase.slug === group.slug)?.ticketCount : undefined} phaseState={board.phaseData[group.slug ?? '']?.state} loaded={board.phaseData[group.slug ?? '']?.tickets != null} error={board.phaseData[group.slug ?? '']?.error} onExpand={() => { void board.loadPhase(group.slug ?? ''); }} onRetry={() => { void board.loadPhase(group.slug ?? '', true); }} settings={data.settings} phases={data.phases.phases} management={management} workspaceId={workspace.id} onChanged={(ticket, changes) => { board.reconcile(ticket, changes); notifyChanged(); }} onOpenTicket={onOpenTicket} onOpenPhases={onOpenPhases} />)}</div>
+            <div className="boards-backlog-groups" data-testid="backlog-body">{data && visibleGroups.map((group) => <BacklogGroupCard key={`${phaseFiltered ? 'filtered' : 'default'}-${group.slug ?? 'no-phase'}`} group={group} initiallyExpanded={phaseFiltered || group.current} total={active ? group.slug === null ? unassignedTotal : data.phases.phases.find(phase => phase.slug === group.slug)?.ticketCount : undefined} phaseState={board.phaseData[group.slug ?? '']?.state} loaded={board.phaseData[group.slug ?? '']?.tickets != null} error={board.phaseData[group.slug ?? '']?.error} onExpand={() => { void board.loadPhase(group.slug ?? ''); }} onRetry={() => { void board.loadPhase(group.slug ?? '', true); }} settings={data.settings} phases={data.phases.phases} management={management} workspaceId={workspace.id} onChanged={(ticket, changes) => { board.reconcile(ticket, changes); notifyChanged(); }} onOpenTicket={onOpenTicket} onOpenPhases={onOpenPhases} onNewTicket={setCreatingPhase} />)}</div>
+            {creatingPhase !== null && data !== null && (
+              <CreateTicketDialog
+                workspaceId={workspace.id}
+                management={management}
+                settings={data.settings}
+                phases={data.phases.phases}
+                defaultPhase={creatingPhase}
+                onClose={() => { setCreatingPhase(null); }}
+                onCreated={(ticket) => {
+                  board.reconcileCreated(ticket);
+                  setCreatingPhase(null);
+                }}
+              />
+            )}
           </>}
     </div>
   );

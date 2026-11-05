@@ -467,7 +467,11 @@ excluding `blocked` and rule `during` statuses, while preserving the column.
 defaulting to `todoDefault`; in-progress requires a rule's waiting status. Backlog resets the
 workflow and round/blocking state. Done uses the first done status unless another is specified;
 closed uses the configured closed status. Leaving done or closed requires force and a target of
-todo or backlog. Each move records both column and workflow change events.
+todo or backlog. Each move records both column and workflow change events. `ticket.add` accepts
+optional `status` (a Kanban column) and `workflowStatus` for the app's creation form. The pair must
+be one the active board settings offer: backlog with the initial status, todo with a `todoEntry`
+status, in-progress with a rule's waiting status, done with a done status, or closed with the closed
+status. Without those fields a new ticket starts in backlog at the initial workflow status.
 
 ```bash
 agent-studio board rules check --workspace ~/work/project      # validate board.json against roles + workflows
