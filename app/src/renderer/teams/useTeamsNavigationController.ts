@@ -47,7 +47,7 @@ export function useTeamsNavigationController(
     origins.current.set(result.ok ? result.data : result.error, id);
     return result;
   }, [load]);
-  const raw = useDashboardSection<TeamOverview>(tagged, workspaceId);
+  const raw = useDashboardSection<TeamOverview>(tagged, workspaceId, true);
 
   const owner = raw.data ?? raw.error;
   const foreign = raw.state !== 'loading' && owner !== null && origins.current.get(owner) !== workspaceId;

@@ -92,9 +92,9 @@ function TeamsOverview(props: TeamsScreenProps): JSX.Element {
   const connected = connectionState === null || connectionState === 'connected';
   const navigation = props.navigation;
   const overview = navigation.overview;
-  const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id);
-  const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id);
-  const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id);
+  const agents = useDashboardSection<AgentCatalogList>(props.management.agents, props.workspace.id, true);
+  const board = useDashboardSection<BoardSettings>(props.management.boardSettings, props.workspace.id, true);
+  const roleCatalog = useDashboardSection<RoleCatalogList>(props.management.roles, props.workspace.id, true);
   const [boardAction, setBoardAction] = useState<BoardAction | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberSelection | null>(null);
   const appliedMemberRequest = useRef<string | null>(null);

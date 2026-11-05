@@ -27,6 +27,7 @@ interface Request<T> {
 export function useDashboardSection<T>(
   load: (workspaceId: string) => Promise<Result<T>>,
   workspaceId: string,
+  retainDataDuringRefresh = false,
 ): DashboardSectionController<T> {
   const [value, setValue] = useState<SectionValue<T>>({
     state: 'loading',
@@ -55,7 +56,7 @@ export function useDashboardSection<T>(
     inFlight.current = request;
     setValue((previous) => ({
       state: 'loading',
-      data: null,
+      data: retainDataDuringRefresh && !resetTime ? previous.data : null,
       error: null,
       lastUpdatedAt: resetTime ? null : previous.lastUpdatedAt,
     }));
@@ -80,7 +81,7 @@ export function useDashboardSection<T>(
         } else {
           setValue((previous) => ({
             state: 'error',
-            data: null,
+            data: retainDataDuringRefresh ? previous.data : null,
             error: result.error,
             lastUpdatedAt: previous.lastUpdatedAt,
           }));
@@ -98,7 +99,7 @@ export function useDashboardSection<T>(
         if (inFlight.current === request) inFlight.current = null;
         setValue((previous) => ({
           state: 'error',
-          data: null,
+          data: retainDataDuringRefresh ? previous.data : null,
           error,
           lastUpdatedAt: previous.lastUpdatedAt,
         }));

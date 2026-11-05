@@ -24,9 +24,10 @@ function deferred<T>(): Deferred<T> {
 function Harness<T>(props: {
   load(workspaceId: string): Promise<Result<T>>;
   workspaceId: string;
+  retain?: boolean;
   notify(section: DashboardSection<T>): void;
 }) {
-  const section = useDashboardSection(props.load, props.workspaceId);
+  const section = useDashboardSection(props.load, props.workspaceId, props.retain);
   props.notify(section);
   return <div data-state={section.state}>{section.data === null ? '' : JSON.stringify(section.data)}</div>;
 }
@@ -71,11 +72,11 @@ describe('useDashboardSection', () => {
     const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     let latest!: DashboardSection<string>;
     vi.spyOn(Date, 'now').mockReturnValue(1234);
-    render(<Harness load={load} workspaceId="a" notify={(section) => { latest = section; }} />);
+    render(<Harness load={load} workspaceId="a" retain notify={(section) => { latest = section; }} />);
     await act(async () => first.resolve({ ok: true, data: 'one' }));
 
     act(() => { void latest.reload(); });
-    expect(latest).toMatchObject({ state: 'loading', data: null, error: null, lastUpdatedAt: 1234 });
+    expect(latest).toMatchObject({ state: 'loading', data: 'one', error: null, lastUpdatedAt: 1234 });
     expect(load).toHaveBeenCalledTimes(2);
     act(() => { void latest.reload(); });
     expect(load).toHaveBeenCalledTimes(2);
@@ -84,7 +85,7 @@ describe('useDashboardSection', () => {
       ok: false,
       error: { code: 'REFRESH_FAILED', message: 'try again', retryable: true },
     }));
-    expect(latest).toMatchObject({ state: 'error', data: null, lastUpdatedAt: 1234 });
+    expect(latest).toMatchObject({ state: 'error', data: 'one', lastUpdatedAt: 1234 });
   });
 
   it('new_workspace_supersedes_old_response', async () => {
@@ -117,8 +118,8 @@ describe('useDashboardSection', () => {
     const oldLoad = vi.fn(() => oldResult.promise);
     const newLoad = vi.fn(() => newResult.promise);
     let latest!: DashboardSection<string>;
-    const result = render(<Harness load={oldLoad} workspaceId="a" notify={(section) => { latest = section; }} />);
-    result.rerender(<Harness load={newLoad} workspaceId="a" notify={(section) => { latest = section; }} />);
+    const result = render(<Harness load={oldLoad} workspaceId="a" retain notify={(section) => { latest = section; }} />);
+    result.rerender(<Harness load={newLoad} workspaceId="a" retain notify={(section) => { latest = section; }} />);
     expect(newLoad).toHaveBeenCalledTimes(1);
     await act(async () => newResult.resolve({ ok: true, data: 'new' }));
     await act(async () => oldResult.resolve({ ok: false, error: { code: 'OLD', message: 'old', retryable: false } }));
@@ -132,18 +133,18 @@ describe('useDashboardSection', () => {
     const newLoad = vi.fn(() => replacement.promise);
     let latest!: DashboardSection<string>;
     vi.spyOn(Date, 'now').mockReturnValue(4321);
-    const result = render(<Harness load={oldLoad} workspaceId="a" notify={(section) => { latest = section; }} />);
+    const result = render(<Harness load={oldLoad} workspaceId="a" retain notify={(section) => { latest = section; }} />);
     await act(async () => first.resolve({ ok: true, data: 'initial' }));
     expect(latest.lastUpdatedAt).toBe(4321);
 
-    result.rerender(<Harness load={newLoad} workspaceId="a" notify={(section) => { latest = section; }} />);
+    result.rerender(<Harness load={newLoad} workspaceId="a" retain notify={(section) => { latest = section; }} />);
     expect(latest).toMatchObject({ state: 'loading', lastUpdatedAt: 4321 });
     await act(async () => replacement.resolve({
       ok: false,
       error: { code: 'REPLACEMENT_FAILED', message: 'failed', retryable: true },
     }));
 
-    expect(latest).toMatchObject({ state: 'error', data: null, lastUpdatedAt: 4321 });
+    expect(latest).toMatchObject({ state: 'error', data: 'initial', lastUpdatedAt: 4321 });
   });
 
   it('stale_failure_cannot_replace_a_newer_success', async () => {

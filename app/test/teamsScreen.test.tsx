@@ -385,11 +385,15 @@ describe('TeamsScreen', () => {
     const { fake, result } = await renderScreen();
     const list = result.getByRole('navigation', { name: 'Harness sidebar' });
     fireEvent.click(card(list, 'Release Team'));
+    const selectedRow = card(list, 'Release Team');
+    const overviewPanel = result.getByRole('region', { name: 'Overview' });
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await act(async () => {});
     expect(fake.overview).toHaveBeenCalledTimes(2);
     expect(fake.agents).toHaveBeenCalledTimes(2);
     expect(card(list, 'Release Team').getAttribute('aria-current')).toBe('page');
+    expect(card(list, 'Release Team')).toBe(selectedRow);
+    expect(result.getByRole('region', { name: 'Overview' })).toBe(overviewPanel);
   });
 
   it('rejected_overview_shows_internal_error', async () => {
