@@ -17,6 +17,8 @@ export interface TicketCardProps {
   workflowStatuses?: readonly BoardStatusInfo[];
   /** Opens the ticket page at boards/ticket/:key. */
   onOpenTicket?(key: string): void;
+  /** Opens the move dialog; omitted on read-only board copies. */
+  onMove?(ticket: BoardTicketSummary): void;
   onApprove?(input: { workflowRunId: string; stage: string; approve: boolean; note?: string }): Promise<void>;
 }
 
@@ -43,6 +45,7 @@ export function TicketCard(props: TicketCardProps): JSX.Element {
   const agent = ticket.activity.agent?.trim() ?? '';
   const reason = tone === 'blocked' ? blockedReasonLine(ticket.blockedReason) : null;
   const open = (): void => { onOpenTicket?.(ticket.key); };
+  const move = (): void => { props.onMove?.(ticket); };
 
   if (attention) return (
     <article className="boards-ticket-card boards-ticket-attention" data-attention={attention.kind}>
@@ -52,11 +55,12 @@ export function TicketCard(props: TicketCardProps): JSX.Element {
       {attention.kind === 'approval' && <span className="boards-ticket-actions"><button type="button" disabled={busy || !props.onApprove} onClick={() => { void decide(true); }}>Approve</button><button type="button" disabled={busy || !props.onApprove} onClick={() => setRejecting(true)}>Reject…</button></span>}
       {attention.kind === 'question' && <span><button type="button" onClick={open}>Answer…</button></span>}
       {rejecting && <div role="dialog" aria-label="Reject approval" className="boards-reject-dialog"><label>Note (optional)<textarea value={note} onChange={event => setNote(event.target.value)} /></label><button type="button" disabled={busy} onClick={() => setRejecting(false)}>Cancel</button><button type="button" disabled={busy} onClick={() => { void decide(false); }}>Reject</button></div>}
+      {props.onMove !== undefined && <span><button type="button" className="boards-ticket-move" aria-label={`Move ${ticket.key}`} aria-haspopup="dialog" onClick={move}>Move</button></span>}
       {error && <span role="alert">{error}</span>}
     </article>
   );
 
-  return (
+  const card = (
     <button
       type="button"
       className="boards-ticket-card"
@@ -93,5 +97,13 @@ export function TicketCard(props: TicketCardProps): JSX.Element {
         )}
       </span>
     </button>
+  );
+
+  if (props.onMove === undefined) return card;
+  return (
+    <div className="boards-ticket-card-shell">
+      {card}
+      <button type="button" className="boards-ticket-move" aria-label={`Move ${ticket.key}`} aria-haspopup="dialog" onClick={move}>Move</button>
+    </div>
   );
 }

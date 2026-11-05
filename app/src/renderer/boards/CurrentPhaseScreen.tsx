@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import type {
   ApiError,
+  BoardColumn,
   BoardPhases,
   BoardSettings,
   BoardTicketList,
+  BoardTicketSummary,
   ManagementApi,
   Result,
   TeamOverview,
@@ -13,6 +15,7 @@ import { attentionCounts, buildAttentionRows } from './attentionModel';
 import { currentPhaseOf, phaseProgress } from './currentPhaseModel';
 import { BoardLanes } from './BoardLanes';
 import { BoardToolbar } from './BoardToolbar';
+import { MoveTicketDialog } from './MoveTicketDialog';
 import { NeedsAttentionCard } from './NeedsAttentionCard';
 import {
   DEFAULT_BOARD_FILTERS,
@@ -40,6 +43,8 @@ export interface CurrentPhaseBoardController {
   data: CurrentPhaseData | null;
   error: ApiError | null;
   reload(): Promise<void>;
+  /** Applies a confirmed move in place, before the next poll. */
+  applyTicketMove(key: string, column: BoardColumn, workflowStatus: string): void;
 }
 
 interface CurrentPhaseOptions {
@@ -158,7 +163,27 @@ export function useCurrentPhaseBoard(
 
   const reload = useCallback(async (): Promise<void> => { await load(false); }, [load]);
 
-  return { ...value, reload };
+  const applyTicketMove = useCallback((key: string, column: BoardColumn, workflowStatus: string): void => {
+    setValue((current) => {
+      if (current.data === null || current.data.tickets === null) return current;
+      const tickets = current.data.tickets.tickets;
+      if (!tickets.some((ticket) => ticket.key === key)) return current;
+      return {
+        ...current,
+        data: {
+          ...current.data,
+          tickets: {
+            ...current.data.tickets,
+            tickets: tickets.map((ticket) => ticket.key === key
+              ? { ...ticket, status: column, workflowStatus }
+              : ticket),
+          },
+        },
+      };
+    });
+  }, []);
+
+  return { ...value, reload, applyTicketMove };
 }
 
 export interface CurrentPhaseScreenProps {
@@ -236,6 +261,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
     ...DEFAULT_BOARD_FILTERS,
     hideEmpty: props.hideEmpty ?? DEFAULT_BOARD_FILTERS.hideEmpty,
   }));
+  const [moving, setMoving] = useState<BoardTicketSummary | null>(null);
   const phase = board.data === null ? null : currentPhaseOf(board.data.phases);
   const tickets = board.data?.tickets?.tickets ?? [];
   const overview = board.data?.overview ?? null;
@@ -335,6 +361,7 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
               hideEmpty={filters.hideEmpty}
               matches={matches}
               onOpenTicket={props.onOpenTicket}
+              onMove={setMoving}
               onApprove={async (input) => {
                 const result = await props.management.approveWorkflow(props.workspace.id, input);
                 if (!result.ok) throw new Error(result.error.message);
@@ -357,6 +384,20 @@ export function CurrentPhaseScreen(props: CurrentPhaseScreenProps): JSX.Element 
           <h2 id="boards-empty-title">No tickets in this phase yet</h2>
           <p>Tickets moved into {phase.name} will appear here.</p>
         </section>
+      )}
+      {moving !== null && board.data !== null && (
+        <MoveTicketDialog
+          key={moving.key}
+          ticket={moving}
+          settings={board.data.settings}
+          management={props.management}
+          workspaceId={props.workspace.id}
+          onClose={() => { setMoving(null); }}
+          onMoved={(target) => {
+            board.applyTicketMove(moving.key, target.column, target.workflowStatus);
+            setMoving(null);
+          }}
+        />
       )}
     </div>
   );
