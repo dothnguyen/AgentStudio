@@ -33,7 +33,7 @@ class BoardConfigV3Tests(unittest.TestCase):
     def test_valid_config_exposes_workflow_metadata(self):
         raw = config()
         parsed = boardmodel.parse_config(raw)
-        self.assertEqual(boardmodel.CONFIG_VERSION, 3)
+        self.assertEqual(boardmodel.CONFIG_VERSION, 4)
         self.assertEqual(boardmodel.KANBAN_COLUMNS, ("backlog", "todo", "in-progress", "done", "closed"))
         self.assertEqual(parsed["version"], 3)
         self.assertEqual(parsed["initialStatus"], "backlog")

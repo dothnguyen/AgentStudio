@@ -84,6 +84,12 @@ Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login
 - Results: list → `{"workspaces":[{"id","name","path","missing","exists"}]}` in registry order (`exists` = the
   folder's `.agent-studio/workspace.json` is still there). Init → `{"id","name","path","existed"}` (`path` is the
   resolved real path; `existed: true` when it was already initialised).
+- Init also scaffolds the workspace so its screens work immediately: `.agent-studio/board.json` (the current v4
+  default board), `roles.json`, `agents.json`, `workflow.json`, `commands.json` and `permissions.json`, plus the
+  `roles/`, `skills/`, `teams/`, `workflows/` and `workflows/prompts/` directories. Missing entries are created;
+  existing user files are never overwritten, so re-running init (or retrying after a partial failure) completes only
+  the missing scaffolding. Scaffolding happens before registration, and a failure returns `BAD_REQUEST` naming the
+  path that could not be created.
 - Default name: the folder name (`basename` of the resolved path, `/` for the root). An empty `name` means the
   default. On an already-initialised folder the name is ignored and nothing is rewritten.
 - Errors (all `BAD_REQUEST`): `Missing required argument 'path'.`, `Argument 'path' must not be empty.`,

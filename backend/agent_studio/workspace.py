@@ -5,7 +5,7 @@ import json
 import os
 import uuid
 
-from . import paths
+from . import paths, workspaceinit
 from .protocol import AsError, BAD_REQUEST, WORKSPACE_NOT_FOUND
 
 MARKER_DIR = ".agent-studio"
@@ -81,14 +81,25 @@ def init(path: str, name: str | None = None) -> dict:
     real = os.path.realpath(path)
     existed = os.path.isfile(_marker(real))
     if not existed:
-        os.makedirs(os.path.join(real, MARKER_DIR), exist_ok=True)
-        body = {"id": str(uuid.uuid4()), "name": name or os.path.basename(real) or real}
-        tmp = _marker(real) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(body, f, indent=2)
-            f.write("\n")
-        os.replace(tmp, _marker(real))
+        tmp = None
+        try:
+            os.makedirs(os.path.join(real, MARKER_DIR), exist_ok=True)
+            body = {"id": str(uuid.uuid4()), "name": name or os.path.basename(real) or real}
+            tmp = _marker(real) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(body, f, indent=2)
+                f.write("\n")
+            os.replace(tmp, _marker(real))
+        except OSError as e:
+            if tmp is not None:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+            raise AsError(BAD_REQUEST, f"Cannot initialize {real}: {e}",
+                          remediation="Fix the path named above and run agent-studio init again.")
     ws = _read(real)
+    workspaceinit.ensure(real)
     _register(ws)
     return dict(ws, existed=existed)
 

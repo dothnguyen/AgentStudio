@@ -24,7 +24,7 @@ from .store import new_id
 
 CONFIG_DIR = ".agent-studio"
 CONFIG_NAME = "board.json"
-CONFIG_VERSION = 3
+CONFIG_VERSION = 4
 KANBAN_COLUMNS = ("backlog", "todo", "in-progress", "done", "closed")
 STATUS_KINDS = ("initial", "done", "closed")
 TERMINAL_KINDS = ("done", "closed")
@@ -57,6 +57,29 @@ DEFAULT_LEASE_SECONDS = 120
 DEFAULT_BASE_BRANCH = "main"
 BODY_LIMIT = 32 * 1024         # a ticket body is the next agent's task text, so it is capped
 ACTIVE_ASSIGNMENT_STATES = ("queued", "claimed", "running", "waiting_input", "reconciling")
+
+
+def default_config() -> dict:
+    """The canonical board for a new workspace, in the latest supported schema.
+
+    Workspace creation and any other initializer use this one document; there is no second starter
+    template to keep in step with the loader.
+    """
+    return {
+        "version": CONFIG_VERSION,
+        "baseBranch": DEFAULT_BASE_BRANCH,
+        "leaseSeconds": DEFAULT_LEASE_SECONDS,
+        "ticketFields": [],
+        "workflowStatuses": [
+            {"id": "none", "kind": "initial", "name": "Backlog"},
+            {"id": "todo", "name": "To do"},
+            {"id": "in-progress", "name": "In progress"},
+            {"id": "done", "kind": "done", "name": "Done"},
+            {"id": "closed", "kind": "closed", "name": "Closed"},
+        ],
+        "todoEntry": [],
+        "todoDefault": None,
+    }
 
 
 def _invalid(problems):

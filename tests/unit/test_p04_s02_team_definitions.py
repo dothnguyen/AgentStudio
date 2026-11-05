@@ -134,7 +134,7 @@ class CommandRuleTests(Base):
         self.assertIn("warning: members[1].role:", out)
 
     def test_invalid_file_not_rewritten(self):
-        os.makedirs(os.path.join(self.cfg, "teams"))
+        os.makedirs(os.path.join(self.cfg, "teams"), exist_ok=True)
         with open(self.team_file(), "w") as f:
             f.write("{nope")
         self.assertEqual(self.code(teamdefs.add_member, self.ws, "t", "A", "r", "codex"), "TEAM_CONFIG_INVALID")

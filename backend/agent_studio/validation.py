@@ -25,6 +25,11 @@ MAX_OUTPUT = 64 * 1024
 EXAMPLE = '{"version": 1, "validation": {"argv": ["python3", "-m", "unittest"], "timeoutMs": 600000}}'
 
 
+def default_config() -> dict:
+    """The canonical validation command for a new workspace."""
+    return {"version": 1, "validation": {"argv": ["python3", "-m", "unittest"], "timeoutMs": 600000}}
+
+
 def load_config(workspace: str) -> dict:
     path = os.path.join(workspace, CONFIG_REL)
     try:

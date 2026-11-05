@@ -21,13 +21,18 @@ def path(workspace: str) -> str:
     return os.path.join(workspace, teamdefs.CONFIG_DIR, CATALOG_FILE)
 
 
+def default_catalog() -> dict:
+    """The canonical empty catalog used when a workspace has no agents.json yet."""
+    return {"version": VERSION, "agents": []}
+
+
 def load(workspace: str) -> dict:
     p = path(workspace)
     try:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
-        return {"version": VERSION, "agents": []}
+        return default_catalog()
     except (OSError, ValueError) as e:
         raise AsError(AGENT_CATALOG_INVALID, f"{p} is not valid JSON: {e}")
     if not isinstance(data, dict):

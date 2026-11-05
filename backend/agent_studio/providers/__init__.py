@@ -16,6 +16,11 @@ TEST_ONLY = ("fake",)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+def default_permissions() -> dict:
+    """The canonical opt-in permission file for a new workspace: command access is off per provider."""
+    return {"version": 1, **{provider: {"commands": False} for provider in PEERS}}
+
+
 def available_ids() -> List[str]:
     return [d for d in sorted(os.listdir(_HERE))
             if d in schema.PROVIDERS and os.path.exists(os.path.join(_HERE, d, "__init__.py"))]

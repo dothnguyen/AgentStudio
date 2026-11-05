@@ -37,6 +37,11 @@ _catalog_snapshot = contextvars.ContextVar("role_catalog_snapshot", default=None
 _catalog_reader = contextvars.ContextVar("role_catalog_reader", default=None)
 
 
+def default_config() -> dict:
+    """The canonical empty role catalog written for a new workspace."""
+    return {"version": 1, "roles": {}}
+
+
 def _inside(base: str, rel: str) -> Optional[str]:
     if not isinstance(rel, str) or not rel or os.path.isabs(rel) or ".." in rel.replace("\\", "/").split("/"):
         return None
@@ -237,7 +242,7 @@ def _mutation_load(workspace, expected):
     if expected is not None and expected != sha:
         raise AsError(CONFIG_CHANGED, ".agent-studio/roles.json changed since it was read; reload and retry.", data={"sha256": sha})
     if data is None:
-        return path, data, {"version": 1, "roles": {}}
+        return path, data, default_config()
     try:
         raw = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeError, RecursionError) as exc:

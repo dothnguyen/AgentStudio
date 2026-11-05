@@ -79,6 +79,7 @@ class Base(unittest.TestCase):
 
 class CatalogTests(Base):
     def test_missing_file_lists_empty(self):
+        os.unlink(agentcatalog.path(self.ws))  # scaffolded by init; a missing file is still an empty catalog
         d = self.ok(self.call("agentdef.list"))
         self.assertEqual((d["agents"], d["problems"], d["version"]), ([], [], 1))
         self.assertIsNone(self.catalog_bytes())

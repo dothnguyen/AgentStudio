@@ -29,6 +29,44 @@ class InitCliTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertTrue(resp["ok"])
 
+    def test_init_from_the_real_shim_scaffolds_a_loadable_workspace_and_resumes(self):
+        import subprocess
+        from agent_studio import boardmodel
+        from tests.helpers import SHIM
+
+        def init():
+            proc = subprocess.run([SHIM, "init", "--json"], cwd=self.cwd, env=self.sb.env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return json.loads(proc.stdout)["data"]
+
+        first = init()
+        cfg = os.path.join(self.cwd, ".agent-studio")
+        files = ("workspace.json", "board.json", "roles.json", "agents.json", "workflow.json",
+                 "commands.json", "permissions.json")
+        for name in files:
+            with open(os.path.join(cfg, name), encoding="utf-8") as f:
+                self.assertIsInstance(json.load(f), dict, name)
+        self.assertEqual(boardmodel.load_config(self.cwd)["version"], boardmodel.CONFIG_VERSION)
+        with open(os.path.join(cfg, "board.json"), "w", encoding="utf-8") as f:
+            json.dump({"version": 4, "baseBranch": "main", "leaseSeconds": 600, "ticketFields": [],
+                       "workflowStatuses": [{"id": "none", "kind": "initial"},
+                                            {"id": "done", "kind": "done"}],
+                       "todoEntry": [], "todoDefault": None}, f)
+        with open(os.path.join(cfg, "board.json"), "rb") as f:
+            before = f.read()
+        os.unlink(os.path.join(cfg, "roles.json"))
+
+        second = init()
+
+        self.assertTrue(second["existed"])
+        self.assertEqual(second["id"], first["id"])
+        with open(os.path.join(cfg, "board.json"), "rb") as f:
+            self.assertEqual(f.read(), before)
+        self.assertTrue(os.path.isfile(os.path.join(cfg, "roles.json")))
+        self.assertTrue(os.path.isdir(os.path.join(cfg, "workflows", "prompts")))
+
+
 
 if __name__ == "__main__":
     unittest.main()

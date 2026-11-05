@@ -61,6 +61,11 @@ EXAMPLE = ('{"version": 1, "commands": {"app-deps-install": {"description": "Rei
            '"argv": ["npm", "ci"], "cwd": "app", "network": true, "roles": ["Developer"]}}}')
 
 
+def default_config() -> dict:
+    """The canonical empty delegated-command catalog for a new workspace (feature off)."""
+    return {"version": 1, "commands": {}, "checkSets": {}}
+
+
 # ---- configuration ------------------------------------------------------------------------------------
 
 def _bad(path: str, message: str) -> AsError:
