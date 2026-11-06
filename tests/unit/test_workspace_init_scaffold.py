@@ -1,12 +1,14 @@
 import json
 import os
 import shutil
+import sqlite3
 import tempfile
+import concurrent.futures
 import unittest
 from unittest import mock
 
 from tests import helpers  # noqa: F401  (puts backend on sys.path)
-from agent_studio import (agentcatalog, boardmodel, boardsettings, delegation, roles, validation,
+from agent_studio import (agentcatalog, boardmodel, boardsettings, delegation, roles, state, validation,
                           workspace, workspaceinit)
 from agent_studio.protocol import AsError, BAD_REQUEST
 
@@ -142,6 +144,60 @@ class WorkspaceScaffoldTests(unittest.TestCase):
 
         self.assert_complete()
         boardmodel.load_config(self.ws)
+
+    def test_runtime_initialization_failure_does_not_register_workspace_and_can_retry(self):
+        failure = AsError(BAD_REQUEST, "simulated runtime database failure")
+        with mock.patch.object(workspaceinit, "ensure_runtime", side_effect=failure):
+            with self.assertRaises(AsError) as cm:
+                workspace.init(self.ws)
+        self.assertIn("simulated runtime database failure", cm.exception.message)
+        registry = os.path.join(self.root, "state", "agent-studio", "workspaces.json")
+        self.assertFalse(os.path.exists(registry))
+
+        result = workspace.init(self.ws)
+
+        self.assertTrue(result["existed"])
+        self.assertTrue(os.path.isfile(registry))
+        conn = state.connect(os.path.join(self.root, "state", "agent-studio", "state.db"), role="reader")
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM phases WHERE workspace = ? AND slug = 'default'",
+                                          (self.ws,)).fetchone()[0], 1)
+        finally:
+            conn.close()
+
+    def test_runtime_initialization_retries_sqlite_lock_contention(self):
+        real_connect = state.connect
+        calls = {"count": 0}
+
+        def locked_once(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise sqlite3.OperationalError("database is locked")
+            return real_connect(*args, **kwargs)
+
+        with mock.patch.object(state, "connect", side_effect=locked_once), \
+             mock.patch.object(workspaceinit.time, "sleep") as sleep:
+            workspaceinit.ensure_runtime(self.ws)
+
+        self.assertEqual(calls["count"], 2)
+        sleep.assert_called_once_with(0.1)
+        conn = real_connect(os.path.join(self.root, "state", "agent-studio", "state.db"), role="reader")
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM phases WHERE workspace = ? AND slug = 'default'",
+                                          (self.ws,)).fetchone()[0], 1)
+        finally:
+            conn.close()
+
+    def test_concurrent_initialization_creates_one_default_phase(self):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda _: workspace.init(self.ws), range(8)))
+        self.assertEqual(len(results), 8)
+        conn = state.connect(os.path.join(self.root, "state", "agent-studio", "state.db"), role="reader")
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM phases WHERE workspace = ? AND slug = 'default'",
+                                          (self.ws,)).fetchone()[0], 1)
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

@@ -42,6 +42,9 @@ class ServeWorkspaceTests(Base):
         c, a, b = self.mk("c"), self.mk("a"), self.mk("b")
         for p in (c, a, b):
             self.assertTrue(self.init(p)["ok"])
+        db_path = os.path.join(self.root, "state", "agent-studio", "state.db")
+        self.assertTrue(os.path.exists(db_path))
+        db_before = self.read(db_path)
         shutil.rmtree(b)
         before = self.read(self.registry)
         r = self.call("workspace.list")
@@ -52,7 +55,7 @@ class ServeWorkspaceTests(Base):
             self.assertEqual(set(w), {"id", "name", "path", "missing", "exists"})
         self.assertEqual([w["exists"] for w in ws], [True, True, False])
         self.assertEqual(self.read(self.registry), before)
-        self.assertFalse(os.path.exists(os.path.join(self.root, "state", "agent-studio", "state.db")))
+        self.assertEqual(self.read(db_path), db_before)
 
     def test_list_empty(self):
         r = self.call("workspace.list")

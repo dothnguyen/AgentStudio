@@ -239,6 +239,7 @@ class WriteAuthority(unittest.TestCase):
     def test_source_connections_use_their_role(self):
         """Fails if a client/runner/reader code path opens a coordinator (or other unexpected) connection."""
         allowed = {"coordinator.py": {"coordinator"}, "client.py": {"client"}, "dispatch.py": {"reader"},
+                   "workspaceinit.py": {"coordinator"},
                    "runner.py": {"runner"}, "watch.py": {"reader"}}  # tests/ harnesses are outside the package
         found = {}
         for name in os.listdir(PKG):

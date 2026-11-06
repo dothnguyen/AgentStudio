@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
+import time
 
-from . import agentcatalog, boardmodel, delegation, providers, roles, validation
+from . import agentcatalog, boardmodel, delegation, paths, providers, roles, state, validation
 from .protocol import AsError, BAD_REQUEST
+from .store import Store
 
 CONFIG_DIR = boardmodel.CONFIG_DIR
 DIRECTORIES = (
@@ -44,10 +47,13 @@ def documents() -> dict:
 def _ensure_dir(path: str) -> None:
     if os.path.isdir(path):
         return
-    if os.path.lexists(path):
+    try:
+        os.makedirs(path, exist_ok=True)
+    except FileExistsError:
+        pass
+    if not os.path.isdir(path):
         raise AsError(BAD_REQUEST, f"Workspace initialization cannot create {path}: it exists and is not a directory.",
                       remediation=_REMEDIATION)
-    os.makedirs(path, exist_ok=True)
 
 
 def _create_file(path: str, data: bytes) -> bool:
@@ -90,4 +96,31 @@ def ensure(workspace: str) -> list:
         raise
     except OSError as e:
         raise AsError(BAD_REQUEST, f"Workspace initialization failed: {e}", remediation=_REMEDIATION)
+    ensure_runtime(workspace)
     return created
+
+
+def ensure_runtime(workspace: str) -> None:
+    """Ensure the persistent board/default phase exists, repairing old partial workspaces."""
+    for tries in range(6):
+        conn = None
+        try:
+            sd = paths.ensure_state_dir()
+            conn = state.connect(state.db_path(sd), role="coordinator", create=True)
+            state.migrate(conn, state.db_path(sd))
+            with Store(conn).transaction() as tx:
+                boardmodel.ensure_board(tx, workspace)
+            return
+        except AsError:
+            raise
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) and "busy" not in str(e):
+                raise AsError(BAD_REQUEST, f"Workspace runtime initialization failed: {e}", remediation=_REMEDIATION)
+            if tries == 5:
+                raise AsError(BAD_REQUEST, f"Workspace runtime initialization failed: {e}", remediation=_REMEDIATION)
+            time.sleep(0.1 * (2 ** tries))
+        except Exception as e:
+            raise AsError(BAD_REQUEST, f"Workspace runtime initialization failed: {e}", remediation=_REMEDIATION)
+        finally:
+            if conn is not None:
+                conn.close()

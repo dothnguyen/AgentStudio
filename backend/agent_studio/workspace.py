@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
 
 from . import paths, workspaceinit
@@ -111,11 +112,15 @@ def init(path: str, name: str | None = None) -> dict:
         try:
             os.makedirs(os.path.join(real, MARKER_DIR), exist_ok=True)
             body = {"id": str(uuid.uuid4()), "name": name or os.path.basename(real) or real}
-            tmp = _marker(real) + ".tmp"
+            tmp = _marker(real) + f".{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(body, f, indent=2)
                 f.write("\n")
-            os.replace(tmp, _marker(real))
+            try:
+                os.link(tmp, _marker(real))
+            except FileExistsError:
+                pass  # a concurrent initializer published the canonical marker first
+            os.unlink(tmp)
         except OSError as e:
             if tmp is not None:
                 try:

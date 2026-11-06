@@ -89,7 +89,9 @@ Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login
   `roles/`, `skills/`, `teams/`, `workflows/` and `workflows/prompts/` directories. Missing entries are created;
   existing user files are never overwritten, so re-running init (or retrying after a partial failure) completes only
   the missing scaffolding. Scaffolding happens before registration, and a failure returns `BAD_REQUEST` naming the
-  path that could not be created.
+  path that could not be created. It also initializes the state database's board row and persisted protected
+  `default` phase before registration. Board read requests repair that runtime state for older partially initialized
+  workspaces. Initialization is safe to repeat and does not overwrite board configuration or existing ticket data.
 - Default name: the folder name (`basename` of the resolved path, `/` for the root). An empty `name` means the
   default. On an already-initialised folder the name is ignored and nothing is rewritten.
 - Errors (all `BAD_REQUEST`): `Missing required argument 'path'.`, `Argument 'path' must not be empty.`,
@@ -98,7 +100,8 @@ Environment capture: `AGENT_STUDIO_ENV_MODE=login-interactive` (default), `login
   `<marker> is not valid JSON: ...` / `<marker> must be a JSON object with string id and name` for a broken
   `workspace.json`, and `workspaces.json is unreadable: ...`. Neither command raises a `WORKSPACE_*` code;
   `WORKSPACE_NOT_FOUND` comes only from workspace resolution in other commands.
-- These files are not in `state.db`, so the commands run without the coordinator and need no `idempotencyKey`.
+- The commands run without the coordinator and need no `idempotencyKey`; workspace initialization opens the local
+  state database directly to create the board runtime rows.
 
 ## Agent catalog (P05-S08)
 

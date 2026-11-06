@@ -9,7 +9,7 @@ import traceback
 
 import copy
 
-from . import boardstatuses, agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, workflowcatalog, roles, workflow, workflowdef, PROTOCOL, client, coordinator, ops, paths, \
+from . import boardstatuses, agentcatalog, delegation, rolecatalog, skills, teamdefs, boardmodel, boardsettings, boardworkflows, workflowcatalog, roles, workflow, workflowdef, workspaceinit, PROTOCOL, client, coordinator, ops, paths, \
     queries, state, teams, teamstatus, teamview, tmuxctl, workspace
 from .providers.base import POLICIES
 from .providers.fake.fake_cli import SCENARIOS
@@ -736,6 +736,7 @@ def _validate_phase_remove(args):
 
 def _phase_show(args, req):
     clean = _validate_phase_ref(args)
+    workspaceinit.ensure_runtime(clean["workspace"])
     conn = _reader()
     try:
         return boardmodel.phase_detail(conn, clean["workspace"], clean["phase"])
@@ -745,6 +746,7 @@ def _phase_show(args, req):
 
 def _phase_list(args, req):
     clean = _validate_board_show(args)
+    workspaceinit.ensure_runtime(clean["workspace"])
     conn = _reader()
     try:
         return boardmodel.phase_list(conn, clean["workspace"])
@@ -763,6 +765,7 @@ def _ticket_show(args, req):
 
 def _ticket_list(args, req):
     clean = _validate_ticket_list(args)
+    workspaceinit.ensure_runtime(clean["workspace"])
     conn = _reader()
     try:
         return boardmodel.ticket_list(conn, clean["workspace"], clean.get("status"), clean.get("phase"),
@@ -774,6 +777,7 @@ def _ticket_list(args, req):
 
 def _board_show(args, req):
     clean = _validate_board_show(args)
+    workspaceinit.ensure_runtime(clean["workspace"])
     conn = _reader()
     try:
         return boardmodel.board_show(conn, clean["workspace"])
@@ -783,6 +787,7 @@ def _board_show(args, req):
 
 def _board_summary(args, req):
     clean = _validate_board_summary(args)
+    workspaceinit.ensure_runtime(clean["workspace"])
     conn = _reader()
     try:
         return boardmodel.board_summary(conn, clean["workspace"], clean["limit"])
