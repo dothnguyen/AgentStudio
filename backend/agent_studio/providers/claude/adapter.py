@@ -25,6 +25,7 @@ NEVER = ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions
          "Bash", "--add-dir")
 REASONING = ("low", "medium", "high", "xhigh", "max")
 READ_TOOLS = "Read,Grep,Glob"
+WEB_TOOLS = "WebSearch,WebFetch"
 MCP_TOOLS = ["mcp__agent-studio__" + n for n in ("ticket_add", "ticket_update", "ticket_list", "ticket_show", "phase_list", "board_show",
                                                     "delegated_commands_list", "delegated_command_request")]
 COMMON = ["--print", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
@@ -37,17 +38,20 @@ POLICY_FLAGS = {
                         "--allowedTools", READ_TOOLS],
 }
 # Opt-in command access (P01-S09b): `.agent-studio/permissions.json` {"version": 1, "claude": {"commands": true}}.
-# Without it nothing changes. With it `--restricted` is dropped (it removes every code-running tool) and Bash is
-# added: any command for workspace_write, a short read-only allowlist for read_only.
+# Without it nothing changes. With it `--restricted` is dropped (it removes every code-running and web tool),
+# WebSearch and WebFetch are enabled for both policies, and Bash is added: any command for workspace_write, a
+# short read-only allowlist for read_only.
 READ_COMMANDS = ["git status", "git diff", "git log", "git show", "git ls-files", "git rev-parse", "git grep",
                  "git blame", "git merge-base", "git branch", "ls", "cat", "head", "tail", "wc", "grep", "sort",
                  "uniq", "pwd", "cd", "python3 -m unittest", "python3 -W ignore -m unittest", "python3 -m pytest",
                  "rg", "ctags -f -"]
 COMMAND_FLAGS = {
-    "read_only": ["--permission-mode", "dontAsk", "--tools", READ_TOOLS + ",Bash", "--allowedTools",
-                  ",".join([READ_TOOLS] + [f"Bash({c}:*)" for c in READ_COMMANDS])],
-    "workspace_write": ["--permission-mode", "acceptEdits", "--tools", READ_TOOLS + ",Edit,Write,NotebookEdit,Bash",
-                        "--allowedTools", READ_TOOLS + ",Bash"],
+    "read_only": ["--permission-mode", "dontAsk", "--tools", READ_TOOLS + ",Bash," + WEB_TOOLS,
+                  "--allowedTools", ",".join([READ_TOOLS, WEB_TOOLS]
+                                               + [f"Bash({c}:*)" for c in READ_COMMANDS])],
+    "workspace_write": ["--permission-mode", "acceptEdits", "--tools",
+                        READ_TOOLS + ",Edit,Write,NotebookEdit,Bash," + WEB_TOOLS,
+                        "--allowedTools", READ_TOOLS + ",Bash," + WEB_TOOLS],
 }
 
 

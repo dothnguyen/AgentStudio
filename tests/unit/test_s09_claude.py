@@ -109,7 +109,7 @@ class Argv(unittest.TestCase):
         self.assertEqual(sorted(tools), sorted(["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit"]))
         self.assertNotIn("Bash", tools)
 
-    def test_commands_opt_in_adds_bash_and_drops_restricted(self):
+    def test_commands_opt_in_adds_bash_and_web_tools_and_drops_restricted(self):
         import tempfile, json as _j
         ws = tempfile.mkdtemp()
         os.makedirs(os.path.join(ws, ".agent-studio"))
@@ -118,9 +118,17 @@ class Argv(unittest.TestCase):
             _j.dump({"version": 1, "claude": {"commands": True}}, f)
         w = self.argv(ws=ws, policy="workspace_write")
         self.assertNotIn("--restricted", w)
-        self.assertEqual(w[w.index("--allowedTools") + 1], "Read,Grep,Glob,Bash")
+        self.assertEqual(w[w.index("--allowedTools") + 1], "Read,Grep,Glob,Bash,WebSearch,WebFetch")
+        self.assertEqual(set(w[w.index("--tools") + 1].split(",")),
+                         {"Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "Bash",
+                          "WebSearch", "WebFetch"})
         r = self.argv(ws=ws)
         allowed = r[r.index("--allowedTools") + 1]
+        tools = r[r.index("--tools") + 1].split(",")
+        self.assertIn("WebSearch", tools)
+        self.assertIn("WebFetch", tools)
+        self.assertIn("WebSearch", allowed.split(","))
+        self.assertIn("WebFetch", allowed.split(","))
         self.assertIn("Bash(git diff:*)", allowed)
         self.assertIn("Bash(python3 -W ignore -m unittest:*)", allowed)
         self.assertIn("Bash(rg:*)", allowed)
@@ -139,6 +147,12 @@ class Argv(unittest.TestCase):
                 f.write(text)
             self.assertFalse(claude_mod.commands_enabled(ws))
         shutil.rmtree(ws)
+
+    def test_web_tools_are_not_available_without_commands_opt_in(self):
+        for policy in ("read_only", "workspace_write"):
+            argv = self.argv(policy=policy)
+            self.assertNotIn("WebSearch", argv[argv.index("--tools") + 1].split(","))
+            self.assertNotIn("WebFetch", argv[argv.index("--tools") + 1].split(","))
 
     def test_never_bypasses(self):
         for policy in ("read_only", "workspace_write"):
