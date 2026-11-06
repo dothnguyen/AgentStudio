@@ -25,6 +25,7 @@ export const MANAGEMENT_CHANNELS = {
   managementBoardStatuses: 'management:boardStatuses',
   managementBoardPhases: 'management:boardPhases',
   managementCreatePhase: 'management:createPhase',
+  managementSetCurrentPhase: 'management:setCurrentPhase',
   managementBoardTickets: 'management:boardTickets',
   managementBoardTicket: 'management:boardTicket',
   managementCreateTicket: 'management:createTicket',
@@ -311,6 +312,7 @@ export const MANAGEMENT_SPECS: readonly ManagementSpec[] = [
     id: { kind: 'slug', required: true }, name: { kind: 'nonEmpty', required: true },
     description: { kind: 'string' }, before: { kind: 'slug' },
   }, { mutating: true }),
+  spec(C.managementSetCurrentPhase, 'setCurrentPhase', 'phase.set-current', { phase: { kind: 'slug', required: true } }, { mutating: true }),
   spec(C.managementBoardTickets, 'boardTickets', 'ticket.list', {
     phase: { kind: 'slug' },
     unassigned: { kind: 'bool' },

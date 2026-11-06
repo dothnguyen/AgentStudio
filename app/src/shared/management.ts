@@ -735,6 +735,7 @@ export interface ManagementApi {
   boardStatuses(workspaceId: string): R<BoardStatuses>;
   boardPhases(workspaceId: string): R<BoardPhases>;
   createPhase(workspaceId: string, input: BoardPhaseCreateInput): R<BoardPhaseCreateResult>;
+  setCurrentPhase(workspaceId: string, input: { phase: string }): R<{ currentPhase: BoardPhaseRef; changed: boolean }>;
   boardTickets(workspaceId: string, input: { phase?: string; unassigned?: boolean }): R<BoardTicketList>;
   boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;
   createTicket(workspaceId: string, input: BoardTicketCreateInput): R<BoardTicketCreateResult>;

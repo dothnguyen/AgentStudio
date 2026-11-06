@@ -12,9 +12,10 @@ const CATEGORIES: { key: keyof PhaseSegments; label: string; accessible: string 
   { key: 'other', label: 'Other', accessible: 'other' },
 ];
 
-export function PhaseCard({ phase, statuses, onViewTickets, onOpenBoard }: {
+export function PhaseCard({ phase, statuses, onViewTickets, onOpenBoard, onMakeCurrent }: {
   phase: BoardPhase; statuses: readonly BoardStatusInfo[];
   onViewTickets(slug: string): void; onOpenBoard(): void;
+  onMakeCurrent(phase: BoardPhase, trigger: HTMLButtonElement): void;
 }): JSX.Element {
   const headingId = useId();
   const segments = phaseSegments(phase, statuses);
@@ -38,6 +39,7 @@ export function PhaseCard({ phase, statuses, onViewTickets, onOpenBoard }: {
     <div className="boards-milestone-actions">
       <button type="button" onClick={() => onViewTickets(phase.slug)}>View tickets</button>
       {state === 'current' && <button type="button" onClick={onOpenBoard}>Open board</button>}
+      {state === 'open' && <button type="button" onClick={event => onMakeCurrent(phase, event.currentTarget)}>Make current</button>}
     </div>
   </section>;
 }

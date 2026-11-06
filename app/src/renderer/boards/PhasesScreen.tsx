@@ -11,6 +11,21 @@ export function PhasesScreen({ workspace, management, refreshMs, onViewTickets =
   const board = usePhasesData(management, workspace.id, refreshMs);
   const [creating, setCreating] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  const [makingCurrent, setMakingCurrent] = useState<import('../api').BoardPhase | null>(null);
+  const [currentError, setCurrentError] = useState('');
+  const [currentBusy, setCurrentBusy] = useState(false);
+  const currentFlight = useRef(false);
+  const currentTrigger = useRef<HTMLButtonElement | null>(null);
+  async function confirmCurrent(): Promise<void> {
+    if (!makingCurrent || currentFlight.current) return;
+    currentFlight.current = true; setCurrentBusy(true); setCurrentError('');
+    try {
+      const result = await management.setCurrentPhase(workspace.id, { phase: makingCurrent.slug });
+      if (result.ok) { board.reconcileCurrent(makingCurrent.slug); setMakingCurrent(null); requestAnimationFrame(() => currentTrigger.current?.focus()); }
+      else setCurrentError(`${result.error.message}${result.error.remediation ? ` ${result.error.remediation}` : ''}`);
+    } catch (reason) { setCurrentError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { currentFlight.current = false; setCurrentBusy(false); }
+  }
   return (
     <div className="boards-current-screen" data-section="boards/phases">
       <nav className="boards-breadcrumb" aria-label="Breadcrumb">
@@ -29,7 +44,11 @@ export function PhasesScreen({ workspace, management, refreshMs, onViewTickets =
           {board.data?.phases.phases.length === 0 ? <section className="boards-state-card"><h2>No phases yet</h2></section> :
             <div className="boards-milestone-list">{board.data && [...board.data.phases.phases]
               .sort((a, b) => Number(b.current) - Number(a.current) || Number(a.status === 'closed') - Number(b.status === 'closed') || a.position - b.position)
-              .map(phase => <PhaseCard key={phase.slug} phase={phase} statuses={board.data!.settings.statuses} onViewTickets={onViewTickets} onOpenBoard={onOpenBoard} />)}</div>}</>}
+              .map(phase => <PhaseCard key={phase.slug} phase={phase} statuses={board.data!.settings.statuses} onViewTickets={onViewTickets} onOpenBoard={onOpenBoard} onMakeCurrent={(target, trigger) => { currentTrigger.current = trigger; setCurrentError(''); setMakingCurrent(target); }} />)}</div>}</>}
+      {makingCurrent && <Dialog role="alertdialog" title="Make phase current?" subtitle={`${makingCurrent.name} (${makingCurrent.slug})`} onClose={() => { if (!currentBusy) setMakingCurrent(null); }} busy={currentBusy} actions={[{ label: 'Cancel', onClick: () => setMakingCurrent(null) }, { label: currentBusy ? 'Making current…' : 'Make current', variant: 'primary', disabled: currentBusy, onClick: () => { void confirmCurrent(); } }]}>
+        <p>Tickets in {makingCurrent.name} will become eligible for automatic board workflow routing. Tickets in other phases will wait. This changes which phase workflows consider; it does not move tickets between phases.</p>
+        {currentError && <div role="alert">Could not make this phase current: {currentError} <button type="button" disabled={currentBusy} onClick={() => { void confirmCurrent(); }}>Retry</button></div>}
+      </Dialog>}
       {creating && board.data && <NewPhaseDialog workspaceId={workspace.id} management={management} phases={board.data.phases.phases} onClose={() => { setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); }} onCreated={phase => { board.reconcileCreated(phase); setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); void board.refresh(); }} />}
     </div>
   );

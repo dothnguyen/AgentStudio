@@ -15,10 +15,11 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
   }
 }
 
-export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void>; refresh(): Promise<void>; reconcileCreated(phase: import('../api').BoardPhase): void } {
+export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void>; refresh(): Promise<void>; reconcileCreated(phase: import('../api').BoardPhase): void; reconcileCurrent(slug: string): void } {
   const [value, setValue] = useState<Value>({ state: 'loading', data: null, error: null });
   const sequence = useRef(0);
   const hasData = useRef(false);
+  const ignoreNextBoardChange = useRef(false);
   const createdPhases = useRef(new Map<string, import('../api').BoardPhase>());
   const load = useCallback(async (silent: boolean): Promise<void> => {
     const request = ++sequence.current;
@@ -54,7 +55,10 @@ export function usePhasesData(management: ManagementApi, workspaceId: string, re
     hasData.current = false;
     void load(false);
     const timer = refreshMs > 0 ? setInterval(() => { void load(true); }, refreshMs) : null;
-    const onChange = (): void => { void load(true); };
+    const onChange = (): void => {
+      if (ignoreNextBoardChange.current) { ignoreNextBoardChange.current = false; return; }
+      void load(true);
+    };
     window.addEventListener(BOARD_CHANGED_EVENT, onChange);
     return () => {
       sequence.current += 1;
@@ -75,6 +79,19 @@ export function usePhasesData(management: ManagementApi, workspaceId: string, re
       return { ...current, data: { ...current.data, phases: { ...current.data.phases, phases } } };
     });
   }, []);
+  const reconcileCurrent = useCallback((slug: string) => {
+    sequence.current += 1;
+    setValue(current => {
+      if (!current.data) return current;
+      const selected = current.data.phases.phases.find(item => item.slug === slug);
+      if (!selected) return current;
+      return { ...current, data: { ...current.data, phases: { ...current.data.phases, currentPhase: selected, phases: current.data.phases.phases.map(item => ({ ...item, current: item.slug === slug })) } } };
+    });
+    // Notify navigation and other board views, but do not immediately overwrite
+    // this optimistic reconciliation with a read that can still be stale.
+    ignoreNextBoardChange.current = true;
+    window.dispatchEvent(new Event(BOARD_CHANGED_EVENT));
+  }, []);
   const refresh = useCallback(async () => { await load(true); }, [load]);
-  return { ...value, reload, refresh, reconcileCreated };
+  return { ...value, reload, refresh, reconcileCreated, reconcileCurrent };
 }

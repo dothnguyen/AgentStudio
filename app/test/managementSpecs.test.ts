@@ -6,12 +6,12 @@ const parse = (m: string, req: Record<string, unknown>) => byLabel(m).parse(req)
 
 describe('managementSpecs', () => {
   it('has one spec per channel and marks write operations as mutating', () => {
-    expect(MANAGEMENT_SPECS).toHaveLength(65);
+    expect(MANAGEMENT_SPECS).toHaveLength(66);
     expect(MANAGEMENT_SPECS.map((s) => s.channel).sort()).toEqual(Object.values(MANAGEMENT_CHANNELS).sort());
     expect(MANAGEMENT_SPECS.filter((s) => s.mutating).map((s) => s.label).sort()).toEqual([
       'management.answerAssignment', 'management.approveCommand', 'management.approveWorkflow', 'management.cancelCommand', 'management.cancelRun', 'management.createPhase', 'management.createTicket', 'management.rejectCommand',
       'management.resetUsage', 'management.resumeMemberAgent', 'management.retryRun', 'management.retryTicket',
-      'management.runBoard', 'management.startTeam', 'management.stopBoard', 'management.stopTeam',
+      'management.runBoard', 'management.setCurrentPhase', 'management.startTeam', 'management.stopBoard', 'management.stopTeam',
       'management.switchMemberAgent', 'management.ticketMove', 'management.ticketPhase', 'management.ticketWorkflow', 'management.unblockTicket',
     ]);
   });

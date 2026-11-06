@@ -279,6 +279,7 @@ export function getManagementApi(): ManagementApi {
     boardStatuses: (...args) => real.boardStatuses(...args),
     boardPhases: (...args) => real.boardPhases(...args),
     createPhase: (...args) => real.createPhase(...args),
+    setCurrentPhase: (...args) => real.setCurrentPhase(...args),
     boardTickets: (...args) => real.boardTickets(...args),
     boardTicket: (...args) => real.boardTicket(...args),
     createTicket: (...args) => real.createTicket(...args),

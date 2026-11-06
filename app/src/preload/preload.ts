@@ -36,6 +36,7 @@ export const PRELOAD_CHANNELS = {
   managementBoardStatuses: 'management:boardStatuses',
   managementBoardPhases: 'management:boardPhases',
   managementCreatePhase: 'management:createPhase',
+  managementSetCurrentPhase: 'management:setCurrentPhase',
   managementBoardTickets: 'management:boardTickets',
   managementBoardTicket: 'management:boardTicket',
   managementCreateTicket: 'management:createTicket',
@@ -119,6 +120,7 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
       boardStatuses: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardStatuses, w, {}),
       boardPhases: (w) => ipc.invoke(PRELOAD_CHANNELS.managementBoardPhases, w, {}),
       createPhase: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementCreatePhase, w, input),
+      setCurrentPhase: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementSetCurrentPhase, w, input),
       boardTickets: (w, input) =>
         ipc.invoke(PRELOAD_CHANNELS.managementBoardTickets, w, input.unassigned === true ? { unassigned: true } : input.phase === undefined ? {} : { phase: input.phase }),
       boardTicket: (w, input) => ipc.invoke(PRELOAD_CHANNELS.managementBoardTicket, w, { key: input.key }),
