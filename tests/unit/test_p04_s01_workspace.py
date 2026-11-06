@@ -128,6 +128,33 @@ class ResolveTests(Base):
 
 
 class ListAndCliTests(Base):
+    def test_remove_registration_preserves_all_workspace_files_and_reimport(self):
+        ws = workspace.init(self.ws, name="Original")
+        sentinel = os.path.join(self.ws, ".agent-studio", "sentinel")
+        with open(sentinel, "w") as f:
+            f.write("keep")
+        before = {os.path.relpath(os.path.join(root, name), self.ws): open(os.path.join(root, name), "rb").read()
+                  for root, _, files in os.walk(self.ws) for name in files}
+        removed = workspace.remove(self.ws + os.sep + ".")
+        self.assertTrue(removed["removed"])
+        self.assertEqual(workspace.list_workspaces()["workspaces"], [])
+        after = {os.path.relpath(os.path.join(root, name), self.ws): open(os.path.join(root, name), "rb").read()
+                 for root, _, files in os.walk(self.ws) for name in files}
+        self.assertEqual(after, before)
+        again = workspace.init(self.ws)
+        self.assertEqual(again["id"], ws["id"])
+        self.assertEqual(again["name"], "Original")
+
+    def test_remove_normalized_duplicate_registry_paths_together(self):
+        ws = workspace.init(self.ws)
+        registry = self.reg()
+        registry["workspaces"].append(dict(registry["workspaces"][0], path=self.ws + "/."))
+        with open(self.registry, "w") as f:
+            json.dump(registry, f)
+        self.assertTrue(workspace.remove(self.ws)["removed"])
+        self.assertEqual(workspace.list_workspaces()["workspaces"], [])
+        self.assertEqual(workspace.remove(self.ws)["removed"], False)
+
     def test_list_flags_missing_without_rewriting(self):
         workspace.init(self.ws)
         shutil.rmtree(self.ws)
@@ -172,7 +199,7 @@ class ListAndCliTests(Base):
 
     def test_workspace_dispatch_commands(self):
         keys = sorted(k for k in dispatch.COMMANDS if k == "init" or k.startswith("workspace"))
-        self.assertEqual(keys, ["workspace.init", "workspace.list"])
+        self.assertEqual(keys, ["workspace.init", "workspace.list", "workspace.remove"])
 
 
 if __name__ == "__main__":

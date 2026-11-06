@@ -36,7 +36,7 @@ describe('preload', () => {
     expect(Object.keys(exposed)).toEqual(['agentStudio']);
     const api = exposed.agentStudio as Record<string, Record<string, unknown>>;
     expect(Object.keys(api).sort()).toEqual(['connection', 'dashboard', 'management', 'workspaces']);
-    expect(Object.keys(api.workspaces).sort()).toEqual(['create', 'list', 'pickFolder']);
+    expect(Object.keys(api.workspaces).sort()).toEqual(['create', 'list', 'pickFolder', 'remove']);
     expect(Object.keys(api.dashboard).sort()).toEqual(['activity', 'board', 'teams']);
     expect(Object.keys(api.management).sort()).toEqual([...METHODS].sort());
     expect(Object.keys(api.connection)).toEqual(['onChange']);

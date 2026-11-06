@@ -64,7 +64,8 @@ def _load_registry() -> list:
 
 def _register(ws: dict) -> None:
     items = _load_registry()
-    if any(i.get("path") == ws["path"] for i in items):
+    canonical = os.path.normcase(os.path.realpath(ws["path"]))
+    if any(isinstance(i.get("path"), str) and os.path.normcase(os.path.realpath(i["path"])) == canonical for i in items):
         return
     items.append({"id": ws["id"], "name": ws["name"], "path": ws["path"]})
     target = _registry_path()
@@ -73,6 +74,31 @@ def _register(ws: dict) -> None:
         json.dump({"workspaces": items}, f, indent=2)
         f.write("\n")
     os.replace(tmp, target)
+
+
+def remove(path: str) -> dict:
+    """Forget a registered path by editing only the Agent Studio registry."""
+    canonical = os.path.normcase(os.path.realpath(path))
+    items = _load_registry()
+    kept = [i for i in items if not (isinstance(i.get("path"), str)
+                                     and os.path.normcase(os.path.realpath(i["path"])) == canonical)]
+    if len(kept) == len(items):
+        return {"removed": False, "path": canonical}
+    target = _registry_path()
+    tmp = f"{target}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"workspaces": kept}, f, indent=2)
+            f.write("\n")
+        os.replace(tmp, target)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise AsError(BAD_REQUEST, f"Cannot update {REGISTRY_FILE}: {e}",
+                      remediation="Check that the Agent Studio state directory is writable and try again.")
+    return {"removed": True, "path": canonical}
 
 
 def init(path: str, name: str | None = None) -> dict:

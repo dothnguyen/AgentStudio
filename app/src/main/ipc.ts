@@ -14,6 +14,7 @@ import { WslPathError, toWslPath } from './wslPath';
 
 export const CHANNELS = {
   list: 'workspaces:list',
+  remove: 'workspaces:remove',
   create: 'workspaces:create',
   pickFolder: 'workspaces:pickFolder',
   connectionGet: 'connection:get',
@@ -142,6 +143,15 @@ export function registerIpc(deps: IpcDeps): void {
     if (args.length !== 0) return badArgs('workspaces.list takes no arguments.');
     try {
       return fromResponse(await client.request('workspace.list', {}));
+    } catch (e) {
+      return fromError(e);
+    }
+  });
+
+  ipcMain.handle(CHANNELS.remove, async (_e, ...args) => {
+    if (args.length !== 1 || !isNonEmptyString(args[0])) return badArgs('workspaces.remove expects one non-empty path string.');
+    try {
+      return fromResponse(await client.request('workspace.remove', { path: toWslPath(args[0], client.distro) }));
     } catch (e) {
       return fromError(e);
     }

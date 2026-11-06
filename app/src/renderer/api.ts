@@ -116,6 +116,7 @@ declare global {
       };
       workspaces?: {
         list(): Promise<Result<WorkspaceList>>;
+        remove(path: string): Promise<Result<{ removed: boolean; path: string }>>;
         create(args: CreateArgs): Promise<Result<InitResult>>;
         pickFolder(): Promise<Result<string | null>>;
       };
@@ -155,6 +156,7 @@ export interface InitResult {
 }
 export interface WorkspacesApi {
   list(): Promise<Result<WorkspaceList>>;
+  remove(path: string): Promise<Result<{ removed: boolean; path: string }>>;
   create(args: CreateArgs): Promise<Result<InitResult>>;
   pickFolder(): Promise<Result<string | null>>;
 }
@@ -232,6 +234,7 @@ export function getWorkspacesApi(): WorkspacesApi {
   if (!real) throw new Error('Agent Studio preload API is missing (window.agentStudio.workspaces).');
   return {
     list: () => real.list(),
+    remove: (path) => real.remove(path),
     create: (args) => real.create(args),
     pickFolder: () => real.pickFolder(),
   };

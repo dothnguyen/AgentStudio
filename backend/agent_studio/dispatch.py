@@ -967,6 +967,13 @@ def _workspace_list(args, req):
     return workspace.list_workspaces()
 
 
+def _workspace_remove(args, req):
+    unknown = sorted(set(args) - {"path"})
+    if unknown:
+        raise AsError(BAD_REQUEST, f"workspace.remove got unknown argument(s): {', '.join(unknown)}.")
+    return workspace.remove(req_text(args, "path", 4096, allow_empty=False))
+
+
 def _workspace_init(args, req):
     path = req_text(args, "path", 4096, allow_empty=False)
     name = req_text(args, "name", 1024, required=False)
@@ -1225,6 +1232,7 @@ COMMANDS = {
     "health": lambda args, req: ops.health(args),
     "preflight": lambda args, req: ops.preflight(args),
     "workspace.list": _workspace_list,
+    "workspace.remove": _workspace_remove,
     "workspace.init": _workspace_init,
     "coordinator.start": _coordinator_start,
     "coordinator.stop": _coordinator_stop,

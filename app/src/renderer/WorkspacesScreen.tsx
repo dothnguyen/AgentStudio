@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ApiError, ConnectionStatus, DashboardApi, InitResult, ManagementApi, Result, Workspace, WorkspaceList, WorkspacesApi } from './api';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 import { WorkspaceShell } from './shell/WorkspaceShell';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 
 export const LOADING_TEXT = 'Loading workspaces…';
 export const EMPTY_TITLE = 'No workspaces yet';
@@ -63,7 +64,7 @@ type Load =
   | { kind: 'ready'; workspaces: Workspace[] }
   | { kind: 'error'; error: ApiError };
 
-function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w: Workspace) => void }) {
+function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w: Workspace) => void; onRemove: (w: Workspace, control: HTMLButtonElement) => void }) {
   const { w, onSelect } = props;
   const ref = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -71,6 +72,7 @@ function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
+    <div className="ws-row-wrap">
     <button
       type="button"
       className="ws-row"
@@ -99,6 +101,8 @@ function WorkspaceRow(props: { w: Workspace; focusOnMount: boolean; onSelect: (w
         <span className="row-chevron" aria-hidden="true">›</span>
       </span>
     </button>
+    <button type="button" className="secondary" aria-label={`Remove ${w.name} from list`} onClick={(e) => props.onRemove(w, e.currentTarget)}>Remove from list</button>
+    </div>
   );
 }
 
@@ -110,6 +114,9 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: Dashboa
   const [notice, setNotice] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<Workspace | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const removeFocus = useRef<HTMLElement | null>(null);
   const seq = useRef(0);
   const active = useRef(true);
 
@@ -184,6 +191,26 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: Dashboa
     ++seq.current;
     setRefreshing(false);
     setDialogOpen(true);
+  };
+
+  const confirmRemove = async () => {
+    if (!removeTarget || removeBusy) return;
+    setRemoveBusy(true);
+    let result: Result<{ removed: boolean; path: string }>;
+    try { result = await api.remove(removeTarget.path); }
+    catch (e) { result = { ok: false, error: { code: 'INTERNAL', message: e instanceof Error ? e.message : String(e), retryable: false } }; }
+    setRemoveBusy(false);
+    if (!result.ok) {
+      setRemoveTarget(null);
+      setNotice(`Could not remove "${removeTarget.name}" from the list: ${result.error.code}: ${result.error.message}${result.error.remediation ? ` ${result.error.remediation}` : ''}`);
+      return;
+    }
+    ++seq.current;
+    setLoad((current) => current.kind === 'ready'
+      ? { kind: 'ready', workspaces: current.workspaces.filter((w) => w.path !== removeTarget.path) }
+      : current);
+    setNotice(null);
+    setRemoveTarget(null);
   };
 
   if (load.kind === 'loading') {
@@ -304,14 +331,15 @@ export function WorkspacesScreen(props: { api: WorkspacesApi; dashboard: Dashboa
           )}
           <ul aria-label="Workspaces">
             {load.workspaces.map((w) => (
-              <li key={w.id}>
-                <WorkspaceRow w={w} focusOnMount={focusId === w.id} onSelect={onSelect} />
+              <li key={`${w.id}:${w.path}`}>
+                <WorkspaceRow w={w} focusOnMount={focusId === w.id} onSelect={onSelect} onRemove={(target, control) => { removeFocus.current = control; setRemoveTarget(target); }} />
               </li>
             ))}
           </ul>
         </section>
       </WorkspaceLayout>
       {dialog}
+      {removeTarget && <ConfirmDialog title={`Remove ${removeTarget.name} from list?`} body={`This will remove the saved reference to ${removeTarget.name} (${removeTarget.path}). No workspace files will be deleted or changed.`} confirmLabel="Remove from list" busy={removeBusy} returnFocusRef={removeFocus} onCancel={() => setRemoveTarget(null)} onConfirm={() => void confirmRemove()} />}
     </>
   );
 }

@@ -80,7 +80,8 @@ function fakeWorkspaces(...items: Array<unknown | Error | Deferred<unknown>>) {
   });
   const create = vi.fn();
   const pickFolder = vi.fn(async () => ({ ok: true as const, data: null }));
-  return { api: { list, create, pickFolder } as WorkspacesApi, list, create, pickFolder };
+  const remove = vi.fn(async (path: string) => ({ ok: true as const, data: { removed: true, path } }));
+  return { api: { list, create, pickFolder, remove } as WorkspacesApi, list, create, pickFolder, remove };
 }
 
 const settle = () => act(async () => {});
@@ -441,6 +442,36 @@ describe('WorkspacesScreen', () => {
     fireEvent.click(result.getByRole('button', { name: 'Refresh' }));
     await settle();
     expect(view(result)).toBe('empty');
+  });
+
+  it('confirms safe removal, restores focus on cancel, and handles the last workspace', async () => {
+    const fake = fakeWorkspaces(ok(ws('a', 'Alpha', '/tmp/a')));
+    const result = await mount(fake.api);
+    const remove = result.getByRole('button', { name: 'Remove Alpha from list' });
+    fireEvent.click(remove);
+    const dialog = result.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('Alpha');
+    expect(dialog.textContent).toContain('/tmp/a');
+    expect(dialog.textContent).toContain('No workspace files will be deleted or changed');
+    fireEvent.click(result.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(remove);
+    expect(result.getByText('Alpha')).toBeTruthy();
+    fireEvent.click(remove);
+    fireEvent.click(result.getByRole('button', { name: 'Remove from list' }));
+    await settle();
+    expect(fake.remove).toHaveBeenCalledWith('/tmp/a');
+    expect(view(result)).toBe('empty');
+  });
+
+  it('keeps the row and shows actionable error when removal persistence fails', async () => {
+    const fake = fakeWorkspaces(ok(ws('a', 'Alpha', '/a')));
+    fake.remove.mockResolvedValue({ ok: false, error: { code: 'IO', message: 'registry is read only', retryable: false, remediation: 'Check permissions.' } });
+    const result = await mount(fake.api);
+    fireEvent.click(result.getByRole('button', { name: 'Remove Alpha from list' }));
+    fireEvent.click(result.getByRole('button', { name: 'Remove from list' }));
+    await settle();
+    expect(result.getByText('Alpha')).toBeTruthy();
+    expect(result.getByRole('alert').textContent).toContain('Check permissions.');
   });
 
   it('clicking an existing workspace opens its shell', async () => {

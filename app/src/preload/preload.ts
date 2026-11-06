@@ -5,6 +5,7 @@ import type { AgentStudioApi, ConnectionPayload, CreateArgs } from '../shared/ap
 // A sandboxed preload may only require('electron'), so these are duplicated from main/ipc.ts (a test keeps them equal).
 export const PRELOAD_CHANNELS = {
   list: 'workspaces:list',
+  remove: 'workspaces:remove',
   create: 'workspaces:create',
   pickFolder: 'workspaces:pickFolder',
   connectionGet: 'connection:get',
@@ -84,6 +85,7 @@ export function buildApi(ipc: IpcRendererLike): AgentStudioApi {
   return {
     workspaces: {
       list: () => ipc.invoke(PRELOAD_CHANNELS.list),
+      remove: (path: string) => ipc.invoke(PRELOAD_CHANNELS.remove, path),
       create: (args: CreateArgs) => ipc.invoke(PRELOAD_CHANNELS.create, args),
       pickFolder: () => ipc.invoke(PRELOAD_CHANNELS.pickFolder),
     },

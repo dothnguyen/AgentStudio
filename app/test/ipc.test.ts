@@ -40,7 +40,7 @@ describe('registerIpc', () => {
   it('registers exactly the invoke channels', () => {
     const { handlers } = setup();
     expect([...handlers.keys()].sort()).toEqual(
-      [CHANNELS.list, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet, CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity, ...Object.values(MANAGEMENT_CHANNELS)].sort(),
+      [CHANNELS.list, CHANNELS.remove, CHANNELS.create, CHANNELS.pickFolder, CHANNELS.connectionGet, CHANNELS.dashboardTeams, CHANNELS.dashboardBoard, CHANNELS.dashboardActivity, ...Object.values(MANAGEMENT_CHANNELS)].sort(),
     );
   });
 

@@ -52,18 +52,21 @@ describe('getWorkspacesApi', () => {
     const list = vi.fn(async () => listResult);
     const create = vi.fn(async (_args: CreateArgs) => createResult);
     const pickFolder = vi.fn(async () => pickResult);
+    const remove = vi.fn(async (path: string) => ({ ok: true as const, data: { removed: true, path } }));
     window.agentStudio = {
       connection: { onChange: () => () => {} },
-      workspaces: { list, create, pickFolder },
+      workspaces: { list, create, pickFolder, remove },
     };
     const api = getWorkspacesApi();
     const args = { path: '/home/me/a', name: 'Alpha' };
     expect(await api.list()).toEqual(listResult);
     expect(await api.create(args)).toEqual(createResult);
     expect(await api.pickFolder()).toEqual(pickResult);
+    expect(await api.remove('/home/me/a')).toEqual({ ok: true, data: { removed: true, path: '/home/me/a' } });
     expect(list).toHaveBeenCalledWith();
     expect(create).toHaveBeenCalledWith(args);
     expect(pickFolder).toHaveBeenCalledWith();
+    expect(remove).toHaveBeenCalledWith('/home/me/a');
   });
 
   it('getWorkspacesApi returns its own narrow forwarding object', () => {
@@ -74,6 +77,7 @@ describe('getWorkspacesApi', () => {
         data: { id: 'a', name: 'Alpha', path: '/a', existed: false },
       })),
       pickFolder: vi.fn(async () => ({ ok: true as const, data: null })),
+      remove: vi.fn(async (path: string) => ({ ok: true as const, data: { removed: true, path } })),
       extraPreloadMethod: vi.fn(),
     };
     window.agentStudio = {
@@ -83,7 +87,7 @@ describe('getWorkspacesApi', () => {
 
     const api = getWorkspacesApi();
     expect(api).not.toBe(workspaces);
-    expect(Object.keys(api).sort()).toEqual(['create', 'list', 'pickFolder']);
+    expect(Object.keys(api).sort()).toEqual(['create', 'list', 'pickFolder', 'remove']);
   });
 });
 

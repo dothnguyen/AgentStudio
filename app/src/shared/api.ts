@@ -99,6 +99,7 @@ export interface DashboardActivity {
 export interface AgentStudioApi {
   workspaces: {
     list(): Promise<Result<WorkspaceList>>;
+    remove(path: string): Promise<Result<{ removed: boolean; path: string }>>;
     create(args: CreateArgs): Promise<Result<InitResult>>;
     pickFolder(): Promise<Result<string | null>>;
   };
