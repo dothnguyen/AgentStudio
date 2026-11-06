@@ -1933,6 +1933,26 @@ ul[aria-label="Workspaces"] {
 .role-dialog-locked-id { display: flex; align-items: center; gap: 8px; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px dashed #2a2e35; border-radius: 7px; color: #a3a9b2; font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
 .role-dialog-locked-id svg { flex: none; }
 .role-dialog-field-error { margin: 0; color: #f0a3a3; font-size: 12px; overflow-wrap: anywhere; }
+.phase-create-dialog .dialog-body { min-width: 0; }
+.phase-dialog-fields { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.phase-dialog-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.phase-dialog-fields .role-dialog-field { min-width: 0; overflow-wrap: anywhere; }
+.phase-dialog-fields input,
+.phase-dialog-fields textarea,
+.phase-dialog-fields select { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid #2f343c; border-radius: 7px; background: #121418; color: #e7e9ec; font: inherit; }
+.phase-dialog-fields input,
+.phase-dialog-fields select { min-height: 38px; padding: 0 12px; }
+.phase-dialog-fields textarea { min-height: 104px; padding: 10px 12px; line-height: 1.5; resize: vertical; }
+.phase-dialog-fields :is(input, textarea, select):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.phase-dialog-fields :is(input, textarea, select):disabled { opacity: 0.55; }
+.phase-dialog-fields [aria-invalid="true"] { border-color: #b4413b; }
+.phase-create-dialog .dialog-body, .phase-create-dialog .dialog-footer, .phase-create-dialog .dialog-header { min-width: 0; }
+.phase-create-dialog .dialog-footer { justify-content: flex-end; }
+@media (max-width: 560px) {
+  .phase-dialog-row { grid-template-columns: minmax(0, 1fr); }
+  .phase-create-dialog .dialog-footer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .phase-create-dialog .dialog-action { min-width: 0; overflow-wrap: anywhere; }
+}
 .role-dialog-error { padding: 10px 12px; border: 1px solid #5a2e2e; border-radius: 8px; background: rgba(180, 60, 60, 0.08); color: #f0c7c0; font-size: 12.5px; overflow-wrap: anywhere; }
 .role-dialog-error p { margin: 2px 0; }
 .role-dialog-error code { color: #f0c7c0; }

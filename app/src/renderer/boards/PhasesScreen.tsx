@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from 'react';
+import { useId, useRef, useState, type JSX } from 'react';
 import type { ManagementApi, Workspace } from '../api';
 import { BoardErrorCard, LoadingSkeleton } from './CurrentPhaseScreen';
 import { usePhasesData } from './usePhasesData';
@@ -38,6 +38,7 @@ function NewPhaseDialog({ workspaceId, management, phases, onClose, onCreated }:
   const [name, setName] = useState(''); const [slug, setSlug] = useState(''); const [editedSlug, setEditedSlug] = useState(false);
   const [description, setDescription] = useState(''); const [before, setBefore] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState(''); const [slugError, setSlugError] = useState(''); const flight = useRef(false); const nameRef = useRef<HTMLInputElement>(null);
+  const uid = useId();
   async function submit(): Promise<void> {
     if (flight.current) return;
     const cleanName = name.trim(); const cleanSlug = slug.trim();
@@ -52,11 +53,15 @@ function NewPhaseDialog({ workspaceId, management, phases, onClose, onCreated }:
     finally { flight.current = false; setBusy(false); }
   }
   const existing = [...phases].sort((a,b) => a.position-b.position);
-  return <Dialog title="New phase" subtitle="Add a phase to this board." onClose={onClose} busy={busy} initialFocus={nameRef} actions={[{ label: 'Cancel', onClick: onClose }, { label: 'Create phase', variant: 'primary', disabled: busy, onClick: () => { void submit(); } }]}>
-    <label>Phase name<input ref={nameRef} value={name} maxLength={80} onChange={e => { const value=e.target.value; setName(value); if (!editedSlug) setSlug(phaseSlug(value)); }} aria-invalid={Boolean(nameError)} /></label>{nameError && <p role="alert">{nameError}</p>}
-    <label>Phase ID / slug <span>(stable CLI/config ID)</span><input value={slug} maxLength={64} onChange={e => { setEditedSlug(true); setSlug(e.target.value); }} aria-invalid={Boolean(slugError)} /></label>{slugError && <p role="alert">{slugError}</p>}
-    <label>Description (optional)<textarea value={description} maxLength={2000} onChange={e => setDescription(e.target.value)} /></label>
-    <label>Place before<select value={before} onChange={e => setBefore(e.target.value)}><option value="">At end</option>{existing.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}</select></label>
-    {error && <div role="alert">{error} <button type="button" disabled={busy} onClick={() => { void submit(); }}>Retry</button></div>}
+  return <Dialog title="New phase" subtitle="Add a phase to this board." onClose={onClose} busy={busy} initialFocus={nameRef} className="phase-create-dialog" actions={[{ label: 'Cancel', onClick: onClose }, { label: busy ? 'Creating…' : 'Create phase', variant: 'primary', disabled: busy, onClick: () => { void submit(); } }]}>
+    <div className="phase-dialog-fields">
+      <div className="phase-dialog-row">
+        <div className="role-dialog-field"><label htmlFor={`${uid}-name`}>Phase name</label><input id={`${uid}-name`} ref={nameRef} value={name} maxLength={80} disabled={busy} aria-invalid={nameError ? true : undefined} aria-describedby={nameError ? `${uid}-name-error` : undefined} onChange={e => { const value=e.target.value; setName(value); if (!editedSlug) setSlug(phaseSlug(value)); }} />{nameError && <p className="role-dialog-field-error" id={`${uid}-name-error`} role="alert">{nameError}</p>}</div>
+        <div className="role-dialog-field"><label htmlFor={`${uid}-slug`}>Phase ID / slug</label><input id={`${uid}-slug`} value={slug} maxLength={64} disabled={busy} aria-invalid={slugError ? true : undefined} aria-describedby={`${uid}-slug-hint${slugError ? ` ${uid}-slug-error` : ''}`} onChange={e => { setEditedSlug(true); setSlug(e.target.value); }} /><p className="role-dialog-hint" id={`${uid}-slug-hint`}>Stable ID used by CLI and configuration.</p>{slugError && <p className="role-dialog-field-error" id={`${uid}-slug-error`} role="alert">{slugError}</p>}</div>
+      </div>
+      <div className="role-dialog-field"><label htmlFor={`${uid}-description`}>Description <span className="role-dialog-optional">(optional)</span></label><textarea id={`${uid}-description`} rows={4} value={description} maxLength={2000} disabled={busy} onChange={e => setDescription(e.target.value)} /></div>
+      <div className="role-dialog-field"><label htmlFor={`${uid}-before`}>Place before</label><select id={`${uid}-before`} value={before} disabled={busy} onChange={e => setBefore(e.target.value)}><option value="">At end</option>{existing.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}</select><p className="role-dialog-hint">Choose where this phase appears in the board.</p></div>
+    </div>
+    {error && <div className="role-dialog-error" role="alert">{error} <button type="button" disabled={busy} onClick={() => { void submit(); }}>Retry</button></div>}
   </Dialog>;
 }

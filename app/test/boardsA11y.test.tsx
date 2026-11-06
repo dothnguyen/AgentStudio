@@ -184,6 +184,97 @@ describe('Boards responsive contract', () => {
 });
 
 describe('Backlog and Phases accessibility', () => {
+  it('renders the phase form as an associated responsive form with field errors and ordered keyboard focus', async () => {
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'x-id', slug: 'x', name: 'X', position: 2, current: false, ticketCount: 0, counts: {} } } }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle();
+    await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    const name = view.getByRole('textbox', { name: 'Phase name' });
+    const slug = view.getByRole('textbox', { name: 'Phase ID / slug' });
+    const description = view.getByRole('textbox', { name: 'Description (optional)' });
+    const placement = view.getByRole('combobox', { name: 'Place before' });
+    expect(document.activeElement).toBe(name);
+    expect(name.getAttribute('aria-invalid')).toBeNull();
+    for (const control of [name, slug, description, placement]) expect(control.id).toBeTruthy();
+    expect(view.getByText('Stable ID used by CLI and configuration.').id).toBe(slug.getAttribute('aria-describedby')?.split(' ')[0]);
+    const user = userEvent.setup();
+    await user.tab(); expect(document.activeElement).toBe(slug);
+    await user.tab(); expect(document.activeElement).toBe(description);
+    await user.tab(); expect(document.activeElement).toBe(placement);
+    await user.click(view.getByRole('button', { name: 'Create phase' }));
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(name.getAttribute('aria-describedby')).toBe(view.getByText('Phase name is required.').id);
+    expect(slug.getAttribute('aria-invalid')).toBe('true');
+    expect(slug.getAttribute('aria-describedby')).toContain(view.getByText(/Use a lowercase slug/).id);
+    expect(view.getByRole('dialog').querySelector('.phase-dialog-row')).toBeTruthy();
+    expect(flat).toContain('.phase-dialog-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));');
+    expect(flat).toContain('.phase-dialog-row { grid-template-columns: minmax(0, 1fr); }');
+    expect(flat).toContain('.phase-dialog-fields select {');
+  });
+
+  it('disables phase fields and actions while creation is pending', async () => {
+    let resolveCreate!: (value: { ok: true; data: { phase: ReturnType<typeof boardPhasesFixture>['phases'][number] } }) => void;
+    const createPhase = vi.fn(() => new Promise<{ ok: true; data: { phase: ReturnType<typeof boardPhasesFixture>['phases'][number] } }>(resolve => { resolveCreate = resolve; }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle(); await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Busy');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(view.getByRole('textbox', { name: 'Phase name' }).hasAttribute('disabled')).toBe(true);
+    expect(view.getByRole('combobox', { name: 'Place before' }).hasAttribute('disabled')).toBe(true);
+    expect(view.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true);
+    resolveCreate({ ok: true, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'busy-id', slug: 'busy', name: 'Busy', current: false, ticketCount: 0, counts: {} } } });
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+  });
+
+  it('handles long phase names, descriptions, and labels without overflow or clipping', async () => {
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'x-id', slug: 'x', name: 'X', position: 2, current: false, ticketCount: 0, counts: {} } } }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle();
+    await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    const name = view.getByRole('textbox', { name: 'Phase name' });
+    const description = view.getByRole('textbox', { name: 'Description (optional)' });
+    const dialog = view.getByRole('dialog');
+    const dialogBody = dialog.querySelector('.dialog-body')!;
+    const initialHeight = dialogBody.getBoundingClientRect().height;
+    await userEvent.setup().type(name, 'This is an exceptionally long phase name that spans multiple words');
+    const afterNameHeight = dialogBody.getBoundingClientRect().height;
+    expect(name).toHaveProperty('value', 'This is an exceptionally long phase name that spans multiple words');
+    expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth + 1);
+    await userEvent.setup().type(description, 'A comprehensive description explaining the purpose and scope of this phase with multiple sentences that form a longer text block to test overflow handling');
+    const afterDescHeight = dialogBody.getBoundingClientRect().height;
+    expect(description.scrollWidth).toBeLessThanOrEqual(description.clientWidth + 1);
+    expect(afterDescHeight).toBeGreaterThanOrEqual(afterNameHeight);
+    expect(flat).toContain('.phase-dialog-fields [aria-invalid="true"] { border-color:');
+    expect(flat).toContain('.role-dialog-field-error { margin: 0; color:');
+    expect(flat).toContain('overflow-wrap: anywhere;');
+  });
+
+  it('supports input maxLength attributes and responsive label wrapping', async () => {
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'x-id', slug: 'x', name: 'X', position: 2, current: false, ticketCount: 0, counts: {} } } }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle();
+    await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    const name = view.getByRole('textbox', { name: 'Phase name' });
+    const slug = view.getByRole('textbox', { name: 'Phase ID / slug' });
+    const description = view.getByRole('textbox', { name: 'Description (optional)' });
+    expect(name.getAttribute('maxLength')).toBe('80');
+    expect(slug.getAttribute('maxLength')).toBe('64');
+    expect(description.getAttribute('maxLength')).toBe('2000');
+    expect(description.getAttribute('rows')).toBe('4');
+    const select = view.getByRole('combobox', { name: 'Place before' });
+    expect(select).toBeTruthy();
+    const formFields = view.getByRole('dialog').querySelectorAll('.role-dialog-field');
+    expect(formFields.length).toBe(4);
+    for (const field of formFields) {
+      const label = field.querySelector('label');
+      expect(label).toBeTruthy();
+      expect(label?.textContent?.trim().length).toBeGreaterThan(0);
+      const control = field.querySelector('input, textarea, select');
+      expect(control).toBeTruthy();
+      expect(['input', 'textarea', 'select']).toContain(control?.tagName.toLowerCase());
+    }
+  });
+
   it('creates a phase with generated or edited ID, description and order, then restores focus', async () => {
     const created = { ...boardPhasesFixture().phases[0]!, id: 'phase-new-id', slug: 'my-phase', name: 'My Phase', description: 'Details', position: 1, current: false, ticketCount: 0, counts: { backlog: 0, todo: 0, 'in-progress': 0, done: 0, closed: 0 } };
     const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: created } }));
@@ -237,7 +328,7 @@ describe('Backlog and Phases accessibility', () => {
     await userEvent.setup().click(trigger);
     await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Slow');
     await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
-    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(view.getByRole('button', { name: 'Creating…' }).hasAttribute('disabled')).toBe(true);
     expect(createPhase).toHaveBeenCalledTimes(1);
     resolveCreate({ ok: true, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'slow-id', slug: 'slow', name: 'Slow', current: false, ticketCount: 0, counts: {} } } });
     await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
