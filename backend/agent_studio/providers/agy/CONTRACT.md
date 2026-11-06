@@ -11,7 +11,8 @@ The adapter uses `--mode accept-edits`, streaming JSON over stdin/stdout, and
 optional model/effort flags. It does not enable permission bypass by default. Opt-in:
 a workspace file `.agent-studio/permissions.json` with `{"version": 1, "agy": {"commands": true}}`
 adds `--dangerously-skip-permissions` to auto-approve tool execution (e.g. commands) without
-prompting. Existing agy permission settings still apply when opt-in is absent, which can cause
+prompting. This also makes provider-native web/search tools available when the installed agy version supplies them;
+Agent Studio does not invent provider-specific web flags. Existing agy permission settings still apply when opt-in is absent, which can cause
 headless operations to be denied. Permission denial diagnostics are treated as waiting for input,
 including when the CLI exits successfully. Assignment-specific Agent Studio board MCP is not
 supported and requests to enable it are rejected. Global agy MCP configuration is

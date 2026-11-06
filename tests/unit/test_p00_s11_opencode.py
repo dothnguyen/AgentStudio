@@ -78,15 +78,19 @@ class Settings(unittest.TestCase):
     def test_policy_rules_keep_shell_opt_in(self):
         ro = oc_mod.policy_rules("read_only", False)
         self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, ro)
+        self.assertIn({"action": "websearch", "resource": "*", "effect": "deny"}, ro)
+        self.assertIn({"action": "webfetch", "resource": "*", "effect": "deny"}, ro)
         ro_cmd = oc_mod.policy_rules("read_only", True)
         self.assertIn({"action": "shell", "resource": "git status *", "effect": "allow"}, ro_cmd)
         self.assertIn({"action": "shell", "resource": "python3 -m unittest *", "effect": "allow"}, ro_cmd)
+        self.assertEqual(ro_cmd[-2:], oc_mod.WEB_RULES)
         ww = oc_mod.policy_rules("workspace_write", False)
         self.assertIn({"action": "edit", "resource": "*", "effect": "allow"}, ww)
         self.assertIn({"action": "external_directory", "resource": "*", "effect": "deny"}, ww)
         self.assertIn({"action": "shell", "resource": "*", "effect": "deny"}, ww)
         ww_cmd = oc_mod.policy_rules("workspace_write", True)
-        self.assertEqual(ww_cmd[-1], {"action": "shell", "resource": "*", "effect": "allow"})
+        self.assertEqual(ww_cmd[-3], {"action": "shell", "resource": "*", "effect": "allow"})
+        self.assertEqual(ww_cmd[-2:], oc_mod.WEB_RULES)
 
 
 class Fixture(unittest.TestCase):
@@ -179,10 +183,12 @@ class Argv(Fixture):
         with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
             json.dump({"version": 1, "opencode": {"commands": True}}, f)
         p = self.argv(policy="workspace_write", ws=ws)
-        self.assertEqual(self.rules(p)[-1], {"action": "shell", "resource": "*", "effect": "allow"})
+        self.assertEqual(self.rules(p)[-3], {"action": "shell", "resource": "*", "effect": "allow"})
+        self.assertEqual(self.rules(p)[-2:], oc_mod.WEB_RULES)
         ro = self.argv(policy="read_only", ws=ws)
         self.assertIn({"action": "shell", "resource": "git status *", "effect": "allow"}, self.rules(ro))
         self.assertNotIn({"action": "shell", "resource": "*", "effect": "allow"}, self.rules(ro))
+        self.assertEqual(self.rules(ro)[-2:], oc_mod.WEB_RULES)
 
     def test_model_selection(self):
         p = self.argv(model="deepseek/deepseek-flash")

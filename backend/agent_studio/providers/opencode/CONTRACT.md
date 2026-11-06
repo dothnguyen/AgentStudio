@@ -15,7 +15,7 @@ disabled for the run. Nothing below is guessed: every flag and config behaviour 
 | Permission injection | `OPENCODE_CONFIG_CONTENT` (a JSON document merged by the config loader), verified with a canary rule through `opencode debug --standalone agents`; `OPENCODE_DISABLE_PROJECT_CONFIG=1` ignores the workspace's `opencode.json` |
 | `read_only` rules | deny `edit`, `shell`, `execute`, `webfetch`, `websearch`, `external_directory`, and `question` |
 | `workspace_write` rules | allow `edit`, deny `external_directory`, `webfetch`, `websearch`, and `question`; `shell` denied unless the workspace opts in |
-| Opt-in commands | `.agent-studio/permissions.json` `{"version": 1, "opencode": {"commands": true}}` → allow all `shell` commands for `workspace_write`; for `read_only` only the read-only command allowlist (`READ_COMMANDS`) |
+| Opt-in commands | `.agent-studio/permissions.json` `{"version": 1, "opencode": {"commands": true}}` → allow `websearch` and `webfetch` for both policies, all `shell` commands for `workspace_write`, and only the read-only shell allowlist (`READ_COMMANDS`) for `read_only` |
 | Never used | `--auto` (auto-approves permissions: the bypass analog), `--continue` / `-c`, `--session` |
 | Output format | `run --format json`: newline-delimited JSON events on stdout |
 | Terminal event | `step_finish` with `part.reason == "stop"`. A `step_finish` with `reason: "tool-calls"` is an intermediate step, not the end. A provider `error` event is the only failure signal — **the CLI can exit 0 on a provider error** |
@@ -52,10 +52,12 @@ fixtures and streams keep working.
 v2 evaluates an ordered rule list and the **last matching rule wins**. The default base policy starts with
 `{"action": "*", "resource": "*", "effect": "allow"}`, so Agent Studio appends its rules after it:
 
-- `read_only` denies every mutating or networked action. `edit`, `shell`, and `execute` are denied; `external_directory`
-  keeps reads and tool paths inside the workspace; `question` is denied because headless runs cannot answer.
+- `read_only` denies every mutating or networked action by default. `edit`, `shell`, and `execute` are denied;
+  `external_directory` keeps reads and tool paths inside the workspace; `question` is denied because headless runs
+  cannot answer. The commands opt-in allows `websearch`, `webfetch`, and only the read-only shell allowlist.
 - `workspace_write` allows edits (resources for files inside the workspace are relative, so `*` covers them) and keeps
-  `external_directory` denied, so an edit cannot escape the workspace. Shell is denied unless the workspace opts in.
+  `external_directory` denied, so an edit cannot escape the workspace. Shell, web search, and web fetch are denied
+  unless the workspace opts in.
 - `OPENCODE_DISABLE_PROJECT_CONFIG=1` is set on every run. Without it a `workspace_write` agent could edit the
   workspace's `opencode.json` and widen its own rules.
 

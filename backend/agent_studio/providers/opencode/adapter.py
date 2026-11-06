@@ -41,6 +41,10 @@ READ_COMMANDS = ["git status", "git diff", "git log", "git show", "git ls-files"
                  "git blame", "git merge-base", "git branch", "ls", "cat", "head", "tail", "wc", "grep", "sort",
                  "uniq", "pwd", "cd", "python3 -m unittest", "python3 -W ignore -m unittest", "python3 -m pytest",
                  "rg", "ctags -f -"]
+WEB_RULES = [
+    {"action": "webfetch", "resource": "*", "effect": "allow"},
+    {"action": "websearch", "resource": "*", "effect": "allow"},
+]
 
 # Ordered rules; the last matching rule wins (v2 permissions model). The base policy starts with
 # {"action": "*", "resource": "*", "effect": "allow"}, so a deny must follow it; exceptions follow the deny.
@@ -88,10 +92,12 @@ def policy_rules(policy: str, commands: bool) -> List[dict]:
         rules = [dict(r) for r in READ_ONLY]
         if commands:
             rules += [{"action": "shell", "resource": c + " *", "effect": "allow"} for c in READ_COMMANDS]
+            rules += [dict(r) for r in WEB_RULES]
         return rules
     rules = [dict(r) for r in WORKSPACE_WRITE]
     if commands:
         rules.append({"action": "shell", "resource": "*", "effect": "allow"})
+        rules += [dict(r) for r in WEB_RULES]
     return rules
 
 

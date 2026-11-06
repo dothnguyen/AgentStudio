@@ -15,6 +15,7 @@ time and refuses with `CAPABILITY_GAP` if any is missing; it never guesses a fla
 | Common argv | `codex exec --json --color never --ephemeral --skip-git-repo-check --cd <workspace> … -` (prompt on **stdin** from the private `prompt.txt`) |
 | `read_only` | `--sandbox workspace-write -c approval_policy="never" -c sandbox_workspace_write.network_access=false`: Codex's read-only sandbox forbids temp files, which tests need. The runner fingerprints the workspace (git HEAD, tracked diff, untracked files) before and after and fails the report with `READ_ONLY_VIOLATION` if it changed. Nothing is reverted automatically. |
 | `workspace_write` | `--sandbox workspace-write -c approval_policy="never" -c sandbox_workspace_write.network_access=false` |
+| Opt-in commands | `.agent-studio/permissions.json` `{"version": 1, "codex": {"commands": true}}` enables workspace-write sandbox network access and the installed CLI's `standalone_web_search` feature for both policies; defaults remain network-off |
 | Never used | `--dangerously-bypass-approvals-and-sandbox`, `danger-full-access`, `--full-auto`, `--yolo` (asserted in code and tests) |
 | Model | `--model <name>`; name must match `^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$` (codex validates the model itself at run time) |
 | Reasoning | `-c model_reasoning_effort="<level>"`, level ∈ `minimal low medium high xhigh` (the values codex 0.163.0 accepts; anything else is refused by Agent Studio because codex does not validate it) |

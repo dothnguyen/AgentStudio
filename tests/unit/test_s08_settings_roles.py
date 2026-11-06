@@ -97,6 +97,31 @@ class CodexArgv(unittest.TestCase):
         self.assertEqual(a[a.index("--sandbox") + 1], "workspace-write")
         self.assertIn("sandbox_workspace_write.network_access=false", a)
 
+    def test_commands_opt_in_enables_network_and_web_search(self):
+        ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, True)
+        os.makedirs(os.path.join(ws, ".agent-studio"))
+        with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
+            json.dump({"version": 1, "codex": {"commands": True}}, f)
+        assignment = inp("workspace_write")
+        assignment.workspace = ws
+        a = CODEX.prepare(assignment, self.env).argv
+        self.assertIn("sandbox_workspace_write.network_access=true", a)
+        self.assertNotIn("sandbox_workspace_write.network_access=false", a)
+        self.assertEqual(a[a.index("--enable") + 1], "standalone_web_search")
+
+    def test_bad_codex_permissions_file_leaves_commands_off(self):
+        ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, True)
+        os.makedirs(os.path.join(ws, ".agent-studio"))
+        with open(os.path.join(ws, ".agent-studio", "permissions.json"), "w") as f:
+            f.write('{"version":1,"codex":{"commands":"yes"}}')
+        assignment = inp("workspace_write")
+        assignment.workspace = ws
+        a = CODEX.prepare(assignment, self.env).argv
+        self.assertIn("sandbox_workspace_write.network_access=false", a)
+        self.assertNotIn("--enable", a)
+
     def test_model_and_reasoning_reach_argv_as_single_arguments(self):
         a = CODEX.prepare(inp(model="gpt-5.1-codex", reasoning="xhigh"), self.env).argv
         self.assertEqual(a[a.index("--model") + 1], "gpt-5.1-codex")

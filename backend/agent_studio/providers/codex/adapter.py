@@ -32,6 +32,25 @@ ENV = BASE_ENV + ("CODEX_HOME", "OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI_BASE_
 _inspect_cache: Dict[tuple, dict] = {}
 
 
+def commands_enabled(workspace: str) -> bool:
+    """Opt in to shell network access and Codex's built-in web search for this workspace."""
+    try:
+        with open(os.path.join(workspace, ".agent-studio", "permissions.json"), encoding="utf-8") as f:
+            cfg = json.load(f)
+        return cfg.get("version") == 1 and (cfg.get("codex") or {}).get("commands") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def policy_flags(policy: str, commands: bool) -> List[str]:
+    flags = list(POLICY_FLAGS[policy])
+    if commands:
+        network = "sandbox_workspace_write.network_access=false"
+        flags[flags.index(network)] = "sandbox_workspace_write.network_access=true"
+        flags += ["--enable", "standalone_web_search"]
+    return flags
+
+
 def _short(text: str, n: int = 300) -> str:
     return " ".join(str(text).split())[:n]
 
@@ -132,7 +151,7 @@ class CodexAdapter(Adapter):
             raise AsError("PROVIDER_UNAVAILABLE", "codex was not found on the login PATH.")
         self.validate_settings(inp.model, inp.reasoning)
         argv = [exe, "exec", "--json", "--color", "never", "--ephemeral", "--skip-git-repo-check",
-                "--cd", inp.workspace] + POLICY_FLAGS[inp.policy]
+                "--cd", inp.workspace] + policy_flags(inp.policy, commands_enabled(inp.workspace))
         if any(a in NEVER for a in argv):
             raise AsError("BAD_ADAPTER", "refusing a sandbox-bypass flag")
         if inp.model:
