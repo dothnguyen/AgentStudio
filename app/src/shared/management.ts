@@ -412,6 +412,8 @@ export interface BoardPhases {
   currentPhase: BoardPhaseRef;
   phases: BoardPhase[];
 }
+export interface BoardPhaseCreateInput { id: string; name: string; description?: string; before?: string }
+export interface BoardPhaseCreateResult { phase: BoardPhase }
 export type BoardTicketActivityState = 'working' | 'not started' | 'finished' | 'blocked';
 export interface BoardTicketActivity {
   state: BoardTicketActivityState;
@@ -732,6 +734,7 @@ export interface ManagementApi {
   checkSets(workspaceId: string): R<CheckSetList>;
   boardStatuses(workspaceId: string): R<BoardStatuses>;
   boardPhases(workspaceId: string): R<BoardPhases>;
+  createPhase(workspaceId: string, input: BoardPhaseCreateInput): R<BoardPhaseCreateResult>;
   boardTickets(workspaceId: string, input: { phase?: string; unassigned?: boolean }): R<BoardTicketList>;
   boardTicket(workspaceId: string, input: { key: string }): R<BoardTicketDetail>;
   createTicket(workspaceId: string, input: BoardTicketCreateInput): R<BoardTicketCreateResult>;

@@ -19,7 +19,7 @@ function fakeIpc(getResult: unknown = { state: 'connecting', error: null }) {
 }
 
 const METHODS = [
-  'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket', 'createTicket',
+  'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'createPhase', 'boardTickets', 'boardTicket', 'createTicket',
   'saveBoardWorkflow', 'deleteBoardWorkflow', 'savePrompt', 'deletePrompt', 'addStatus', 'renameStatus', 'removeStatus', 'reorderStatuses', 'approveWorkflow', 'answerAssignment',
   'boardWorkflows', 'boardWorkflow', 'prompts', 'prompt', 'checkSets', 'boardStatuses',
   'createAgent', 'updateAgent', 'deleteAgent',
@@ -85,6 +85,7 @@ describe('preload', () => {
     m.checkSets('ws', x);
     m.boardStatuses('ws', x);
     m.boardPhases('ws', x);
+    m.createPhase('ws', { id: 'new', name: 'New' }, x);
     m.boardTickets('ws', {}, x);
     m.boardTickets('ws', { phase: 'phase-05' }, x);
     m.boardTickets('ws', { unassigned: true }, x);
@@ -151,6 +152,7 @@ describe('preload', () => {
       [P.managementCheckSets, 'ws', {}],
       [P.managementBoardStatuses, 'ws', {}],
       [P.managementBoardPhases, 'ws', {}],
+      [P.managementCreatePhase, 'ws', { id: 'new', name: 'New' }],
       [P.managementBoardTickets, 'ws', {}],
       [P.managementBoardTickets, 'ws', { phase: 'phase-05' }],
       [P.managementBoardTickets, 'ws', { unassigned: true }],

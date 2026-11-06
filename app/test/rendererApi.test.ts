@@ -138,7 +138,7 @@ describe('getDashboardApi', () => {
 
 describe('getManagementApi', () => {
   const METHODS = [
-    'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'boardTickets', 'boardTicket', 'createTicket',
+    'overview', 'agents', 'team', 'validateTeam', 'boardSettings', 'boardPhases', 'createPhase', 'boardTickets', 'boardTicket', 'createTicket',
     'saveBoardWorkflow', 'deleteBoardWorkflow', 'savePrompt', 'deletePrompt', 'addStatus', 'renameStatus', 'removeStatus', 'reorderStatuses', 'approveWorkflow', 'answerAssignment',
     'boardWorkflows', 'boardWorkflow', 'prompts', 'prompt', 'checkSets', 'boardStatuses',
     'createAgent', 'updateAgent', 'deleteAgent',

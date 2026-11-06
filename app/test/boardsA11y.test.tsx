@@ -184,6 +184,65 @@ describe('Boards responsive contract', () => {
 });
 
 describe('Backlog and Phases accessibility', () => {
+  it('creates a phase with generated or edited ID, description and order, then restores focus', async () => {
+    const created = { ...boardPhasesFixture().phases[0]!, id: 'phase-new-id', slug: 'my-phase', name: 'My Phase', description: 'Details', position: 1, current: false, ticketCount: 0, counts: { backlog: 0, todo: 0, 'in-progress': 0, done: 0, closed: 0 } };
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: created } }));
+    const fake = fakeManagement({ calls: { createPhase } });
+    const view = render(<PhasesScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const trigger = view.getByRole('button', { name: 'New phase' });
+    await userEvent.setup().click(trigger);
+    const name = view.getByRole('textbox', { name: 'Phase name' });
+    await userEvent.setup().type(name, 'My Phase');
+    expect(view.getByRole('textbox', { name: /Phase ID/ })).toHaveProperty('value', 'my-phase');
+    await userEvent.setup().clear(view.getByRole('textbox', { name: /Phase ID/ }));
+    await userEvent.setup().type(view.getByRole('textbox', { name: /Phase ID/ }), 'my-phase');
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Description (optional)' }), 'Details');
+    await userEvent.setup().selectOptions(view.getByRole('combobox', { name: 'Place before' }), 'phase-06');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    await waitFor(() => expect(createPhase).toHaveBeenCalledWith(workspaceA.id, { id: 'my-phase', name: 'My Phase', description: 'Details', before: 'phase-06' }));
+    await waitFor(() => expect(view.getByRole('heading', { name: 'My Phase' })).toBeTruthy());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('rejects duplicate and invalid phase IDs and preserves fields after backend failure for retry', async () => {
+    const createPhase = vi.fn().mockResolvedValueOnce({ ok: false as const, error: { code: 'PHASE_EXISTS', message: 'Duplicate ID', retryable: false } }).mockResolvedValue({ ok: true as const, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'x-id', slug: 'x', name: 'X', position: 2, current: false, ticketCount: 0, counts: {} } } });
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle(); await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Keep Me');
+    const slug = view.getByRole('textbox', { name: /Phase ID/ });
+    await userEvent.setup().clear(slug); await userEvent.setup().type(slug, 'Bad ID');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(view.getByRole('alert').textContent).toContain('lowercase slug'); expect(createPhase).not.toHaveBeenCalled();
+    await userEvent.setup().clear(slug); await userEvent.setup().type(slug, 'phase-05');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(view.getByRole('alert').textContent).toContain('already exists'); expect(createPhase).not.toHaveBeenCalled();
+    await userEvent.setup().clear(slug); await userEvent.setup().type(slug, 'x');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    await waitFor(() => expect(view.getByRole('alert').textContent).toContain('Duplicate ID'));
+    expect(view.getByRole('textbox', { name: 'Phase name' })).toHaveProperty('value', 'Keep Me');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+  });
+
+  it('cancels by keyboard, restores opener focus, and prevents concurrent submissions', async () => {
+    let resolveCreate!: (value: { ok: true; data: { phase: ReturnType<typeof boardPhasesFixture>['phases'][number] } }) => void;
+    const createPhase = vi.fn(() => new Promise<{ ok: true; data: { phase: ReturnType<typeof boardPhasesFixture>['phases'][number] } }>(resolve => { resolveCreate = resolve; }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle();
+    const trigger = view.getByRole('button', { name: 'New phase' });
+    await userEvent.setup().click(trigger);
+    await userEvent.setup().keyboard('{Escape}');
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    await userEvent.setup().click(trigger);
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Slow');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(createPhase).toHaveBeenCalledTimes(1);
+    resolveCreate({ ok: true, data: { phase: { ...boardPhasesFixture().phases[0]!, id: 'slow-id', slug: 'slow', name: 'Slow', current: false, ticketCount: 0, counts: {} } } });
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+  });
+
   it('keeps headings at h1 or h2 and connects each group button to its panel', async () => {
     const backlog = render(
       <BacklogScreen

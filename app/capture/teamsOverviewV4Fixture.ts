@@ -336,6 +336,7 @@ export function createTeamsOverviewV4Apis(): { management: ManagementApi; dashbo
     checkSets: () => readOnly(),
     boardStatuses: () => readOnly(),
     boardPhases: () => readOnly(),
+    createPhase: () => readOnly(),
     boardTickets: () => readOnly(),
     boardTicket: () => readOnly(),
     createTicket: () => readOnly(),

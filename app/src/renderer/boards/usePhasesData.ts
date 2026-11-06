@@ -15,7 +15,7 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
   }
 }
 
-export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void> } {
+export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void>; reconcileCreated(phase: import('../api').BoardPhase): void } {
   const [value, setValue] = useState<Value>({ state: 'loading', data: null, error: null });
   const sequence = useRef(0);
   const hasData = useRef(false);
@@ -50,5 +50,14 @@ export function usePhasesData(management: ManagementApi, workspaceId: string, re
     };
   }, [load, refreshMs]);
   const reload = useCallback(async () => { await load(false); }, [load]);
-  return { ...value, reload };
+  const reconcileCreated = useCallback((phase: import('../api').BoardPhase) => {
+    setValue(current => {
+      if (!current.data) return current;
+      const existing = current.data.phases.phases;
+      if (existing.some(item => item.slug === phase.slug)) return current;
+      const phases = [...existing.map(item => item.position >= phase.position ? { ...item, position: item.position + 1 } : item), phase];
+      return { ...current, data: { ...current.data, phases: { ...current.data.phases, phases } } };
+    });
+  }, []);
+  return { ...value, reload, reconcileCreated };
 }
