@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PhasesScreen } from '../src/renderer/boards/PhasesScreen';
 import { boardPhase, boardPhasesFixture } from './boardFixtures';
@@ -107,6 +108,59 @@ describe('PhasesScreen', () => {
     const view = render(<PhasesScreen workspace={workspaceA} management={fake.api} />);
     await settle();
     expect(view.getByText('No phases yet')).toBeTruthy();
+  });
+  it('reconciles the production phase-add payload once, preserves the current phase and visible cards when refresh fails', async () => {
+    const initial = boardPhasesFixture();
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: { id: 'phase-x-id', slug: 'phase-x', name: 'Phase X', description: null, position: 1, status: 'open' as const } } }));
+    const failure = managementError('DOWN', 'Refresh unavailable');
+    const fake = fakeManagement({ boardPhases: [ok(initial), failure], calls: { createPhase } });
+    const view = render(<PhasesScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    const trigger = view.getByRole('button', { name: 'New phase' });
+    await userEvent.setup().click(trigger);
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Phase X');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    await waitFor(() => expect(view.getByRole('heading', { name: 'Phase X' })).toBeTruthy());
+    expect(view.queryByRole('dialog')).toBeNull();
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Phases');
+    expect(view.getAllByRole('heading', { level: 2 }).map(item => item.textContent)).toEqual(['Phase 05', 'Phase X', 'Phase 06']);
+    expect(view.getAllByRole('heading', { name: 'Phase X' })).toHaveLength(1);
+    expect(view.getByRole('region', { name: 'Phase 05' }).querySelector('.boards-phase-pill')?.textContent).toBe('Current');
+    expect(view.getByRole('region', { name: 'Phase X' }).querySelector('.boards-phase-pill')).toBeNull();
+    expect(view.getByText(/Could not refresh phases: Refresh unavailable/)).toBeTruthy();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('normalizes missing UI fields in a malformed successful response', async () => {
+    const createPhase = vi.fn(async () => ({ ok: true as const, data: { phase: {} } }));
+    const view = render(<PhasesScreen workspace={workspaceA} management={fakeManagement({ calls: { createPhase } }).api} refreshMs={0} />);
+    await settle();
+    await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Malformed');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    expect(view.getByRole('heading', { level: 1 }).textContent).toBe('Phases');
+    expect(view.getByRole('heading', { name: 'Malformed' })).toBeTruthy();
+    expect(view.getByRole('region', { name: 'Malformed' }).querySelector('.boards-phase-pill')).toBeNull();
+    expect(view.getByText('Phase 05')).toBeTruthy();
+    expect(view.getByText('Phase 06')).toBeTruthy();
+  });
+  it('keeps a delayed create acknowledgement when the follow-up phase read is stale', async () => {
+    const initial = boardPhasesFixture();
+    let finishCreate!: (value: ReturnType<typeof ok<{ phase: { id: string; slug: string; name: string; position: number; status: 'open' } }>>) => void;
+    const createPhase = vi.fn(() => new Promise<any>(resolve => { finishCreate = resolve; }));
+    const fake = fakeManagement({ boardPhases: [ok(initial), ok(initial)], calls: { createPhase } });
+    const view = render(<PhasesScreen workspace={workspaceA} management={fake.api} refreshMs={0} />);
+    await settle();
+    await userEvent.setup().click(view.getByRole('button', { name: 'New phase' }));
+    await userEvent.setup().type(view.getByRole('textbox', { name: 'Phase name' }), 'Delayed Phase');
+    await userEvent.setup().click(view.getByRole('button', { name: 'Create phase' }));
+    expect(view.getByRole('dialog')).toBeTruthy();
+    await act(async () => finishCreate(ok({ phase: { id: 'phase-delayed', slug: 'delayed-phase', name: 'Delayed Phase', position: 1, status: 'open' } })));
+    await waitFor(() => expect(view.queryByRole('dialog')).toBeNull());
+    await settle();
+    expect(view.getAllByRole('heading', { name: 'Delayed Phase' })).toHaveLength(1);
+    expect(view.getAllByRole('heading', { level: 2 }).map(item => item.textContent)).toEqual(['Phase 05', 'Delayed Phase', 'Phase 06']);
   });
   it('refreshes both reads on board changes and polling', async () => {
     vi.useFakeTimers();

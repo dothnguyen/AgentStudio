@@ -25,11 +25,12 @@ export function PhasesScreen({ workspace, management, refreshMs, onViewTickets =
       </header>
       {board.state === 'loading' ? <LoadingSkeleton label="Loading phases…" /> :
         board.state === 'error' ? <BoardErrorCard title="Could not load phases" error={board.error} onRetry={() => { void board.reload(); }} /> :
-          board.data?.phases.phases.length === 0 ? <section className="boards-state-card"><h2>No phases yet</h2></section> :
+          <>{board.error && <div role="alert" className="boards-inline-error">Could not refresh phases: {board.error.message} <button type="button" onClick={() => { void board.refresh(); }}>Retry</button></div>}
+          {board.data?.phases.phases.length === 0 ? <section className="boards-state-card"><h2>No phases yet</h2></section> :
             <div className="boards-milestone-list">{board.data && [...board.data.phases.phases]
               .sort((a, b) => Number(b.current) - Number(a.current) || Number(a.status === 'closed') - Number(b.status === 'closed') || a.position - b.position)
-              .map(phase => <PhaseCard key={phase.slug} phase={phase} statuses={board.data!.settings.statuses} onViewTickets={onViewTickets} onOpenBoard={onOpenBoard} />)}</div>}
-      {creating && board.data && <NewPhaseDialog workspaceId={workspace.id} management={management} phases={board.data.phases.phases} onClose={() => { setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); }} onCreated={phase => { board.reconcileCreated(phase); setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); }} />}
+              .map(phase => <PhaseCard key={phase.slug} phase={phase} statuses={board.data!.settings.statuses} onViewTickets={onViewTickets} onOpenBoard={onOpenBoard} />)}</div>}</>}
+      {creating && board.data && <NewPhaseDialog workspaceId={workspace.id} management={management} phases={board.data.phases.phases} onClose={() => { setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); }} onCreated={phase => { board.reconcileCreated(phase); setCreating(false); requestAnimationFrame(() => addButton.current?.focus()); void board.refresh(); }} />}
     </div>
   );
 }
@@ -48,7 +49,11 @@ function NewPhaseDialog({ workspaceId, management, phases, onClose, onCreated }:
     flight.current = true; setBusy(true); setError('');
     try {
       const result = await management.createPhase(workspaceId, { id: cleanSlug, name: cleanName, ...(description.trim() ? { description: description.trim() } : {}), ...(before ? { before } : {}) });
-      if (result.ok) onCreated(result.data.phase); else setError(`${result.error.message}${result.error.remediation ? ` ${result.error.remediation}` : ''}`);
+      if (result.ok) {
+        const phase = normalizeCreatedPhase(result.data?.phase, cleanSlug, cleanName, description.trim(), phases, before);
+        if (!phase) { setError('The phase was created, but its response could not be reconciled. Retry to refresh the phase list.'); return; }
+        onCreated(phase);
+      } else setError(`${result.error.message}${result.error.remediation ? ` ${result.error.remediation}` : ''}`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { flight.current = false; setBusy(false); }
   }
@@ -64,4 +69,21 @@ function NewPhaseDialog({ workspaceId, management, phases, onClose, onCreated }:
     </div>
     {error && <div className="role-dialog-error" role="alert">{error} <button type="button" disabled={busy} onClick={() => { void submit(); }}>Retry</button></div>}
   </Dialog>;
+}
+
+function normalizeCreatedPhase(value: unknown, slug: string, name: string, description: string, phases: import('../api').BoardPhase[], before: string): import('../api').BoardPhase | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.slug === 'string' && raw.slug !== slug) return null;
+  const counts = raw.counts && typeof raw.counts === 'object' && !Array.isArray(raw.counts)
+    ? Object.fromEntries(Object.entries(raw.counts).filter(([, count]) => typeof count === 'number' && Number.isFinite(count))) as Record<string, number>
+    : {};
+  return {
+    id: typeof raw.id === 'string' ? raw.id : null, slug, name: typeof raw.name === 'string' ? raw.name : name,
+    description: typeof raw.description === 'string' ? raw.description : description || null,
+    position: Number.isInteger(raw.position) ? raw.position as number : before ? phases.find(phase => phase.slug === before)?.position ?? phases.length : phases.length,
+    status: raw.status === 'closed' ? 'closed' : 'open', current: false,
+    ticketCount: typeof raw.ticketCount === 'number' && Number.isFinite(raw.ticketCount) ? raw.ticketCount : 0,
+    counts,
+  };
 }

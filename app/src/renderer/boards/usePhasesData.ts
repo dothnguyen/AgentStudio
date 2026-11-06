@@ -15,26 +15,39 @@ async function call<T>(load: () => Promise<Result<T>>): Promise<Result<T>> {
   }
 }
 
-export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void>; reconcileCreated(phase: import('../api').BoardPhase): void } {
+export function usePhasesData(management: ManagementApi, workspaceId: string, refreshMs = CURRENT_PHASE_REFRESH_MS): Value & { reload(): Promise<void>; refresh(): Promise<void>; reconcileCreated(phase: import('../api').BoardPhase): void } {
   const [value, setValue] = useState<Value>({ state: 'loading', data: null, error: null });
   const sequence = useRef(0);
   const hasData = useRef(false);
+  const createdPhases = useRef(new Map<string, import('../api').BoardPhase>());
   const load = useCallback(async (silent: boolean): Promise<void> => {
     const request = ++sequence.current;
-    if (!silent || !hasData.current) setValue({ state: 'loading', data: null, error: null });
+    if (!silent || !hasData.current) setValue(current => ({ state: 'loading', data: silent ? current.data : null, error: null }));
     const [phases, settings] = await Promise.all([
       call(() => management.boardPhases(workspaceId)),
       call(() => management.boardSettings(workspaceId)),
     ]);
     if (request !== sequence.current) return;
     if (!phases.ok || !settings.ok) {
+      if (silent && hasData.current) {
+        const error = !phases.ok ? phases.error : !settings.ok ? settings.error : null;
+        setValue(current => ({ ...current, state: 'ready', error }));
+        return;
+      }
       hasData.current = false;
       const error = !phases.ok ? phases.error : !settings.ok ? settings.error : null;
       setValue({ state: 'error', data: null, error });
       return;
     }
     hasData.current = true;
-    setValue({ state: 'ready', data: { phases: phases.data, settings: settings.data }, error: null });
+    // A read that races the write, or comes from a briefly stale API snapshot,
+    // must not remove a phase already acknowledged by createPhase.
+    const remote = phases.data.phases;
+    const missingCreated = [...createdPhases.current.values()].filter(created => !remote.some(item => item.slug === created.slug));
+    const merged = missingCreated.length
+      ? [...remote.map(item => item.position >= Math.min(...missingCreated.map(created => created.position)) ? { ...item, position: item.position + missingCreated.length } : item), ...missingCreated]
+      : remote;
+    setValue({ state: 'ready', data: { phases: { ...phases.data, phases: merged }, settings: settings.data }, error: null });
   }, [management, workspaceId]);
 
   useEffect(() => {
@@ -51,13 +64,17 @@ export function usePhasesData(management: ManagementApi, workspaceId: string, re
   }, [load, refreshMs]);
   const reload = useCallback(async () => { await load(false); }, [load]);
   const reconcileCreated = useCallback((phase: import('../api').BoardPhase) => {
+    // Invalidate reads started before the mutation so an older snapshot cannot erase it.
+    sequence.current += 1;
     setValue(current => {
       if (!current.data) return current;
       const existing = current.data.phases.phases;
       if (existing.some(item => item.slug === phase.slug)) return current;
+      if (!createdPhases.current.has(phase.slug)) createdPhases.current.set(phase.slug, phase);
       const phases = [...existing.map(item => item.position >= phase.position ? { ...item, position: item.position + 1 } : item), phase];
       return { ...current, data: { ...current.data, phases: { ...current.data.phases, phases } } };
     });
   }, []);
-  return { ...value, reload, reconcileCreated };
+  const refresh = useCallback(async () => { await load(true); }, [load]);
+  return { ...value, reload, refresh, reconcileCreated };
 }
